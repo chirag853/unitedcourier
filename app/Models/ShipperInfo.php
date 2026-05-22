@@ -12,6 +12,7 @@ class ShipperInfo extends Model
     protected $table = 'shipper_info';
 
     protected $fillable = [
+        'customer_id',
         'delivery_destination',
         'origin_type',
         'shipping_method',

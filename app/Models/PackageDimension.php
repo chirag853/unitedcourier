@@ -13,6 +13,7 @@ class PackageDimension extends Model
 
     protected $fillable = [
         'shipper_id',
+        'shipping_method',
         'actual_weight_kg',
         'length_cm',
         'width_cm',

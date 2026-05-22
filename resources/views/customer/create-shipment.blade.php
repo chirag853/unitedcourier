@@ -186,7 +186,7 @@
                                             </div>
                                             -->
                                                         <h5 style="margin-bottom: 20px;">Shipment Type</h5>
-                                                        <div class="col-md-4">
+                                                        <div class="col-md-6">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Delivery Destination<span
                                                                         class="text-danger ms-1">*</span></label>
@@ -204,7 +204,7 @@
                                                                 </select>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-4">
+                                                        <div class="col-md-6">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Origin Type<span
                                                                         class="text-danger ms-1">*</span></label>
@@ -217,12 +217,17 @@
                                                                     <option value="CSB IV">CSB IV </option>
                                                                     <option value="CSB V">CSB V</option>
                                                                 </select>
-                                                                <div id="originTypeError" class="text-danger mt-1" style="display: none;">
-                                                                    Please enroll for CSB V to create shipments with CSB V origin type. <a href="{{ route('customer.csb5-form') }}" class="text-danger fw-bold">Go to CSB V Onboarding</a>
+                                                                <div id="originTypeError" class="text-danger mt-1"
+                                                                    style="display: none;">
+                                                                    Please enroll for CSB V to create shipments with CSB
+                                                                    V origin type. <a
+                                                                        href="{{ route('customer.csb5-form') }}"
+                                                                        class="text-danger fw-bold">Go to CSB V
+                                                                        Onboarding</a>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-4">
+                                                        <div class="col-md-4" style="display:none">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Shipping Method <span
                                                                         class="text-danger ms-1">*</span></label>
@@ -6839,12 +6844,76 @@
                                             <div class="accordion-collapse collapse" id="social"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
+                                                    <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="mb-4">
+                                                        <label class="form-label">DDP</label>
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-my-delivery" name="package_shipping_method" value="DDP - United My Delivery" class="form-check-input">
+                                                                <label class="form-check-label" for="united-my-delivery">United My Delivery</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-air-premium" name="package_shipping_method" value="DDP - United Air Premium" class="form-check-input">
+                                                                <label class="form-check-label" for="united-air-premium">United Air Premium </label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-grd-premium" name="package_shipping_method" value="DDP - United GRD Premium" class="form-check-input">
+                                                                <label class="form-check-label" for="united-grd-premium">United GRD Premium </label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-air-express" name="package_shipping_method" value="DDP - United Air Express" class="form-check-input">
+                                                                <label class="form-check-label" for="united-air-express">United Air Express</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-prior-post" name="package_shipping_method" value="DDP - United Prior Post" class="form-check-input">
+                                                                <label class="form-check-label" for="united-prior-post">United Prior Post</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-eco-post" name="package_shipping_method" value="DDP - United ECO Post" class="form-check-input">
+                                                                <label class="form-check-label" for="united-eco-post">United ECO Post</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-my-pickup" name="package_shipping_method" value="DDP - United My Pickup" class="form-check-input">
+                                                                <label class="form-check-label" for="united-my-pickup">United My Pickup</label>
+                                                            </div>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="col-md-4">
+                                                    <div class="mb-4">
+                                                        <label class="form-label">DDU</label>
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-my-delivery1" name="package_shipping_method" value="DDU - United My Delivery" class="form-check-input">
+                                                                <label class="form-check-label" for="united-my-delivery1">United My Delivery</label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-air-premium1" name="package_shipping_method" value="DDU - United Air Premium" class="form-check-input">
+                                                                <label class="form-check-label" for="united-air-premium1">United Air Premium </label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-grd-premium1" name="package_shipping_method" value="DDU - United GRD Premium" class="form-check-input">
+                                                                <label class="form-check-label" for="united-grd-premium1">United GRD Premium </label>
+                                                            </div>
+                                                            <div class="form-check">
+                                                                <input type="radio" id="united-my-pickup1" name="package_shipping_method" value="DDU - United My Pickup" class="form-check-input">
+                                                                <label class="form-check-label" for="united-my-pickup1">United My Pickup</label>
+                                                            </div>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                            </div>
                                                     <div class="row rowContaineraddmore">
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Actual Weight (kg)</label>
                                                                 <input type="number" class="form-control"
-                                                                    name="actual_weight_kg"
+                                                                    name="packages[0][actual_weight_kg]"
                                                                     placeholder="Actual Weight (kg)">
                                                             </div>
                                                         </div>
@@ -6852,21 +6921,21 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">Length (cm) </label>
                                                                 <input type="number" class="form-control"
-                                                                    name="length_cm" placeholder="Length (cm)">
+                                                                    name="packages[0][length_cm]" placeholder="Length (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Width (cm) </label>
                                                                 <input type="number" class="form-control"
-                                                                    name="width_cm" placeholder="Width (cm)">
+                                                                    name="packages[0][width_cm]" placeholder="Width (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Height (cm)</label>
                                                                 <input type="number" class="form-control"
-                                                                    name="height_cm" placeholder="Height (cm)">
+                                                                    name="packages[0][height_cm]" placeholder="Height (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -6875,7 +6944,7 @@
                                                                     (L*B*H/5000=VOL
                                                                     WT)</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="volumetric_weight"
+                                                                    name="packages[0][volumetric_weight]"
                                                                     placeholder="volumetric weight">
                                                             </div>
                                                         </div>
@@ -6888,6 +6957,25 @@
                                         </div>
                                         <!-- /Package Dimension -->
                                         <script>
+                                        function reindexPackageRows() {
+                                            document.querySelectorAll('.rowContaineraddmore').forEach(function(row, index) {
+                                                const fields = [
+                                                    'actual_weight_kg',
+                                                    'length_cm',
+                                                    'width_cm',
+                                                    'height_cm',
+                                                    'volumetric_weight'
+                                                ];
+
+                                                fields.forEach(function(field) {
+                                                    const input = row.querySelector('[name$="[' + field + ']"]');
+                                                    if (input) {
+                                                        input.name = 'packages[' + index + '][' + field + ']';
+                                                    }
+                                                });
+                                            });
+                                        }
+
                                         document.getElementById('addRowBtn').addEventListener('click', function() {
                                             let lastRow = document.querySelector(
                                                 '.rowContaineraddmore:last-of-type');
@@ -6905,11 +6993,13 @@
                                             deleteBtn.className = 'delete-row';
                                             deleteBtn.onclick = function() {
                                                 newRow.remove();
+                                                reindexPackageRows();
                                             };
                                             newRow.appendChild(deleteBtn);
                                             // Insert above button
                                             let btn = document.getElementById('addRowBtn');
                                             btn.parentNode.insertBefore(newRow, btn);
+                                            reindexPackageRows();
                                         });
                                         </script>
                                         <!-- CSB INFO -->
@@ -7636,20 +7726,42 @@
     <script src="{{ asset('assets/js/script.js') }}" type="text/javascript"></script>
     <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    @if (session('success') || session('error') || $errors->any())
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const messages = @json($errors->all());
+            const fallbackMessage = @json(session('error') ?: session('success'));
+            const errorHtml = messages.length ?
+                '<ul class="text-start mb-0 ps-3">' + messages.map(function(message) {
+                    return '<li>' + message + '</li>';
+                }).join('') + '</ul>' :
+                fallbackMessage;
+
+            Swal.fire({
+                icon: @json(session('success') ? 'success' : 'error'),
+                title: @json(session('success') ? 'Success!' : 'Unable to create shipment'),
+                html: errorHtml,
+                confirmButtonColor: @json(session('success') ? '#2563eb' : '#dc3545')
+            });
+        });
+        </script>
+    @endif
     <script>
     // Toggle CSB Information section based on Origin Type selection
     document.addEventListener('DOMContentLoaded', function() {
         const originTypeSelect = document.getElementById('originType');
         const csbInfoSection = document.getElementById('csbInfoSection');
+        const csbStatus = @json($customer->csb_status ?? null);
 
         function toggleCsbInfo() {
-            if (originTypeSelect.value === 'CSB V') {
+            if (originTypeSelect.value === 'CSB V' && csbStatus !== 1) {
                 csbInfoSection.style.display = 'block';
                 // Update numbers: CSB Info becomes 4, Shipment Invoice becomes 5
                 document.getElementById('csbInfoNumber').textContent = '4';
                 document.getElementById('shipmentInvoiceNumber').textContent = '5';
             } else {
                 csbInfoSection.style.display = 'none';
+                $('#csbinfo').collapse('hide');
                 // Update numbers: Shipment Invoice becomes 4 (CSB Info is hidden)
                 document.getElementById('shipmentInvoiceNumber').textContent = '4';
             }
@@ -7683,10 +7795,39 @@
     // Handle form submission
     document.addEventListener('DOMContentLoaded', function() {
         const forms = document.querySelectorAll('form[action*="create-shipment"]');
+
+        function formatFieldName(field) {
+            return field
+                .replace(/^items\.\d+\./, 'item ')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, function(char) {
+                    return char.toUpperCase();
+                });
+        }
+
+        function buildErrorHtml(errors) {
+            if (!errors) {
+                return '';
+            }
+
+            const messages = [];
+            Object.keys(errors).forEach(function(field) {
+                const fieldErrors = Array.isArray(errors[field]) ? errors[field] : [errors[field]];
+                fieldErrors.forEach(function(message) {
+                    messages.push('<li><strong>' + formatFieldName(field) + ':</strong> ' + message + '</li>');
+                });
+            });
+
+            return messages.length ? '<ul class="text-start mb-0 ps-3">' + messages.join('') + '</ul>' : '';
+        }
+
         forms.forEach(function(form) {
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const submitButton = form.querySelector('button[type="submit"]');
+                if (!submitButton) {
+                    return;
+                }
                 const originalText = submitButton.innerHTML;
                 // Show loading state
                 submitButton.disabled = true;
@@ -7714,8 +7855,14 @@
                             'Accept': 'application/json'
                         }
                     })
-                    .then(response => response.json())
-                    .then(data => {
+                    .then(response => response.json().then(data => ({
+                        ok: response.ok,
+                        status: response.status,
+                        data
+                    })))
+                    .then(({
+                        data
+                    }) => {
                         if (data.success) {
                             // Show success message
                             Swal.fire({
@@ -7733,11 +7880,12 @@
                                 $('#basic').collapse('show');
                             }, 2000);
                         } else {
+                            const errorHtml = buildErrorHtml(data.errors);
                             // Show error message
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Error!',
-                                text: data.message,
+                                title: data.message || 'Unable to create shipment',
+                                html: errorHtml || 'Please check the form and try again.',
                                 confirmButtonColor: '#dc3545'
                             });
                             // Show validation errors if any
@@ -7768,8 +7916,9 @@
     document.addEventListener('DOMContentLoaded', function() {
         const originTypeSelect = document.getElementById('originType');
         const originTypeError = document.getElementById('originTypeError');
-        const csbStatus = {{ $customer->csb_status }};
-        
+        const csbInfoSection = document.getElementById('csbInfoSection');
+        const csbStatus = @json($customer->csb_status ?? null);
+
         if (originTypeSelect && typeof $ !== 'undefined') {
             // Use Select2 change event
             $(originTypeSelect).on('change', function() {
@@ -7778,10 +7927,16 @@
                     if (originTypeError) {
                         originTypeError.style.display = 'block';
                     }
+                    if (csbInfoSection) {
+                        csbInfoSection.style.display = 'none';
+                        $('#csbinfo').collapse('hide');
+                    }
                     // Disable all form inputs except origin_type select
                     const form = $(this).closest('form');
                     if (form) {
-                        form.find('input:not([name="origin_type"]), select:not(#originType), textarea, button[type="submit"]').prop('disabled', true);
+                        form.find(
+                            'input:not([name="origin_type"]), select:not(#originType), textarea, button[type="submit"]'
+                        ).prop('disabled', true);
                     }
                     // Reset to CSB IV
                     // $(this).val('CSB IV').trigger('change');
@@ -7793,7 +7948,8 @@
                     // Enable all form inputs
                     const form = $(this).closest('form');
                     if (form) {
-                        form.find('input, select, textarea, button[type="submit"]').prop('disabled', false);
+                        form.find('input, select, textarea, button[type="submit"]').prop('disabled',
+                            false);
                     }
                 }
             });

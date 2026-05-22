@@ -475,7 +475,7 @@ class customerController extends Controller
                 // Shipper Info
                 'delivery_destination' => 'required|string|max:100',
                 'origin_type' => 'required|string|max:50',
-                'shipping_method' => 'required|string|max:100',
+                'shipping_method' => 'nullable|string|max:100',
                 'shipper_same_as_customer' => 'boolean',
                 'shipper_company_names' => 'required|string|max:150',
                 'shipper_contact_person' => 'required|string|max:100',
@@ -505,15 +505,17 @@ class customerController extends Controller
                 'consignee_email_opt_out' => 'boolean',
 
                 // Package Dimension
-                'actual_weight_kg' => 'nullable|numeric|min:0',
-                'length_cm' => 'nullable|numeric|min:0',
-                'width_cm' => 'nullable|numeric|min:0',
-                'height_cm' => 'nullable|numeric|min:0',
-                'volumetric_weight' => 'nullable|numeric|min:0',
+                'package_shipping_method' => 'nullable|string|max:100',
+                'packages' => 'nullable|array',
+                'packages.*.actual_weight_kg' => 'nullable|numeric|min:0',
+                'packages.*.length_cm' => 'nullable|numeric|min:0',
+                'packages.*.width_cm' => 'nullable|numeric|min:0',
+                'packages.*.height_cm' => 'nullable|numeric|min:0',
+                'packages.*.volumetric_weight' => 'nullable|numeric|min:0',
 
                 // CSB Information
-                'ecommerce' => 'required|in:Yes,No',
-                'scheme' => 'required|in:Yes,No',
+                'ecommerce' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
+                'scheme' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
                 'bond_ut_igst' => 'nullable|in:Bond UT,IGST',
                 'lut_number' => 'nullable|string|max:100',
                 'iec_code' => 'nullable|string|max:50',
@@ -544,6 +546,15 @@ class customerController extends Controller
             if ($validatedData['origin_type'] === 'CSB V') {
                 $customer = auth()->guard('customer')->user();
                 if ($customer->csb_status === 1) {
+                    if (!$request->expectsJson()) {
+                        return back()
+                            ->withErrors([
+                                'origin_type' => 'CSB V requires CSB V onboarding. Your current status is CSB-IV only.'
+                            ])
+                            ->withInput()
+                            ->with('error', 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.');
+                    }
+
                     return response()->json([
                         'success' => false,
                         'message' => 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.',
@@ -556,9 +567,10 @@ class customerController extends Controller
 
             // Store Shipper Info
             $shipper = ShipperInfo::create([
+                'customer_id' => auth()->guard('customer')->id(),
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
-                'shipping_method' => $validatedData['shipping_method'],
+                'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
                 'company_name' => $validatedData['shipper_company_names'],
                 'contact_person' => $validatedData['shipper_contact_person'],
@@ -593,21 +605,38 @@ class customerController extends Controller
                 'email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
             ]);
 
-            // Store Package Dimension
-            $package = PackageDimension::create([
-                'shipper_id' => $shipperId,
-                'actual_weight_kg' => $validatedData['actual_weight_kg'] ?? null,
-                'length_cm' => $validatedData['length_cm'] ?? null,
-                'width_cm' => $validatedData['width_cm'] ?? null,
-                'height_cm' => $validatedData['height_cm'] ?? null,
-                'volumetric_weight'=> $validatedData['volumetric_weight'] ?? null,
-            ]);
+            // Store Package Dimensions
+            $packageIds = [];
+            $packageShippingMethod = $validatedData['package_shipping_method'] ?? null;
+            $packageRows = $validatedData['packages'] ?? [[]];
+
+            foreach ($packageRows as $packageData) {
+                $hasPackageValue = collect($packageData)->filter(function ($value) {
+                    return $value !== null && $value !== '';
+                })->isNotEmpty() || !empty($packageShippingMethod);
+
+                if (!$hasPackageValue) {
+                    continue;
+                }
+
+                $package = PackageDimension::create([
+                    'shipper_id' => $shipperId,
+                    'shipping_method' => $packageShippingMethod,
+                    'actual_weight_kg' => $packageData['actual_weight_kg'] ?? null,
+                    'length_cm' => $packageData['length_cm'] ?? null,
+                    'width_cm' => $packageData['width_cm'] ?? null,
+                    'height_cm' => $packageData['height_cm'] ?? null,
+                    'volumetric_weight' => $packageData['volumetric_weight'] ?? null,
+                ]);
+
+                $packageIds[] = $package->id;
+            }
 
             // Store CSB Information
             $csb = CsbInformation::create([
                 'shipper_id' => $shipperId,
-                'ecommerce' => $validatedData['ecommerce'],
-                'scheme' => $validatedData['scheme'],
+                'ecommerce' => $validatedData['ecommerce'] ?? 'No',
+                'scheme' => $validatedData['scheme'] ?? 'No',
                 'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
                 'lut_number' => $validatedData['lut_number'] ?? null,
                 'iec_code' => $validatedData['iec_code'] ?? null,
@@ -647,19 +676,31 @@ class customerController extends Controller
                 \Log::info('No items data received');
             }
 
+            if (!$request->expectsJson()) {
+                return back()->with('success', 'Shipment created successfully!');
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Shipment created successfully!',
                 'data' => [
                     'shipper_id' => $shipper->id,
                     'consignee_id' => $consignee->id,
-                    'package_id' => $package->id,
+                    'package_id' => $packageIds[0] ?? null,
+                    'package_ids' => $packageIds,
                     'csb_id' => $csb->id,
                     'invoice_id' => $invoice->id,
                 ]
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            if (!$request->expectsJson()) {
+                return back()
+                    ->withErrors($e->validator)
+                    ->withInput()
+                    ->with('error', 'Please correct the highlighted shipment details.');
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
@@ -667,6 +708,12 @@ class customerController extends Controller
             ], 422);
 
         } catch (\Exception $e) {
+            if (!$request->expectsJson()) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Failed to create shipment: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create shipment: ' . $e->getMessage()
