@@ -357,10 +357,13 @@
 
                     <!-- Item-->
                     <div class="pt-2 mt-2 border-top">
-                        <a href="login.html" class="dropdown-item text-danger">
-                            <i class="ti ti-logout me-1 fs-17 align-middle"></i>
-                            <span class="align-middle">Sign Out</span>
-                        </a>
+                        <form action="{{ route('admin.logout') }}" method="POST" style="display: inline;">
+                            @csrf
+                            <button type="submit" class="dropdown-item text-danger w-100 text-start">
+                                <i class="ti ti-logout me-1 fs-17 align-middle"></i>
+                                <span class="align-middle">Sign Out</span>
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>

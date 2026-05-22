@@ -3,23 +3,28 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use App\Models\NetworkOffice;
 
 class AdminController extends Controller
 {
     public function index()
     {
+        // Check if admin is authenticated
+        if (!Auth::guard('admin')->check()) {
+            return redirect()->route('admin.login')->with('error', 'Please login first');
+        }
+        
         return view('admin.dashboard');
-    }
-
-    public function service()
-    {
-        $serviceContent = \App\Models\ServicePage::orderBy('sort_order')->get();
-        return view('admin.change-service', ['serviceContent' => $serviceContent]);
     }
 
     public function login()
     {
+        // If already logged in, redirect to dashboard
+        if (Auth::guard('admin')->check()) {
+            return redirect()->route('admin.dashboard');
+        }
+        
         return view('admin.login');
     }
 
@@ -31,17 +36,22 @@ class AdminController extends Controller
             'password' => 'required',
         ]);
 
-        // Placeholder for actual authentication logic
-        // In a real application, you would use Laravel's Auth facade
-        // For now, we'll simulate a successful login and redirect to dashboard
+        // Attempt to login with admin guard
+        if (Auth::guard('admin')->attempt(['email' => $request->email, 'password' => $request->password], $request->has('remember'))) {
+            return redirect()->route('admin.dashboard')->with('success', 'Login successful!');
+        }
+
+        // Login failed
+        return redirect()->route('admin.login')->with('error', 'Invalid email or password');
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::guard('admin')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         
-        // Example of what real authentication would look like:
-        // if (Auth::attempt(['email' => $request->email, 'password' => $request->password])) {
-        //     return redirect()->route('admin.dashboard');
-        // }
-        
-        // For demo purposes, redirect to dashboard
-        return redirect()->route('admin.dashboard')->with('success', 'Login successful!');
+        return redirect()->route('admin.login')->with('success', 'Logged out successfully!');
     }
 
     public function companies()

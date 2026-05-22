@@ -78,6 +78,12 @@
                                             {{ session('success') }}
                                         </div>
                                     @endif
+                                    
+                                    @if(session('error'))
+                                        <div class="alert alert-danger">
+                                            {{ session('error') }}
+                                        </div>
+                                    @endif
                                     <div class="mb-3">
                                         <label class="form-label">Email Address</label>
                                         <div class="input-group input-group-flat">

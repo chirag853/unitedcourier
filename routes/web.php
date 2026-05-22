@@ -38,7 +38,7 @@ Route::get('/document-download', [WebsiteController::class, 'documentDownload'])
 // Admin routes
 Route::prefix('admin')->group(function () {
     
-    // Authentication Routes
+    // Public Authentication Routes (No Middleware)
     Route::get('/', [AdminController::class, 'login'])->name('admin.login');
     Route::post('/login', [AdminController::class, 'loginPost'])->name('admin.login.post');
     Route::get('/register', [AdminController::class, 'register'])->name('admin.register');
@@ -48,12 +48,17 @@ Route::prefix('admin')->group(function () {
     Route::get('/two-step-verification', [AdminController::class, 'twoStepVerification'])->name('admin.two-step-verification');
     Route::get('/lock-screen', [AdminController::class, 'lockScreen'])->name('admin.lock-screen');
     
-    // Dashboard Routes
-    Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
-    Route::get('/leads-dashboard', [AdminController::class, 'leadsDashboard'])->name('admin.leads-dashboard');
-    Route::get('/project-dashboard', [AdminController::class, 'projectDashboard'])->name('admin.project-dashboard');
-    
-    // CRM Routes
+    // Protected Routes (With AdminAuth Middleware)
+    Route::middleware('admin.auth')->group(function () {
+        // Logout Route
+        Route::post('/logout', [AdminController::class, 'logout'])->name('admin.logout');
+        
+        // Dashboard Routes
+        Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
+        Route::get('/leads-dashboard', [AdminController::class, 'leadsDashboard'])->name('admin.leads-dashboard');
+        Route::get('/project-dashboard', [AdminController::class, 'projectDashboard'])->name('admin.project-dashboard');
+        
+        // CRM Routes
     Route::get('/contacts', [AdminController::class, 'contacts'])->name('admin.contacts');
     Route::get('/companies', [AdminController::class, 'companies'])->name('admin.companies');
     Route::get('/deals', [AdminController::class, 'deals'])->name('admin.deals');
@@ -456,6 +461,7 @@ Route::prefix('admin')->group(function () {
     Route::get('/layout-fullwidth', [AdminController::class, 'layoutFullwidth'])->name('admin.layout-fullwidth');
     Route::get('/layout-rtl', [AdminController::class, 'layoutRtl'])->name('admin.layout-rtl');
     Route::get('/layout-dark', [AdminController::class, 'layoutDark'])->name('admin.layout-dark');
+    });
 });
 
 
