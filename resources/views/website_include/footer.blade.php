@@ -136,6 +136,7 @@
                     <li><a href="{{ url('about') }}">About Us</a></li>
                     <li><a href="{{ url('tracking') }}">Tracking</a></li>
                     <li><a href="{{ url('contact-us') }}">Contact Us</a></li>
+                    <li><a href="{{ url('blogs') }}">Blog</a></li>
                     <li><a href="{{ url('terms-and-conditions') }}">Terms & Conditions</a></li>
                     <li><a href="{{ url('privacy-policy') }}">Privacy Policy</a></li>
                     <li><a href="{{ url('refund-and-cancellation-policy') }}">Cancellation & Refund Policy</a></li>

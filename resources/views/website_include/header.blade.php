@@ -6,7 +6,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-
     @if(isset($blog) && $blog->seo_meta_title)
         {{-- Blog Detail SEO --}}
         <title>{{ $blog->seo_meta_title }}</title>
@@ -43,6 +42,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
     <!-- Lenis for Smooth Inertial Scrolling -->
     <script src="https://unpkg.com/@studio-freight/lenis@1.0.34/dist/lenis.min.js"></script>
+
+    <style>
+        
+        .menu-custom-item{
+            border-radius: 73px;
+            border: 1px solid #d6d6d6;
+        }
+
+        /* add hover */
+        .menu-custom-item:hover {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            color: white !important;
+            /* border-color: #2563eb; */
+        }
+
+         /* add hover */
+        .btn-signup-main:hover {
+            background: linear-gradient(to left, #2563eb, #9333ea);
+            color: white !important;
+        }
+    </style>
 
 </head>
 
@@ -136,20 +156,21 @@
                                     </div>
                                     <div class="menu-info">
                                         <h6>Volumetric Calculator</h6>
-                                        <p>Our Express services are designed to give customers complete flexibility.</p>
+                                        <p>Enter your package dimensions to instantly calculate</p>
                                     </div>
                                 </a>
-                                <a href="{{ url('/world-weather') }}" class="menu-item">
+                                <a href="#" class="menu-item">
+                                <!-- <a href="{{ url('/world-weather') }}" class="menu-item"> -->
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
-                                        <i class="fa-solid fa-people-carry-box"></i>
+                                        <i class="fa-solid fa-calculator"></i>
                                     </div>
                                     <div class="menu-info">
-                                        <h6>World Weather</h6>
-                                        <p>Connect your marketplace account directly with our platform and ship orders
-                                            with ease.</p>
+                                        <!-- <h6>World Weather</h6> -->
+                                        <h6>Shipping Rate Calculator</h6>
+                                        <p>Get accurate, all‑inclusive rates in seconds.</p>
                                     </div>
                                 </a>
-                                <a href="{{ url('/world-time') }}" class="menu-item">
+                                <!-- <a href="{{ url('/world-time') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-box"></i>
                                     </div>
@@ -158,17 +179,43 @@
                                         <p>Our US warehousing facility helps businesses reduce delivery timelines,
                                             manage inventory efficiently.</p>
                                     </div>
-                                </a>
+                                </a> -->
                                 <a href="{{ url('/currency-calculator') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
-                                        <i class="fa-solid fa-people-carry-box"></i>
+                                        <i class="fa-solid fa-indian-rupee-sign"></i>
                                     </div>
                                     <div class="menu-info">
-                                        <h6>Currency Calculator</h6>
-                                        <p>Connect your marketplace account directly with our platform and ship orders
-                                            with ease.</p>
+                                        <!-- <h6>Currency Calculator</h6> -->
+                                        <h6>Forex Calculator</h6>
+                                        <p>Convert USD, EUR, GBP, AED and other global currencies into INR instantly.</p>
                                     </div>
                                 </a>
+
+
+                                <!-- barcode generator -->
+                                <a href="#" class="menu-item">
+                                    <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
+                                        <i class="fa-solid fa-barcode"></i>
+                                    </div>
+                                    <div class="menu-info">
+                                        <!-- <h6>Currency Calculator</h6> -->
+                                        <h6>Barcode Generator</h6>
+                                        <p>Create shipment barcodes in seconds.</p>
+                                    </div>
+                                </a>
+
+                                <!-- HSN finder -->
+                                <a href="#" class="menu-item">
+                                    <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
+                                        <i class="fa-solid fa-h"></i>
+                                    </div>
+                                    <div class="menu-info">
+                                        <!-- <h6>Currency Calculator</h6> -->
+                                        <h6>HSN Finder</h6>
+                                        <p>Want to know a product's Indian HSN or US HTS code in a snap?</p>
+                                    </div>
+                                </a>
+
                             </div>
                             <div class="menu-col-right">
                                 <a href="{{ url('/e-books') }}" class="partner-card">
@@ -181,22 +228,22 @@
                                     </div>
                                 </a>
                                 <div class="share-docs-bar">
-                                    <button class="btn-signup-sm">Webinar</button>
-                                    <button class="btn-signup-sm">Document Download</button>
+                                    <button class="btn-signup-sm"><a href="{{url('/webinar')}}" style="text-decoration: none; color: inherit;"> Webinar</a></button>
+                                    <button class="btn-signup-sm"><a href="{{url('/document-download')}}" style="text-decoration: none; color: inherit;">Document Download</a></button>
                                 </div>
 
                             </div>
                         </div>
                     </li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url('/tracking') }}">Tracking</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url('/network') }}">Networking</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url('/blogs') }}">Blog</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url('/partnership') }}">Partnership</a></li>
+                    <!-- <li class="nav-item"><a class="nav-link" href="{{ url('/tracking') }}">Tracking</a></li> -->
+                    <!-- <li class="nav-item"><a class="nav-link" href="{{ url('/network') }}">Networking</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url('/blogs') }}">Blog</a></li> -->
                 </ul>
                 <div class="d-flex flex-column flex-lg-row align-items-center gap-3">
-                    <a href="{{ url('/customer') }}" class="text-decoration-none fw-bold text-dark"
-                        style="font-size: 15px;">Login</a>
-                    <a href="{{ url('/customer/register') }}" class="btn-signup-main w-100 w-lg-auto text-decoration-none">Sign Up
-                        for Free</a>
+                    <a class="nav-link menu-custom-item" href="{{ url('/tracking') }}">Tracking</a>
+                    <a href="{{ url('/customer') }}" class="menu-custom-item nav-link">Login</a>
+                    <a href="{{ url('/customer/register') }}" class="btn-signup-main w-100 w-lg-auto text-decoration-none">Get Started</a>
                 </div>
             </div>
         </div>
