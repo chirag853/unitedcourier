@@ -292,30 +292,62 @@
     
     
     <!-- Daterangepikcer JS -->
-	<script src="{{ asset('js/moment.min.js') }}" type="text/javascript"></script>
-	<script src="{{ asset('assets/plugins/daterangepicker/daterangepicker.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('js/moment.min.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('assets/plugins/daterangepicker/daterangepicker.js') }}" type="text/javascript"></script>
 
     <!-- Apexchart JS -->
-	<script src="{{ asset('assets/plugins/apexchart/apexcharts.min.js') }}" type="text/javascript"></script>
-	<script src="{{ asset('assets/plugins/apexchart/chart-data.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('assets/plugins/apexchart/apexcharts.min.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('assets/plugins/apexchart/chart-data.js') }}" type="text/javascript"></script>
 
-	<!-- Chart JS -->
-	<script src="{{ asset('assets/plugins/peity/jquery.peity.min.js') }}" type="text/javascript"></script>
-	<script src="{{ asset('assets/plugins/peity/chart-data.js') }}" type="text/javascript"></script>
+ <!-- Chart JS -->
+ <script src="{{ asset('assets/plugins/peity/jquery.peity.min.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('assets/plugins/peity/chart-data.js') }}" type="text/javascript"></script>
     
-	<!-- Simplebar JS -->
-	<script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}" type="text/javascript"></script>
+ <!-- Simplebar JS -->
+ <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}" type="text/javascript"></script>
 
     <!-- Select2 JS -->
-	<script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}" type="text/javascript"></script>
+ <script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}" type="text/javascript"></script>
 
     <!-- Flatpickr JS -->
     <script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}" type="text/javascript"></script>
 
     <!-- Main JS -->
     <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
+
+    <!-- CKEditor 4.22.1 Full -->
+    <script src="https://cdn.ckeditor.com/4.22.1/full/ckeditor.js"></script>
+
     <script>
+        // Initialize CKEditor for Add FAQ Answer
+        CKEDITOR.replace('faq_answer', {
+            height: 300,
+        });
+
+        // Initialize CKEditor for Edit FAQ Answer
+        CKEDITOR.replace('edit_faq_answer', {
+            height: 300,
+        });
+
+        CKEDITOR.on('instanceReady', function(ev) {
+            ev.editor.on('fileUploadRequest', function(evt) {
+                var xhr = evt.data.fileLoader.xhr;
+                xhr.setRequestHeader('X-CSRF-TOKEN', '{{ csrf_token() }}');
+            });
+        });
+
         $(document).ready(function() {
+            // Helper: Update CKEditor instances before any AJAX form submission
+            function syncCkEditors() {
+                if (typeof CKEDITOR !== 'undefined') {
+                    for (var instance in CKEDITOR.instances) {
+                        if (CKEDITOR.instances.hasOwnProperty(instance)) {
+                            CKEDITOR.instances[instance].updateElement();
+                        }
+                    }
+                }
+            }
+
             // Pre-select page when "Add" button is clicked for a specific page
             $('.add-faq-for-page').on('click', function() {
                 var page = $(this).data('page');
@@ -327,6 +359,7 @@
             // FAQ Add Form
             $('#addFaqForm').on('submit', function(e) {
                 e.preventDefault();
+                syncCkEditors();
                 
                 $.ajax({
                     url: '{{ route("admin.store-faq") }}',
@@ -351,6 +384,7 @@
             // FAQ Edit Form
             $('#editFaqForm').on('submit', function(e) {
                 e.preventDefault();
+                syncCkEditors();
                 var faqId = $('#edit_faq_id').val();
                 
                 $.ajax({
@@ -382,6 +416,11 @@
                 $('#edit_faq_page').val(btn.data('page'));
                 $('#edit_faq_sort_order').val(btn.data('sort_order'));
                 $('#edit_faq_is_active').val(btn.data('is_active'));
+                
+                // Set CKEditor content with the answer data
+                if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.edit_faq_answer) {
+                    CKEDITOR.instances.edit_faq_answer.setData(btn.data('answer'));
+                }
                 
                 var modal = new bootstrap.Modal(document.getElementById('editFaqModal'));
                 modal.show();
@@ -423,6 +462,21 @@
                     }
                 });
             });
+        });
+
+        // When the Add modal is hidden, reset the form and clear CKEditor
+        $('#addFaqModal').on('hidden.bs.modal', function () {
+            $('#addFaqForm')[0].reset();
+            if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.faq_answer) {
+                CKEDITOR.instances.faq_answer.setData('');
+            }
+        });
+
+        // When the Edit modal is hidden, clear CKEditor
+        $('#editFaqModal').on('hidden.bs.modal', function () {
+            if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.edit_faq_answer) {
+                CKEDITOR.instances.edit_faq_answer.setData('');
+            }
         });
     </script>
 </body>
