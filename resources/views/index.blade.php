@@ -578,10 +578,12 @@
                         {{ $shippingSolution1['card_desc'] ?? 'Move commercial shipments with confidence. We support exporters, manufacturers, distributors, and growing businesses with secure handling, flexible delivery options, documentation support, and competitive pricing for bulk volumes.' }}
                     </p>
                     <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{{ $shippingSolution1['card_point1'] ?? 'Fragile Goods' }} </strong>
+                        <li>
+                                <strong>{!! $shippingSolution1['card_point1'] ?? 'Fragile Goods' !!}</strong>
+
                             <!-- {{ $shippingSolution1['card_point1'] ?? 'Secure handling for sensitive and high-volume shipments.' }} -->
                         </li>
-                        <li><strong>{{ $shippingSolution1['card_point2'] ?? 'Bulk Shipments' }} </strong>
+                        <li><strong>{!! $shippingSolution1['card_point2'] ?? 'Bulk Shipments' !!}</strong>
                             <!-- {{ $shippingSolution1['card_point2'] ?? 'Cost-effective solutions and customs clearance support.' }} -->
                         </li>
                     </ul>
@@ -600,10 +602,10 @@
                         {{ $shippingSolution2['card_desc'] ?? 'Connect your online store with our shipping platform and manage orders from leading marketplaces like Amazon, eBay, Etsy, Walmart, and more, with faster processing, real-time tracking, and reliable delivery support.' }}
                     </p>
                     <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{{ $shippingSolution2['card_point1'] ?? 'Real-Time Tracking' }}:</strong>
-                            {{ $shippingSolution2['card_point1'] ?? 'Complete visibility for every shipment.' }}</li>
-                        <li><strong>{{ $shippingSolution2['card_point2'] ?? 'Seller-Friendly Shipping' }}:</strong>
-                            {{ $shippingSolution2['card_point2'] ?? 'Built for marketplace sellers handling small packages daily and high volume' }}
+                        <li><strong>{!! $shippingSolution2['card_point1'] ?? 'Real-Time Tracking' !!}</strong>
+                            <!-- {{ $shippingSolution2['card_point1'] ?? 'Complete visibility for every shipment.' }}</li> -->
+                        <li><strong>{!! $shippingSolution2['card_point2'] ?? 'Seller-Friendly Shipping' !!}</strong>
+                            <!-- {{ $shippingSolution2['card_point2'] ?? 'Built for marketplace sellers handling small packages daily and high volume' }} -->
                         </li>
                     </ul>
                     <a href="#" class="sr-demo-btn-live">{{ $shippingSolution2['card_cta'] ?? 'Start Shipping' }}</a>
@@ -624,11 +626,11 @@
                         {{ $shippingSolution3['card_desc'] ?? 'Launch and scale your Online business with reliable door-to-door Shipping. Whether you sell through Shopify, your own website, or a dropshipping store, we help you ship products directly to customers with speed, tracking, and complete reliability.' }}
                     </p>
                     <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{{ $shippingSolution3['card_point1'] ?? 'End-to-End Support' }}:</strong>
-                            {{ $shippingSolution3['card_point1'] ?? 'Manage multiple tasks with one easy-to-use dashboard' }}
+                        <li><strong>{!! $shippingSolution3['card_point1'] ?? 'End-to-End Support' !!}</strong>
+                            <!-- {{ $shippingSolution3['card_point1'] ?? 'Manage multiple tasks with one easy-to-use dashboard' }} -->
                         </li>
-                        <li><strong>{{ $shippingSolution3['card_point2'] ?? 'Automated Order flow' }}:</strong>
-                            {{ $shippingSolution3['card_point2'] ?? 'Manage. Process. Dispatch' }}</li>
+                        <li><strong>{!! $shippingSolution3['card_point2'] ?? 'Automated Order flow' !!}</strong>
+                            <!-- {{ $shippingSolution3['card_point2'] ?? 'Manage. Process. Dispatch' }}</li> -->
                     </ul>
                     <a href="#" class="sr-demo-btn-live">{{ $shippingSolution3['card_cta'] ?? 'Start Shipping' }}</a>
                 </div>
@@ -646,11 +648,11 @@
                         {{ $shippingSolution4['card_desc'] ?? 'Send personal packages to your loved ones worldwide with safe handling, timely delivery, and clear updates at every step.' }}
                     </p>
                     <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{{ $shippingSolution4['card_point1'] ?? 'International Delivery' }}:</strong>
-                            {{ $shippingSolution4['card_point1'] ?? 'Reliable shipping for gifts, documents, clothes, and personal items.' }}
+                        <li><strong>{!! $shippingSolution4['card_point1'] ?? 'International Delivery' !!}</strong>
+                            <!-- {{ $shippingSolution4['card_point1'] ?? 'Reliable shipping for gifts, documents, clothes, and personal items.' }} -->
                         </li>
-                        <li><strong>{{ $shippingSolution4['card_point2'] ?? 'Live Updates' }}:</strong>
-                            {{ $shippingSolution4['card_point2'] ?? 'Stay informed from pickup to delivery.' }}</li>
+                        <li><strong>{!! $shippingSolution4['card_point2'] ?? 'Live Updates' !!}</strong>
+                            <!-- {{ $shippingSolution4['card_point2'] ?? 'Stay informed from pickup to delivery.' }}</li> -->
                     </ul>
                     <a href="#" class="sr-demo-btn-live">{{ $shippingSolution4['card_cta'] ?? 'Book Shipment' }}</a>
                 </div>

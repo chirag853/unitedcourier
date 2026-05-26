@@ -1541,6 +1541,31 @@ class AdminController extends Controller
     }
 
     // FAQ Management Methods
+    public function faq()
+    {
+        $faqs = \App\Models\Faq::orderBy('page')->orderBy('sort_order')->orderBy('id')->get();
+        $faqsByPage = $faqs->groupBy('page');
+
+        $pageNames = [
+            'home' => 'Home',
+            'network' => 'Network',
+            'about' => 'About Us',
+            'service' => 'Service',
+            'partnership' => 'Partnership',
+            'warehousing' => 'Warehousing Solutions',
+            'ecommerce' => 'E-Commerce Logistics Solutions',
+            'express-air' => 'Express Air Freight Solutions',
+            'track-order' => 'Track Order',
+            'e-books' => 'E-Books',
+            'volumetric-calculator' => 'Volumetric Calculator',
+            'barcode-generator' => 'Barcode Generator',
+            'shipping-rate-calculator' => 'Shipping Rate Calculator',
+            'hsn-finder' => 'HSN Finder',
+        ];
+
+        return view('admin.faq', compact('faqs', 'faqsByPage', 'pageNames'));
+    }
+
     public function storeFaq(Request $request)
     {
         try {
@@ -3743,7 +3768,7 @@ class AdminController extends Controller
         $ecosystemGlobalCards = \App\Models\PartnershipPage::bySection('ecosystem_global')->active()->ordered()->get();
         $ecosystemPartnerCards = \App\Models\PartnershipPage::bySection('ecosystem_partner')->active()->ordered()->get();
         $faqSection = \App\Models\PartnershipPage::bySection('faq')->active()->first();
-        $faqItems = \App\Models\PartnershipPage::bySection('faq_item')->active()->ordered()->get();
+        $faqItems = \App\Models\Faq::byPage('partnership')->active()->ordered()->get();
 
         return view('admin.edit-partnership-all', compact(
             'hero', 'logos', 'formSection', 'aboutSection', 'features',
@@ -3851,13 +3876,13 @@ class AdminController extends Controller
                 ]);
             }
 
-            // Update FAQ Items
+            // Update FAQ Items (unified faq table)
             if (isset($data['faq_items']) && is_array($data['faq_items'])) {
                 foreach ($data['faq_items'] as $faqItemData) {
-                    $updateRecord($faqItemData['id'], [
-                        'title' => $faqItemData['title'] ?? '',
-                        'description' => $faqItemData['description'] ?? '',
-                    ]);
+                    $faq = \App\Models\Faq::findOrFail($faqItemData['id']);
+                    $faq->question = $faqItemData['question'] ?? $faq->question;
+                    $faq->answer = $faqItemData['answer'] ?? $faq->answer;
+                    $faq->save();
                 }
             }
 

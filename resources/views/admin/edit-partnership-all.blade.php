@@ -572,13 +572,13 @@
                                     <div class="row">
                                         <div class="col-md-12 mb-2">
                                             <label class="form-section-label">Question</label>
-                                            <input type="text" class="form-control" name="faq_items[{{ $index }}][title]" value="{{ $faq->title ?? '' }}">
+                                            <input type="text" class="form-control" name="faq_items[{{ $index }}][question]" value="{{ $faq->question ?? '' }}">
                                         </div>
                                     </div>
                                     <div class="row">
                                         <div class="col-md-12 mb-2">
                                             <label class="form-section-label">Answer</label>
-                                            <textarea class="form-control" name="faq_items[{{ $index }}][description]" rows="2">{{ $faq->description ?? '' }}</textarea>
+                                            <textarea class="form-control" name="faq_items[{{ $index }}][answer]" rows="2">{{ $faq->answer ?? '' }}</textarea>
                                         </div>
                                     </div>
                                 </div>

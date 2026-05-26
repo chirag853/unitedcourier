@@ -576,12 +576,12 @@
                         <h2 class="accordion-header">
                             <button class="accordion-button {{ $index == 0 ? '' : 'collapsed' }}" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#faq{{ $index + 1 }}">
-                                {{ $faq->title }}
+                                {{ $faq->question }}
                             </button>
                         </h2>
                         <div id="faq{{ $index + 1 }}" class="accordion-collapse collapse {{ $index == 0 ? 'show' : '' }}" data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                {!! $faq->description !!}
+                                {!! $faq->answer !!}
                             </div>
                         </div>
                     </div>

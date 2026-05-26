@@ -717,18 +717,15 @@
             <div class="col-lg-8">
                 <div class="accordion" id="logisticsFaq" style="height: 70vh; overflow-y: auto;">
                     @foreach($faqs as $index => $faq)
-                    @php
-                        $faqContent = is_string($faq->content) ? json_decode($faq->content, true) : $faq->content;
-                    @endphp
                     <div class="accordion-item">
                         <h2 class="accordion-header">
                             <button class="accordion-button {{ $index == 0 ? '' : 'collapsed' }}" type="button" data-bs-toggle="collapse" data-bs-target="#faq{{ $index }}">
-                                {{ $faqContent['question'] ?? 'Question' }}
+                                {{ $faq->question }}
                             </button>
                         </h2>
                         <div id="faq{{ $index }}" class="accordion-collapse collapse {{ $index == 0 ? 'show' : '' }}" data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                {{ $faqContent['answer'] ?? 'Answer' }}
+                                {{ $faq->answer }}
                             </div>
                         </div>
                     </div>

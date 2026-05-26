@@ -334,20 +334,18 @@
                 <div class="accordion" id="logisticsFaq" style="height: 70vh; overflow-y: auto;">
                     @forelse($faqs as $index => $faq)
                     @php
-                        $question = $faq->content['question'] ?? $faq->title ?? 'Question';
-                        $answer = $faq->content['answer'] ?? $faq->description ?? 'Answer';
                         $faqId = 'faq' . ($index + 1);
                         $isFirst = $index === 0;
                     @endphp
                     <div class="accordion-item">
                         <h2 class="accordion-header">
                             <button class="accordion-button {{ !$isFirst ? 'collapsed' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#{{ $faqId }}">
-                                {{ $question }}
+                                {{ $faq->question }}
                             </button>
                         </h2>
                         <div id="{{ $faqId }}" class="accordion-collapse collapse {{ $isFirst ? 'show' : '' }}" data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                {{ $answer }}
+                                {{ $faq->answer }}
                             </div>
                         </div>
                     </div>

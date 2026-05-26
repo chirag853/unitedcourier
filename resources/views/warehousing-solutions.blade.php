@@ -489,13 +489,17 @@
                 <a href="#" class="book-btn-service"><i class="fas fa-paper-plane"></i> Book a Shipping</a> &nbsp;  <a href="#" class="quote-btn-service"><i class="fas fa-calculator"></i> Get a Quote</a>
 
                 <div class="hero-badges">
-                    @foreach(data_get($heroContent, 'content.list_items', [
-                        '24–72 Hr Delivery',
-                        'Fully Insured',
+                    <!-- @foreach(data_get($heroContent, 'content.list_items', [
+                        'Inventory Management',
+                        'Fast Fulfillment',
                         '220+ Countries',
                     ]) as $badge)
                         <div class="hero-badge"><i class="fas fa-check-circle"></i> {{ $badge }}</div>
-                    @endforeach
+                    @endforeach -->
+
+                    <div class="hero-badge"><i class="fas fa-clock"></i>Inventory Management</div>
+                    <div class="hero-badge"><i class="fas fa-shield-alt"></i>Fast Fulfillment</div>
+                    <div class="hero-badge"><i class="fas fa-map-marker-alt"></i>220+ Countries</div>
                 </div>
             </div>
 
@@ -772,21 +776,21 @@
  <section class="faq-section">
     <div class="container">
         <div class="faq-header">
-            <span class="heading-badge">{{ data_get($faqContent->first(), 'content.badge', 'Common Questions') }}</span>
-            <h2 class="about-title">{{ data_get($faqContent->first(), 'content.title', 'Frequently Asked Questions') }}</h2>
+            <span class="heading-badge">{{ data_get($faqHeaderContent, 'content.badge', 'Common Questions') }}</span>
+            <h2 class="about-title">{{ data_get($faqHeaderContent, 'content.title', 'Frequently Asked Questions') }}</h2>
         </div>
         
         <div class="row g-4">
             <div class="col-lg-4">
                 <div class="faq-illustration">
-                    <img src="{{ data_get($faqContent->first(), 'content.illustration_image', 'https://i.pinimg.com/originals/f6/5d/46/f65d4681649d85bc91c86872a1775919.gif') }}" alt="Help" style="width: 200px; margin-top: -40px;">
-                    <h4 class="fw-bold mb-3">{{ data_get($faqContent->first(), 'content.help_title', 'Need personalized help?') }}</h4>
-                    <p class="text-muted">{{ data_get($faqContent->first(), 'content.help_description', 'Our logistics experts are available 24/7 to assist your requirements.') }}</p>
+                    <img src="{{ data_get($faqHeaderContent, 'content.illustration_image', 'https://i.pinimg.com/originals/f6/5d/46/f65d4681649d85bc91c86872a1775919.gif') }}" alt="Help" style="width: 200px; margin-top: -40px;">
+                    <h4 class="fw-bold mb-3">{{ data_get($faqHeaderContent, 'content.help_title', 'Need personalized help?') }}</h4>
+                    <p class="text-muted">{{ data_get($faqHeaderContent, 'content.help_description', 'Our logistics experts are available 24/7 to assist your requirements.') }}</p>
                     
                     <div class="moving-gradient-bg contact-box">
-                        <h4>{{ data_get($faqContent->first(), 'content.contact_title', 'Contact Us') }}</h4>
-                        <p>{{ data_get($faqContent->first(), 'content.contact_description', 'For urgent inquiries regarding your current shipment status.') }}</p>
-                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ data_get($faqContent->first(), 'content.contact_button_text', 'Message Support') }}</button>
+                        <h4>{{ data_get($faqHeaderContent, 'content.contact_title', 'Contact Us') }}</h4>
+                        <p>{{ data_get($faqHeaderContent, 'content.contact_description', 'For urgent inquiries regarding your current shipment status.') }}</p>
+                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ data_get($faqHeaderContent, 'content.contact_button_text', 'Message Support') }}</button>
                     </div>
                 </div>
             </div>
@@ -798,12 +802,12 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button {{ $index !== 0 ? 'collapsed' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#faq{{ $index + 1 }}">
-                                    {{ data_get($faqItem, 'content.subtitle', 'FAQ question') }}
+                                    {{ $faqItem->question }}
                                 </button>
                             </h2>
                             <div id="faq{{ $index + 1 }}" class="accordion-collapse collapse{{ $index === 0 ? ' show' : '' }}" data-bs-parent="#logisticsFaq">
                                 <div class="accordion-body">
-                                    {{ data_get($faqItem, 'content.description', 'FAQ answer text goes here.') }}
+                                    {{ $faqItem->answer }}
                                 </div>
                             </div>
                         </div>

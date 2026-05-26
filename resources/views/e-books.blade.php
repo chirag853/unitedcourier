@@ -434,20 +434,19 @@ $faqContactButtonText = $faqHeader->content['contact_button_text'] ?? 'Message S
                 <div class="accordion" id="logisticsFaq" style="height: 70vh; overflow-y: auto;">
                     @forelse($faqs as $faq)
                     @php
-                    $fContent = $faq->content;
                     $faqId = 'faq' . $loop->iteration;
                     @endphp
                     <div class="accordion-item">
                         <h2 class="accordion-header">
                             <button class="accordion-button {{ $loop->first ? '' : 'collapsed' }}" type="button"
                                 data-bs-toggle="collapse" data-bs-target="#{{ $faqId }}">
-                                {{ $fContent['question'] ?? '' }}
+                                {{ $faq->question }}
                             </button>
                         </h2>
                         <div id="{{ $faqId }}" class="accordion-collapse collapse {{ $loop->first ? 'show' : '' }}"
                             data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                {{ $fContent['answer'] ?? '' }}
+                                {{ $faq->answer }}
                             </div>
                         </div>
                     </div>
