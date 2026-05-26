@@ -30,6 +30,9 @@ Route::get('/world-weather', [WebsiteController::class, 'worldWeather'])->name('
 Route::get('/world-time', [WebsiteController::class, 'worldTime'])->name('world-time');
 Route::get('/partnership', [WebsiteController::class, 'partner'])->name('partnership');
 Route::get('/document-download', [WebsiteController::class, 'documentDownload'])->name('document-download');
+Route::get('/barcode-generator', [WebsiteController::class, 'barcodeGenerator'])->name('barcode-generator');
+Route::get('/shipping-rate-calculator', [WebsiteController::class, 'shippingRateCalculator'])->name('shipping-rate-calculator');
+Route::get('/hsn-finder', [WebsiteController::class, 'hsnFinder'])->name('hsn-finder');
 
 
 
@@ -446,6 +449,21 @@ Route::prefix('admin')->group(function () {
     Route::post('/store-express-air-freight-solutions-content', [AdminController::class, 'storeExpressAirFreightSolutionsContent'])->name('admin.store-express-air-freight-solutions-content');
     Route::post('/update-express-air-freight-solutions-content/{id}', [AdminController::class, 'updateExpressAirFreightSolutionsContent'])->name('admin.update-express-air-freight-solutions-content');
     Route::delete('/delete-express-air-freight-solutions-content/{id}', [AdminController::class, 'deleteExpressAirFreightSolutionsContent'])->name('admin.delete-express-air-freight-solutions-content');
+
+    // Barcode Generator Page Management Routes
+    Route::get('/change-barcode-generator', [AdminController::class, 'changeBarcodeGenerator'])->name('admin.change-barcode-generator');
+    Route::post('/update-barcode-generator-content/{id}', [AdminController::class, 'updateBarcodeGeneratorContent'])->name('admin.update-barcode-generator-content');
+    Route::delete('/delete-barcode-generator-content/{id}', [AdminController::class, 'deleteBarcodeGeneratorContent'])->name('admin.delete-barcode-generator-content');
+
+    // Shipping Rate Calculator Page Management Routes
+    Route::get('/change-shipping-rate-calculator', [AdminController::class, 'changeShippingRateCalculator'])->name('admin.change-shipping-rate-calculator');
+    Route::post('/update-shipping-rate-calculator-content/{id}', [AdminController::class, 'updateShippingRateCalculatorContent'])->name('admin.update-shipping-rate-calculator-content');
+    Route::delete('/delete-shipping-rate-calculator-content/{id}', [AdminController::class, 'deleteShippingRateCalculatorContent'])->name('admin.delete-shipping-rate-calculator-content');
+
+    // HSN Finder Page Management Routes
+    Route::get('/change-hsn-finder', [AdminController::class, 'changeHsnFinder'])->name('admin.change-hsn-finder');
+    Route::post('/update-hsn-finder-content/{id}', [AdminController::class, 'updateHsnFinderContent'])->name('admin.update-hsn-finder-content');
+    Route::delete('/delete-hsn-finder-content/{id}', [AdminController::class, 'deleteHsnFinderContent'])->name('admin.delete-hsn-finder-content');
 
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');

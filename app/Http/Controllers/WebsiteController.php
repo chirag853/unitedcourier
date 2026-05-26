@@ -19,6 +19,9 @@ use App\Models\EcommerceLogisticsSolutionsPage;
 use App\Models\Blog;
 use App\Models\BlogCategory;
 use App\Models\ExpressAirFreightSolutionsPage;
+use App\Models\BarcodeGeneratorPage;
+use App\Models\ShippingRateCalculatorPage;
+use App\Models\HsnFinderPage;
 
 class WebsiteController extends Controller
 {
@@ -418,5 +421,89 @@ class WebsiteController extends Controller
             ->get();
 
         return view('blog-detail', compact('blog', 'trendingBlogs'));
+    }
+
+    /**
+     * Display the barcode generator page.
+     */
+    public function barcodeGenerator()
+    {
+        $heroContent = BarcodeGeneratorPage::bySection('hero')->where('status', true)->first();
+        $featuresHeading = BarcodeGeneratorPage::bySection('features_heading')->where('status', true)->first();
+        $features = BarcodeGeneratorPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
+        $trackCta = BarcodeGeneratorPage::bySection('track_cta')->where('status', true)->first();
+        $testimonialsHeader = BarcodeGeneratorPage::bySection('testimonials_header')->where('status', true)->first();
+        $testimonials = Testimonial::byPage('barcode-generator')->active()->ordered()->get();
+        $faqHeader = BarcodeGeneratorPage::bySection('faq_header')->where('status', true)->first();
+        $faqs = BarcodeGeneratorPage::bySection('faq')->where('status', true)->orderBy('display_order')->get();
+        $faqContactSidebar = BarcodeGeneratorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
+
+        return view('barcode-generator', compact(
+            'heroContent',
+            'featuresHeading',
+            'features',
+            'trackCta',
+            'testimonialsHeader',
+            'testimonials',
+            'faqHeader',
+            'faqs',
+            'faqContactSidebar'
+        ));
+    }
+
+    /**
+     * Display the shipping rate calculator page.
+     */
+    public function shippingRateCalculator()
+    {
+        $heroContent = ShippingRateCalculatorPage::bySection('hero')->where('status', true)->first();
+        $featuresHeading = ShippingRateCalculatorPage::bySection('features_heading')->where('status', true)->first();
+        $features = ShippingRateCalculatorPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
+        $trackCta = ShippingRateCalculatorPage::bySection('track_cta')->where('status', true)->first();
+        $testimonialsHeader = ShippingRateCalculatorPage::bySection('testimonials_header')->where('status', true)->first();
+        $testimonials = Testimonial::byPage('shipping-rate-calculator')->active()->ordered()->get();
+        $faqHeader = ShippingRateCalculatorPage::bySection('faq_header')->where('status', true)->first();
+        $faqs = ShippingRateCalculatorPage::bySection('faq')->where('status', true)->orderBy('display_order')->get();
+        $faqContactSidebar = ShippingRateCalculatorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
+
+        return view('shipping-rate-calculator', compact(
+            'heroContent',
+            'featuresHeading',
+            'features',
+            'trackCta',
+            'testimonialsHeader',
+            'testimonials',
+            'faqHeader',
+            'faqs',
+            'faqContactSidebar'
+        ));
+    }
+
+    /**
+     * Display the HSN finder page.
+     */
+    public function hsnFinder()
+    {
+        $heroContent = HsnFinderPage::bySection('hero')->where('status', true)->first();
+        $featuresHeading = HsnFinderPage::bySection('features_heading')->where('status', true)->first();
+        $features = HsnFinderPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
+        $testimonialsHeader = HsnFinderPage::bySection('testimonials_header')->where('status', true)->first();
+        $testimonials = Testimonial::byPage('hsn-finder')->active()->ordered()->get();
+        $faqHeader = HsnFinderPage::bySection('faq_header')->where('status', true)->first();
+        $faqs = HsnFinderPage::bySection('faq')->where('status', true)->orderBy('display_order')->get();
+        $faqContactSidebar = HsnFinderPage::bySection('faq_contact_sidebar')->where('status', true)->first();
+        $trackCta = HsnFinderPage::bySection('track_cta')->where('status', true)->first();
+
+        return view('hsn-finder', compact(
+            'heroContent',
+            'featuresHeading',
+            'features',
+            'testimonialsHeader',
+            'testimonials',
+            'faqHeader',
+            'faqs',
+            'faqContactSidebar',
+            'trackCta'
+        ));
     }
 }

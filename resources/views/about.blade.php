@@ -515,7 +515,7 @@
                         {!! $heroContent->description !!}
                     </p>
                    @if($heroContent->image)
-                   <img src="{{ asset($heroContent->image) }}" class="img-fluid hero-main-img" style="max-width:1000px; margin-bottom:-100px">
+                   <img src="{{ asset(ltrim($heroContent->image, 'public/')) }}" class="img-fluid hero-main-img" style="max-width:1000px; margin-bottom:-100px">
                    @endif
                 
                 </div>
@@ -566,7 +566,7 @@
                 <div class="col-lg-6 animate-on-scroll" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
                     <div class="about-image-grid">
                         @if($overview->image)
-                        <img src="{{ asset($overview->image) }}" class="img-fluid">
+                        <img src="{{ asset(ltrim($overview->image, 'public/')) }}" class="img-fluid">
                         @endif
                     </div>
                 </div>
@@ -638,7 +638,7 @@
 
                     <div class="img-card">
                         @if($journeyIntro->image)
-                        <img src="{{ asset($journeyIntro->image) }}" alt="Logistic Success Story">
+                        <img src="{{ asset(ltrim($journeyIntro->image, 'public/')) }}" alt="Logistic Success Story">
                         @endif
                     </div>
 

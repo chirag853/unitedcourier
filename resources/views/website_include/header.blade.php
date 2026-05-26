@@ -124,7 +124,7 @@
                             <div class="menu-col-right">
                                 <span class="menu-label">PARTNER PROGRAM</span>
                                 <a href="{{ url('/partnership') }}" class="partner-card">
-                                    <img src="https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&q=80&w=200"
+                                    <img src="{{asset(asset('/website_images/partnership-menu.webp'))}}"
                                         class="partner-img" alt="Partner">
                                     <div class="menu-info">
                                         <h6>Become a Partner</h6>
@@ -159,7 +159,7 @@
                                         <p>Enter your package dimensions to instantly calculate</p>
                                     </div>
                                 </a>
-                                <a href="#" class="menu-item">
+                                <a href="{{ url('/shipping-rate-calculator') }}" class="menu-item">
                                 <!-- <a href="{{ url('/world-weather') }}" class="menu-item"> -->
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-calculator"></i>
@@ -193,7 +193,7 @@
 
 
                                 <!-- barcode generator -->
-                                <a href="#" class="menu-item">
+                                <a href="{{ url('/barcode-generator') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-barcode"></i>
                                     </div>
@@ -205,7 +205,7 @@
                                 </a>
 
                                 <!-- HSN finder -->
-                                <a href="#" class="menu-item">
+                                <a href="{{ url('/hsn-finder') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-h"></i>
                                     </div>
@@ -219,7 +219,7 @@
                             </div>
                             <div class="menu-col-right">
                                 <a href="{{ url('/e-books') }}" class="partner-card">
-                                    <img src="https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&q=80&w=200"
+                                    <img src="{{asset(asset('/website_images/e-book.webp'))}}"
                                         class="partner-img" alt="Partner">
                                     <div class="menu-info">
                                         <h6>E-Books</h6>

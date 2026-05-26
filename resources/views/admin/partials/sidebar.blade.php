@@ -125,6 +125,12 @@
                                         class="{{ request()->is('admin/change-partnership*') ? 'active' : '' }}">Partnership</a></li>
                                 <li><a href="{{ url('/admin/change-document-download') }}"
                                         class="{{ request()->is('admin/change-document-download*') ? 'active' : '' }}">Document Download</a></li>
+                                <li><a href="{{ url('/admin/change-barcode-generator') }}"
+                                        class="{{ request()->is('admin/change-barcode-generator*') ? 'active' : '' }}">Barcode Generator</a></li>
+                                <li><a href="{{ url('/admin/change-shipping-rate-calculator') }}"
+                                        class="{{ request()->is('admin/change-shipping-rate-calculator*') ? 'active' : '' }}">Shipping Rate Calculator</a></li>
+                                <li><a href="{{ url('/admin/change-hsn-finder') }}"
+                                        class="{{ request()->is('admin/change-hsn-finder*') ? 'active' : '' }}">HSN Finder</a></li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
                             </ul>
                         </li>

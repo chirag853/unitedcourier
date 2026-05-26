@@ -138,7 +138,7 @@ class AdminController extends Controller
                 ]);
                 
                 $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
-                $imagePath = 'public/website_images/' . $imageName;
+                $imagePath = 'website_images/' . $imageName;
                 
                 // Ensure directory exists
                 $uploadPath = public_path('website_images');
@@ -3356,6 +3356,186 @@ class AdminController extends Controller
             'success' => true,
             'message' => 'Express air freight solutions content deleted successfully!'
         ]);
+    }
+
+    // ========== Barcode Generator Page Management ==========
+
+    public function changeBarcodeGenerator()
+    {
+        $barcodeContent = \App\Models\BarcodeGeneratorPage::orderBy('display_order')->get();
+        return view('admin.change-barcode-generator', ['barcodeContent' => $barcodeContent]);
+    }
+
+    public function updateBarcodeGeneratorContent(Request $request, $id)
+    {
+        try {
+            $content = \App\Models\BarcodeGeneratorPage::findOrFail($id);
+
+            $updateData = [
+                'title' => $request->title,
+                'subtitle' => $request->subtitle,
+                'description' => $request->description,
+                'page_badge_text' => $request->page_badge_text,
+                'page_button_text' => $request->page_button_text,
+                'page_icon_class' => $request->page_icon_class,
+                'page_tag' => $request->page_tag,
+                'page_label' => $request->page_label,
+                'page_placeholder' => $request->page_placeholder,
+                'link' => $request->link,
+                'display_order' => $request->display_order ?? 0,
+                'status' => $request->has('status') ? true : false,
+            ];
+
+            $content->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Barcode generator content updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deleteBarcodeGeneratorContent($id)
+    {
+        try {
+            $content = \App\Models\BarcodeGeneratorPage::findOrFail($id);
+            $content->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Barcode generator content deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    // ========== Shipping Rate Calculator Page Management ==========
+
+    public function changeShippingRateCalculator()
+    {
+        $shippingRateContent = \App\Models\ShippingRateCalculatorPage::orderBy('display_order')->get();
+        return view('admin.change-shipping-rate-calculator', ['shippingRateContent' => $shippingRateContent]);
+    }
+
+    public function updateShippingRateCalculatorContent(Request $request, $id)
+    {
+        try {
+            $content = \App\Models\ShippingRateCalculatorPage::findOrFail($id);
+
+            $updateData = [
+                'title' => $request->title,
+                'subtitle' => $request->subtitle,
+                'description' => $request->description,
+                'page_badge_text' => $request->page_badge_text,
+                'page_button_text' => $request->page_button_text,
+                'page_icon_class' => $request->page_icon_class,
+                'page_tag' => $request->page_tag,
+                'page_label' => $request->page_label,
+                'page_placeholder' => $request->page_placeholder,
+                'link' => $request->link,
+                'display_order' => $request->display_order ?? 0,
+                'status' => $request->has('status') ? true : false,
+            ];
+
+            $content->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipping rate calculator content updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deleteShippingRateCalculatorContent($id)
+    {
+        try {
+            $content = \App\Models\ShippingRateCalculatorPage::findOrFail($id);
+            $content->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipping rate calculator content deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    // ========== HSN Finder Page Management ==========
+
+    public function changeHsnFinder()
+    {
+        $hsnFinderContent = \App\Models\HsnFinderPage::orderBy('display_order')->get();
+        return view('admin.change-hsn-finder', ['hsnFinderContent' => $hsnFinderContent]);
+    }
+
+    public function updateHsnFinderContent(Request $request, $id)
+    {
+        try {
+            $content = \App\Models\HsnFinderPage::findOrFail($id);
+
+            $updateData = [
+                'title' => $request->title,
+                'subtitle' => $request->subtitle,
+                'description' => $request->description,
+                'page_badge_text' => $request->page_badge_text,
+                'page_button_text' => $request->page_button_text,
+                'page_icon_class' => $request->page_icon_class,
+                'page_tag' => $request->page_tag,
+                'page_label' => $request->page_label,
+                'page_placeholder' => $request->page_placeholder,
+                'link' => $request->link,
+                'display_order' => $request->display_order ?? 0,
+                'status' => $request->has('status') ? true : false,
+            ];
+
+            $content->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'HSN finder content updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deleteHsnFinderContent($id)
+    {
+        try {
+            $content = \App\Models\HsnFinderPage::findOrFail($id);
+            $content->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'HSN finder content deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
     }
 
     // ========== Partnership Page Management ==========
