@@ -563,8 +563,8 @@
 
         <div class="sr-demo-toggle-nav">
             <div class="sr-demo-nav-item sr-active" onclick="srShowTab(0, this)">B2B Shipments</div>
-            <div class="sr-demo-nav-item" onclick="srShowTab(1, this)">Marketplaces</div>
-            <div class="sr-demo-nav-item" onclick="srShowTab(2, this)">Dropshipping</div>
+            <div class="sr-demo-nav-item" onclick="srShowTab(2, this)">Marketplaces</div>
+            <div class="sr-demo-nav-item" onclick="srShowTab(1, this)">Dropshipping</div>
             <div class="sr-demo-nav-item" onclick="srShowTab(3, this)">Friends & Family</div>
         </div>
 
@@ -578,11 +578,11 @@
                         {{ $shippingSolution1['card_desc'] ?? 'Move commercial shipments with confidence. We support exporters, manufacturers, distributors, and growing businesses with secure handling, flexible delivery options, documentation support, and competitive pricing for bulk volumes.' }}
                     </p>
                     <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{{ $shippingSolution1['card_point1'] ?? 'Fragile Goods' }}:</strong>
-                            {{ $shippingSolution1['card_point1'] ?? 'Secure handling for sensitive and high-volume shipments.' }}
+                        <li><strong>{{ $shippingSolution1['card_point1'] ?? 'Fragile Goods' }} </strong>
+                            <!-- {{ $shippingSolution1['card_point1'] ?? 'Secure handling for sensitive and high-volume shipments.' }} -->
                         </li>
-                        <li><strong>{{ $shippingSolution1['card_point2'] ?? 'Bulk Shipments' }}:</strong>
-                            {{ $shippingSolution1['card_point2'] ?? 'Cost-effective solutions and customs clearance support.' }}
+                        <li><strong>{{ $shippingSolution1['card_point2'] ?? 'Bulk Shipments' }} </strong>
+                            <!-- {{ $shippingSolution1['card_point2'] ?? 'Cost-effective solutions and customs clearance support.' }} -->
                         </li>
                     </ul>
                     <a href="#" class="sr-demo-btn-live">{{ $shippingSolution1['card_cta'] ?? 'Start Shipping' }}</a>
