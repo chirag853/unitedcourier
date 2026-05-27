@@ -393,6 +393,7 @@ Route::prefix('admin')->group(function () {
     // Home Page Management Routes
     Route::get('/change-home', [AdminController::class, 'changeHome'])->name('admin.change-home');
     Route::get('/update-home', [AdminController::class, 'updateHome'])->name('admin.update-home');
+    Route::get('/get-home-content/{id}', [AdminController::class, 'getHomeContent'])->name('admin.get-home-content');
     Route::post('/update-home-content/{id}', [AdminController::class, 'updateHomeContent'])->name('admin.update-home-content');
     Route::post('/update-multiple-home-content', [AdminController::class, 'updateMultipleHomeContent'])->name('admin.update-multiple-home-content');
     

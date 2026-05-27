@@ -190,6 +190,12 @@ class AdminController extends Controller
         return view('admin.change-home', ['homeContent' => $homeContent]);
     }
 
+    public function getHomeContent($id)
+    {
+        $content = \App\Models\HomePageContent::findOrFail($id);
+        return response()->json($content);
+    }
+
     public function updateHomeContent(Request $request, $id)
     {
         $content = \App\Models\HomePageContent::findOrFail($id);

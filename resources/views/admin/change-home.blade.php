@@ -190,7 +190,7 @@
                                                     <div class="table-actions">
                                                         <button type="button" class="btn btn-sm btn-primary action-btn"
                                                             data-bs-toggle="modal" data-bs-target="#editModal"
-                                                            onclick="editContent({{ $content->id }}, '{{ addslashes($content->section) }}', '{{ addslashes($content->field_name) }}', '{{ addslashes($content->content) }}', {{ $content->sort_order }})">
+                                                            onclick="editContent({{ $content->id }})">
                                                             <i class="ti ti-edit"></i> Edit
                                                         </button>
                                                     </div>
@@ -369,18 +369,31 @@
     //     });
     // } );
 
-    function editContent(id, section, fieldName, content, sortOrder) {
-        document.getElementById('contentId').value = id;
-        document.getElementById('editSection').value = section;
-        document.getElementById('editFieldName').value = fieldName;
-        document.getElementById('editContent').value = content;
-        document.getElementById('editSortOrder').value = sortOrder;
+    function editContent(id) {
+        // Fetch content data via AJAX using only the ID
+        fetch(`${BASE_URL}/admin/get-home-content/${id}`, {
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('contentId').value = data.id;
+            document.getElementById('editSection').value = data.section;
+            document.getElementById('editFieldName').value = data.field_name;
+            document.getElementById('editContent').value = data.content;
+            document.getElementById('editSortOrder').value = data.sort_order;
 
-        // Show image preview if content contains image
-        updateContentPreview(content);
+            // Show image preview if content contains image
+            updateContentPreview(data.content);
 
-        // Show/hide image upload section based on whether content is an image
-        toggleImageUploadSection(content);
+            // Show/hide image upload section based on whether content is an image
+            toggleImageUploadSection(data.content);
+        })
+        .catch(error => {
+            console.error('Error fetching content:', error);
+            alert('Failed to load content data.');
+        });
     }
 
     function toggleImageUploadSection(content) {
