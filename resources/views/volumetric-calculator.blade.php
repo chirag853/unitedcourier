@@ -478,7 +478,7 @@
                         </h2>
                         <div id="faq{{ $index + 1 }}" class="accordion-collapse {{ $index === 0 ? 'show' : 'collapse' }}" data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                {{ $faq->answer }}
+                                {!! $faq->answer !!}
                             </div>
                         </div>
                     </div>

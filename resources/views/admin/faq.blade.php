@@ -145,7 +145,7 @@
                                                 <button type="button" class="btn btn-sm btn-outline-primary edit-faq"
                                                         data-id="{{ $faq->id }}"
                                                         data-question="{{ $faq->question }}"
-                                                        data-answer="{{ $faq->answer }}"
+                                                        data-answer="{{ e($faq->answer) }}"
                                                         data-page="{{ $faq->page }}"
                                                         data-sort_order="{{ $faq->sort_order }}"
                                                         data-is_active="{{ $faq->is_active }}">
