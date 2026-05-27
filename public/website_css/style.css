@@ -1642,12 +1642,13 @@
         .faq-illustration {
             background-color: #eeedf3;
             border-radius: 24px;
-            padding: 40px;
-            height: 100%;
+            padding: 25px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             border: 1px solid #e2e8f0;
+            position: sticky;
+            top: 90px;
         }
 
         .contact-box {
@@ -1981,7 +1982,7 @@
         }
 
         .footer-links a {
-            color: var(--text-light);
+            color: #fff;
             text-decoration: none;
             transition: all 0.3s ease;
             font-size: 0.95rem;
@@ -1989,7 +1990,7 @@
         }
 
         .footer-links a:hover {
-            color: var(--primary-blue);
+            /* color: var(--primary-blue); */
             transform: translateX(5px);
         }
 
@@ -1997,14 +1998,14 @@
             display: flex;
             gap: 15px;
             margin-bottom: 20px;
-            color: var(--text-light);
+            color: #fff;
             font-size: 0.95rem;
             position: relative;
             z-index: 2;
         }
 
         .contact-item a {
-            color: var(--text-light);
+            color: #fff;
             text-decoration: none;
             }
 
@@ -2057,9 +2058,11 @@
         }
 
         .copyright {
-            color: var(--text-light);
+            color: #fff;
             font-size: 0.9rem;
         }
+
+        
 
         .legal-links {
             display: flex;

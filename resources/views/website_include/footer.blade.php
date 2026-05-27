@@ -15,15 +15,8 @@
                 <img src="https://www.usps.com/global-elements/header/images/utility-header/logo-sb.svg"
                     class="partners-logo-img">
             </div>
-            <div class="logo-item" class="logo-item-partners">
-                <img src="https://www.tnt.com/dam/tnt_express_media/en_gb/images/ChoosingTNT/TNT-Logo-edt.png"
-                    class="partners-logo-img">
-            </div>
-            <div class="logo-item" class="logo-item-partners">
-                <img src="https://dotcomaramexprod.blob.core.windows.net/default/docs/default-source/logo/aramex-logo-english.webp"
-                    class="partners-logo-img">
-            </div>
-
+            
+          
             <!-- Cloned Logos (for seamless loop) -->
 
             <div class="logo-item" class="logo-item-partners">
@@ -36,14 +29,8 @@
                 <img src="https://www.usps.com/global-elements/header/images/utility-header/logo-sb.svg"
                     class="partners-logo-img">
             </div>
-            <div class="logo-item" class="logo-item-partners">
-                <img src="https://www.tnt.com/dam/tnt_express_media/en_gb/images/ChoosingTNT/TNT-Logo-edt.png"
-                    class="partners-logo-img">
-            </div>
-            <div class="logo-item" class="logo-item-partners">
-                <img src="https://dotcomaramexprod.blob.core.windows.net/default/docs/default-source/logo/aramex-logo-english.webp"
-                    class="partners-logo-img">
-            </div>
+            
+            
 
         </div>
     </div>
@@ -85,7 +72,7 @@
 
 
 <!-- footer starts here -->
-<footer class="main-footer">
+<footer class="main-footer moving-gradient-bg">
     <!-- Animated Flight Path Layer -->
     <div class="animation-container">
         <svg width="100%" height="100%" viewBox="0 0 1200 400" preserveAspectRatio="none">
@@ -109,9 +96,7 @@
                     <img src="{{ asset('/website_images/logo-white.png') }}" class="img-fluid"
                         style="max-width: 240px;">
                 </a>
-                <p class="footer-desc">United Worldwide Couriers delivers integrated logistics solutions for modern B2B
-                    enterprises, e-commerce brands, and growing businesses. Our services cover international Air Express
-                    & Freight, pan-India pickup, customs clearance with documentation support.</p>
+                <p class="footer-desc">Domestic Offices:<br> Delhi | Jaipur | Bhopal | Surat | Ahmedabad | Chennai | Agra | Moradabad | Mumbai | Kanpur | Lucknow | Udaipur | Meerut | Roorkee | Jalandhar | Ludhiana</p>
 
                 <div class="social-links">
                     <a href="{{ url('#') }}" class="social-btn">
@@ -133,7 +118,7 @@
             <div class="col-lg-2 col-md-6">
                 <h4 class="footer-heading">Quick Links</h4>
                 <ul class="footer-links">
-                    <li><a href="{{ url('about') }}">About Us</a></li>
+                   
                     <li><a href="{{ url('tracking') }}">Tracking</a></li>
                     <li><a href="{{ url('contact-us') }}">Contact Us</a></li>
                     <li><a href="{{ url('blogs') }}">Blog</a></li>
@@ -163,9 +148,9 @@
                         <polyline points="22,6 12,13 2,6"></polyline>
                     </svg>
                     <div>
-                        <strong>Email Support</strong><br>
-                        <a href="mailto:info@unitedcouriers.biz"> info@unitedcouriers.biz </a><br>
-                        <a href="mailto:csd@unitedcouriers.biz"> csd@unitedcouriers.biz </a>
+                        <!-- <strong>Email Support</strong><br> -->
+                        <a href="mailto:support@unitedcouriers.biz"> support@unitedcouriers.biz </a><br>
+                        
                     </div>
                 </div>
                 <div class="contact-item">
@@ -175,7 +160,7 @@
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <div>
-                        <strong>Headquarters</strong><br>
+                        <!-- <strong>Headquarters</strong><br> -->
                         Building No. 1, Bypass Road,<br>
                         Mahipalpur New Delhi -110037
                     </div>
@@ -188,7 +173,7 @@
                         </path>
                     </svg>
                     <div>
-                        <strong>Phone Number</strong><br>
+                        <!-- <strong>Phone Number</strong><br> -->
                         <a href="tel:+91-9999911176"> +91-9999911176 </a>,
                         <a href="tel:+91-11-46122222"> +91-11-46122222 </a> <br>
                         <a href="tel:+91-11-26161261"> +91-11-26161261 </a>

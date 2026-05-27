@@ -66,6 +66,7 @@
     z-index: 9999;
     /* Very high to stay on top */
     transition: transform 0.2s ease;
+    border:1px solid #fff;
 }
 
 #uc-chat-trigger:hover {
@@ -303,7 +304,7 @@
                 <i data-lucide="chevron-left" size="18"></i>
             </button> -->
             <div class="uc-header-logo">
-                <img src="{{ asset('public/website_images/fav-icon.png') }}" alt="Logo">
+                <img src="{{ asset('website_images/fav-icon.png') }}" alt="Logo">
             </div>
             <div class="uc-header-info">
                 <h6>United Worldwide Courier</h6>

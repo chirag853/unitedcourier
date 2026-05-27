@@ -737,23 +737,53 @@
         <div class="row g-4">
             <div class="col-lg-4">
                 <div class="faq-illustration">
-                    <img src="https://i.pinimg.com/originals/f6/5d/46/f65d4681649d85bc91c86872a1775919.gif" alt="Help"
-                        style="width: 200px; margin-top: -40px;">
-                    <h4 class="fw-bold mb-3">Need personalized help?</h4>
-                    <p class="text-muted">Our logistics experts are available 24/7 to assist your requirements.</p>
+                    <div class="mb-4">
+                            <h4 class="h4-title">Any Queries? <span class="gradient-text">Get Support</span></h4>
+                        </div>
+                        <form>
+                            <div class="row g-3 mb-3">
 
-                    <div class="moving-gradient-bg contact-box">
-                        <h4>Contact Us</h4>
-                        <p>For urgent inquiries regarding your current shipment status.</p>
-                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">Message
-                            Support</button>
-                    </div>
+                                <div class="col-12">
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom" placeholder="Full Name">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-12">
+                                    <div class="input-group-custom">
+                                        <input type="tel" class="form-control input-custom" placeholder="Phone">
+                                        <i class="fas fa-phone"></i>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="input-group-custom">
+                                        <input type="email" class="form-control input-custom" placeholder="Email">
+                                        <i class="fas fa-envelope"></i>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="input-group-custom">
+                                        <textarea class="form-control input-custom" rows="2" placeholder="Message"></textarea>
+                                        <i style="top: 18px;" class="fa-solid fa-comment-dots"></i>
+                                    </div>
+                                </div>
+
+                            </div>
+                            
+
+                            <button type="button" class="btn moving-gradient-bg btn-primary-custom">
+                                Get Support <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </form>
                 </div>
             </div>
 
 
             <div class="col-lg-8">
-                <div class="accordion" id="logisticsFaq" style="height: 70vh; overflow-y: auto;">
+                <div class="accordion" id="logisticsFaq">
                     <!-- @php
                         echo "<pre>";
                         print_r($faqs);
