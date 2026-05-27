@@ -337,7 +337,7 @@ class WebsiteController extends Controller
         $testimonialsHeader = ExpressAirFreightSolutionsPage::bySection('testimonials')->where('item_key', 'testimonials_header')->active()->first();
         $testimonials = ExpressAirFreightSolutionsPage::bySection('testimonials')->where('item_key', '!=', 'testimonials_header')->active()->ordered()->get();
         $faqHeader = ExpressAirFreightSolutionsPage::bySection('faq')->where('item_key', 'faq_header')->active()->first();
-        $faqs = Faq::byPage('express-air-freight')->active()->ordered()->get();
+        $faqs = Faq::byPage('express-air')->active()->ordered()->get();
         
         return view('express-air-freight-solutions', compact(
             'heroContent', 'statsContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent',
