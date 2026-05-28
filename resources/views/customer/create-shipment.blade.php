@@ -6832,6 +6832,9 @@
                                             text-align: center;
                                         }
                                         </style>
+
+
+
                                         <!-- Package Dimension -->
                                         <div class="accordion-item border-top rounded mb-3">
                                             <div class="accordion-header">
@@ -6844,70 +6847,6 @@
                                             <div class="accordion-collapse collapse" id="social"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
-                                                    <div class="row">
-                                                <div class="col-md-4">
-                                                    <div class="mb-4">
-                                                        <label class="form-label">DDP</label>
-                                                        <div class="d-flex flex-wrap gap-2">
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-my-delivery" name="package_shipping_method" value="DDP - United My Delivery" class="form-check-input">
-                                                                <label class="form-check-label" for="united-my-delivery">United My Delivery</label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-air-premium" name="package_shipping_method" value="DDP - United Air Premium" class="form-check-input">
-                                                                <label class="form-check-label" for="united-air-premium">United Air Premium </label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-grd-premium" name="package_shipping_method" value="DDP - United GRD Premium" class="form-check-input">
-                                                                <label class="form-check-label" for="united-grd-premium">United GRD Premium </label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-air-express" name="package_shipping_method" value="DDP - United Air Express" class="form-check-input">
-                                                                <label class="form-check-label" for="united-air-express">United Air Express</label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-prior-post" name="package_shipping_method" value="DDP - United Prior Post" class="form-check-input">
-                                                                <label class="form-check-label" for="united-prior-post">United Prior Post</label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-eco-post" name="package_shipping_method" value="DDP - United ECO Post" class="form-check-input">
-                                                                <label class="form-check-label" for="united-eco-post">United ECO Post</label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-my-pickup" name="package_shipping_method" value="DDP - United My Pickup" class="form-check-input">
-                                                                <label class="form-check-label" for="united-my-pickup">United My Pickup</label>
-                                                            </div>
-
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div class="col-md-4">
-                                                    <div class="mb-4">
-                                                        <label class="form-label">DDU</label>
-                                                        <div class="d-flex flex-wrap gap-2">
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-my-delivery1" name="package_shipping_method" value="DDU - United My Delivery" class="form-check-input">
-                                                                <label class="form-check-label" for="united-my-delivery1">United My Delivery</label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-air-premium1" name="package_shipping_method" value="DDU - United Air Premium" class="form-check-input">
-                                                                <label class="form-check-label" for="united-air-premium1">United Air Premium </label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-grd-premium1" name="package_shipping_method" value="DDU - United GRD Premium" class="form-check-input">
-                                                                <label class="form-check-label" for="united-grd-premium1">United GRD Premium </label>
-                                                            </div>
-                                                            <div class="form-check">
-                                                                <input type="radio" id="united-my-pickup1" name="package_shipping_method" value="DDU - United My Pickup" class="form-check-input">
-                                                                <label class="form-check-label" for="united-my-pickup1">United My Pickup</label>
-                                                            </div>
-
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                            </div>
                                                     <div class="row rowContaineraddmore">
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
@@ -6956,6 +6895,7 @@
                                             </div>
                                         </div>
                                         <!-- /Package Dimension -->
+                                        
                                         <script>
                                         function reindexPackageRows() {
                                             document.querySelectorAll('.rowContaineraddmore').forEach(function(row, index) {
@@ -7275,10 +7215,15 @@
 
                                                         <div class="add-more mb-3" id="tableaddRowBtn">➕ Add another
                                                         </div>
-                                                        <div class="mt-3">
-                                                            <label>Total Amount</label>
-                                                            <input type="text" id="totalAmount"
-                                                                class="form-control w-25" readonly>
+                                                        <div class="mt-3 d-flex align-items-end gap-3">
+                                                            <div>
+                                                                <label>Total Amount</label>
+                                                                <input type="text" id="totalAmount"
+                                                                    class="form-control w-25" readonly>
+                                                            </div>
+                                                            <button type="button" class="btn btn-primary" id="rateCalculateBtn">
+                                                                <i class="ti ti-calculator me-1"></i> Rate Calculate
+                                                            </button>
                                                         </div>
                                                         <style>
                                                         .table input,
@@ -7404,6 +7349,117 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <!-- Rate Calculate -->
+                                        <div class="accordion-item border-top rounded mb-3">
+                                            <div class="accordion-header">
+                                                <a href="#" class="accordion-button accordion-custom-button rounded"
+                                                    data-bs-toggle="collapse" data-bs-target="#rate-calc">
+                                                    <span class="avatar avatar-md rounded me-1"
+                                                        id="rateCalculateNumber">6</span>
+                                                    Rate Calculate
+                                                </a>
+                                            </div>
+                                            <div class="accordion-collapse collapse" id="rate-calc"
+                                                data-bs-parent="#main_accordion">
+                                                <div class="accordion-body border-top">
+                                                    <div class="row">
+                                                        <div class="col-md-4">
+                                                            <div class="mb-4">
+                                                                <label class="form-label">DDP</label>
+                                                                <div class="d-flex flex-wrap gap-2">
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-my-delivery" name="ddp_shipping_method" value="DDP - United My Delivery" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-my-delivery">United My Delivery</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-air-premium" name="ddp_shipping_method" value="DDP - United Air Premium" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-air-premium">United Air Premium </label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-grd-premium" name="ddp_shipping_method" value="DDP - United GRD Premium" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-grd-premium">United GRD Premium </label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-air-express" name="ddp_shipping_method" value="DDP - United Air Express" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-air-express">United Air Express</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-prior-post" name="ddp_shipping_method" value="DDP - United Prior Post" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-prior-post">United Prior Post</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-eco-post" name="ddp_shipping_method" value="DDP - United ECO Post" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-eco-post">United ECO Post</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-my-pickup" name="ddp_shipping_method" value="DDP - United My Pickup" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-my-pickup">United My Pickup</label>
+                                                                    </div>
+
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="col-md-4">
+                                                            <div class="mb-4">
+                                                                <label class="form-label">DDU</label>
+                                                                <div class="d-flex flex-wrap gap-2">
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-my-delivery1" name="ddp_shipping_method" value="DDU - United My Delivery" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-my-delivery1">United My Delivery</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-air-premium1" name="ddp_shipping_method" value="DDU - United Air Premium" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-air-premium1">United Air Premium </label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-grd-premium1" name="ddp_shipping_method" value="DDU - United GRD Premium" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-grd-premium1">United GRD Premium </label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="united-my-pickup1" name="ddp_shipping_method" value="DDU - United My Pickup" class="form-check-input">
+                                                                        <label class="form-check-label" for="united-my-pickup1">United My Pickup</label>
+                                                                    </div>
+
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- UPS Rate Result -->
+                                                    <div class="row mt-3" id="upsRateResult" style="display:none;">
+                                                        <div class="col-12">
+                                                            <div class="card border">
+                                                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                                                    <h6 class="mb-0">UPS Rate Response</h6>
+                                                                    <span class="badge bg-success" id="rateStatusBadge">Success</span>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <div class="table-responsive">
+                                                                        <table class="table table-bordered mb-0">
+                                                                            <thead class="table-light">
+                                                                                <tr>
+                                                                                    <th>Service</th>
+                                                                                    <th>Zone</th>
+                                                                                    <th>Weight</th>
+                                                                                    <th>Transportation Charges</th>
+                                                                                    <th>Total Charges</th>
+                                                                                    <th>Currency</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody id="upsRateTableBody">
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                    <div id="upsRateError" class="alert alert-danger mt-3 d-none"></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- /UPS Rate Result -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- /Rate Calculate -->
                                     </div>
                                     <!-- /Access -->
                                     <div class="mt-4 d-flex align-items-center justify-content-end">
@@ -7754,16 +7810,19 @@
         const csbStatus = @json($customer->csb_status ?? null);
 
         function toggleCsbInfo() {
+            const rateCalcNum = document.getElementById('rateCalculateNumber');
             if (originTypeSelect.value === 'CSB V' && csbStatus !== 1) {
                 csbInfoSection.style.display = 'block';
-                // Update numbers: CSB Info becomes 4, Shipment Invoice becomes 5
+                // Order: 1-Shipper, 2-Consignee, 3-Package, 4-CSB, 5-Invoice, 6-Rate Calculate
                 document.getElementById('csbInfoNumber').textContent = '4';
                 document.getElementById('shipmentInvoiceNumber').textContent = '5';
+                if (rateCalcNum) rateCalcNum.textContent = '6';
             } else {
                 csbInfoSection.style.display = 'none';
                 $('#csbinfo').collapse('hide');
-                // Update numbers: Shipment Invoice becomes 4 (CSB Info is hidden)
+                // Order: 1-Shipper, 2-Consignee, 3-Package, 4-Invoice, 5-Rate Calculate
                 document.getElementById('shipmentInvoiceNumber').textContent = '4';
+                if (rateCalcNum) rateCalcNum.textContent = '5';
             }
         }
         // Initial check
@@ -7774,6 +7833,332 @@
         if (originTypeSelect.classList.contains('select2-hidden-accessible')) {
             $(document).on('change', '#originType', toggleCsbInfo);
         }
+    });
+    </script>
+    <script>
+    // Helper to get value from input/select
+    function getVal(selector) {
+        const el = document.querySelector(selector);
+        return el ? el.value.trim() : '';
+    }
+
+    // Helper to get value from a field by name within a container element
+    function getNestedVal(container, fieldName) {
+        const input = container.querySelector('[name$="[' + fieldName + ']"]');
+        return input ? input.value.trim() : '';
+    }
+
+    // Convert kg to lbs (1 kg = 2.20462 lbs)
+    function kgToLbs(kg) {
+        return (parseFloat(kg) * 2.20462).toFixed(2);
+    }
+
+    // Map delivery destination text to country code
+    function getCountryCodeFromDestination(dest) {
+        const map = {
+            'US- United State of America': 'US',
+            'India': 'IN',
+            'UK - United Kingdom': 'GB',
+            'China': 'CN',
+            'Russia': 'RU',
+            'Srilanka': 'LK'
+        };
+        return map[dest] || 'US';
+    }
+
+    // Map selected shipping method (from radio buttons in Rate Calculate section) to UPS service code
+    function getServiceCodeFromShippingMethod(methodValue) {
+        const methodMap = {
+            'DDP - United My Delivery': '03',      // UPS Ground
+            'DDP - United Air Premium': '01',      // UPS Next Day Air
+            'DDP - United GRD Premium': '02',      // UPS 2nd Day Air
+            'DDP - United Air Express': '07',      // UPS Worldwide Express
+            'DDP - United Prior Post': '11',       // UPS Standard
+            'DDP - United ECO Post': '65',         // UPS Saver
+            'DDP - United My Pickup': '03',
+
+            
+            'DDU - United My Delivery': '03',
+            'DDU - United Air Premium': '01',
+            'DDU - United GRD Premium': '02',
+            'DDU - United My Pickup': '03'
+        };
+        return methodMap[methodValue] || '65';     // fallback
+    }
+
+    // Build the UPS Rate payload from the form
+    // function buildRatePayload() {
+    //     const shipperCompany = getVal('input[name="shipper_company_names"]');
+    //     const shipperContact = getVal('input[name="shipper_contact_person"]');
+    //     const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
+    //     const shipperPostal = getVal('input[name="shipper_pincode"]');
+    //     const shipperCity = getVal('input[name="shipper_city"]');
+    //     const shipperState = getVal('input[name="shipper_state"]');
+    //     const shipperCountry = 'IN';
+
+    //     const consigneePostal = getVal('input[name="consignee_zip_code"]');
+    //     const deliveryDest = getVal('select[name="delivery_destination"]');
+    //     const destCountry = getCountryCodeFromDestination(deliveryDest);
+
+    //     let selectedMethod = '';
+    //     const radio = document.querySelector('input[name="ddp_shipping_method"]:checked');
+    //     if (radio) selectedMethod = radio.value;
+    //     const serviceCode = getServiceCodeFromShippingMethod(selectedMethod);
+
+    //     let weightKg = getVal('input[name="packages[0][actual_weight_kg]"]');
+    //     if (!weightKg) weightKg = '1';
+
+    //     return {
+    //         RateRequest: {
+    //             Shipment: {
+    //                 Shipper: {
+    //                     Name: shipperName,
+    //                     ShipperNumber: "1255AK",
+    //                     Address: {
+    //                         City: shipperCity,
+    //                         StateProvinceCode: shipperState,
+    //                         PostalCode: shipperPostal,
+    //                         CountryCode: shipperCountry
+    //                     }
+    //                 },
+    //                 ShipFrom: {
+    //                     Address: {
+    //                         PostalCode: shipperPostal,
+    //                         CountryCode: shipperCountry
+    //                     }
+    //                 },
+    //                 ShipTo: {
+    //                     Address: {
+    //                         PostalCode: consigneePostal,
+    //                         CountryCode: destCountry
+    //                     }
+    //                 },
+    //                 Service: {
+    //                     // Code: serviceCode
+    //                     Code: "65"
+    //                 },
+    //                 Package: {
+    //                     PackagingType: {
+    //                         Code: "02"
+    //                     },
+    //                     PackageWeight: {
+    //                         UnitOfMeasurement: {
+    //                             Code: "KGS"
+    //                         },
+    //                         Weight: weightKg
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     };
+    // }
+
+
+    function buildRatePayload() {
+    // Shipper
+    const shipperCompany = getVal('input[name="shipper_company_names"]');
+    const shipperContact = getVal('input[name="shipper_contact_person"]');
+    const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
+    const shipperPostal = getVal('input[name="shipper_pincode"]');
+    const shipperCity = getVal('input[name="shipper_city"]');
+    const shipperState = getVal('input[name="shipper_state"]');
+    const shipperCountry = 'IN';
+
+    // Consignee
+    const consigneePostal = getVal('input[name="consignee_zip_code"]');
+    const deliveryDest = getVal('select[name="delivery_destination"]');
+    const destCountry = getCountryCodeFromDestination(deliveryDest);
+
+    // Selected shipping method
+    const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+    if (!selectedRadio) {
+        alert('Please select a shipping method');
+        return null;
+    }
+    const methodValue = selectedRadio.value;
+    const serviceCode = getServiceCodeFromShippingMethod(methodValue);
+
+    // Build Package array from ALL package dimension rows
+    const packageRows = document.querySelectorAll('.rowContaineraddmore');
+    const packages = [];
+
+    packageRows.forEach(function(row, index) {
+        const weightKg = getNestedVal(row, 'actual_weight_kg');
+        const lengthCm = getNestedVal(row, 'length_cm');
+        const widthCm = getNestedVal(row, 'width_cm');
+        const heightCm = getNestedVal(row, 'height_cm');
+
+        // Skip empty rows if weight is not provided
+        if (!weightKg || isNaN(weightKg) || weightKg <= 0) {
+            return;
+        }
+
+        const pkg = {
+            PackagingType: { Code: "02" }, // Customer Supplied Package
+            PackageWeight: {
+                UnitOfMeasurement: { Code: "KGS" },
+                Weight: weightKg
+            }
+        };
+
+        // Add dimensions only if all three are provided
+        if (lengthCm && widthCm && heightCm) {
+            pkg.Dimensions = {
+                UnitOfMeasurement: { Code: "CM" },
+                Length: lengthCm,
+                Width: widthCm,
+                Height: heightCm
+            };
+        }
+
+        packages.push(pkg);
+    });
+
+    // Fallback: if no valid package rows, send a single default 1kg package
+    if (packages.length === 0) {
+        packages.push({
+            PackagingType: { Code: "02" },
+            PackageWeight: {
+                UnitOfMeasurement: { Code: "KGS" },
+                Weight: "1"
+            }
+        });
+    }
+
+    return {
+        RateRequest: {
+            Shipment: {
+                Shipper: {
+                    Name: shipperName,
+                    ShipperNumber: "1255AK",
+                    Address: {
+                        City: shipperCity,
+                        StateProvinceCode: shipperState,
+                        PostalCode: shipperPostal,
+                        CountryCode: shipperCountry
+                    }
+                },
+                ShipFrom: {
+                    Address: {
+                        PostalCode: shipperPostal,
+                        CountryCode: shipperCountry
+                    }
+                },
+                ShipTo: {
+                    Address: {
+                        PostalCode: consigneePostal,
+                        CountryCode: destCountry
+                    }
+                },
+                Service: {
+                    Code: serviceCode
+                },
+                Package: packages
+            }
+        }
+    };
+}
+
+    // Reusable function to call UPS rate API
+    function calculateRate() {
+        const resultDiv = document.getElementById('upsRateResult');
+        const tableBody = document.getElementById('upsRateTableBody');
+        const errorDiv = document.getElementById('upsRateError');
+        const btn = document.getElementById('rateCalculateBtn');
+
+        // Show the rate calculate accordion
+        $('#rate-calc').collapse('show');
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculating...';
+        }
+        resultDiv.style.display = 'none';
+        errorDiv.classList.add('d-none');
+
+        const payload = buildRatePayload();
+        if (!payload) {
+            // buildRatePayload already shows alert if no method selected
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
+            }
+            return;
+        }
+        console.log('Payload sent to UPS:', payload);
+
+        fetch('/customer/ups-rate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.rateResponse) {
+                const rate = data.rateResponse;
+                resultDiv.style.display = 'block';
+                document.getElementById('rateStatusBadge').textContent = 'Success';
+                document.getElementById('rateStatusBadge').className = 'badge bg-success';
+
+                let rows = '';
+                if (Array.isArray(rate.RatedShipment)) {
+                    rate.RatedShipment.forEach(ship => {
+                        rows += `<tr>
+                            <td>${ship.Service?.Code || ''}</td>
+                            <td>${ship.Zone || ''}</td>
+                            <td>${ship.BillingWeight?.Weight || ''} ${ship.BillingWeight?.UnitOfMeasurement?.Code || ''}</td>
+                            <td>${ship.TransportationCharges?.MonetaryValue || ''}</td>
+                            <td><strong>${ship.TotalCharges?.MonetaryValue || ''}</strong></td>
+                            <td>${ship.TotalCharges?.CurrencyCode || ''}</td>
+                        </tr>`;
+                    });
+                }
+                tableBody.innerHTML = rows;
+            } else {
+                errorDiv.textContent = data.message || 'Failed to get UPS rate';
+                errorDiv.classList.remove('d-none');
+                resultDiv.style.display = 'block';
+                document.getElementById('rateStatusBadge').textContent = 'Error';
+                document.getElementById('rateStatusBadge').className = 'badge bg-danger';
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.classList.remove('d-none');
+            resultDiv.style.display = 'block';
+            document.getElementById('rateStatusBadge').textContent = 'Error';
+            document.getElementById('rateStatusBadge').className = 'badge bg-danger';
+        })
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Button click handler triggers rate calculation
+        const btn = document.getElementById('rateCalculateBtn');
+        if (btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                calculateRate();
+            });
+        }
+
+        // Auto-calculate rate when any shipping method radio button changes
+        document.querySelectorAll('input[name="ddp_shipping_method"]').forEach(function(radio) {
+            radio.addEventListener('change', function() {
+                if (this.checked) {
+                    calculateRate();
+                }
+            });
+        });
     });
     </script>
     <script>

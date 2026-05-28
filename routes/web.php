@@ -511,4 +511,5 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/csb5-form', [customerController::class, 'storeCsb5Form'])->name('csb5-form.store');
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/create-shipment', [customerController::class, 'storeShipment'])->name('create-shipment.store');
+    Route::post('/ups-rate', [customerController::class, 'getUpsRate'])->name('ups.rate');
 });

@@ -17,6 +17,8 @@ use App\Models\CsbInformation;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\CsbForm;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 
 class customerController extends Controller
 {
@@ -717,6 +719,143 @@ class customerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create shipment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Proxy UPS Rate API call
+     */
+    /**
+     * Get UPS OAuth access token and cache it.
+     * Expects UPS_CLIENT_ID and UPS_CLIENT_SECRET in environment.
+     */
+    private function getUpsAccessToken()
+    {
+        $cacheKey = 'ups_access_token';
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        $clientId = env('UPS_CLIENT_ID');
+        $clientSecret = env('UPS_CLIENT_SECRET');
+        $tokenUrl = 'https://onlinetools.ups.com/security/v1/oauth/token';
+
+        if (!$clientId || !$clientSecret) {
+            throw new \Exception('UPS client credentials not configured. Set UPS_CLIENT_ID and UPS_CLIENT_SECRET in .env');
+        }
+
+        $response = Http::withBasicAuth($clientId, $clientSecret)
+            ->asForm()
+            ->post($tokenUrl, ['grant_type' => 'client_credentials']);
+
+        if (!$response->successful()) {
+            \Log::error('UPS token error: ' . $response->body());
+            throw new \Exception('Unable to retrieve UPS access token');
+        }
+
+        $data = $response->json();
+
+        if (empty($data['access_token'])) {
+            \Log::error('UPS token missing access_token: ' . $response->body());
+            throw new \Exception('UPS access token not found in response');
+        }
+
+        $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 3600;
+        $ttl = max(60, $expiresIn - 60);
+        Cache::put($cacheKey, $data['access_token'], $ttl);
+
+        return $data['access_token'];
+    }
+
+
+    
+    public function getUpsRate(Request $request)
+    {
+        try {
+            $payload = $request->all();
+
+            // Ensure origin/ShipFrom postal code exists. If missing, copy from Shipper Address postal code.
+            $shipFromPostal = data_get($payload, 'RateRequest.Shipment.ShipFrom.Address.PostalCode');
+            if (empty($shipFromPostal)) {
+                $shipperPostal = data_get($payload, 'RateRequest.Shipment.Shipper.Address.PostalCode');
+                if (!empty($shipperPostal)) {
+                    data_set($payload, 'RateRequest.Shipment.ShipFrom.Address.PostalCode', $shipperPostal);
+                }
+            }
+
+            // Log payload for debugging (truncate large payloads)
+            try {
+                \Log::info('UPS Rate payload: ' . substr(json_encode($payload), 0, 2000));
+            } catch (\Exception $e) {
+                // ignore logging errors
+            }
+
+            // Obtain cached UPS OAuth token
+            try {
+                $token = $this->getUpsAccessToken();
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to obtain UPS access token: ' . $e->getMessage()
+                ], 500);
+            }
+
+            $ch = curl_init('https://onlinetools.ups.com/api/rating/v2409/Rate');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Authorization: Bearer ' . $token,
+                ],
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_SSL_VERIFYPEER => false, // Set true in production
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+            if ($curlError) {
+                \Log::error('UPS Rate cURL error: ' . $curlError);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'UPS API connection error',
+                    'curl_error' => $curlError
+                ], 500);
+            }
+
+            // Try to decode JSON, but keep raw response for debugging
+            $decoded = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                \Log::warning('UPS Rate returned non-JSON response. HTTP: ' . $httpCode . ' Body: ' . $response);
+            } else {
+                \Log::info('UPS Rate response HTTP: ' . $httpCode . ' Body: ' . substr($response, 0, 2000));
+            }
+
+            if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['RateResponse'])) {
+                return response()->json([
+                    'success' => true,
+                    'rateResponse' => $decoded['RateResponse']
+                ]);
+            }
+
+            // Return detailed debug info to client (useful in dev environment)
+            return response()->json([
+                'success' => false,
+                'message' => 'UPS API returned error',
+                'httpCode' => $httpCode,
+                'decoded' => $decoded,
+                'raw_response' => $response
+            ], $httpCode ?: 500);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error: ' . $e->getMessage()
             ], 500);
         }
     }
