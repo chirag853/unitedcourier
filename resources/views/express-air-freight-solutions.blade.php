@@ -152,7 +152,7 @@
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div class="plane-circle">
-                        <img src="{{ $heroImage }}" class="img-fluid">
+                        <img src="{{ asset( $heroImage) }}" class="img-fluid">
                         <!-- Stat pills -->
                         @foreach($heroStatPills as $pill)
                         <div class="stat-pill pill-{{ $loop->iteration }}">
@@ -275,7 +275,7 @@
             <div class="col-lg-6 animate-on-scroll" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
                 <div class="about-image-grid">
                     <div class="world-map-placeholder">
-                        <img src="{{ $overviewImage }}" class="img-fluid">
+                        <img src="{{ asset($overviewImage) }}" class="img-fluid">
                         <div class="map-dot md1"></div>
                         <div class="map-dot md2"></div>
                         <div class="map-dot md3"></div>
@@ -391,7 +391,7 @@
     $testimonialsHeaderDescription = $testimonialsHeader->content['description'] ?? 'Join our growing network of satisfied clients who depend on us for easy, secure, fast, and efficient logistics solutions.';
     $testimonialsGoogleReviewImage = $testimonialsHeader->content['google_review_image'] ?? null;
 @endphp
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         <div class="row justify-content-center mb-3">
@@ -478,7 +478,7 @@
     $faqContactBoxDescription = $faqHeader->content['contact_box_description'] ?? 'For urgent inquiries regarding your current shipment status.';
     $faqContactButtonText = $faqHeader->content['contact_button_text'] ?? 'Message Support';
 @endphp
-<section class="faq-section">
+<section class="faq-section" style="display:none">
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">{{ $faqBadge }}</span>

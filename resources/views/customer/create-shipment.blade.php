@@ -135,7 +135,7 @@
                                                 <a href="#" class="accordion-button accordion-custom-button rounded"
                                                     data-bs-toggle="collapse" data-bs-target="#basic">
                                                     <span class="avatar avatar-md rounded me-1">1</span>
-                                                    Shipper Info
+                                                    Shipper Info (ship from)
                                                 </a>
                                             </div>
                                             <div class="accordion-collapse collapse show" id="basic"
@@ -194,13 +194,13 @@
                                                                     name="delivery_destination" data-toggle="select2"
                                                                     data-select2-id="12" tabindex="-1"
                                                                     aria-hidden="true">
-                                                                    <option data-select2-id="12">Select</option>
-                                                                    <option>US- United State of America</option>
-                                                                    <option>India</option>
-                                                                    <option>UK - United Kingdom</option>
-                                                                    <option>China</option>
-                                                                    <option>Russia</option>
-                                                                    <option>Srilanka</option>
+                                                                    <option data-select2-id="12" value="">Select</option>
+                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
+                                                                    <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>India</option>
+                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
+                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}>China</option>
+                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>Russia</option>
+                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>Srilanka</option>
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -214,8 +214,8 @@
                                                                     aria-hidden="true">
                                                                     <option data-select2-id="13" value="">Select
                                                                     </option>
-                                                                    <option value="CSB IV">CSB IV </option>
-                                                                    <option value="CSB V">CSB V</option>
+                                                                    <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
+                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -237,29 +237,29 @@
                                                                     aria-hidden="true">
                                                                     <option data-select2-id="11" value="">Select
                                                                     </option>
-                                                                    <option value="United My Delivery">United My
+                                                                    <option value="United My Delivery" {{ old('shipping_method') == 'United My Delivery' ? 'selected' : '' }}>United My
                                                                         Delivery</option>
-                                                                    <option value="United Air Premium">United Air
+                                                                    <option value="United Air Premium" {{ old('shipping_method') == 'United Air Premium' ? 'selected' : '' }}>United Air
                                                                         Premium (UPS ,DPD)</option>
-                                                                    <option value="United Ground Premium">United Ground
+                                                                    <option value="United Ground Premium" {{ old('shipping_method') == 'United Ground Premium' ? 'selected' : '' }}>United Ground
                                                                         Premium</option>
-                                                                    <option value="United Eco Post">United Eco Post
+                                                                    <option value="United Eco Post" {{ old('shipping_method') == 'United Eco Post' ? 'selected' : '' }}>United Eco Post
                                                                         (USPS)</option>
-                                                                    <option value="United Airexpress">United Airexpress
+                                                                    <option value="United Airexpress" {{ old('shipping_method') == 'United Airexpress' ? 'selected' : '' }}>United Airexpress
                                                                         (UPS 2nd Day, UPS Saver)
                                                                     </option>
-                                                                    <option value="United Premium Post">united premium
+                                                                    <option value="United Premium Post" {{ old('shipping_method') == 'United Premium Post' ? 'selected' : '' }}>united premium
                                                                         post (USPS Parcll, Royal
                                                                         Mail)
                                                                     </option>
-                                                                    <option value="United My Pickup">United My Pickup
+                                                                    <option value="United My Pickup" {{ old('shipping_method') == 'United My Pickup' ? 'selected' : '' }}>United My Pickup
                                                                     </option>
                                                                 </select>
                                                             </div>
                                                         </div>
                                                         <div class="form-check mb-3">
                                                             <input class="form-check-input" type="checkbox"
-                                                                id="sameAsCustomer" name="shipper_same_as_customer">
+                                                                id="sameAsCustomer" name="shipper_same_as_customer" {{ old('shipper_same_as_customer') ? 'checked' : '' }}>
                                                             <label class="form-check-label" for="sameAsCustomer">
                                                                 Shipper Details (Same as Customer)
                                                             </label>
@@ -270,7 +270,7 @@
                                                                 <label class="form-label">Comapany Name <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_company_names"
+                                                                    name="shipper_company_names" value="{{ old('shipper_company_names') }}"
                                                                     placeholder="Company Name">
                                                             </div>
                                                         </div>
@@ -279,7 +279,7 @@
                                                                 <label class="form-label">Contact Person <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_contact_person"
+                                                                    name="shipper_contact_person" value="{{ old('shipper_contact_person') }}"
                                                                     placeholder="Contact Person">
                                                             </div>
                                                         </div>
@@ -288,7 +288,7 @@
                                                                 <label class="form-label">Address Line 1 <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_address_line1"
+                                                                    name="shipper_address_line1" value="{{ old('shipper_address_line1') }}"
                                                                     placeholder="Address Line 1">
                                                             </div>
                                                         </div>
@@ -297,7 +297,7 @@
                                                                 <label class="form-label">Address Line 2 <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_address_line2"
+                                                                    name="shipper_address_line2" value="{{ old('shipper_address_line2') }}"
                                                                     placeholder="Address Line 2">
                                                             </div>
                                                         </div>
@@ -306,7 +306,7 @@
                                                                 <label class="form-label">Address Line 3 <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_address_line3"
+                                                                    name="shipper_address_line3" value="{{ old('shipper_address_line3') }}"
                                                                     placeholder="Address Line 3">
                                                             </div>
                                                         </div>
@@ -315,7 +315,7 @@
                                                                 <label class="form-label">Pincode <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_pincode" placeholder="Pincode">
+                                                                    name="shipper_pincode" value="{{ old('shipper_pincode') }}" placeholder="Pincode">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -323,7 +323,7 @@
                                                                 <label class="form-label">City <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_city" placeholder="City">
+                                                                    name="shipper_city" value="{{ old('shipper_city') }}" placeholder="City">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -331,7 +331,7 @@
                                                                 <label class="form-label">State <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_state" placeholder="State">
+                                                                    name="shipper_state" value="{{ old('shipper_state') }}" placeholder="State">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -3486,7 +3486,7 @@
                                                                             </li>
                                                                         </ul>
                                                                     </div><input type="text" class="form-control phone"
-                                                                        name="shipper_phone_number" autocomplete="off"
+                                                                        name="shipper_phone_number" value="{{ old('shipper_phone_number') }}" autocomplete="off"
                                                                         data-intl-tel-input-id="0">
                                                                 </div>
                                                             </div>
@@ -3509,7 +3509,7 @@
                                                                     </div>
                                                                 </div>
                                                                 <input type="email" class="form-control"
-                                                                    name="shipper_emails" placeholder="Email Address">
+                                                                    name="shipper_emails" value="{{ old('shipper_emails') }}" placeholder="Email Address">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -3520,10 +3520,11 @@
                                                                     name="shipper_kyc_type" data-toggle="select2"
                                                                     data-select2-id="11" tabindex="-1"
                                                                     aria-hidden="true">
-                                                                    <option>GST (Normal)</option>
-                                                                    <option>Aadhar Card</option>
-                                                                    <option>PAN Card</option>
-                                                                    <option>Passport Number</option>
+                                                                    <option value="">Select</option>
+                                                                    <option value="GST (Normal)" {{ old('shipper_kyc_type') == 'GST (Normal)' ? 'selected' : '' }}>GST (Normal)</option>
+                                                                    <option value="Aadhar Card" {{ old('shipper_kyc_type') == 'Aadhar Card' ? 'selected' : '' }}>Aadhar Card</option>
+                                                                    <option value="PAN Card" {{ old('shipper_kyc_type') == 'PAN Card' ? 'selected' : '' }}>PAN Card</option>
+                                                                    <option value="Passport Number" {{ old('shipper_kyc_type') == 'Passport Number' ? 'selected' : '' }}>Passport Number</option>
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -3531,7 +3532,7 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">KYC Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_kyc_number" placeholder="KYC Number">
+                                                                    name="shipper_kyc_number" value="{{ old('shipper_kyc_number') }}" placeholder="KYC Number">
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
@@ -3549,7 +3550,7 @@
                                                 <a href="#" class="accordion-button accordion-custom-button rounded"
                                                     data-bs-toggle="collapse" data-bs-target="#address">
                                                     <span class="avatar avatar-md rounded me-1">2</span>
-                                                    Consignee Info
+                                                    Consignee Info (ship to)
                                                 </a>
                                             </div>
                                             <div class="accordion-collapse collapse" id="address"
@@ -3561,7 +3562,7 @@
                                                                 <label class="form-label">Consignee Name <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_name" placeholder="Consignee Name">
+                                                                    name="consignee_name" value="{{ old('consignee_name') }}" placeholder="Consignee Name">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -3569,7 +3570,7 @@
                                                                 <label class="form-label">Contact Person <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_contact_person"
+                                                                    name="consignee_contact_person" value="{{ old('consignee_contact_person') }}"
                                                                     placeholder="Contact Person">
                                                             </div>
                                                         </div>
@@ -3578,7 +3579,7 @@
                                                                 <label class="form-label">Address Line 1 <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_address_line1"
+                                                                    name="consignee_address_line1" value="{{ old('consignee_address_line1') }}"
                                                                     placeholder="Address Line 1">
                                                             </div>
                                                         </div>
@@ -3587,7 +3588,7 @@
                                                                 <label class="form-label">Address Line 2 <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_address_line2"
+                                                                    name="consignee_address_line2" value="{{ old('consignee_address_line2') }}"
                                                                     placeholder="Address Line 2">
                                                             </div>
                                                         </div>
@@ -3595,7 +3596,7 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">Address Line 3 </label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_address_line3"
+                                                                    name="consignee_address_line3" value="{{ old('consignee_address_line3') }}"
                                                                     placeholder="Address Line 3">
                                                             </div>
                                                         </div>
@@ -3604,7 +3605,7 @@
                                                                 <label class="form-label">ZIP Code <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_zip_code" placeholder="ZIP Code">
+                                                                    name="consignee_zip_code" value="{{ old('consignee_zip_code') }}" placeholder="ZIP Code">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -3612,14 +3613,14 @@
                                                                 <label class="form-label">City <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_city" placeholder="City">
+                                                                    name="consignee_city" value="{{ old('consignee_city') }}" placeholder="City">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">State </label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_state" placeholder="State">
+                                                                    name="consignee_state" value="{{ old('consignee_state') }}" placeholder="State">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -6775,7 +6776,7 @@
                                                                             </li>
                                                                         </ul>
                                                                     </div><input type="text" class="form-control phone"
-                                                                        name="consignee_phone_number" autocomplete="off"
+                                                                        name="consignee_phone_number" value="{{ old('consignee_phone_number') }}" autocomplete="off"
                                                                         data-intl-tel-input-id="0">
                                                                 </div>
                                                             </div>
@@ -6798,7 +6799,7 @@
                                                                     </div>
                                                                 </div>
                                                                 <input type="email" class="form-control"
-                                                                    name="consignee_email" placeholder="Email Address">
+                                                                    name="consignee_email" value="{{ old('consignee_email') }}" placeholder="Email Address">
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
@@ -6852,7 +6853,7 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">Actual Weight (kg)</label>
                                                                 <input type="number" class="form-control"
-                                                                    name="packages[0][actual_weight_kg]"
+                                                                    name="packages[0][actual_weight_kg]" value="{{ old('packages.0.actual_weight_kg') }}"
                                                                     placeholder="Actual Weight (kg)">
                                                             </div>
                                                         </div>
@@ -6860,21 +6861,21 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">Length (cm) </label>
                                                                 <input type="number" class="form-control"
-                                                                    name="packages[0][length_cm]" placeholder="Length (cm)">
+                                                                    name="packages[0][length_cm]" value="{{ old('packages.0.length_cm') }}" placeholder="Length (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Width (cm) </label>
                                                                 <input type="number" class="form-control"
-                                                                    name="packages[0][width_cm]" placeholder="Width (cm)">
+                                                                    name="packages[0][width_cm]" value="{{ old('packages.0.width_cm') }}" placeholder="Width (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Height (cm)</label>
                                                                 <input type="number" class="form-control"
-                                                                    name="packages[0][height_cm]" placeholder="Height (cm)">
+                                                                    name="packages[0][height_cm]" value="{{ old('packages.0.height_cm') }}" placeholder="Height (cm)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -6883,7 +6884,7 @@
                                                                     (L*B*H/5000=VOL
                                                                     WT)</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="packages[0][volumetric_weight]"
+                                                                    name="packages[0][volumetric_weight]" value="{{ old('packages.0.volumetric_weight') }}"
                                                                     placeholder="volumetric weight">
                                                             </div>
                                                         </div>
@@ -6963,14 +6964,14 @@
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <div class="form-check">
                                                                         <input type="radio" id="ecommyes"
-                                                                            name="ecommerce" value="Yes"
+                                                                            name="ecommerce" value="Yes" {{ old('ecommerce') == 'Yes' ? 'checked' : '' }}
                                                                             class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="ecommyes">Yes</label>
                                                                     </div>
                                                                     <div class="form-check">
                                                                         <input type="radio" id="ecommno"
-                                                                            name="ecommerce" value="No"
+                                                                            name="ecommerce" value="No" {{ old('ecommerce') == 'No' ? 'checked' : '' }}
                                                                             class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="ecommno">No</label>
@@ -6984,13 +6985,13 @@
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <div class="form-check">
                                                                         <input type="radio" id="schemeyes" name="scheme"
-                                                                            value="Yes" class="form-check-input">
+                                                                            value="Yes" {{ old('scheme') == 'Yes' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="schemeyes">Yes</label>
                                                                     </div>
                                                                     <div class="form-check">
                                                                         <input type="radio" id="schemeno" name="scheme"
-                                                                            value="No" class="form-check-input">
+                                                                            value="No" {{ old('scheme') == 'No' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="schemeno">No</label>
                                                                     </div>
@@ -7003,7 +7004,7 @@
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <div class="form-check">
                                                                         <input type="radio" id="bondut"
-                                                                            name="bond_ut_igst" value="Bond UT"
+                                                                            name="bond_ut_igst" value="Bond UT" {{ old('bond_ut_igst') == 'Bond UT' ? 'checked' : '' }}
                                                                             class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="bondut">Bond
@@ -7011,7 +7012,7 @@
                                                                     </div>
                                                                     <div class="form-check">
                                                                         <input type="radio" id="igst"
-                                                                            name="bond_ut_igst" value="IGST"
+                                                                            name="bond_ut_igst" value="IGST" {{ old('bond_ut_igst') == 'IGST' ? 'checked' : '' }}
                                                                             class="form-check-input">
                                                                         <label class="form-check-label"
                                                                             for="igst">IGST</label>
@@ -7023,13 +7024,13 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">LUT Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="lut_number" placeholder="LUT Number">
+                                                                    name="lut_number" value="{{ old('lut_number') }}" placeholder="LUT Number">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">IEC Code </label>
-                                                                <input type="text" class="form-control" name="iec_code"
+                                                                <input type="text" class="form-control" name="iec_code" value="{{ old('iec_code') }}"
                                                                     placeholder="IEC Code">
                                                             </div>
                                                         </div>
@@ -7037,13 +7038,13 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">GST Number </label>
                                                                 <input type="text" class="form-control"
-                                                                    name="gst_number" placeholder="GST Number">
+                                                                    name="gst_number" value="{{ old('gst_number') }}" placeholder="GST Number">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">AD Code</label>
-                                                                <input type="text" class="form-control" name="ad_code"
+                                                                <input type="text" class="form-control" name="ad_code" value="{{ old('ad_code') }}"
                                                                     placeholder="AD Code">
                                                             </div>
                                                         </div>
@@ -7051,7 +7052,7 @@
                                                             <div class="mb-3 mb-md-0">
                                                                 <label class="form-label">Bank Account Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="bank_account_number"
+                                                                    name="bank_account_number" value="{{ old('bank_account_number') }}"
                                                                     placeholder="Bank Account Number">
                                                             </div>
                                                         </div>
@@ -7059,7 +7060,7 @@
                                                             <div class="mb-0">
                                                                 <label class="form-label">Bank IFSC Code</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="bank_ifsc_code" placeholder="Bank IFSC Code">
+                                                                    name="bank_ifsc_code" value="{{ old('bank_ifsc_code') }}" placeholder="Bank IFSC Code">
                                                             </div>
                                                         </div>
                                                     </div>
@@ -7086,7 +7087,7 @@
                                                                 <div class="mb-3">
                                                                     <label class="form-label">Invoice Number</label>
                                                                     <input type="text" class="form-control"
-                                                                        name="invoice_number"
+                                                                        name="invoice_number" value="{{ old('invoice_number') }}"
                                                                         placeholder="Invoice Number">
                                                                 </div>
                                                             </div>
@@ -7094,14 +7095,14 @@
                                                                 <div class="mb-3">
                                                                     <label class="form-label">Invoice Date</label>
                                                                     <input type="date" class="form-control"
-                                                                        name="invoice_date">
+                                                                        name="invoice_date" value="{{ old('invoice_date') }}">
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
                                                                 <div class="mb-3">
                                                                     <label class="form-label">Invoice Amount </label>
                                                                     <input type="number" class="form-control"
-                                                                        name="invoice_amount"
+                                                                        name="invoice_amount" value="{{ old('invoice_amount') }}"
                                                                         placeholder="Invoice Amount">
                                                                 </div>
                                                             </div>
@@ -7112,9 +7113,9 @@
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="incoterms">
                                                                         <option value="">Select</option>
-                                                                        <option value="DDU">DDU</option>
-                                                                        <option value="DDP">DDP</option>
-                                                                        <option value="Silver">Silver</option>
+                                                                        <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
+                                                                        <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
+                                                                        <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option>
                                                                     </select>
                                                                 </div>
                                                             </div>
@@ -7125,10 +7126,10 @@
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="invoice_currency">
                                                                         <option value="">Select</option>
-                                                                        <option value="INR">Ruppees</option>
-                                                                        <option value="USD">USD Dollar</option>
-                                                                        <option value="GBP">Pound</option>
-                                                                        <option value="Dollar">Dollar</option>
+                                                                        <option value="INR" {{ old('invoice_currency') == 'INR' ? 'selected' : '' }}>Ruppees</option>
+                                                                        <option value="USD" {{ old('invoice_currency') == 'USD' ? 'selected' : '' }}>USD Dollar</option>
+                                                                        <option value="GBP" {{ old('invoice_currency') == 'GBP' ? 'selected' : '' }}>Pound</option>
+                                                                        <option value="Dollar" {{ old('invoice_currency') == 'Dollar' ? 'selected' : '' }}>Dollar</option>
                                                                     </select>
                                                                 </div>
                                                             </div>
@@ -7136,7 +7137,7 @@
                                                                 <div class="mb-3">
                                                                     <label class="form-label">Reference Number </label>
                                                                     <input type="text" class="form-control"
-                                                                        name="reference_number"
+                                                                        name="reference_number" value="{{ old('reference_number') }}"
                                                                         placeholder="Reference Number">
                                                                 </div>
                                                             </div>
@@ -7162,45 +7163,45 @@
                                                                     <tr>
                                                                         <td><input type="text"
                                                                                 class="form-control boxNo"
-                                                                                name="items[0][box_no]" value="1">
+                                                                                name="items[0][box_no]" value="{{ old('items.0.box_no', '1') }}">
                                                                         </td>
                                                                         <td><label class="form-label">Description <span
                                                                                     class="text-danger">*</span></label>
                                                                             <input type="text" class="form-control"
-                                                                                name="items[0][description]"
+                                                                                name="items[0][description]" value="{{ old('items.0.description') }}"
                                                                                 placeholder="Description">
                                                                         </td>
                                                                         <td><input type="text" class="form-control"
-                                                                                name="items[0][hs_code]"
+                                                                                name="items[0][hs_code]" value="{{ old('items.0.hs_code') }}"
                                                                                 placeholder="HS Code"></td>
                                                                         <td>
                                                                             <select class="form-control"
                                                                                 name="items[0][unit_type]">
                                                                                 <option value="">Select</option>
-                                                                                <option value="PCS">PCS</option>
-                                                                                <option value="KG">KG</option>
-                                                                                <option value="NOS">NOS</option>
-                                                                                <option value="Bottle">Bottle</option>
-                                                                                <option value="Pair">Pair</option>
-                                                                                <option value="Strip">Strip</option>
-                                                                                <option value="Dozen">Dozen</option>
-                                                                                <option value="Gross">Gross</option>
-                                                                                <option value="Sets">Sets</option>
-                                                                                <option value="Box">Box</option>
-                                                                                <option value="Container">Container
+                                                                                <option value="PCS" {{ old('items.0.unit_type') == 'PCS' ? 'selected' : '' }}>PCS</option>
+                                                                                <option value="KG" {{ old('items.0.unit_type') == 'KG' ? 'selected' : '' }}>KG</option>
+                                                                                <option value="NOS" {{ old('items.0.unit_type') == 'NOS' ? 'selected' : '' }}>NOS</option>
+                                                                                <option value="Bottle" {{ old('items.0.unit_type') == 'Bottle' ? 'selected' : '' }}>Bottle</option>
+                                                                                <option value="Pair" {{ old('items.0.unit_type') == 'Pair' ? 'selected' : '' }}>Pair</option>
+                                                                                <option value="Strip" {{ old('items.0.unit_type') == 'Strip' ? 'selected' : '' }}>Strip</option>
+                                                                                <option value="Dozen" {{ old('items.0.unit_type') == 'Dozen' ? 'selected' : '' }}>Dozen</option>
+                                                                                <option value="Gross" {{ old('items.0.unit_type') == 'Gross' ? 'selected' : '' }}>Gross</option>
+                                                                                <option value="Sets" {{ old('items.0.unit_type') == 'Sets' ? 'selected' : '' }}>Sets</option>
+                                                                                <option value="Box" {{ old('items.0.unit_type') == 'Box' ? 'selected' : '' }}>Box</option>
+                                                                                <option value="Container" {{ old('items.0.unit_type') == 'Container' ? 'selected' : '' }}>Container
                                                                                 </option>
-                                                                                <option value="Carats">Carats</option>
-                                                                                <option value="Pairs">Pairs</option>
+                                                                                <option value="Carats" {{ old('items.0.unit_type') == 'Carats' ? 'selected' : '' }}>Carats</option>
+                                                                                <option value="Pairs" {{ old('items.0.unit_type') == 'Pairs' ? 'selected' : '' }}>Pairs</option>
                                                                             </select>
                                                                         </td>
                                                                         <td><input type="number"
                                                                                 class="form-control qty"
-                                                                                name="items[0][qty]"
+                                                                                name="items[0][qty]" value="{{ old('items.0.qty') }}"
                                                                                 placeholder="Quantity">
                                                                         </td>
                                                                         <td><input type="number"
                                                                                 class="form-control rate"
-                                                                                name="items[0][unit_rate]"
+                                                                                name="items[0][unit_rate]" value="{{ old('items.0.unit_rate') }}"
                                                                                 placeholder="Unit Rate">
                                                                         </td>
                                                                         <td><input type="text"
@@ -7219,7 +7220,7 @@
                                                             <div>
                                                                 <label>Total Amount</label>
                                                                 <input type="text" id="totalAmount"
-                                                                    class="form-control w-25" readonly>
+                                                                    class="form-control w-100" readonly>
                                                             </div>
                                                             <button type="button" class="btn btn-primary" id="rateCalculateBtn">
                                                                 <i class="ti ti-calculator me-1"></i> Rate Calculate
@@ -7368,31 +7369,31 @@
                                                                 <label class="form-label">DDP</label>
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-my-delivery" name="ddp_shipping_method" value="DDP - United My Delivery" class="form-check-input">
+                                                                        <input type="radio" id="united-my-delivery" name="ddp_shipping_method" value="DDP - United My Delivery" {{ old('ddp_shipping_method') == 'DDP - United My Delivery' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-my-delivery">United My Delivery</label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-air-premium" name="ddp_shipping_method" value="DDP - United Air Premium" class="form-check-input">
+                                                                        <input type="radio" id="united-air-premium" name="ddp_shipping_method" value="DDP - United Air Premium" {{ old('ddp_shipping_method') == 'DDP - United Air Premium' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-air-premium">United Air Premium </label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-grd-premium" name="ddp_shipping_method" value="DDP - United GRD Premium" class="form-check-input">
+                                                                        <input type="radio" id="united-grd-premium" name="ddp_shipping_method" value="DDP - United GRD Premium" {{ old('ddp_shipping_method') == 'DDP - United GRD Premium' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-grd-premium">United GRD Premium </label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-air-express" name="ddp_shipping_method" value="DDP - United Air Express" class="form-check-input">
+                                                                        <input type="radio" id="united-air-express" name="ddp_shipping_method" value="DDP - United Air Express" {{ old('ddp_shipping_method') == 'DDP - United Air Express' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-air-express">United Air Express</label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-prior-post" name="ddp_shipping_method" value="DDP - United Prior Post" class="form-check-input">
+                                                                        <input type="radio" id="united-prior-post" name="ddp_shipping_method" value="DDP - United Prior Post" {{ old('ddp_shipping_method') == 'DDP - United Prior Post' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-prior-post">United Prior Post</label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-eco-post" name="ddp_shipping_method" value="DDP - United ECO Post" class="form-check-input">
+                                                                        <input type="radio" id="united-eco-post" name="ddp_shipping_method" value="DDP - United ECO Post" {{ old('ddp_shipping_method') == 'DDP - United ECO Post' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-eco-post">United ECO Post</label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-my-pickup" name="ddp_shipping_method" value="DDP - United My Pickup" class="form-check-input">
+                                                                        <input type="radio" id="united-my-pickup" name="ddp_shipping_method" value="DDP - United My Pickup" {{ old('ddp_shipping_method') == 'DDP - United My Pickup' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-my-pickup">United My Pickup</label>
                                                                     </div>
 
@@ -7405,22 +7406,21 @@
                                                                 <label class="form-label">DDU</label>
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-my-delivery1" name="ddp_shipping_method" value="DDU - United My Delivery" class="form-check-input">
+                                                                        <input type="radio" id="united-my-delivery1" name="ddp_shipping_method" value="DDU - United My Delivery" {{ old('ddp_shipping_method') == 'DDU - United My Delivery' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-my-delivery1">United My Delivery</label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-air-premium1" name="ddp_shipping_method" value="DDU - United Air Premium" class="form-check-input">
+                                                                        <input type="radio" id="united-air-premium1" name="ddp_shipping_method" value="DDU - United Air Premium" {{ old('ddp_shipping_method') == 'DDU - United Air Premium' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-air-premium1">United Air Premium </label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-grd-premium1" name="ddp_shipping_method" value="DDU - United GRD Premium" class="form-check-input">
+                                                                        <input type="radio" id="united-grd-premium1" name="ddp_shipping_method" value="DDU - United GRD Premium" {{ old('ddp_shipping_method') == 'DDU - United GRD Premium' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-grd-premium1">United GRD Premium </label>
                                                                     </div>
                                                                     <div class="form-check">
-                                                                        <input type="radio" id="united-my-pickup1" name="ddp_shipping_method" value="DDU - United My Pickup" class="form-check-input">
+                                                                        <input type="radio" id="united-my-pickup1" name="ddp_shipping_method" value="DDU - United My Pickup" {{ old('ddp_shipping_method') == 'DDU - United My Pickup' ? 'checked' : '' }} class="form-check-input">
                                                                         <label class="form-check-label" for="united-my-pickup1">United My Pickup</label>
                                                                     </div>
-
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -7959,15 +7959,38 @@
     const shipperCompany = getVal('input[name="shipper_company_names"]');
     const shipperContact = getVal('input[name="shipper_contact_person"]');
     const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
+    const shipperPhone = getVal('input[name="shipper_phone_number"]');
+    const shipperAddressLine1 = getVal('input[name="shipper_address_line1"]');
+    const shipperAddressLine2 = getVal('input[name="shipper_address_line2"]');
+    const shipperAddressLine3 = getVal('input[name="shipper_address_line3"]');
     const shipperPostal = getVal('input[name="shipper_pincode"]');
     const shipperCity = getVal('input[name="shipper_city"]');
     const shipperState = getVal('input[name="shipper_state"]');
     const shipperCountry = 'IN';
 
+    // Build Shipper AddressLine array
+    const shipperAddressLine = [];
+    if (shipperAddressLine1) shipperAddressLine.push(shipperAddressLine1);
+    if (shipperAddressLine2) shipperAddressLine.push(shipperAddressLine2);
+    if (shipperAddressLine3) shipperAddressLine.push(shipperAddressLine3);
+
     // Consignee
+    const consigneeName = getVal('input[name="consignee_name"]');
+    const consigneePhone = getVal('input[name="consignee_phone_number"]');
+    const consigneeAddressLine1 = getVal('input[name="consignee_address_line1"]');
+    const consigneeAddressLine2 = getVal('input[name="consignee_address_line2"]');
+    const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
     const consigneePostal = getVal('input[name="consignee_zip_code"]');
+    const consigneeCity = getVal('input[name="consignee_city"]');
+    const consigneeState = getVal('input[name="consignee_state"]');
     const deliveryDest = getVal('select[name="delivery_destination"]');
     const destCountry = getCountryCodeFromDestination(deliveryDest);
+
+    // Build Consignee AddressLine array
+    const consigneeAddressLine = [];
+    if (consigneeAddressLine1) consigneeAddressLine.push(consigneeAddressLine1);
+    if (consigneeAddressLine2) consigneeAddressLine.push(consigneeAddressLine2);
+    if (consigneeAddressLine3) consigneeAddressLine.push(consigneeAddressLine3);
 
     // Selected shipping method
     const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
@@ -8025,38 +8048,152 @@
         });
     }
 
+    // return {
+    //     RateRequest: {
+    //         Request: {
+    //             RequestOption: "Rate"
+    //         },
+    //         Shipment: {
+    //             Shipper: {
+    //                 Name: shipperName,
+    //                 AttentionName: shipperContact || shipperName,
+    //                 ShipperNumber: "1255AK",
+    //                 Phone: {
+    //                     Number: shipperPhone || ""
+    //                 },
+    //                 Address: {
+    //                     AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Not Provided"],
+    //                     City: shipperCity,
+    //                     StateProvinceCode: shipperState,
+    //                     PostalCode: shipperPostal,
+    //                     CountryCode: shipperCountry
+    //                 }
+    //             },
+    //             ShipFrom: {
+    //                 Name: shipperName,
+    //                 AttentionName: shipperContact || shipperName,
+    //                 Phone: {
+    //                     Number: shipperPhone || ""
+    //                 },
+    //                 Address: {
+    //                     AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Not Provided"],
+    //                     City: shipperCity,
+    //                     StateProvinceCode: shipperState,
+    //                     PostalCode: shipperPostal,
+    //                     CountryCode: shipperCountry
+    //                 }
+    //             },
+    //             ShipTo: {
+    //                 Name: consigneeName || "Consignee",
+    //                 AttentionName: consigneeName || "Consignee",
+    //                 Phone: {
+    //                     Number: consigneePhone || ""
+    //                 },
+    //                 Address: {
+    //                     AddressLine: consigneeAddressLine.length > 0 ? consigneeAddressLine : ["Not Provided"],
+    //                     City: consigneeCity,
+    //                     StateProvinceCode: consigneeState,
+    //                     PostalCode: consigneePostal,
+    //                     CountryCode: destCountry
+    //                 }
+    //             },
+    //             Service: {
+    //                 Code: serviceCode
+    //             },
+    //             Package: packages
+    //         }
+    //     }
+    // };
+
     return {
-        RateRequest: {
-            Shipment: {
-                Shipper: {
-                    Name: shipperName,
-                    ShipperNumber: "1255AK",
-                    Address: {
-                        City: shipperCity,
-                        StateProvinceCode: shipperState,
-                        PostalCode: shipperPostal,
-                        CountryCode: shipperCountry
-                    }
+    RateRequest: {
+        Request: {
+            RequestOption: "Rate"
+        },
+
+        PickupType: {
+            Code: "01"
+        },
+
+        CustomerClassification: {
+            Code: "01"
+        },
+
+        Shipment: {
+            Shipper: {
+                Name: shipperName,
+                AttentionName: shipperContact || shipperName,
+
+                // VALID UPS ACCOUNT
+                ShipperNumber: "1255AK",
+
+                Phone: {
+                    Number: shipperPhone || ""
                 },
-                ShipFrom: {
-                    Address: {
-                        PostalCode: shipperPostal,
-                        CountryCode: shipperCountry
-                    }
+
+                Address: {
+                    AddressLine:
+                        shipperAddressLine.length > 0
+                            ? shipperAddressLine
+                            : ["Not Provided"],
+
+                    City: shipperCity,
+                    StateProvinceCode: shipperState,
+                    PostalCode: shipperPostal,
+                    CountryCode: shipperCountry
+                }
+            },
+
+            ShipFrom: {
+                Name: shipperName,
+                AttentionName: shipperContact || shipperName,
+
+                Phone: {
+                    Number: shipperPhone || ""
                 },
-                ShipTo: {
-                    Address: {
-                        PostalCode: consigneePostal,
-                        CountryCode: destCountry
-                    }
+
+                Address: {
+                    AddressLine:
+                        shipperAddressLine.length > 0
+                            ? shipperAddressLine
+                            : ["Not Provided"],
+
+                    City: shipperCity,
+                    StateProvinceCode: shipperState,
+                    PostalCode: shipperPostal,
+                    CountryCode: shipperCountry
+                }
+            },
+
+            ShipTo: {
+                Name: consigneeName || "Consignee",
+                AttentionName: consigneeName || "Consignee",
+
+                Phone: {
+                    Number: consigneePhone || ""
                 },
-                Service: {
-                    Code: serviceCode
-                },
-                Package: packages
-            }
+
+                Address: {
+                    AddressLine:
+                        consigneeAddressLine.length > 0
+                            ? consigneeAddressLine
+                            : ["Not Provided"],
+
+                    City: consigneeCity,
+                    StateProvinceCode: consigneeState,
+                    PostalCode: consigneePostal,
+                    CountryCode: destCountry
+                }
+            },
+
+            Service: {
+                Code: serviceCode
+            },
+
+            Package: packages
         }
-    };
+    }
+};
 }
 
     // Reusable function to call UPS rate API
@@ -8118,7 +8255,17 @@
                 }
                 tableBody.innerHTML = rows;
             } else {
-                errorDiv.textContent = data.message || 'Failed to get UPS rate';
+                // Build detailed error message showing full UPS response
+                let errorMsg = '<strong>' + (data.message || 'Failed to get UPS rate') + '</strong>';
+                if (data.httpCode) {
+                    errorMsg += '<br><strong>HTTP Code:</strong> ' + data.httpCode;
+                }
+                if (data.decoded) {
+                    errorMsg += '<br><strong>Response:</strong><br><pre style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:12px;margin-top:5px;">' + JSON.stringify(data.decoded, null, 2) + '</pre>';
+                } else if (data.raw_response) {
+                    errorMsg += '<br><strong>Raw Response:</strong><br><pre style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:12px;margin-top:5px;">' + data.raw_response + '</pre>';
+                }
+                errorDiv.innerHTML = errorMsg;
                 errorDiv.classList.remove('d-none');
                 resultDiv.style.display = 'block';
                 document.getElementById('rateStatusBadge').textContent = 'Error';
@@ -8249,21 +8396,20 @@
                         data
                     }) => {
                         if (data.success) {
+                            // Clear localStorage saved form data
+                            if (typeof clearShipmentFormStorage === 'function') {
+                                clearShipmentFormStorage();
+                            }
                             // Show success message
                             Swal.fire({
                                 icon: 'success',
                                 title: 'Success!',
                                 text: data.message,
                                 confirmButtonColor: '#2563eb'
+                            }).then(() => {
+                                // Reload page fresh after user dismisses popup
+                                window.location.reload();
                             });
-                            // Reset form after 2 seconds
-                            setTimeout(() => {
-                                form.reset();
-                                // Close accordion if needed
-                                $('.accordion-collapse').collapse('hide');
-                                // Open first accordion
-                                $('#basic').collapse('show');
-                            }, 2000);
                         } else {
                             const errorHtml = buildErrorHtml(data.errors);
                             // Show error message
@@ -8340,6 +8486,271 @@
             });
         }
     });
+    </script>
+    <script>
+    // ============================================================
+    // FORM PERSISTENCE VIA LOCALSTORAGE
+    // - Auto-saves all form field values on every change
+    // - Restores values automatically on page load (survives F5)
+    // - Cleared on successful form submit via AJAX
+    // ============================================================
+    (function() {
+        const STORAGE_KEY = 'create_shipment_form_data';
+
+        // Get all form elements in the main create-shipment form
+        function getMainForm() {
+            return document.querySelector('form[action*="create-shipment"]');
+        }
+
+        // Serialize all form fields (text, select, radio, checkbox, textarea) to a plain object
+        function serializeForm() {
+            const form = getMainForm();
+            if (!form) return {};
+
+            const data = {};
+            const formData = new FormData(form);
+            for (const [key, value] of formData.entries()) {
+                // Handle multiple values with same name (e.g., checkboxes)
+                if (data.hasOwnProperty(key)) {
+                    if (!Array.isArray(data[key])) {
+                        data[key] = [data[key]];
+                    }
+                    data[key].push(value);
+                } else {
+                    data[key] = value;
+                }
+            }
+
+            // Also capture unchecked radio/checkbox state
+            const radioGroups = new Set();
+            form.querySelectorAll('input[type="radio"]').forEach(radio => {
+                radioGroups.add(radio.name);
+            });
+            radioGroups.forEach(name => {
+                const checkedRadio = form.querySelector('input[name="' + CSS.escape(name) +
+                    '"]:checked');
+                if (checkedRadio) {
+                    data[name] = checkedRadio.value;
+                }
+            });
+
+            // Save checkbox that weren't checked (not in FormData)
+            form.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (!cb.checked && !data.hasOwnProperty(cb.name)) {
+                    data[cb.name] = '';
+                }
+            });
+
+            return data;
+        }
+
+        // Save current form state to localStorage
+        function saveToStorage() {
+            const data = serializeForm();
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {
+                // Storage full or unavailable - silently ignore
+            }
+        }
+
+        // Restore form values from localStorage
+        function restoreFromStorage() {
+            let saved;
+            try {
+                saved = localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                return;
+            }
+            if (!saved) return;
+
+            let data;
+            try {
+                data = JSON.parse(saved);
+            } catch (e) {
+                return;
+            }
+
+            const form = getMainForm();
+            if (!form) return;
+
+            // Track which fields were restored from storage
+            const restoredFields = new Set();
+
+            // Helper: safely escape a string for use inside a CSS attribute selector value
+            function escapeAttr(str) {
+                return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            }
+
+            // We need a map of package row count and item row count from saved data
+            let maxPackageIndex = -1;
+            let maxItemIndex = -1;
+            Object.keys(data).forEach(key => {
+                const pkgMatch = key.match(/^packages\[(\d+)\]/);
+                if (pkgMatch) {
+                    maxPackageIndex = Math.max(maxPackageIndex, parseInt(pkgMatch[1]));
+                }
+                const itemMatch = key.match(/^items\[(\d+)\]/);
+                if (itemMatch) {
+                    maxItemIndex = Math.max(maxItemIndex, parseInt(itemMatch[1]));
+                }
+            });
+
+            // Ensure enough package rows exist
+            const packageRows = form.querySelectorAll('.rowContaineraddmore');
+            const addPackageBtn = document.getElementById('addRowBtn');
+            if (addPackageBtn && maxPackageIndex > 0 &&
+                packageRows.length <= maxPackageIndex) {
+                const rowsToAdd = maxPackageIndex - packageRows.length + 1;
+                for (let i = 0; i < rowsToAdd; i++) {
+                    try {
+                        addPackageBtn.click();
+                    } catch (e) {}
+                }
+            }
+
+            // Ensure enough invoice item rows exist
+            const itemRows = form.querySelectorAll('#invoiceTable tr');
+            const addItemBtn = document.getElementById('tableaddRowBtn');
+            if (addItemBtn && maxItemIndex > 0 &&
+                itemRows.length <= maxItemIndex) {
+                const rowsToAdd = maxItemIndex - itemRows.length + 1;
+                for (let i = 0; i < rowsToAdd; i++) {
+                    try {
+                        addItemBtn.click();
+                    } catch (e) {}
+                }
+            }
+
+            // Short delay to let dynamic rows render, then fill values
+            setTimeout(function() {
+                fillFormValues(data, restoredFields);
+                // Dispatch change events for Select2 and other plugins
+                setTimeout(function() {
+                    restoredFields.forEach(function(key) {
+                        const escaped = escapeAttr(key);
+                        const el = form.querySelector('[name="' + escaped + '"]');
+                        if (el) {
+                            el.dispatchEvent(new Event('change', {
+                                bubbles: true
+                            }));
+                            // Trigger Select2 update
+                            if (typeof $ !== 'undefined' && $(el).hasClass(
+                                    'select2-hidden-accessible')) {
+                                $(el).trigger('change');
+                            }
+                        }
+                    });
+                }, 100);
+            }, 150);
+        }
+
+        function fillFormValues(data, restoredFields) {
+            const form = getMainForm();
+            if (!form) return;
+
+            // Pre-process: extract delivery_destination and origin_type to set first
+            const priorityFields = ['delivery_destination', 'origin_type'];
+
+            // Helper: safely escape a string for use inside a CSS attribute selector value
+            function escapeAttr(str) {
+                return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            }
+
+            // Fill all fields
+            Object.keys(data).forEach(function(name) {
+                const value = data[name];
+                const escaped = escapeAttr(name);
+
+                // For radio buttons: check the matching one
+                const radio = form.querySelector('input[type="radio"][name="' + escaped +
+                    '"][value="' + escapeAttr(String(value)) + '"]');
+                if (radio) {
+                    radio.checked = true;
+                    restoredFields.add(name);
+                    return;
+                }
+
+                // For checkboxes
+                const checkbox = form.querySelector('input[type="checkbox"][name="' + escaped +
+                    '"]');
+                if (checkbox) {
+                    checkbox.checked = (value === 'on' || value === '1' || value === true ||
+                        value === 'true');
+                    restoredFields.add(name);
+                    return;
+                }
+
+                // For select/input/textarea
+                const escapedName = escapeAttr(name);
+                const el = form.querySelector('[name="' + escapedName + '"]');
+                if (el) {
+                    if (el.tagName === 'SELECT') {
+                        el.value = value;
+                        restoredFields.add(name);
+                    } else if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                        // Set value for text/email/number/date/hidden inputs
+                        el.value = value;
+                        // Also set 'value' attribute on intl-tel-input parent
+                        if (el.classList.contains('phone') && typeof $ !==
+                            'undefined') {
+                            // Trigger intl-tel-input to re-process
+                            el.dispatchEvent(new Event('input', {
+                                bubbles: true
+                            }));
+                        }
+                        restoredFields.add(name);
+                    }
+                }
+            });
+        }
+
+        // Clear localStorage
+        function clearShipmentFormStorage() {
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            } catch (e) {}
+        }
+
+        // Expose clear function globally for the success handler
+        window.clearShipmentFormStorage = clearShipmentFormStorage;
+
+        // ---- Attach event listeners ----
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = getMainForm();
+            if (!form) return;
+
+            // Restore saved values on page load (only if no server-side old() values exist)
+            restoreFromStorage();
+
+            // Auto-save on every form field change (debounced for performance)
+            let saveTimeout;
+            form.addEventListener('input', function(e) {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(saveToStorage, 300);
+            });
+            form.addEventListener('change', function(e) {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(saveToStorage, 300);
+            });
+
+            // Also save on Select2 selection (which may not trigger native change)
+            if (typeof $ !== 'undefined') {
+                $(form).on('select2:select select2:unselect', function() {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(saveToStorage, 300);
+                });
+            }
+
+            // Remove saved data when user clicks Reset button
+            const resetBtn = form.querySelector('button[type="reset"]');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function() {
+                    setTimeout(clearShipmentFormStorage, 100);
+                });
+            }
+        });
+    })();
     </script>
     <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"
         data-cf-settings="5d3b6c488f778ded9171c76c-|49" defer></script>

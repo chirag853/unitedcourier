@@ -636,7 +636,7 @@
 
 
 <!-- testimonial -->
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         <div class="row justify-content-center mb-3">
@@ -669,7 +669,7 @@
 </section>
 
 <!-- Partner Logos Section -->
-<section class="py-5">
+<section class="py-5" style="display:none">
     <div class="container">
         <div class="text-center mb-4">
             <h2 class="about-title">Our Trusted Partners</h2>
@@ -691,7 +691,7 @@
 
 
 <!-- FAQ Section -->
- <section class="faq-section">
+ <section class="faq-section" style="display:none">
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">Common Questions</span>

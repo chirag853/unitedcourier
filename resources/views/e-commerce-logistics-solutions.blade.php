@@ -711,7 +711,7 @@
 
 <!-- testimonial -->
 @if($testimonialsHeader || ($testimonials && $testimonials->count() > 0))
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         @if($testimonialsHeader)
@@ -771,7 +771,7 @@
 
 <!-- FAQ Section -->
 @if($faqHeader || ($faqs && $faqs->count() > 0))
-<section class="faq-section">
+<section class="faq-section" style="display:none">
     <div class="container">
         @if($faqHeader)
         <div class="faq-header">
