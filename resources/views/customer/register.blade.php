@@ -1,4 +1,4 @@
-@include('customer.partials.header')
+@include('website_include.header')
 
 <div class="hero-gradient-container" style="margin-top: 70px;">
     <!-- Floating Elements -->
@@ -288,4 +288,4 @@ function showNotification(message, type = 'info') {
 }
 </script>
 
-@include('customer.partials.footer')
+@include('website_include.footer')

@@ -345,4 +345,4 @@
         }
     </script>
 
-@include('customer.partials.footer')
+@include('website_include.footer')
