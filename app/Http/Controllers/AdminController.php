@@ -923,6 +923,9 @@ class AdminController extends Controller
                         'image' => $request->input('content.image'),
                         'list_items' => $listItems,
                     ];
+                    // Also populate normalized columns
+                    $storeData['paragraphs'] = $request->input('content.paragraphs');
+                    $storeData['subtitle'] = $request->input('content.subtitle');
                     break;
                 case 'stats':
                     $contentData = [
@@ -945,13 +948,19 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    // Also populate normalized columns
+                    $storeData['paragraphs'] = $request->input('content.paragraphs');
+                    $storeData['subtitle'] = $request->input('content.subtitle');
                     break;
                 case 'features_header':
                     $contentData = [
                         'title' => $request->input('content.title'),
                         'subtitle' => $request->input('content.subtitle'),
                         'description' => $request->input('content.description'),
+                        'paragraphs' => $request->input('content.paragraphs'),
                     ];
+                    $storeData['paragraphs'] = $request->input('content.paragraphs');
+                    $storeData['subtitle'] = $request->input('content.subtitle');
                     break;
                 case 'features':
                     $contentData = [
@@ -960,6 +969,9 @@ class AdminController extends Controller
                         'icon_svg' => $request->input('content.icon_svg'),
                         'icon_class' => $request->input('content.icon_class'),
                     ];
+                    // Also populate normalized columns
+                    $storeData['paragraphs'] = $request->input('content.paragraphs');
+                    $storeData['subtitle'] = $request->input('content.subtitle');
                     break;
                 case 'faq':
                     $contentData = [
@@ -974,6 +986,8 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    // Also populate normalized columns
+                    $storeData['subtitle'] = $request->input('content.subtitle');
                     break;
                 default:
                     $rawJson = $request->input('content.json');
@@ -983,6 +997,22 @@ class AdminController extends Controller
             }
 
             $storeData['content'] = $contentData;
+
+            // Handle extra_content as a JSON string
+            if ($request->filled('extra_content')) {
+                $extraContentRaw = $request->input('extra_content');
+                // Validate that it's parseable JSON (store as-is; model accessor decodes it)
+                if (is_string($extraContentRaw)) {
+                    $decoded = json_decode($extraContentRaw, true);
+                    if ($decoded !== null || $extraContentRaw === 'null') {
+                        $storeData['extra_content'] = $extraContentRaw;
+                    } else {
+                        // Not valid JSON, store as-is anyway (will be ignored by accessor)
+                        $storeData['extra_content'] = $extraContentRaw;
+                    }
+                }
+            }
+
             $newContent->fill($storeData);
             $newContent->save();
 
@@ -1029,6 +1059,9 @@ class AdminController extends Controller
                         'image' => $request->input('content.image'),
                         'list_items' => $listItems,
                     ];
+                    // Also populate normalized columns
+                    $updateData['paragraphs'] = $request->input('content.paragraphs');
+                    $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
                     
                 case 'stats':
@@ -1053,6 +1086,9 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    // Also populate normalized columns
+                    $updateData['paragraphs'] = $request->input('content.paragraphs');
+                    $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
                     
                 case 'features_header':
@@ -1060,7 +1096,10 @@ class AdminController extends Controller
                         'title' => $request->input('content.title'),
                         'subtitle' => $request->input('content.subtitle'),
                         'description' => $request->input('content.description'),
+                        'paragraphs' => $request->input('content.paragraphs'),
                     ];
+                    $updateData['paragraphs'] = $request->input('content.paragraphs');
+                    $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
                 case 'features':
                     $contentData = [
@@ -1069,6 +1108,9 @@ class AdminController extends Controller
                         'icon_svg' => $request->input('content.icon_svg'),
                         'icon_class' => $request->input('content.icon_class'),
                     ];
+                    // Also populate normalized columns
+                    $updateData['paragraphs'] = $request->input('content.paragraphs');
+                    $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
                     
                 case 'faq':
@@ -1085,6 +1127,8 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    // Also populate normalized columns
+                    $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
                     
                 default:
@@ -1095,6 +1139,20 @@ class AdminController extends Controller
             }
             
             $updateData['content'] = $contentData;
+
+            // Handle extra_content as a JSON string
+            if ($request->filled('extra_content')) {
+                $extraContentRaw = $request->input('extra_content');
+                if (is_string($extraContentRaw)) {
+                    $decoded = json_decode($extraContentRaw, true);
+                    if ($decoded !== null || $extraContentRaw === 'null') {
+                        $updateData['extra_content'] = $extraContentRaw;
+                    } else {
+                        $updateData['extra_content'] = $extraContentRaw;
+                    }
+                }
+            }
+
             $content->update($updateData);
 
             return response()->json([
@@ -1132,21 +1190,42 @@ class AdminController extends Controller
         return view('admin.change-e-commerce-logistics-solutions', ['ecommerceContent' => $ecommerceContent]);
     }
 
+    public function getEcommerceLogisticsSolutionsContent($id)
+    {
+        try {
+            $content = \App\Models\EcommerceLogisticsSolutionsPage::findOrFail($id);
+            return response()->json($content);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Content not found'], 404);
+        }
+    }
+
     public function storeEcommerceLogisticsSolutionsContent(Request $request)
     {
         try {
             $newContent = new \App\Models\EcommerceLogisticsSolutionsPage();
             
             $storeData = [
-                'section' => $request->section === 'features_header' || $request->section === 'testimonials_header' || $request->section === 'faq_header' ? $request->section : $request->section,
+                'section' => $request->section,
                 'item_key' => $request->item_key,
                 'sort_order' => $request->sort_order,
                 'is_active' => $request->is_active ? 1 : 0,
             ];
 
+            // Build data distributed across normalized columns, content JSON, and extra_content
+            // based on where getContentAttribute() reads from
+            $columnData = [];
             $contentData = [];
+            $extraContentData = [];
+
             switch($request->section) {
                 case 'hero':
+                    $columnData['badge_text'] = $request->input('content.badge_text');
+                    $contentData = [
+                        'title' => $request->input('content.title'),
+                        'description' => $request->input('content.description'),
+                        'image' => $request->input('content.image'),
+                    ];
                     $badges = $request->input('content.badges');
                     if (is_string($badges)) {
                         $badgesLines = array_map('trim', explode("\n", $badges));
@@ -1169,75 +1248,81 @@ class AdminController extends Controller
                             }
                         }
                     }
-                    $contentData = [
-                        'badge_text' => $request->input('content.badge_text'),
-                        'title' => $request->input('content.title'),
-                        'description' => $request->input('content.description'),
+                    $extraContentData = [
                         'button_primary_text' => $request->input('content.button_primary_text'),
                         'button_primary_icon' => $request->input('content.button_primary_icon'),
                         'button_primary_url' => $request->input('content.button_primary_url'),
                         'button_secondary_text' => $request->input('content.button_secondary_text'),
                         'button_secondary_icon' => $request->input('content.button_secondary_icon'),
                         'button_secondary_url' => $request->input('content.button_secondary_url'),
-                        'image' => $request->input('content.image'),
                         'badges' => $badges,
                         'stat_pills' => $statPills,
                     ];
                     break;
+
                 case 'stats':
-                    $contentData = [
-                        'title' => $request->input('content.title'),
-                        'value' => $request->input('content.value'),
-                        'suffix' => $request->input('content.suffix'),
-                        'label' => $request->input('content.label'),
-                    ];
-                    break;
-                case 'overview':
-                    $checkList = $request->input('content.check_list');
-                    if (is_string($checkList)) {
-                        $checkList = array_map('trim', explode("\n", $checkList));
-                        $checkList = array_filter($checkList);
+                    if ($request->item_key === 'stats_header') {
+                        // Header record: title lives in extra_content (seeded pattern)
+                        $extraContentData['title'] = $request->input('content.title');
+                    } else {
+                        // Individual stat: mapped to normalized columns
+                        $columnData['stat_value'] = $request->input('content.value');
+                        $columnData['stat_label'] = $request->input('content.label');
+                        $columnData['stat_suffix'] = $request->input('content.suffix');
                     }
+                    break;
+
+                case 'overview':
                     $contentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                         'image' => $request->input('content.image'),
-                        'button_text' => $request->input('content.button_text'),
-                        'button_url' => $request->input('content.button_url'),
-                        'check_list' => $checkList,
                     ];
+                    $columnData['button_text'] = $request->input('content.button_text');
+                    $columnData['button_url'] = $request->input('content.button_url');
+                    $checkList = $request->input('content.check_list');
+                    if (is_array($checkList)) {
+                        $columnData['check_list_text'] = implode("\n", $checkList);
+                    } elseif (is_string($checkList) && !empty($checkList)) {
+                        $items = array_map('trim', explode("\n", $checkList));
+                        $items = array_filter($items);
+                        $columnData['check_list_text'] = implode("\n", $items);
+                    }
                     break;
+
                 case 'features_header':
-                    $contentData = [
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
                     break;
+
                 case 'features':
-                    $contentData = [
-                        'icon' => $request->input('content.icon'),
-                        'color_class' => $request->input('content.color_class'),
+                    $columnData['icon_svg'] = $request->input('content.icon');
+                    $columnData['color_scheme'] = $request->input('content.color_class');
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
                     break;
+
                 case 'testimonials_header':
-                    $contentData = [
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                         'google_review_image' => $request->input('content.google_review_image'),
                     ];
                     break;
+
                 case 'testimonials':
-                    $contentData = [
-                        'name' => $request->input('content.name'),
-                        'avatar' => $request->input('content.avatar'),
-                        'rating' => $request->input('content.rating'),
-                        'text' => $request->input('content.text'),
-                    ];
+                    $columnData['name'] = $request->input('content.name');
+                    $columnData['avatar_url'] = $request->input('content.avatar');
+                    $columnData['rating'] = $request->input('content.rating');
+                    $columnData['text_content'] = $request->input('content.text');
                     break;
+
                 case 'faq_header':
-                    $contentData = [
+                    $extraContentData = [
                         'badge' => $request->input('content.badge'),
                         'title' => $request->input('content.title'),
                         'sidebar_image' => $request->input('content.sidebar_image'),
@@ -1248,12 +1333,12 @@ class AdminController extends Controller
                         'contact_button_text' => $request->input('content.contact_button_text'),
                     ];
                     break;
+
                 case 'faq':
-                    $contentData = [
-                        'question' => $request->input('content.question'),
-                        'answer' => $request->input('content.answer'),
-                    ];
+                    $columnData['question'] = $request->input('content.question');
+                    $columnData['answer'] = $request->input('content.answer');
                     break;
+
                 default:
                     $rawJson = $request->input('content.json');
                     $parsed = json_decode($rawJson, true);
@@ -1261,7 +1346,19 @@ class AdminController extends Controller
                     break;
             }
 
-            $storeData['content'] = $contentData;
+            // Filter out null/empty string values (preserve empty arrays like [] for badges)
+            $contentData = array_filter($contentData, function($v) { return $v !== null && $v !== ''; });
+            $extraContentData = array_filter($extraContentData, function($v) { return $v !== null && $v !== ''; });
+            $columnData = array_filter($columnData, function($v) { return $v !== null && $v !== ''; });
+
+            // Merge: columns go directly, content JSON if any, extra_content if any
+            $storeData = array_merge($storeData, $columnData);
+            if (!empty($contentData)) {
+                $storeData['content'] = $contentData;
+            }
+            // Always set extra_content so stale seeder data gets overwritten
+            $storeData['extra_content'] = !empty($extraContentData) ? json_encode($extraContentData) : json_encode(new \stdClass());
+
             $newContent->fill($storeData);
             $newContent->save();
 
@@ -1289,9 +1386,20 @@ class AdminController extends Controller
                 'is_active' => $request->is_active ? 1 : 0,
             ];
 
+            // Build data distributed across normalized columns, content JSON, and extra_content
+            // based on where getContentAttribute() reads from
+            $columnData = [];
             $contentData = [];
+            $extraContentData = [];
+
             switch($request->section) {
                 case 'hero':
+                    $columnData['badge_text'] = $request->input('content.badge_text');
+                    $contentData = [
+                        'title' => $request->input('content.title'),
+                        'description' => $request->input('content.description'),
+                        'image' => $request->input('content.image'),
+                    ];
                     $badges = $request->input('content.badges');
                     if (is_string($badges)) {
                         $badgesLines = array_map('trim', explode("\n", $badges));
@@ -1314,75 +1422,79 @@ class AdminController extends Controller
                             }
                         }
                     }
-                    $contentData = [
-                        'badge_text' => $request->input('content.badge_text'),
-                        'title' => $request->input('content.title'),
-                        'description' => $request->input('content.description'),
+                    $extraContentData = [
                         'button_primary_text' => $request->input('content.button_primary_text'),
                         'button_primary_icon' => $request->input('content.button_primary_icon'),
                         'button_primary_url' => $request->input('content.button_primary_url'),
                         'button_secondary_text' => $request->input('content.button_secondary_text'),
                         'button_secondary_icon' => $request->input('content.button_secondary_icon'),
                         'button_secondary_url' => $request->input('content.button_secondary_url'),
-                        'image' => $request->input('content.image'),
                         'badges' => $badges,
                         'stat_pills' => $statPills,
                     ];
                     break;
+
                 case 'stats':
-                    $contentData = [
-                        'title' => $request->input('content.title'),
-                        'value' => $request->input('content.value'),
-                        'suffix' => $request->input('content.suffix'),
-                        'label' => $request->input('content.label'),
-                    ];
-                    break;
-                case 'overview':
-                    $checkList = $request->input('content.check_list');
-                    if (is_string($checkList)) {
-                        $checkList = array_map('trim', explode("\n", $checkList));
-                        $checkList = array_filter($checkList);
+                    if ($request->item_key === 'stats_header') {
+                        $extraContentData['title'] = $request->input('content.title');
+                    } else {
+                        $columnData['stat_value'] = $request->input('content.value');
+                        $columnData['stat_label'] = $request->input('content.label');
+                        $columnData['stat_suffix'] = $request->input('content.suffix');
                     }
+                    break;
+
+                case 'overview':
                     $contentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                         'image' => $request->input('content.image'),
-                        'button_text' => $request->input('content.button_text'),
-                        'button_url' => $request->input('content.button_url'),
-                        'check_list' => $checkList,
                     ];
+                    $columnData['button_text'] = $request->input('content.button_text');
+                    $columnData['button_url'] = $request->input('content.button_url');
+                    $checkList = $request->input('content.check_list');
+                    if (is_array($checkList)) {
+                        $columnData['check_list_text'] = implode("\n", $checkList);
+                    } elseif (is_string($checkList) && !empty($checkList)) {
+                        $items = array_map('trim', explode("\n", $checkList));
+                        $items = array_filter($items);
+                        $columnData['check_list_text'] = implode("\n", $items);
+                    }
                     break;
+
                 case 'features_header':
-                    $contentData = [
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
                     break;
+
                 case 'features':
-                    $contentData = [
-                        'icon' => $request->input('content.icon'),
-                        'color_class' => $request->input('content.color_class'),
+                    $columnData['icon_svg'] = $request->input('content.icon');
+                    $columnData['color_scheme'] = $request->input('content.color_class');
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
                     break;
+
                 case 'testimonials_header':
-                    $contentData = [
+                    $extraContentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                         'google_review_image' => $request->input('content.google_review_image'),
                     ];
                     break;
+
                 case 'testimonials':
-                    $contentData = [
-                        'name' => $request->input('content.name'),
-                        'avatar' => $request->input('content.avatar'),
-                        'rating' => $request->input('content.rating'),
-                        'text' => $request->input('content.text'),
-                    ];
+                    $columnData['name'] = $request->input('content.name');
+                    $columnData['avatar_url'] = $request->input('content.avatar');
+                    $columnData['rating'] = $request->input('content.rating');
+                    $columnData['text_content'] = $request->input('content.text');
                     break;
+
                 case 'faq_header':
-                    $contentData = [
+                    $extraContentData = [
                         'badge' => $request->input('content.badge'),
                         'title' => $request->input('content.title'),
                         'sidebar_image' => $request->input('content.sidebar_image'),
@@ -1393,12 +1505,12 @@ class AdminController extends Controller
                         'contact_button_text' => $request->input('content.contact_button_text'),
                     ];
                     break;
+
                 case 'faq':
-                    $contentData = [
-                        'question' => $request->input('content.question'),
-                        'answer' => $request->input('content.answer'),
-                    ];
+                    $columnData['question'] = $request->input('content.question');
+                    $columnData['answer'] = $request->input('content.answer');
                     break;
+
                 default:
                     $rawJson = $request->input('content.json');
                     $parsed = json_decode($rawJson, true);
@@ -1406,7 +1518,19 @@ class AdminController extends Controller
                     break;
             }
 
-            $updateData['content'] = $contentData;
+            // Filter out null/empty string values (preserve empty arrays like [] for badges)
+            $contentData = array_filter($contentData, function($v) { return $v !== null && $v !== ''; });
+            $extraContentData = array_filter($extraContentData, function($v) { return $v !== null && $v !== ''; });
+            $columnData = array_filter($columnData, function($v) { return $v !== null && $v !== ''; });
+
+            // Merge: columns go directly, content JSON if any, extra_content if any
+            $updateData = array_merge($updateData, $columnData);
+            if (!empty($contentData)) {
+                $updateData['content'] = $contentData;
+            }
+            // Always set extra_content so stale seeder data gets overwritten
+            $updateData['extra_content'] = !empty($extraContentData) ? json_encode($extraContentData) : json_encode(new \stdClass());
+
             $content->update($updateData);
 
             return response()->json([

@@ -192,7 +192,7 @@
                                                     </td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" onclick="editContent({{ $content->id }}, '{{ $content->section }}', '{{ addslashes(json_encode($data)) }}', {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
+                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-content='{!! json_encode($data, JSON_HEX_APOS | JSON_HEX_TAG | JSON_HEX_AMP) !!}' onclick="editContent({{ $content->id }}, '{{ $content->section }}', this.dataset.content, {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">

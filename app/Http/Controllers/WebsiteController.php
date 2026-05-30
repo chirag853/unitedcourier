@@ -304,6 +304,19 @@ class WebsiteController extends Controller
         $faqContent = Faq::byPage('warehousing')->active()->ordered()->get();
         $ctaContent = WarehousingSolutionsPage::bySection('cta')->active()->first();
         
+        // DEBUG: Log paragraphs data for key sections
+        \Illuminate\Support\Facades\Log::debug('WarehousingSolutions DEBUG', [
+            'hero_paragraphs_raw' => $heroContent?->getRawOriginal('paragraphs'),
+            'hero_paragraphs_accessor' => data_get($heroContent, 'content.paragraphs'),
+            'overview_paragraphs_raw' => $overviewContent?->getRawOriginal('paragraphs'),
+            'overview_paragraphs_accessor' => data_get($overviewContent, 'content.paragraphs'),
+            'features_header_paragraphs_raw' => $featuresHeaderContent?->getRawOriginal('paragraphs'),
+            'features_header_paragraphs_accessor' => data_get($featuresHeaderContent, 'content.paragraphs'),
+            'features_count' => $featuresContent->count(),
+            'first_feature_paragraphs_raw' => $featuresContent->first()?->getRawOriginal('paragraphs'),
+            'first_feature_paragraphs_accessor' => data_get($featuresContent->first(), 'content.paragraphs'),
+        ]);
+        
         return view('warehousing-solutions', compact(
             'heroContent', 'statsContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent', 'testimonials', 'faqContent', 'faqHeaderContent', 'ctaContent'
         ));

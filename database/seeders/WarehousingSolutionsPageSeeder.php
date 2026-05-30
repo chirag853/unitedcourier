@@ -135,6 +135,7 @@ class WarehousingSolutionsPageSeeder extends Seeder
             [
                 'section' => 'features',
                 'item_key' => 'features_header',
+                'subtitle' => 'Powering your business with cutting-edge logistics technology and unmatched service quality.',
                 'paragraphs' => 'Every feature is designed to give your business a competitive edge — speed, transparency, and reliability, every single shipment. Join our growing network of satisfied clients who depend on us for easy, secure, fast, and efficient logistics solutions. More than three decades (30+ years) of our positive track record speaks for itself.',
                 'extra_content' => json_encode([
                     'title' => 'What Makes Our E-commerce Logistics Stand Out',

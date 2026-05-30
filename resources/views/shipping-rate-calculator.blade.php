@@ -415,7 +415,7 @@
 
 
 @if($trackCta)
-<div class="container my-5">
+<div class="container my-5" style="display:none">
     <div class="row">
         <div class="col-12">
             
@@ -455,7 +455,7 @@
 
 
 <!-- testimonial -->
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         <div class="row justify-content-center mb-3">
@@ -546,7 +546,7 @@
 
 
 <!-- FAQ Section -->
- <section class="faq-section">
+ <section class="faq-section" style="display:none">
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">{{ $faqHeader->subtitle ?? 'Common Questions' }}</span>

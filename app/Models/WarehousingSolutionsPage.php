@@ -30,6 +30,7 @@ class WarehousingSolutionsPage extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'rating' => 'decimal:1',
+        'content' => 'array',
     ];
 
     /**
@@ -37,6 +38,7 @@ class WarehousingSolutionsPage extends Model
      */
     public function getContentAttribute($value)
     {
+        // Start with normalized column values
         $data = [
             'title'       => $this->title,
             'description' => $this->description,
@@ -64,6 +66,39 @@ class WarehousingSolutionsPage extends Model
             'alt'         => $this->alt_text,
         ];
 
+        // Bridge: some normalized column keys differ from what consumers expect
+        if ($this->icon_svg !== null) {
+            $data['icon'] = $this->icon_svg;
+        }
+
+        // Parse the JSON content column and merge its values on top of defaults.
+        // $value is the raw string from the content column.
+        // The getContentAttribute() accessor takes precedence over the
+        // $casts = ['content' => 'array'] cast, so $value is the raw DB string.
+        // JSON in the DB has embedded control characters (literal \n in HTML content)
+        // that cause json_decode to fail. Sanitize by stripping control chars.
+        $originalContent = null;
+        if (is_string($value)) {
+            $originalContent = json_decode($value, true);
+            if (!is_array($originalContent)) {
+                // Strip control characters (0x00-0x1F except 0x09 tab, 0x0A LF, 0x0D CR)
+                // but keep CR/LF as they may appear inside JSON string values
+                // Actually, just replace literal LF with escaped \n
+                $cleaned = str_replace(["\r\n", "\n", "\r"], ["\\r\\n", "\\n", "\\r"], $value);
+                $originalContent = json_decode($cleaned, true);
+            }
+        } elseif (is_array($value)) {
+            $originalContent = $value;
+        }
+
+        if (is_array($originalContent)) {
+            foreach ($originalContent as $key => $val) {
+                if (!array_key_exists($key, $data) || $data[$key] === null) {
+                    $data[$key] = $val;
+                }
+            }
+        }
+
         if (!empty($this->list_items_text)) {
             $data['list_items'] = explode("\n", $this->list_items_text);
         }
@@ -71,12 +106,23 @@ class WarehousingSolutionsPage extends Model
             $data['check_list'] = explode("\n", $this->check_list_text);
         }
 
-        // Merge any extra content stored as JSON
-        if (!empty($this->extra_content)) {
-            $extra = json_decode($this->extra_content, true);
-            if (is_array($extra)) {
-                $data = array_merge($data, $extra);
+        // Merge any extra content stored as JSON string
+        // Only fill in null/missing keys so content column takes priority
+        $extraContent = $this->extra_content;
+        if (is_string($extraContent)) {
+            $extraContent = json_decode($extraContent, true);
+        }
+        if (is_array($extraContent)) {
+            foreach ($extraContent as $key => $val) {
+                if (!array_key_exists($key, $data) || $data[$key] === null) {
+                    $data[$key] = $val;
+                }
             }
+        }
+
+        // Bridge: ensure list_items key consistency (list_items_text column → list_items)
+        if (!empty($this->list_items_text) && !isset($data['list_items'])) {
+            $data['list_items'] = explode("\n", $this->list_items_text);
         }
 
         return $data;

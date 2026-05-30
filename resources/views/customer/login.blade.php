@@ -15,7 +15,7 @@
                     </h1>
                     
                     <p class="mt-3 text-muted">
-                        Log in to your UWC dashboard and take full control of your global shipping operations. Your orders, your routes, your customers, all managed under one roof. 
+                        Log in to your United Courier’s dashboard and take full control of your worldwide shipping. All your shipments are provided with end-to-end support. 
                     </p>
                     
                     <!-- Global Network Image Integration
@@ -50,9 +50,9 @@
         <div class="stat-card">
             <div class="text-success fs-4"><i class="fa-solid fa-headset"></i></div>
             <div>
-                <div class="fw-bold text-dark" style="font-size: 14px;">Dedicated Support</div>
+                <div class="fw-bold text-dark" style="font-size: 14px;">End-to-End Support</div>
                 <div class="text-muted" style="font-size: 14px;">
-                    The team will provide end-to-end support with relevant answers to your queries and no automated runaround.
+                     The team will provide end-to-end support with relevant answers to your queries and no automated runaround.
                 </div>
             </div>
         </div>
@@ -64,7 +64,7 @@
             <div>
                 <div class="fw-bold text-dark" style="font-size: 14px;">Live Updates</div>
                 <div class="text-muted" style="font-size: 14px;">
-                     Live tracking updates so you're never left guessing where your parcel is.
+                    Live tracking updates so you're never left guessing where your parcel is.
                 </div>
             </div>
         </div>

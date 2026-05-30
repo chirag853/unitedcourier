@@ -713,7 +713,7 @@
 
 
 @if($ctaContent)
-<section class="cta-section py-5 bg-primary text-white">
+<section class="cta-section py-5 bg-primary text-white" style="display:none">
     <div class="container">
         <div class="row align-items-center">
             <div class="col-lg-8">
@@ -729,7 +729,7 @@
 @endif
 
 <!-- testimonial -->
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         <div class="row justify-content-center mb-3">
@@ -773,7 +773,7 @@
 
 
 <!-- FAQ Section -->
- <section class="faq-section">
+ <section class="faq-section" style="display:none">
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">{{ data_get($faqHeaderContent, 'content.badge', 'Common Questions') }}</span>

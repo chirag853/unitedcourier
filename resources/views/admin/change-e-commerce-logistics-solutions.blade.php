@@ -196,7 +196,7 @@
                                                     </td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-content='@json($contentData)' onclick="editContent(this, {{ $content->id }}, '{{ $content->section }}', '{{ $content->item_key }}', {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
+                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" onclick="editContent({{ $content->id }})">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">
@@ -557,114 +557,128 @@
         $('#ecommerceContentTable').DataTable();
     } );
 
-    function editContent(button, id, section, itemKey, sortOrder, isActive) {
-        const content = JSON.parse(button.dataset.content);
-        const form = document.getElementById('editForm');
-        form.action = '{{ route('admin.update-e-commerce-logistics-solutions-content', ['id' => '__ID__']) }}'.replace('__ID__', id);
-        
-        document.getElementById('contentId').value = id;
-        document.getElementById('section').value = section;
-        document.getElementById('itemKey').value = itemKey;
-        document.getElementById('sortOrder').value = sortOrder;
-        document.getElementById('isActive').checked = isActive == 1;
-        
-        hideAllSectionFields();
-        
-        // Show relevant fields and populate data
-        switch(section) {
-            case 'hero':
-                toggleSectionFields('heroFields', true);
-                document.getElementById('heroBadgeText').value = content.badge_text || '';
-                document.getElementById('heroTitle').value = content.title || '';
-                document.getElementById('heroDescription').value = content.description || '';
-                document.getElementById('heroButtonPrimaryText').value = content.button_primary_text || '';
-                document.getElementById('heroButtonPrimaryIcon').value = content.button_primary_icon || '';
-                document.getElementById('heroButtonPrimaryUrl').value = content.button_primary_url || '';
-                document.getElementById('heroButtonSecondaryText').value = content.button_secondary_text || '';
-                document.getElementById('heroButtonSecondaryIcon').value = content.button_secondary_icon || '';
-                document.getElementById('heroButtonSecondaryUrl').value = content.button_secondary_url || '';
-                document.getElementById('heroImage').value = content.image || '';
-                if (Array.isArray(content.badges)) {
-                    document.getElementById('heroBadges').value = content.badges.map(b => `${b.icon}|${b.text}`).join('\n');
-                } else {
-                    document.getElementById('heroBadges').value = content.badges || '';
-                }
-                if (Array.isArray(content.stat_pills)) {
-                    document.getElementById('heroStatPills').value = content.stat_pills.map(s => `${s.icon}|${s.value}|${s.label}|${s.color}|${s.text_color}`).join('\n');
-                } else {
-                    document.getElementById('heroStatPills').value = content.stat_pills || '';
-                }
-                break;
-                
-            case 'stats':
-                toggleSectionFields('statsFields', true);
-                document.getElementById('statsTitle').value = content.title || '';
-                document.getElementById('statValue').value = content.value || '';
-                document.getElementById('statSuffix').value = content.suffix || '';
-                document.getElementById('statLabel').value = content.label || '';
-                break;
-                
-            case 'features_header':
-                toggleSectionFields('featuresHeaderFields', true);
-                document.getElementById('featuresHeaderTitle').value = content.title || '';
-                document.getElementById('featuresHeaderDescription').value = content.description || '';
-                break;
-                
-            case 'features':
-                toggleSectionFields('featuresFields', true);
-                document.getElementById('featureIcon').value = content.icon || '';
-                document.getElementById('featureColorClass').value = content.color_class || '';
-                document.getElementById('featureTitle').value = content.title || '';
-                document.getElementById('featureDescription').value = content.description || '';
-                break;
-                
-            case 'overview':
-                toggleSectionFields('overviewFields', true);
-                document.getElementById('overviewTitle').value = content.title || '';
-                document.getElementById('overviewDescription').value = content.description || '';
-                document.getElementById('overviewImage').value = content.image || '';
-                document.getElementById('overviewButtonText').value = content.button_text || '';
-                document.getElementById('overviewButtonUrl').value = content.button_url || '';
-                if (Array.isArray(content.check_list)) {
-                    document.getElementById('overviewCheckList').value = content.check_list.join('\n');
-                } else {
-                    document.getElementById('overviewCheckList').value = content.check_list || '';
-                }
-                break;
-                
-            case 'testimonials_header':
-                toggleSectionFields('testimonialsHeaderFields', true);
-                document.getElementById('testimonialsHeaderTitle').value = content.title || '';
-                document.getElementById('testimonialsHeaderDescription').value = content.description || '';
-                document.getElementById('testimonialsGoogleReview').value = content.google_review_image || '';
-                break;
-                
-            case 'testimonials':
-                toggleSectionFields('testimonialsFields', true);
-                document.getElementById('testimonialName').value = content.name || '';
-                document.getElementById('testimonialAvatar').value = content.avatar || '';
-                document.getElementById('testimonialRating').value = content.rating || '';
-                document.getElementById('testimonialText').value = content.text || '';
-                break;
-                
-            case 'faq_header':
-                toggleSectionFields('faqHeaderFields', true);
-                document.getElementById('faqHeaderBadge').value = content.badge || '';
-                document.getElementById('faqHeaderTitle').value = content.title || '';
-                document.getElementById('faqHeaderSidebarImage').value = content.sidebar_image || '';
-                document.getElementById('faqHeaderSidebarTitle').value = content.sidebar_title || '';
-                document.getElementById('faqHeaderSidebarDescription').value = content.sidebar_description || '';
-                document.getElementById('faqHeaderContactBoxTitle').value = content.contact_box_title || '';
-                document.getElementById('faqHeaderContactBoxDescription').value = content.contact_box_description || '';
-                document.getElementById('faqHeaderContactButtonText').value = content.contact_button_text || '';
-                break;
-                
-            case 'faq':
-                toggleSectionFields('faqFields', true);
-                document.getElementById('faqQuestion').value = content.question || '';
-                document.getElementById('faqAnswer').value = content.answer || '';
-                break;
-        }
+    function editContent(id) {
+        // Fetch content data via AJAX using only the ID
+        fetch(`${BASE_URL}/admin/get-e-commerce-logistics-solutions-content/${id}`, {
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            const form = document.getElementById('editForm');
+            form.action = '{{ route('admin.update-e-commerce-logistics-solutions-content', ['id' => '__ID__']) }}'.replace('__ID__', id);
+            
+            document.getElementById('contentId').value = data.id;
+            document.getElementById('section').value = data.section;
+            document.getElementById('itemKey').value = data.item_key;
+            document.getElementById('sortOrder').value = data.sort_order;
+            document.getElementById('isActive').checked = data.is_active == 1;
+            
+            const content = data.content || {};
+            
+            hideAllSectionFields();
+            
+            // Show relevant fields and populate data
+            switch(data.section) {
+                case 'hero':
+                    toggleSectionFields('heroFields', true);
+                    document.getElementById('heroBadgeText').value = content.badge_text || '';
+                    document.getElementById('heroTitle').value = content.title || '';
+                    document.getElementById('heroDescription').value = content.description || '';
+                    document.getElementById('heroButtonPrimaryText').value = content.button_primary_text || '';
+                    document.getElementById('heroButtonPrimaryIcon').value = content.button_primary_icon || '';
+                    document.getElementById('heroButtonPrimaryUrl').value = content.button_primary_url || '';
+                    document.getElementById('heroButtonSecondaryText').value = content.button_secondary_text || '';
+                    document.getElementById('heroButtonSecondaryIcon').value = content.button_secondary_icon || '';
+                    document.getElementById('heroButtonSecondaryUrl').value = content.button_secondary_url || '';
+                    document.getElementById('heroImage').value = content.image || '';
+                    if (Array.isArray(content.badges)) {
+                        document.getElementById('heroBadges').value = content.badges.map(b => `${b.icon}|${b.text}`).join('\n');
+                    } else {
+                        document.getElementById('heroBadges').value = content.badges || '';
+                    }
+                    if (Array.isArray(content.stat_pills)) {
+                        document.getElementById('heroStatPills').value = content.stat_pills.map(s => `${s.icon}|${s.value}|${s.label}|${s.color}|${s.text_color}`).join('\n');
+                    } else {
+                        document.getElementById('heroStatPills').value = content.stat_pills || '';
+                    }
+                    break;
+                    
+                case 'stats':
+                    toggleSectionFields('statsFields', true);
+                    document.getElementById('statsTitle').value = content.title || '';
+                    document.getElementById('statValue').value = content.value || '';
+                    document.getElementById('statSuffix').value = content.suffix || '';
+                    document.getElementById('statLabel').value = content.label || '';
+                    break;
+                    
+                case 'features_header':
+                    toggleSectionFields('featuresHeaderFields', true);
+                    document.getElementById('featuresHeaderTitle').value = content.title || '';
+                    document.getElementById('featuresHeaderDescription').value = content.description || '';
+                    break;
+                    
+                case 'features':
+                    toggleSectionFields('featuresFields', true);
+                    document.getElementById('featureIcon').value = content.icon || '';
+                    document.getElementById('featureColorClass').value = content.color_class || '';
+                    document.getElementById('featureTitle').value = content.title || '';
+                    document.getElementById('featureDescription').value = content.description || '';
+                    break;
+                    
+                case 'overview':
+                    toggleSectionFields('overviewFields', true);
+                    document.getElementById('overviewTitle').value = content.title || '';
+                    document.getElementById('overviewDescription').value = content.description || '';
+                    document.getElementById('overviewImage').value = content.image || '';
+                    document.getElementById('overviewButtonText').value = content.button_text || '';
+                    document.getElementById('overviewButtonUrl').value = content.button_url || '';
+                    if (Array.isArray(content.check_list)) {
+                        document.getElementById('overviewCheckList').value = content.check_list.join('\n');
+                    } else {
+                        document.getElementById('overviewCheckList').value = content.check_list || '';
+                    }
+                    break;
+                    
+                case 'testimonials_header':
+                    toggleSectionFields('testimonialsHeaderFields', true);
+                    document.getElementById('testimonialsHeaderTitle').value = content.title || '';
+                    document.getElementById('testimonialsHeaderDescription').value = content.description || '';
+                    document.getElementById('testimonialsGoogleReview').value = content.google_review_image || '';
+                    break;
+                    
+                case 'testimonials':
+                    toggleSectionFields('testimonialsFields', true);
+                    document.getElementById('testimonialName').value = content.name || '';
+                    document.getElementById('testimonialAvatar').value = content.avatar || '';
+                    document.getElementById('testimonialRating').value = content.rating || '';
+                    document.getElementById('testimonialText').value = content.text || '';
+                    break;
+                    
+                case 'faq_header':
+                    toggleSectionFields('faqHeaderFields', true);
+                    document.getElementById('faqHeaderBadge').value = content.badge || '';
+                    document.getElementById('faqHeaderTitle').value = content.title || '';
+                    document.getElementById('faqHeaderSidebarImage').value = content.sidebar_image || '';
+                    document.getElementById('faqHeaderSidebarTitle').value = content.sidebar_title || '';
+                    document.getElementById('faqHeaderSidebarDescription').value = content.sidebar_description || '';
+                    document.getElementById('faqHeaderContactBoxTitle').value = content.contact_box_title || '';
+                    document.getElementById('faqHeaderContactBoxDescription').value = content.contact_box_description || '';
+                    document.getElementById('faqHeaderContactButtonText').value = content.contact_button_text || '';
+                    break;
+                    
+                case 'faq':
+                    toggleSectionFields('faqFields', true);
+                    document.getElementById('faqQuestion').value = content.question || '';
+                    document.getElementById('faqAnswer').value = content.answer || '';
+                    break;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching content:', error);
+            alert('Failed to load content data.');
+        });
     }
 
     function openCreateModal() {

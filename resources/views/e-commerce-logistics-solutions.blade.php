@@ -531,27 +531,23 @@
 
                 <div class="gradient-text badge-trusted mb-4 animate-float-loop">
                     <span class="static-dot"></span>
-                    {{ $heroContent->content['badge_text'] ?? 'E-commerce Logistics Solutions' }}
+                    {{ $heroContent->content['badge_text'] }}
                 </div>
                 <h1 class="hero-title mb-4">
-                    {!! $heroContent->content['title'] ?? 'Built for Sellers. <span class="moving-gradient-text">Designed for scale</span>' !!}
+                    {!! $heroContent->content['title'] !!}
                 </h1>
                 <p style="max-width: 100%;" class="mb-5 lead">
-                    {{ $heroContent->content['description'] ?? 'Connect your marketplace account directly with our platform and ship orders with ease — starting from lightweight parcels of just 50g to high-volume e-commerce shipments.' }}
+                    {{ $heroContent->content['description'] }}
                 </p>
 
-                <a href="{{ $heroContent->content['button_primary_url'] ?? '#' }}" class="book-btn-service"><i class="fas {{ $heroContent->content['button_primary_icon'] ?? 'fa-paper-plane' }}"></i> {{ $heroContent->content['button_primary_text'] ?? 'Book a Shipping' }}</a> &nbsp; <a
-                    href="{{ $heroContent->content['button_secondary_url'] ?? '#' }}" class="quote-btn-service"><i class="fas {{ $heroContent->content['button_secondary_icon'] ?? 'fa-calculator' }}"></i> {{ $heroContent->content['button_secondary_text'] ?? 'Get a Quote' }}</a>
+                <a href="{{ $heroContent->content['button_primary_url'] }}" class="book-btn-service"><i class="fas {{ $heroContent->content['button_primary_icon'] }}"></i> {{ $heroContent->content['button_primary_text'] }}</a> &nbsp; <a
+                    href="{{ $heroContent->content['button_secondary_url'] }}" class="quote-btn-service"><i class="fas {{ $heroContent->content['button_secondary_icon'] }}"></i> {{ $heroContent->content['button_secondary_text'] }}</a>
 
                 <div class="hero-badges">
                     @if(isset($heroContent->content['badges']) && is_array($heroContent->content['badges']))
                         @foreach($heroContent->content['badges'] as $badge)
                             <div class="hero-badge"><i class="fas {{ $badge['icon'] }}"></i> {{ $badge['text'] }}</div>
                         @endforeach
-                    @else
-                        <div class="hero-badge"><i class="fas fa-clock"></i> 24–72 Hr Delivery</div>
-                        <div class="hero-badge"><i class="fas fa-shield-alt"></i> Fully Insured</div>
-                        <div class="hero-badge"><i class="fas fa-map-marker-alt"></i> 220+ Countries</div>
                     @endif
                 </div>
 
@@ -561,7 +557,7 @@
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div style="width: 400px; height: 400px;" class="plane-circle">
-                        <img src="{{ asset('assets/' . ($heroContent->content['image'] ?? 'images/ecomm-service.webp')) }}" class="img-fluid">
+                        <img src="{{ asset('assets/' . $heroContent->content['image']) }}" class="img-fluid">
                         <!-- Stat pills -->
                         @if(isset($heroContent->content['stat_pills']) && is_array($heroContent->content['stat_pills']))
                             @foreach($heroContent->content['stat_pills'] as $index => $pill)
@@ -573,28 +569,6 @@
                                     </div>
                                 </div>
                             @endforeach
-                        @else
-                            <div class="stat-pill pill-1">
-                                <div class="sp-icon" style="background:rgba(26,115,232,.1);color:var(--primary)"><i class="fas fa-box"></i></div>
-                                <div>
-                                    <div class="sp-val">50K+</div>
-                                    <div class="sp-lbl">Shipments/Month</div>
-                                </div>
-                            </div>
-                            <div class="stat-pill pill-2">
-                                <div class="sp-icon" style="background:rgba(255,107,0,.1);color:var(--accent)"><i class="fas fa-star"></i></div>
-                                <div>
-                                    <div class="sp-val">4.9★</div>
-                                    <div class="sp-lbl">Avg Rating</div>
-                                </div>
-                            </div>
-                            <div class="stat-pill pill-3">
-                                <div class="sp-icon" style="background:rgba(40,167,69,.1);color:var(--success)"><i class="fas fa-check-circle"></i></div>
-                                <div>
-                                    <div class="sp-val">99.2%</div>
-                                    <div class="sp-lbl">On-Time Rate</div>
-                                </div>
-                            </div>
                         @endif
                     </div>
                 </div>
@@ -613,7 +587,7 @@
         @php $statsHeader = $statsContent->firstWhere('item_key', 'stats_header'); @endphp
         @if($statsHeader)
         <div class="text-center mb-5">
-            <h2 class="section-title">{!! $statsHeader->content['title'] ?? '' !!}</h2>
+            <h2 class="section-title">{!! $statsHeader->content['title'] !!}</h2>
         </div>
         @endif
 
@@ -623,9 +597,9 @@
                     @if($stat->item_key !== 'stats_header')
                     <div class="stat-card">
                         <div class="stat-number-wrapper">
-                            <span class="stat-number" data-target="{{ $stat->content['value'] ?? '0' }}">0</span>{{ $stat->content['suffix'] ?? '' }}
+                            <span class="stat-number" data-target="{{ $stat->content['value'] }}">0</span>{{ $stat->content['suffix'] }}
                         </div>
-                        <p class="stat-label">{{ $stat->content['label'] ?? '' }}</p>
+                        <p class="stat-label">{{ $stat->content['label'] }}</p>
                     </div>
                     @endif
                 @endforeach
@@ -645,7 +619,7 @@
             <div class="col-lg-6 animate-on-scroll" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
                 <div class="about-image-grid">
                     <div class="world-map-placeholder">
-                        <img src="{{ asset('assets/' . ($overviewContent->content['image'] ?? 'images/map-pattern.png')) }}" class="img-fluid">
+                        <img src="{{ asset('assets/' . $overviewContent->content['image']) }}" class="img-fluid">
                     </div>
                 </div>
             </div>
@@ -653,8 +627,8 @@
             <!-- Content Side -->
             <div class="col-lg-6">
                 <div class="about-content">
-                    <h2 class="about-title">{!! $overviewContent->content['title'] ?? 'Dedicated Supply Chain for <span class="moving-gradient-text">E-commerce</span>' !!}</h2>
-                    <p class="lead">{{ $overviewContent->content['description'] ?? '' }}
+                    <h2 class="about-title">{!! $overviewContent->content['title'] !!}</h2>
+                    <p class="lead">{{ $overviewContent->content['description'] }}
                     </p>
 
                     @if(isset($overviewContent->content['check_list']) && is_array($overviewContent->content['check_list']))
@@ -665,7 +639,7 @@
                     </ul>
                     @endif
 
-                    <a href="{{ $overviewContent->content['button_url'] ?? '#' }}" class="sr-demo-btn-live mt-3">{{ $overviewContent->content['button_text'] ?? 'Book Shipments' }}</a>
+                    <a href="{{ $overviewContent->content['button_url'] }}" class="sr-demo-btn-live mt-3">{{ $overviewContent->content['button_text'] }}</a>
                 </div>
             </div>
 
@@ -683,9 +657,9 @@
         @if($featuresHeaderContent)
         <div class="row justify-content-center mb-3">
             <div class="col-lg-10 text-center">
-                <h2 class="about-title">{{ $featuresHeaderContent->content['title'] ?? '' }}</h2>
+                <h2 class="about-title">{{ $featuresHeaderContent->content['title'] }}</h2>
                 <p class="about-desc text-center">
-                    {{ $featuresHeaderContent->content['description'] ?? '' }}
+                    {{ $featuresHeaderContent->content['description'] }}
                 </p>
             </div>
         </div>
@@ -696,9 +670,9 @@
             @foreach($featuresContent as $feature)
             <div class="col-md-6 col-lg-3">
                 <div class="feature-card">
-                    <div class="feature-icon {{ $feature->content['color_class'] ?? 'fi-blue' }}"><i class="fas {{ $feature->content['icon'] ?? 'fa-satellite' }}"></i></div>
-                    <h5>{{ $feature->content['title'] ?? '' }}</h5>
-                    <p>{{ $feature->content['description'] ?? '' }}</p>
+                    <div class="feature-icon {{ $feature->content['color_class'] }}"><i class="fas {{ $feature->content['icon'] }}"></i></div>
+                    <h5>{{ $feature->content['title'] }}</h5>
+                    <p>{{ $feature->content['description'] }}</p>
                 </div>
             </div>
             @endforeach
@@ -724,9 +698,9 @@
                     </a>
                 </div>
                 @endif
-                <h2 class="about-title">{{ $testimonialsHeader->content['title'] ?? '' }}</h2>
+                <h2 class="about-title">{{ $testimonialsHeader->content['title'] }}</h2>
                 <p class="about-desc text-center">
-                    {{ $testimonialsHeader->content['description'] ?? '' }}
+                    {{ $testimonialsHeader->content['description'] }}
                 </p>
             </div>
         </div>
@@ -738,12 +712,12 @@
                 @foreach($testimonials as $testimonial)
                 <div class="testimonial-card">
                     <div class="stars">
-                        @for($i = 0; $i < ($testimonial->content['rating'] ?? 5); $i++)★@endfor
+                        @for($i = 0; $i < $testimonial->content['rating']; $i++)★@endfor
                     </div>
-                    <p class="testimonial-text">"{{ $testimonial->content['text'] ?? '' }}"</p>
+                    <p class="testimonial-text">"{{ $testimonial->content['text'] }}"</p>
                     <div class="user-info">
-                        <img src="{{ asset('assets/' . ($testimonial->content['avatar'] ?? '')) }}" class="img-fluid">
-                        <h6>{{ $testimonial->content['name'] ?? '' }}</h6>
+                        <img src="{{ asset('assets/' . $testimonial->content['avatar']) }}" class="img-fluid">
+                        <h6>{{ $testimonial->content['name'] }}</h6>
                     </div>
                 </div>
                 @endforeach
@@ -752,12 +726,12 @@
                 @foreach($testimonials as $testimonial)
                 <div class="testimonial-card">
                     <div class="stars">
-                        @for($i = 0; $i < ($testimonial->content['rating'] ?? 5); $i++)★@endfor
+                        @for($i = 0; $i < $testimonial->content['rating']; $i++)★@endfor
                     </div>
-                    <p class="testimonial-text">"{{ $testimonial->content['text'] ?? '' }}"</p>
+                    <p class="testimonial-text">"{{ $testimonial->content['text'] }}"</p>
                     <div class="user-info">
-                        <img src="{{ $testimonial->content['avatar'] ?? '' }}" class="img-fluid">
-                        <h6>{{ $testimonial->content['name'] ?? '' }}</h6>
+                        <img src="{{ $testimonial->content['avatar'] }}" class="img-fluid">
+                        <h6>{{ $testimonial->content['name'] }}</h6>
                     </div>
                 </div>
                 @endforeach
@@ -775,8 +749,8 @@
     <div class="container">
         @if($faqHeader)
         <div class="faq-header">
-            <span class="heading-badge">{{ $faqHeader->content['badge'] ?? 'Common Questions' }}</span>
-            <h2 class="about-title">{{ $faqHeader->content['title'] ?? 'Frequently Asked Questions' }}</h2>
+            <span class="heading-badge">{{ $faqHeader->content['badge'] }}</span>
+            <h2 class="about-title">{{ $faqHeader->content['title'] }}</h2>
         </div>
         @endif
 
@@ -787,13 +761,13 @@
                     <img src="{{ $faqHeader->content['sidebar_image'] }}" alt="Help"
                         style="width: 200px; margin-top: -40px;">
                     @endif
-                    <h4 class="fw-bold mb-3">{{ $faqHeader->content['sidebar_title'] ?? 'Need personalized help?' }}</h4>
-                    <p class="text-muted">{{ $faqHeader->content['sidebar_description'] ?? 'Our logistics experts are available 24/7 to assist your requirements.' }}</p>
+                    <h4 class="fw-bold mb-3">{{ $faqHeader->content['sidebar_title'] }}</h4>
+                    <p class="text-muted">{{ $faqHeader->content['sidebar_description'] }}</p>
 
                     <div class="moving-gradient-bg contact-box">
-                        <h4>{{ $faqHeader->content['contact_box_title'] ?? 'Contact Us' }}</h4>
-                        <p>{{ $faqHeader->content['contact_box_description'] ?? 'For urgent inquiries regarding your current shipment status.' }}</p>
-                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ $faqHeader->content['contact_button_text'] ?? 'Message Support' }}</button>
+                        <h4>{{ $faqHeader->content['contact_box_title'] }}</h4>
+                        <p>{{ $faqHeader->content['contact_box_description'] }}</p>
+                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ $faqHeader->content['contact_button_text'] }}</button>
                     </div>
                 </div>
             </div>

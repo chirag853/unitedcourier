@@ -60,10 +60,13 @@
             overflow: hidden;
         }
         .content-preview {
-            max-width: 300px;
-            max-height: 100px;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            max-width: 400px;
+        }
+        .content-preview table tr td {
+            white-space: nowrap;
+        }
+        .content-preview table tr td:last-child {
+            white-space: normal;
         }
     </style>
 </head>
@@ -160,20 +163,27 @@
                                                     </td>
                                                     <td>
                                                         <div class="content-preview">
-                                                            @if($content->section === 'hero')
-                                                                <strong>{{ $contentData['title'] ?? '' }}</strong><br>
-                                                                <small>{{ \Illuminate\Support\Str::limit($contentData['paragraphs'] ?? '', 50) }}</small>
-                                                            @elseif($content->section === 'stats')
-                                                                <strong>{{ $contentData['stat_number'] ?? '' }}</strong> {{ $contentData['suffix'] ?? '' }}<br>
-                                                                <small>{{ $contentData['stat_label'] ?? '' }}</small>
-                                                            @elseif($content->section === 'features')
-                                                                <strong>{{ $contentData['subtitle'] ?? '' }}</strong><br>
-                                                                <small>{{ \Illuminate\Support\Str::limit($contentData['paragraphs'] ?? '', 50) }}</small>
-                                                            @elseif($content->section === 'cta')
-                                                                <strong>{{ $contentData['title'] ?? '' }}</strong><br>
-                                                                <small>{{ $contentData['subtitle'] ?? '' }}</small>
+                                                            @if(is_array($contentData) && count($contentData) > 0)
+                                                                <table class="table table-sm table-bordered mb-0" style="font-size: 11px;">
+                                                                    @foreach($contentData as $key => $val)
+                                                                        @if($val !== null)
+                                                                            <tr>
+                                                                                <td class="fw-semibold text-nowrap p-1" style="width: 30%;">{{ $key }}</td>
+                                                                                <td class="p-1" style="word-break: break-all;">
+                                                                                    @if(is_array($val))
+                                                                                        {{ is_string($val[0] ?? null) ? implode(', ', $val) : json_encode($val) }}
+                                                                                    @elseif(is_string($val) && strlen($val) > 80)
+                                                                                        {{ \Illuminate\Support\Str::limit($val, 80) }}
+                                                                                    @else
+                                                                                        {{ $val }}
+                                                                                    @endif
+                                                                                </td>
+                                                                            </tr>
+                                                                        @endif
+                                                                    @endforeach
+                                                                </table>
                                                             @else
-                                                                <small class="text-muted">{{ \Illuminate\Support\Str::limit(json_encode($contentData), 50) }}</small>
+                                                                <small class="text-muted">No content data</small>
                                                             @endif
                                                         </div>
                                                     </td>
@@ -187,7 +197,7 @@
                                                     </td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-content='@json($contentData)' onclick="editContent(this, {{ $content->id }}, '{{ $content->section }}', '{{ $content->item_key }}', {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
+                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-content='{!! json_encode($contentData, JSON_HEX_APOS) !!}' onclick="editContent(this, {{ $content->id }}, '{{ $content->section }}', '{{ $content->item_key }}', {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">
@@ -265,6 +275,11 @@
                                             Active
                                         </label>
                                     </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="extraContent" class="form-label">Extra Content (JSON)</label>
+                                    <textarea class="form-control font-monospace" id="extraContent" name="extra_content" rows="4" placeholder='{"custom_key": "custom_value", "another_key": "value"}'></textarea>
+                                    <small class="text-muted">Optional: JSON key-value pairs that will be merged into the content array. These values override any other content fields with the same key.</small>
                                 </div>
                             </div>
 
@@ -352,6 +367,10 @@
                                     <div class="mb-3">
                                         <label for="featuresHeaderDescription" class="form-label">Description</label>
                                         <textarea class="form-control" id="featuresHeaderDescription" name="content[description]" rows="3" placeholder="Section description"></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="featuresHeaderParagraph" class="form-label">Paragraph</label>
+                                        <textarea class="form-control" id="featuresHeaderParagraph" name="content[paragraphs]" rows="3" placeholder="Section description"></textarea>
                                     </div>
                                 </div>
 
@@ -480,6 +499,11 @@
 
     function editContent(button, id, section, itemKey, sortOrder, isActive) {
         const content = JSON.parse(button.dataset.content);
+        
+        // DEBUG: Log what we're getting
+        console.log('editContent called', {id, section, itemKey, content});
+        console.log('paragraphs value:', content.paragraphs);
+        console.log('paragraphs type:', typeof content.paragraphs);
         const formSection = section === 'features' && itemKey === 'features_header' ? 'features_header' : section;
         const form = document.getElementById('editForm');
         form.action = '{{ route('admin.update-warehousing-solutions-content', ['id' => '__ID__']) }}'.replace('__ID__', id);
@@ -518,6 +542,7 @@
                 document.getElementById('featuresHeaderTitle').value = content.title || '';
                 document.getElementById('featuresHeaderSubtitle').value = content.subtitle || '';
                 document.getElementById('featuresHeaderDescription').value = content.description || '';
+                document.getElementById('featuresHeaderParagraph').value = content.paragraphs || '';
                 break;
             case 'features':
                 toggleSectionFields('featuresFields', true);
@@ -551,6 +576,18 @@
                 document.getElementById('ctaButtonUrl').value = content.button_url || '';
                 break;
         }
+
+        // Populate extra_content
+        const extraContent = content.extra_content || {};
+        // Remove keys that are already handled by regular fields to keep it clean
+        const handledKeys = ['title','subtitle','paragraphs','badge_text','button_text','button_url','image','list_items','stat_number','stat_label','suffix','icon_svg','icon_class','question','answer','description'];
+        const filteredExtra = {};
+        for (const [key, val] of Object.entries(extraContent)) {
+            if (!handledKeys.includes(key)) {
+                filteredExtra[key] = val;
+            }
+        }
+        document.getElementById('extraContent').value = Object.keys(filteredExtra).length > 0 ? JSON.stringify(filteredExtra, null, 2) : '';
     }
 
     function openCreateModal() {
@@ -569,6 +606,7 @@
                 el.value = '';
             }
         });
+        document.getElementById('extraContent').value = '';
         toggleSectionFields('heroFields', true);
         document.getElementById('section').dispatchEvent(new Event('change'));
 
@@ -611,7 +649,14 @@
     document.getElementById('editForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const id = document.getElementById('contentId').value;
-        const formData = buildSectionFormData(this);
+        
+        let formData;
+        try {
+            formData = buildSectionFormData(this);
+        } catch (e) {
+            // If extra_content JSON is invalid, buildSectionFormData already alerted the user
+            return;
+        }
         
         // Determine the correct endpoint based on whether this is a create or update
         let url = id ? `${BASE_URL}/admin/update-warehousing-solutions-content/${id}` : `${BASE_URL}/admin/store-warehousing-solutions-content`;
@@ -645,6 +690,19 @@
 
     function getSectionFieldIds() {
         return ['heroFields','statsFields','featuresFields','featuresHeaderFields','overviewFields','faqFields','ctaFields'];
+    }
+
+    // Gather extra_content from the JSON textarea
+    function getExtraContentJson() {
+        const raw = document.getElementById('extraContent').value.trim();
+        if (!raw) return null;
+        try {
+            const parsed = JSON.parse(raw);
+            return JSON.stringify(parsed); // Return valid JSON string
+        } catch(e) {
+            alert('Extra Content JSON is invalid. Please fix it or clear the field.\nError: ' + e.message);
+            throw new Error('Invalid JSON in extra_content');
+        }
     }
 
     function getFieldIdForSection(section) {
@@ -717,6 +775,17 @@
                     formData.append(el.name, el.value);
                 }
             });
+        }
+
+        // Append extra_content
+        try {
+            const extraContentJson = getExtraContentJson();
+            if (extraContentJson !== null) {
+                formData.append('extra_content', extraContentJson);
+            }
+        } catch (e) {
+            // Abort form submission if JSON is invalid
+            throw e;
         }
 
         return formData;
