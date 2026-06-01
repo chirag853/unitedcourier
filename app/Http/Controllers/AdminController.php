@@ -4541,4 +4541,10 @@ class AdminController extends Controller
         return view('admin.change-subscribers', compact('subscribers'));
     }
 
+    public function changeFaqQueries()
+    {
+        $queries = \App\Models\FaqQuery::orderBy('id', 'desc')->get();
+        return view('admin.change-faq-queries', compact('queries'));
+    }
+
 }

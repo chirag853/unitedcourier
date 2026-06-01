@@ -447,19 +447,8 @@
 
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="faq-illustration">
-                    <img src="{{ asset($faqSidebar->data_image ?? 'https://i.pinimg.com/originals/f6/5d/46/f65d4681649d85bc91c86872a1775919.gif') }}" alt="Help"
-                        style="width: 200px; margin-top: -40px;">
-                    <h4 class="fw-bold mb-3">{{ $faqSidebar->data_title ?? 'Need personalized help?' }}</h4>
-                    <p class="text-muted">{{ $faqSidebar->data_description ?? 'Our logistics experts are available 24/7 to assist your requirements.' }}</p>
-
-                    <div class="moving-gradient-bg contact-box">
-                        <h4>Contact Us</h4>
-                        <p>For urgent inquiries regarding your current shipment status.</p>
-                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ $faqSidebar->data_button_text ?? 'Message Support' }}</button>
-                    </div>
-                </div>
-            </div>
+               @include('website_include.faq-support-form')
+           </div>
 
 
             <div class="col-lg-8">

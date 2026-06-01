@@ -137,6 +137,8 @@
                                         class="{{ request()->is('admin/change-partner-logos*') ? 'active' : '' }}">Partner Logos</a></li>
                                 <li><a href="{{ url('/admin/change-subscribers') }}"
                                         class="{{ request()->is('admin/change-subscribers*') ? 'active' : '' }}">Subscribers</a></li>
+                                <li><a href="{{ url('/admin/change-faq-queries') }}"
+                                        class="{{ request()->is('admin/change-faq-queries*') ? 'active' : '' }}">FAQ Queries</a></li>
                                 <li><a href="{{ url('/admin/faq') }}"
                                         class="{{ request()->is('admin/faq') ? 'active' : '' }}">FAQ Management</a></li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->

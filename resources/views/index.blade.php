@@ -736,59 +736,8 @@
 
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="faq-illustration">
-                    <div class="mb-4">
-                            <h4 class="h4-title">Any Queries? <span class="gradient-text">Get Support</span></h4>
-                        </div>
-                        <form>
-                            <div class="row g-3 mb-3">
-
-                                <!-- name -->
-                                <div class="col-12">
-                                    <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom" placeholder="Full Name">
-                                        <i class="fas fa-user"></i>
-                                    </div>
-                                </div>
-                                
-
-                                <!-- email -->
-                                <div class="col-12">
-                                    <div class="input-group-custom">
-                                        <input type="email" class="form-control input-custom" placeholder="Email">
-                                        <i class="fas fa-envelope"></i>
-                                    </div>
-                                </div>
-
-                                
-
-                                <!-- phone -->
-                                <div class="col-12">
-                                    <div class="input-group-custom">
-                                        <input type="tel" class="form-control input-custom" placeholder="Phone">
-                                        <i class="fas fa-phone"></i>
-                                    </div>
-                                </div>
-
-                                
-
-                                <!-- message -->
-                                <div class="col-12">
-                                    <div class="input-group-custom">
-                                        <textarea class="form-control input-custom" rows="2" placeholder="Message"></textarea>
-                                        <i style="top: 18px;" class="fa-solid fa-comment-dots"></i>
-                                    </div>
-                                </div>
-
-                            </div>
-                            
-
-                            <button type="button" class="btn moving-gradient-bg btn-primary-custom">
-                                Get Support <i class="fa-solid fa-paper-plane"></i>
-                            </button>
-                        </form>
-                </div>
-            </div>
+               @include('website_include.faq-support-form')
+           </div>
 
 
             <div class="col-lg-8">

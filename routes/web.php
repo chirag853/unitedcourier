@@ -37,6 +37,9 @@ Route::get('/hsn-finder', [WebsiteController::class, 'hsnFinder'])->name('hsn-fi
 // Newsletter Subscribe Route
 Route::post('/subscribe', [WebsiteController::class, 'subscribe'])->name('subscribe');
 
+// FAQ Query Submit Route
+Route::post('/faq-query', [WebsiteController::class, 'submitFaqQuery'])->name('faq-query.submit');
+
 Route::get('/index', [customerController::class, 'index'])->name('customer.index');
 Route::get('/login', [customerController::class, 'login'])->name('login');
 Route::get('/get-started', [customerController::class, 'register'])->name('register');
@@ -488,6 +491,9 @@ Route::prefix('admin')->group(function () {
 
     // Subscribers Management Routes
     Route::get('/change-subscribers', [AdminController::class, 'changeSubscribers'])->name('admin.change-subscribers');
+
+    // FAQ Queries Management Routes
+    Route::get('/change-faq-queries', [AdminController::class, 'changeFaqQueries'])->name('admin.change-faq-queries');
 
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');

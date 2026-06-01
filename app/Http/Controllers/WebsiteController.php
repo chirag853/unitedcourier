@@ -529,6 +529,32 @@ class WebsiteController extends Controller
     }
 
     /**
+     * Handle FAQ query form submission from "Get Support" form.
+     */
+    public function submitFaqQuery(Request $request)
+    {
+        $request->validate([
+            'full_name' => 'required|string|max:255',
+            'email'     => 'required|email|max:255',
+            'phone'     => 'required|string|max:20',
+            'message'   => 'required|string',
+        ]);
+
+        \App\Models\FaqQuery::create([
+            'full_name' => $request->input('full_name'),
+            'email'     => $request->input('email'),
+            'phone'     => $request->input('phone'),
+            'message'   => $request->input('message'),
+            'page_name' => $request->input('page_name'),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Thank you! Your query has been submitted. We will get back to you shortly.',
+        ]);
+    }
+
+    /**
      * Get common stats/fact numbers for the shared stats section.
      */
     private function getCommonStats()

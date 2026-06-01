@@ -415,19 +415,8 @@ $faqContactButtonText = $faqHeader->content['contact_button_text'] ?? 'Message S
 
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="faq-illustration">
-                    <img src="{{ asset( $faqSidebarImage) }}" alt="Help" style="width: 200px; margin-top: -40px;">
-                    <h4 class="fw-bold mb-3">{{ $faqSidebarTitle }}</h4>
-                    <p class="text-muted">{{ $faqSidebarDescription }}</p>
-
-                    <div class="moving-gradient-bg contact-box">
-                        <h4>{{ $faqContactBoxTitle }}</h4>
-                        <p>{{ $faqContactBoxDescription }}</p>
-                        <button style="background-color: #fff; color: #2563eb;"
-                            class="btn btn-contact">{{ $faqContactButtonText }}</button>
-                    </div>
-                </div>
-            </div>
+               @include('website_include.faq-support-form')
+           </div>
 
 
             <div class="col-lg-8">

@@ -729,21 +729,8 @@
 
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="faq-illustration">
-                    @if(isset($faqHeader->content['sidebar_image']))
-                    <img src="{{ $faqHeader->content['sidebar_image'] }}" alt="Help"
-                        style="width: 200px; margin-top: -40px;">
-                    @endif
-                    <h4 class="fw-bold mb-3">{{ $faqHeader->content['sidebar_title'] }}</h4>
-                    <p class="text-muted">{{ $faqHeader->content['sidebar_description'] }}</p>
-
-                    <div class="moving-gradient-bg contact-box">
-                        <h4>{{ $faqHeader->content['contact_box_title'] }}</h4>
-                        <p>{{ $faqHeader->content['contact_box_description'] }}</p>
-                        <button style="background-color: #fff; color: #2563eb;" class="btn btn-contact">{{ $faqHeader->content['contact_button_text'] }}</button>
-                    </div>
-                </div>
-            </div>
+               @include('website_include.faq-support-form')
+           </div>
 
             @if($faqs && $faqs->count() > 0)
             <div class="col-lg-8">
