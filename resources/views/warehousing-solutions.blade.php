@@ -550,53 +550,7 @@
 
 
 
-<!-- FACTS NUMBER section -->
-
- <section class="py-5 bg-white">
-        <div class="container">
-            <div class="text-center mb-5">
-                <h2 class="section-title">{!! data_get($statsContent->first(), 'content.title', 'Trusted by over <span class="gradient-text">50,000 Businesses</span> for daily logistics') !!}</h2>
-            </div>
-            
-            <div class="stats-wrapper">
-                <div class="stats-container">
-                    @forelse($statsContent as $stat)
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper">
-                                <span class="stat-number" data-target="{{ data_get($stat, 'content.stat_number', 0) }}">0</span>{{ data_get($stat, 'content.suffix', '') }}
-                            </div>
-                            <p class="stat-label">{{ data_get($stat, 'content.stat_label', 'Statistic') }}</p>
-                        </div>
-                    @empty
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="150">0</span>+</div>
-                            <p class="stat-label">Cities Covered</p>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="100">0</span>K+</div>
-                            <p class="stat-label">Daily Parcels</p>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="5">0</span>K+</div>
-                            <p class="stat-label">Delivery Riders</p>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="99">0</span>.9%</div>
-                            <p class="stat-label">On-time Rate</p>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="24">0</span>/7</div>
-                            <p class="stat-label">Live Tracking</p>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number-wrapper"><span class="stat-number" data-target="50">0</span>K+</div>
-                            <p class="stat-label">Happy Clients</p>
-                        </div>
-                    @endforelse
-                </div>
-            </div>
-        </div>
-  </section>
+@include('website_include.fact-number-section')
 
 
     <!-- OVERVIEW About Section -->

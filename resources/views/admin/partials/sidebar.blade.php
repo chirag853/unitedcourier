@@ -131,6 +131,10 @@
                                         class="{{ request()->is('admin/change-shipping-rate-calculator*') ? 'active' : '' }}">Shipping Rate Calculator</a></li>
                                 <li><a href="{{ url('/admin/change-hsn-finder') }}"
                                         class="{{ request()->is('admin/change-hsn-finder*') ? 'active' : '' }}">HSN Finder</a></li>
+                                <li><a href="{{ url('/admin/change-common-stats') }}"
+                                        class="{{ request()->is('admin/change-common-stats*') ? 'active' : '' }}">Common Stats</a></li>
+                                <li><a href="{{ url('/admin/change-partner-logos') }}"
+                                        class="{{ request()->is('admin/change-partner-logos*') ? 'active' : '' }}">Partner Logos</a></li>
                                 <li><a href="{{ url('/admin/faq') }}"
                                         class="{{ request()->is('admin/faq') ? 'active' : '' }}">FAQ Management</a></li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->

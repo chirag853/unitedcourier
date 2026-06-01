@@ -580,34 +580,7 @@
 
 
 
-<!-- FACTS NUMBER section -->
-@if($statsContent && $statsContent->count() > 0)
-<section class="py-5 bg-white">
-    <div class="container">
-        @php $statsHeader = $statsContent->firstWhere('item_key', 'stats_header'); @endphp
-        @if($statsHeader)
-        <div class="text-center mb-5">
-            <h2 class="section-title">{!! $statsHeader->content['title'] !!}</h2>
-        </div>
-        @endif
-
-        <div class="stats-wrapper">
-            <div class="stats-container">
-                @foreach($statsContent as $stat)
-                    @if($stat->item_key !== 'stats_header')
-                    <div class="stat-card">
-                        <div class="stat-number-wrapper">
-                            <span class="stat-number" data-target="{{ $stat->content['value'] }}">0</span>{{ $stat->content['suffix'] }}
-                        </div>
-                        <p class="stat-label">{{ $stat->content['label'] }}</p>
-                    </div>
-                    @endif
-                @endforeach
-            </div>
-        </div>
-    </div>
-</section>
-@endif
+@include('website_include.fact-number-section')
 
 
 <!-- OVERVIEW About Section -->
@@ -849,41 +822,5 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.timeline-item').forEach(item => observer.observe(item));
 </script>
 
-<!-- Animated counter for stats -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const counters = document.querySelectorAll('.stat-number');
-    const speed = 200;
-
-    const animateCounter = (counter) => {
-        const target = parseInt(counter.getAttribute('data-target'));
-        let count = 0;
-        const increment = Math.ceil(target / speed);
-
-        const updateCount = () => {
-            count += increment;
-            if (count < target) {
-                counter.innerText = count;
-                requestAnimationFrame(updateCount);
-            } else {
-                counter.innerText = target;
-            }
-        };
-
-        updateCount();
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                animateCounter(entry.target);
-                observer.unobserve(entry.target);
-            }
-        });
-    }, { threshold: 0.5 });
-
-    counters.forEach(counter => observer.observe(counter));
-});
-</script>
 
 @include('website_include.footer')

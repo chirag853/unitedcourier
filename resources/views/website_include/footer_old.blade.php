@@ -1,47 +1,4 @@
-<!-- partner logo sections -->
-<section class="partners-section">
-       
-        <div class="logo-slider">
-            <div class="logo-track">
-                <!-- Original Logos -->
-                
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://1000logos.net/wp-content/uploads/2021/04/Fedex-logo.png" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.ups.com/webassets/icons/logo.svg" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.usps.com/global-elements/header/images/utility-header/logo-sb.svg" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.tnt.com/dam/tnt_express_media/en_gb/images/ChoosingTNT/TNT-Logo-edt.png" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://dotcomaramexprod.blob.core.windows.net/default/docs/default-source/logo/aramex-logo-english.webp" class="partners-logo-img">
-                </div>
-
-                <!-- Cloned Logos (for seamless loop) -->
-
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://1000logos.net/wp-content/uploads/2021/04/Fedex-logo.png" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.ups.com/webassets/icons/logo.svg" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.usps.com/global-elements/header/images/utility-header/logo-sb.svg" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://www.tnt.com/dam/tnt_express_media/en_gb/images/ChoosingTNT/TNT-Logo-edt.png" class="partners-logo-img">
-                </div>
-                <div class="logo-item" class="logo-item-partners">
-                    <img src="https://dotcomaramexprod.blob.core.windows.net/default/docs/default-source/logo/aramex-logo-english.webp" class="partners-logo-img">
-                </div>
-
-            </div>
-        </div>
-</section>
+@include('website_include.partners-logo-section')
 
 
 

@@ -196,7 +196,7 @@
                     {{ $heroData->data_description ?? 'Enter your package dimensions to instantly calculate dimensional weight and understand how carriers determine your chargeable weight.' }}
                 </p>
 
-                <a href="{{ $heroData->data['button_url'] ?? '#' }}" class="book-btn-service"><i class="fas fa-calculator"></i> &nbsp; {{ $heroData->data_button_text ?? 'Calculate Now' }}</a>
+                <!-- <a href="{{ $heroData->data['button_url'] ?? '#' }}" class="book-btn-service"><i class="fas fa-calculator"></i> &nbsp; {{ $heroData->data_button_text ?? 'Calculate Now' }}</a> -->
 
             </div>
 

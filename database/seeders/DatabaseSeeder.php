@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call([
+            FactNumberSectionCommonPageSeeder::class,
+            PartnersSectionCommonPageSeeder::class,
             WarehousingSolutionsPageSeeder::class,
             WarehousingTestimonialsSeeder::class,
             TestimonialsSeeder::class,

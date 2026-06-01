@@ -1,88 +1,6 @@
 @include('website_include.header')
 
 <style>
-  /* FACTS NUMBER CSS */
-  :root {
-            --brand-blue: #2563eb;
-            --brand-gradient: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --card-border: rgba(0, 0, 0, 0.06);
-        }
-
-        .stats-wrapper {
-            width: 100%;
-            padding: 0px 10px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .stats-container {
-            display: grid;
-            /* Force all items into 1 row */
-            grid-template-columns: repeat(6, 1fr);
-            gap: 15px;
-            width: 100%;
-        }
-
-        .stat-card {
-            background: #ffffff;
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 10px;
-            text-align: center;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .stat-card:hover {
-            border-color: var(--brand-blue);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03);
-            transform: translateY(-4px);
-        }
-
-        .stat-number-wrapper {
-            font-family: 'Outfit', sans-serif;
-            font-size: 2.2rem;
-            /* Lighter font weight */
-            font-weight: 500; 
-            color: var(--brand-blue);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 4px;
-            letter-spacing: -0.01em;
-        }
-
-        .stat-label {
-            font-size: 0.85rem;
-            /* Lighter font weight */
-            font-weight: 400;
-            color: var(--text-muted);
-            margin: 0;
-            letter-spacing: 0.02em;
-        }
-
-        /* Adjustments for smaller screens to prevent overcrowding */
-        @media (max-width: 1200px) {
-            .stat-number-wrapper { font-size: 1.8rem; }
-            .stat-label { font-size: 0.75rem; }
-        }
-
-        @media (max-width: 992px) {
-            .stats-container {
-                grid-template-columns: repeat(3, 1fr); /* 2 rows on tablet */
-            }
-        }
-
-        @media (max-width: 576px) {
-            .stats-container {
-                grid-template-columns: repeat(2, 1fr); /* 3 rows on mobile */
-            }
-        }
-
 
         /* MISSION AND VISION CSS */
 
@@ -737,42 +655,6 @@
 </section>
 
 
-
-<!-- FACTS counter script -->
-    <script>
-        const animateCounter = (el) => {
-            const target = parseInt(el.getAttribute('data-target'));
-            const duration = 1500;
-            const stepTime = 20;
-            const steps = duration / stepTime;
-            const increment = target / steps;
-            let current = 0;
-
-            const timer = setInterval(() => {
-                current += increment;
-                if (current >= target) {
-                    el.innerText = target;
-                    clearInterval(timer);
-                } else {
-                    el.innerText = Math.floor(current);
-                }
-            }, stepTime);
-        };
-
-        const observer2 = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const counter = entry.target.querySelector('.stat-number');
-                    if (counter && !counter.classList.contains('counted')) {
-                        animateCounter(counter);
-                        counter.classList.add('counted');
-                    }
-                }
-            });
-        }, { threshold: 0.2 });
-
-        document.querySelectorAll('.stat-card').forEach(card => observer2.observe(card));
-    </script>
 
 
   <!-- MOUSE HOVER GREDIENT EFFECT ON MISSION AND VISSION SCRIPS -->

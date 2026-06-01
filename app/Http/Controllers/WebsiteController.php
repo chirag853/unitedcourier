@@ -23,6 +23,7 @@ use App\Models\BarcodeGeneratorPage;
 use App\Models\ShippingRateCalculatorPage;
 use App\Models\HsnFinderPage;
 use App\Models\Faq;
+use App\Models\FactNumberSectionCommonPage;
 
 class WebsiteController extends Controller
 {
@@ -130,7 +131,6 @@ class WebsiteController extends Controller
         
         // Group by section type
         $heroContent = $aboutContent->where('section_type', 'hero')->first();
-        $stats = AboutPageContent::where('section_type', 'stat')->orderBy('display_order')->get();
         $overview = $aboutContent->where('section_type', 'overview')->first();
         $missionVisionIntro = $aboutContent->where('section_type', 'mission_vision_intro')->first();
         $mission = $aboutContent->where('section_type', 'mission')->first();
@@ -140,10 +140,10 @@ class WebsiteController extends Controller
         $testimonials = Testimonial::byPage('about')->active()->ordered()->get();
         $faqHeader = $aboutContent->where('section_type', 'faq_header')->first();
         $faqs = Faq::byPage('about')->active()->ordered()->get();
+        $commonStats = $this->getCommonStats();
 
         return view('about', compact(
             'heroContent',
-            'stats',
             'overview',
             'missionVisionIntro',
             'mission',
@@ -152,7 +152,8 @@ class WebsiteController extends Controller
             'milestones',
             'testimonials',
             'faqHeader',
-            'faqs'
+            'faqs',
+            'commonStats'
         ));
     }
 
@@ -162,10 +163,10 @@ class WebsiteController extends Controller
         $services = ServicePage::bySection('services')->active()->ordered()->get();
         $testimonials = Testimonial::byPage('service')->active()->ordered()->get();
         $faqs = Faq::byPage('service')->active()->ordered()->get();
-        $stats = ServicePage::bySection('stats')->active()->ordered()->get();
         $partners = ServicePage::bySection('partners')->active()->ordered()->get();
+        $commonStats = $this->getCommonStats();
         
-        return view('service', compact('services', 'testimonials', 'faqs', 'stats', 'partners'));
+        return view('service', compact('services', 'testimonials', 'faqs', 'partners', 'commonStats'));
     }
 
     // volumetric calculator page
@@ -247,8 +248,8 @@ class WebsiteController extends Controller
         $faqSection = \App\Models\PartnershipPage::bySection('faq')->active()->first();
         $faqItems = Faq::byPage('partnership')->active()->ordered()->get();
         $formSection = \App\Models\PartnershipPage::bySection('partner_form')->active()->first();
-        $logos = \App\Models\PartnershipPage::bySection('logos')->active()->ordered()->get();
-        return view('partnership', compact('hero', 'aboutSection', 'features', 'ecosystemSection', 'ecosystemGlobalCards', 'ecosystemPartnerCards', 'faqSection', 'faqItems', 'formSection', 'logos'));
+        // $partnerLogos is now globally shared via AppServiceProvider
+        return view('partnership', compact('hero', 'aboutSection', 'features', 'ecosystemSection', 'ecosystemGlobalCards', 'ecosystemPartnerCards', 'faqSection', 'faqItems', 'formSection'));
     }
 
     public function webinar()
@@ -295,7 +296,6 @@ class WebsiteController extends Controller
 
     public function warehousingSolutions(){
         $heroContent = WarehousingSolutionsPage::bySection('hero')->active()->first();
-        $statsContent = WarehousingSolutionsPage::bySection('stats')->active()->ordered()->get();
         $overviewContent = WarehousingSolutionsPage::bySection('overview')->active()->first();
         $featuresHeaderContent = WarehousingSolutionsPage::bySection('features')->where('item_key', 'features_header')->active()->first();
         $featuresContent = WarehousingSolutionsPage::bySection('features')->where('item_key', '!=', 'features_header')->active()->ordered()->get();
@@ -303,29 +303,16 @@ class WebsiteController extends Controller
         $faqHeaderContent = WarehousingSolutionsPage::bySection('faq')->active()->ordered()->first();
         $faqContent = Faq::byPage('warehousing')->active()->ordered()->get();
         $ctaContent = WarehousingSolutionsPage::bySection('cta')->active()->first();
-        
-        // DEBUG: Log paragraphs data for key sections
-        \Illuminate\Support\Facades\Log::debug('WarehousingSolutions DEBUG', [
-            'hero_paragraphs_raw' => $heroContent?->getRawOriginal('paragraphs'),
-            'hero_paragraphs_accessor' => data_get($heroContent, 'content.paragraphs'),
-            'overview_paragraphs_raw' => $overviewContent?->getRawOriginal('paragraphs'),
-            'overview_paragraphs_accessor' => data_get($overviewContent, 'content.paragraphs'),
-            'features_header_paragraphs_raw' => $featuresHeaderContent?->getRawOriginal('paragraphs'),
-            'features_header_paragraphs_accessor' => data_get($featuresHeaderContent, 'content.paragraphs'),
-            'features_count' => $featuresContent->count(),
-            'first_feature_paragraphs_raw' => $featuresContent->first()?->getRawOriginal('paragraphs'),
-            'first_feature_paragraphs_accessor' => data_get($featuresContent->first(), 'content.paragraphs'),
-        ]);
+        $commonStats = $this->getCommonStats();
         
         return view('warehousing-solutions', compact(
-            'heroContent', 'statsContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent', 'testimonials', 'faqContent', 'faqHeaderContent', 'ctaContent'
+            'heroContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent', 'testimonials', 'faqContent', 'faqHeaderContent', 'ctaContent', 'commonStats'
         ));
     }
 
     // e-commerce logistics solutions page
     public function ecommerceLogisticsSolutions(){
         $heroContent = EcommerceLogisticsSolutionsPage::bySection('hero')->active()->first();
-        $statsContent = EcommerceLogisticsSolutionsPage::bySection('stats')->active()->ordered()->get();
         $overviewContent = EcommerceLogisticsSolutionsPage::bySection('overview')->active()->first();
         $featuresHeaderContent = EcommerceLogisticsSolutionsPage::bySection('features')->where('item_key', 'features_header')->active()->first();
         $featuresContent = EcommerceLogisticsSolutionsPage::bySection('features')->where('item_key', '!=', 'features_header')->active()->ordered()->get();
@@ -333,17 +320,17 @@ class WebsiteController extends Controller
         $testimonials = EcommerceLogisticsSolutionsPage::bySection('testimonials')->where('item_key', '!=', 'testimonials_header')->active()->ordered()->get();
         $faqHeader = EcommerceLogisticsSolutionsPage::bySection('faq')->where('item_key', 'faq_header')->active()->first();
         $faqs = Faq::byPage('ecommerce-logistics')->active()->ordered()->get();
+        $commonStats = $this->getCommonStats();
         
         return view('e-commerce-logistics-solutions', compact(
-            'heroContent', 'statsContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent',
-            'testimonialsHeader', 'testimonials', 'faqHeader', 'faqs'
+            'heroContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent',
+            'testimonialsHeader', 'testimonials', 'faqHeader', 'faqs', 'commonStats'
         ));
     }
 
     // Express Air Freight Solutions page
     public function expressAirFreightSolutions(){
         $heroContent = ExpressAirFreightSolutionsPage::bySection('hero')->active()->first();
-        $statsContent = ExpressAirFreightSolutionsPage::bySection('stats')->where('item_key', '!=', 'stats_header')->active()->ordered()->get();
         $overviewContent = ExpressAirFreightSolutionsPage::bySection('overview')->active()->first();
         $featuresHeaderContent = ExpressAirFreightSolutionsPage::bySection('features')->where('item_key', 'features_header')->active()->first();
         $featuresContent = ExpressAirFreightSolutionsPage::bySection('features')->where('item_key', '!=', 'features_header')->active()->ordered()->get();
@@ -351,10 +338,11 @@ class WebsiteController extends Controller
         $testimonials = ExpressAirFreightSolutionsPage::bySection('testimonials')->where('item_key', '!=', 'testimonials_header')->active()->ordered()->get();
         $faqHeader = ExpressAirFreightSolutionsPage::bySection('faq')->where('item_key', 'faq_header')->active()->first();
         $faqs = Faq::byPage('express-air')->active()->ordered()->get();
+        $commonStats = $this->getCommonStats();
         
         return view('express-air-freight-solutions', compact(
-            'heroContent', 'statsContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent',
-            'testimonialsHeader', 'testimonials', 'faqHeader', 'faqs'
+            'heroContent', 'overviewContent', 'featuresHeaderContent', 'featuresContent',
+            'testimonialsHeader', 'testimonials', 'faqHeader', 'faqs', 'commonStats'
         ));
     }
 
@@ -508,5 +496,13 @@ class WebsiteController extends Controller
             'faqContactSidebar',
             'trackCta'
         ));
+    }
+
+    /**
+     * Get common stats/fact numbers for the shared stats section.
+     */
+    private function getCommonStats()
+    {
+        return FactNumberSectionCommonPage::active()->ordered()->get();
     }
 }

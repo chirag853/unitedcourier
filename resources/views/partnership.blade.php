@@ -30,20 +30,20 @@
         </div>
 </header>
 
-@if($logos->count() > 0)
+@if($partnerLogos->count() > 0)
         <div class="logo-slider">
             <div class="logo-track">
                 <!-- Original Logos -->
-                @foreach($logos as $logo)
+                @foreach($partnerLogos as $logo)
                 <div class="logo-item">
-                    <img src="{{ asset($logo->image) }}" alt="{{ $logo->title ?? 'Logo' }}">
+                    <img src="{{ $logo->logo_image }}" alt="{{ $logo->alt_text ?? 'Partner Logo' }}">
                 </div>
                 @endforeach
 
                 <!-- Cloned Logos (for seamless loop) -->
-                @foreach($logos as $logo)
+                @foreach($partnerLogos as $logo)
                 <div class="logo-item">
-                    <img src="{{ asset($logo->image) }}" alt="{{ $logo->title ?? 'Logo' }}">
+                    <img src="{{ $logo->logo_image }}" alt="{{ $logo->alt_text ?? 'Partner Logo' }}">
                 </div>
                 @endforeach
             </div>

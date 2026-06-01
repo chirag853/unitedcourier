@@ -473,6 +473,17 @@ Route::prefix('admin')->group(function () {
     Route::post('/update-hsn-finder-content/{id}', [AdminController::class, 'updateHsnFinderContent'])->name('admin.update-hsn-finder-content');
     Route::delete('/delete-hsn-finder-content/{id}', [AdminController::class, 'deleteHsnFinderContent'])->name('admin.delete-hsn-finder-content');
 
+    // Common Stats (Fact Number Section) Management Routes
+    Route::get('/change-common-stats', [AdminController::class, 'changeCommonStats'])->name('admin.change-common-stats');
+    Route::post('/update-common-stats/{id}', [AdminController::class, 'updateCommonStats'])->name('admin.update-common-stats');
+    Route::delete('/delete-common-stats/{id}', [AdminController::class, 'deleteCommonStats'])->name('admin.delete-common-stats');
+
+    // Partners Section (Logos) Management Routes
+    Route::get('/change-partner-logos', [AdminController::class, 'changePartnerLogos'])->name('admin.change-partner-logos');
+    Route::post('/store-partner-logo', [AdminController::class, 'storePartnerLogo'])->name('admin.store-partner-logo');
+    Route::post('/update-partner-logo/{id}', [AdminController::class, 'updatePartnerLogo'])->name('admin.update-partner-logo');
+    Route::delete('/delete-partner-logo/{id}', [AdminController::class, 'deletePartnerLogo'])->name('admin.delete-partner-logo');
+
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');
     Route::get('/subscription', [AdminController::class, 'subscription'])->name('admin.subscription');

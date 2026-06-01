@@ -4383,4 +4383,156 @@ class AdminController extends Controller
         }
     }
 
+    // ========== Common Stats (Fact Number Section) Management ==========
+
+    public function changeCommonStats()
+    {
+        $commonStats = \App\Models\FactNumberSectionCommonPage::orderBy('display_order')->get();
+        return view('admin.change-common-stats', compact('commonStats'));
+    }
+
+    public function updateCommonStats(Request $request, $id)
+    {
+        try {
+            $stat = \App\Models\FactNumberSectionCommonPage::findOrFail($id);
+
+            $stat->update([
+                'title'         => $request->title,
+                'target_number' => $request->target_number,
+                'suffix'        => $request->suffix,
+                'display_order' => $request->display_order ?? 0,
+                'status'        => $request->has('status') ? true : false,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stat updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deleteCommonStats($id)
+    {
+        try {
+            $stat = \App\Models\FactNumberSectionCommonPage::findOrFail($id);
+            $stat->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stat deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    // ========== Partners Section (Logos) Management ==========
+
+    public function changePartnerLogos()
+    {
+        $partnerLogos = \App\Models\PartnersSectionCommonPage::orderBy('display_order')->get();
+        return view('admin.change-partner-logos', compact('partnerLogos'));
+    }
+
+    public function storePartnerLogo(Request $request)
+    {
+        try {
+            $request->validate([
+                'logo_image' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+                'alt_text' => 'nullable|string|max:255',
+                'display_order' => 'nullable|integer|min:0',
+            ]);
+
+            // Handle file upload
+            $image = $request->file('logo_image');
+            $fileName = time() . '_partner_' . str_replace(' ', '_', $image->getClientOriginalName());
+            $uploadPath = public_path('uploads/partner_logos');
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+            $image->move($uploadPath, $fileName);
+            $imageUrl = asset('uploads/partner_logos/' . $fileName);
+
+            \App\Models\PartnersSectionCommonPage::create([
+                'logo_image'    => $imageUrl,
+                'alt_text'      => $request->alt_text,
+                'display_order' => $request->display_order ?? 0,
+                'status'        => $request->has('status') ? true : false,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Partner logo added successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function updatePartnerLogo(Request $request, $id)
+    {
+        try {
+            $logo = \App\Models\PartnersSectionCommonPage::findOrFail($id);
+
+            $data = [
+                'alt_text'      => $request->alt_text,
+                'display_order' => $request->display_order ?? 0,
+                'status'        => $request->has('status') ? true : false,
+            ];
+
+            // Handle file upload if a new image is provided
+            if ($request->hasFile('logo_image')) {
+                $image = $request->file('logo_image');
+                $fileName = time() . '_partner_' . str_replace(' ', '_', $image->getClientOriginalName());
+                $uploadPath = public_path('uploads/partner_logos');
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+                $image->move($uploadPath, $fileName);
+                $data['logo_image'] = asset('uploads/partner_logos/' . $fileName);
+            }
+
+            $logo->update($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Partner logo updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deletePartnerLogo($id)
+    {
+        try {
+            $logo = \App\Models\PartnersSectionCommonPage::findOrFail($id);
+            $logo->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Partner logo deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
 }
