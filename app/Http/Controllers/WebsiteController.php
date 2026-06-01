@@ -499,6 +499,36 @@ class WebsiteController extends Controller
     }
 
     /**
+     * Handle newsletter subscriber email from footer subscribe form.
+     */
+    public function subscribe(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|max:255',
+        ]);
+
+        $email = $request->input('email');
+
+        // Check if already subscribed
+        $existing = \App\Models\Subscriber::where('email', $email)->first();
+        if ($existing) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This email is already subscribed!',
+            ]);
+        }
+
+        \App\Models\Subscriber::create([
+            'email' => $email,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Thank you for subscribing!',
+        ]);
+    }
+
+    /**
      * Get common stats/fact numbers for the shared stats section.
      */
     private function getCommonStats()

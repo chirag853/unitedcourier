@@ -34,6 +34,8 @@ Route::get('/barcode-generator', [WebsiteController::class, 'barcodeGenerator'])
 Route::get('/shipping-rate-calculator', [WebsiteController::class, 'shippingRateCalculator'])->name('shipping-rate-calculator');
 Route::get('/hsn-finder', [WebsiteController::class, 'hsnFinder'])->name('hsn-finder');
 
+// Newsletter Subscribe Route
+Route::post('/subscribe', [WebsiteController::class, 'subscribe'])->name('subscribe');
 
 Route::get('/index', [customerController::class, 'index'])->name('customer.index');
 Route::get('/login', [customerController::class, 'login'])->name('login');
@@ -483,6 +485,9 @@ Route::prefix('admin')->group(function () {
     Route::post('/store-partner-logo', [AdminController::class, 'storePartnerLogo'])->name('admin.store-partner-logo');
     Route::post('/update-partner-logo/{id}', [AdminController::class, 'updatePartnerLogo'])->name('admin.update-partner-logo');
     Route::delete('/delete-partner-logo/{id}', [AdminController::class, 'deletePartnerLogo'])->name('admin.delete-partner-logo');
+
+    // Subscribers Management Routes
+    Route::get('/change-subscribers', [AdminController::class, 'changeSubscribers'])->name('admin.change-subscribers');
 
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');

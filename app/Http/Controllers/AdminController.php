@@ -4535,4 +4535,10 @@ class AdminController extends Controller
         }
     }
 
+    public function changeSubscribers()
+    {
+        $subscribers = \App\Models\Subscriber::orderBy('id', 'desc')->get();
+        return view('admin.change-subscribers', compact('subscribers'));
+    }
+
 }
