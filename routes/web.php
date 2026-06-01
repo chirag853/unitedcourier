@@ -447,6 +447,7 @@ Route::prefix('admin')->group(function () {
 
     // E-Commerce Logistics Solutions Page Management Routes
     Route::get('/change-e-commerce-logistics-solutions', [AdminController::class, 'changeEcommerceLogisticsSolutions'])->name('admin.change-e-commerce-logistics-solutions');
+    Route::get('/get-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'getEcommerceLogisticsSolutionsContent'])->name('admin.get-e-commerce-logistics-solutions-content');
     Route::post('/store-e-commerce-logistics-solutions-content', [AdminController::class, 'storeEcommerceLogisticsSolutionsContent'])->name('admin.store-e-commerce-logistics-solutions-content');
     Route::post('/update-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'updateEcommerceLogisticsSolutionsContent'])->name('admin.update-e-commerce-logistics-solutions-content');
     Route::delete('/delete-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'deleteEcommerceLogisticsSolutionsContent'])->name('admin.delete-e-commerce-logistics-solutions-content');
