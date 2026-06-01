@@ -188,7 +188,9 @@
                     {{ $heroData->data['badge_text'] ?? 'Free Tool · Instant Results' }}
                 </div>
                 <h1 class="hero-title mb-4">
-                    Volumetric <span class="moving-gradient-text">{{ $heroData->data_title ?? 'Weight Calculator' }}</span>
+                    <!-- Volumetric <span class="moving-gradient-text">{!! $heroData->data_title ?? 'Weight Calculator' !!}</span> -->
+                    {!! $heroData->data_title ?? 'Weight Calculator' !!}
+
                 </h1>
                 <p style="max-width: 100%;" class="mb-5 lead">
                     {{ $heroData->data_description ?? 'Enter your package dimensions to instantly calculate dimensional weight and understand how carriers determine your chargeable weight.' }}
@@ -333,7 +335,7 @@
                 <h2 class="about-title">{{ $featuresHeader->data_title ?? 'Understanding volumetric weight' }}</h2>
                 
                 <p class="about-desc text-center">
-                    {{ $featuresHeader->data_description ?? 'Carriers use dimensional weight to price large, light packages — here\'s what you need to know.' }}
+                    {{ $featuresHeader->data_description}}
                 </p>
             </div>
         </div>
@@ -355,7 +357,7 @@
 
 
 
-<div class="container my-5">
+<div class="container my-5" style="display:none">
     <div class="row">
         <div class="col-12">
 
@@ -384,14 +386,8 @@
 
 
 
-
-
-
-
-
-
 <!-- testimonial -->
-<section class="testimonial-section">
+<section class="testimonial-section" style="display:none">
     <div class="container">
         <!-- Header -->
         <div class="row justify-content-center mb-3">
@@ -442,7 +438,7 @@
 
 
 <!-- FAQ Section -->
-<section class="faq-section">
+<section class="faq-section" style="display:none">
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">Common Questions</span>

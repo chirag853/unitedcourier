@@ -192,7 +192,7 @@
                                                     </td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-content='{!! json_encode($data, JSON_HEX_APOS | JSON_HEX_TAG | JSON_HEX_AMP) !!}' onclick="editContent({{ $content->id }}, '{{ $content->section }}', this.dataset.content, {{ $content->sort_order }}, {{ $content->is_active ? 1 : 0 }})">
+                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" onclick="editContent({{ $content->id }})">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">
@@ -468,66 +468,79 @@
         groups.forEach(groupId => toggleSectionFields(groupId, false));
     }
 
-    function editContent(id, section, contentJson, sortOrder, isActive) {
-        const content = JSON.parse(contentJson);
+    function editContent(id) {
+        // Fetch content data via AJAX using only the ID
+        fetch(`${BASE_URL}/admin/get-volumetric-calculator-content/${id}`, {
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('contentId').value = data.id;
+            document.getElementById('section').value = data.section;
+            document.getElementById('sortOrder').value = data.sort_order;
+            document.getElementById('isActive').checked = data.is_active == 1;
 
-        document.getElementById('contentId').value = id;
-        document.getElementById('section').value = section;
-        document.getElementById('sortOrder').value = sortOrder;
-        document.getElementById('isActive').checked = isActive == 1;
+            const content = data.data || {};
 
-        hideAllVolumetricFields();
+            hideAllVolumetricFields();
 
-        switch(section) {
-            case 'hero':
-                toggleSectionFields('heroFields', true);
-                document.getElementById('heroBadgeText').value = content.badge_text || '';
-                document.getElementById('heroTitle').value = content.title || '';
-                document.getElementById('heroDescription').value = content.description || '';
-                document.getElementById('heroButtonText').value = content.button_text || '';
-                document.getElementById('heroButtonUrl').value = content.button_url || '';
-                break;
-            case 'features_header':
-                toggleSectionFields('featuresHeaderFields', true);
-                document.getElementById('featuresHeaderTitle').value = content.title || '';
-                document.getElementById('featuresHeaderDescription').value = content.description || '';
-                break;
-            case 'features':
-                toggleSectionFields('featuresFields', true);
-                document.getElementById('featureIconClass').value = content.icon_class || '';
-                document.getElementById('featureTitle').value = content.title || '';
-                document.getElementById('featureDescription').value = content.description || '';
-                break;
-            case 'track_cta':
-                toggleSectionFields('trackCtaFields', true);
-                document.getElementById('trackLiveBadge').value = content.live_badge || '';
-                document.getElementById('trackTitle').value = content.title || '';
-                document.getElementById('trackDescription').value = content.description || '';
-                document.getElementById('trackButtonText').value = content.button_text || '';
-                document.getElementById('trackButtonUrl').value = content.button_url || '';
-                break;
-            case 'faq_sidebar':
-                toggleSectionFields('faqSidebarFields', true);
-                document.getElementById('faqSidebarIconImage').value = content.icon_image || '';
-                document.getElementById('faqSidebarTitle').value = content.title || '';
-                document.getElementById('faqSidebarDescription').value = content.description || '';
-                document.getElementById('faqSidebarButtonText').value = content.button_text || '';
-                document.getElementById('faqSidebarButtonUrl').value = content.button_url || '';
-                break;
-            case 'faq':
-                toggleSectionFields('faqFields', true);
-                document.getElementById('faqQuestion').value = content.question || '';
-                document.getElementById('faqAnswer').value = content.answer || '';
-                break;
-            case 'calculator':
-                toggleSectionFields('calculatorFields', true);
-                document.getElementById('calculatorJson').value = JSON.stringify(content, null, 2);
-                break;
-            default:
-                toggleSectionFields('calculatorFields', true);
-                document.getElementById('calculatorJson').value = JSON.stringify(content, null, 2);
-                break;
-        }
+            switch(data.section) {
+                case 'hero':
+                    toggleSectionFields('heroFields', true);
+                    document.getElementById('heroBadgeText').value = content.badge_text || '';
+                    document.getElementById('heroTitle').value = content.title || '';
+                    document.getElementById('heroDescription').value = content.description || '';
+                    document.getElementById('heroButtonText').value = content.button_text || '';
+                    document.getElementById('heroButtonUrl').value = content.button_url || '';
+                    break;
+                case 'features_header':
+                    toggleSectionFields('featuresHeaderFields', true);
+                    document.getElementById('featuresHeaderTitle').value = content.title || '';
+                    document.getElementById('featuresHeaderDescription').value = content.description || '';
+                    break;
+                case 'features':
+                    toggleSectionFields('featuresFields', true);
+                    document.getElementById('featureIconClass').value = content.icon_class || '';
+                    document.getElementById('featureTitle').value = content.title || '';
+                    document.getElementById('featureDescription').value = content.description || '';
+                    break;
+                case 'track_cta':
+                    toggleSectionFields('trackCtaFields', true);
+                    document.getElementById('trackLiveBadge').value = content.live_badge || '';
+                    document.getElementById('trackTitle').value = content.title || '';
+                    document.getElementById('trackDescription').value = content.description || '';
+                    document.getElementById('trackButtonText').value = content.button_text || '';
+                    document.getElementById('trackButtonUrl').value = content.button_url || '';
+                    break;
+                case 'faq_sidebar':
+                    toggleSectionFields('faqSidebarFields', true);
+                    document.getElementById('faqSidebarIconImage').value = content.icon_image || '';
+                    document.getElementById('faqSidebarTitle').value = content.title || '';
+                    document.getElementById('faqSidebarDescription').value = content.description || '';
+                    document.getElementById('faqSidebarButtonText').value = content.button_text || '';
+                    document.getElementById('faqSidebarButtonUrl').value = content.button_url || '';
+                    break;
+                case 'faq':
+                    toggleSectionFields('faqFields', true);
+                    document.getElementById('faqQuestion').value = content.question || '';
+                    document.getElementById('faqAnswer').value = content.answer || '';
+                    break;
+                case 'calculator':
+                    toggleSectionFields('calculatorFields', true);
+                    document.getElementById('calculatorJson').value = JSON.stringify(content, null, 2);
+                    break;
+                default:
+                    toggleSectionFields('calculatorFields', true);
+                    document.getElementById('calculatorJson').value = JSON.stringify(content, null, 2);
+                    break;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching content:', error);
+            alert('Failed to load content data. Please try again.');
+        });
     }
 
     document.getElementById('section').addEventListener('change', function() {

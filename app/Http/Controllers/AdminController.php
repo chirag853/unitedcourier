@@ -431,11 +431,23 @@ class AdminController extends Controller
         return view('admin.change-volumetric-calculator-page', ['volumetricCalculatorContent' => $volumetricCalculatorContent]);
     }
 
+    public function getVolumetricCalculatorContent($id)
+    {
+        try {
+            $content = \App\Models\VolumetricCalculatorPage::findOrFail($id);
+            return response()->json($content);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Content not found'], 404);
+        }
+    }
+
     public function updateVolumetricCalculatorContent(Request $request, $id)
     {
         try {
             $content = \App\Models\VolumetricCalculatorPage::findOrFail($id);
 
+            // Always write to the data JSON column + normalized columns + data_extra,
+            // because the frontend view reads from ALL THREE sources directly.
             $updateData = [
                 'section' => $request->section,
                 'sort_order' => $request->sort_order,
@@ -452,12 +464,21 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
+                    $updateData['data_button_text'] = $request->input('content.button_text');
+                    $updateData['data_extra'] = json_encode([
+                        'badge_text' => $request->input('content.badge_text'),
+                        'button_url' => $request->input('content.button_url'),
+                    ]);
                     break;
                 case 'features_header':
                     $contentData = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
                     break;
                 case 'features':
                     $contentData = [
@@ -465,6 +486,9 @@ class AdminController extends Controller
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
+                    $updateData['data_icon'] = $request->input('content.icon_class');
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
                     break;
                 case 'track_cta':
                     $contentData = [
@@ -474,6 +498,13 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
+                    $updateData['data_button_text'] = $request->input('content.button_text');
+                    $updateData['data_extra'] = json_encode([
+                        'live_badge' => $request->input('content.live_badge'),
+                        'button_url' => $request->input('content.button_url'),
+                    ]);
                     break;
                 case 'testimonials_header':
                     $contentData = [
@@ -483,6 +514,13 @@ class AdminController extends Controller
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
                     ];
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
+                    $updateData['data_extra'] = json_encode([
+                        'badge_url' => $request->input('content.badge_url'),
+                        'badge_image' => $request->input('content.badge_image'),
+                        'badge_alt' => $request->input('content.badge_alt'),
+                    ]);
                     break;
                 case 'testimonials':
                     $contentData = [
@@ -491,6 +529,12 @@ class AdminController extends Controller
                         'name' => $request->input('content.name'),
                         'image' => $request->input('content.image'),
                     ];
+                    $updateData['data_image'] = $request->input('content.image');
+                    $updateData['data_extra'] = json_encode([
+                        'stars' => $request->input('content.stars'),
+                        'text' => $request->input('content.text'),
+                        'name' => $request->input('content.name'),
+                    ]);
                     break;
                 case 'faq_sidebar':
                     $contentData = [
@@ -500,12 +544,24 @@ class AdminController extends Controller
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
                     ];
+                    $updateData['data_image'] = $request->input('content.icon_image');
+                    $updateData['data_title'] = $request->input('content.title');
+                    $updateData['data_description'] = $request->input('content.description');
+                    $updateData['data_button_text'] = $request->input('content.button_text');
+                    $updateData['data_extra'] = json_encode([
+                        'icon_image' => $request->input('content.icon_image'),
+                        'button_url' => $request->input('content.button_url'),
+                    ]);
                     break;
                 case 'faq':
                     $contentData = [
                         'question' => $request->input('content.question'),
                         'answer' => $request->input('content.answer'),
                     ];
+                    $updateData['data_extra'] = json_encode([
+                        'question' => $request->input('content.question'),
+                        'answer' => $request->input('content.answer'),
+                    ]);
                     break;
                 case 'calculator':
                     $rawJson = $request->input('content.json');
@@ -517,11 +573,13 @@ class AdminController extends Controller
                         ]);
                     }
                     $contentData = $parsed;
+                    $updateData['data_extra'] = $rawJson;
                     break;
                 default:
                     $rawJson = $request->input('content.json');
                     $parsed = json_decode($rawJson, true);
                     $contentData = $parsed !== null ? $parsed : [];
+                    $updateData['data_extra'] = $rawJson;
                     break;
             }
 

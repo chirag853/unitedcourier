@@ -401,6 +401,7 @@ Route::prefix('admin')->group(function () {
     Route::post('/update-service-content/{id}', [AdminController::class, 'updateServiceContent'])->name('admin.update-service-content');
     Route::delete('/delete-service-content/{id}', [AdminController::class, 'deleteServiceContent'])->name('admin.delete-service-content');
     Route::get('/change-volumetric-calculator', [AdminController::class, 'volumetricCalculator'])->name('admin.change-volumetric-calculator');
+    Route::get('/get-volumetric-calculator-content/{id}', [AdminController::class, 'getVolumetricCalculatorContent'])->name('admin.get-volumetric-calculator-content');
     Route::post('/update-volumetric-calculator-content/{id}', [AdminController::class, 'updateVolumetricCalculatorContent'])->name('admin.update-volumetric-calculator-content');
     Route::delete('/delete-volumetric-calculator-content/{id}', [AdminController::class, 'deleteVolumetricCalculatorContent'])->name('admin.delete-volumetric-calculator-content');
     
@@ -441,7 +442,6 @@ Route::prefix('admin')->group(function () {
 
     // E-Commerce Logistics Solutions Page Management Routes
     Route::get('/change-e-commerce-logistics-solutions', [AdminController::class, 'changeEcommerceLogisticsSolutions'])->name('admin.change-e-commerce-logistics-solutions');
-    Route::get('/get-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'getEcommerceLogisticsSolutionsContent'])->name('admin.get-e-commerce-logistics-solutions-content');
     Route::post('/store-e-commerce-logistics-solutions-content', [AdminController::class, 'storeEcommerceLogisticsSolutionsContent'])->name('admin.store-e-commerce-logistics-solutions-content');
     Route::post('/update-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'updateEcommerceLogisticsSolutionsContent'])->name('admin.update-e-commerce-logistics-solutions-content');
     Route::delete('/delete-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'deleteEcommerceLogisticsSolutionsContent'])->name('admin.delete-e-commerce-logistics-solutions-content');

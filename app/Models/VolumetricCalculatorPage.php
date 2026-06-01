@@ -33,39 +33,46 @@ class VolumetricCalculatorPage extends Model
      *
      * NOTE: With 'data' => 'array' cast active, $value is ALREADY a decoded array
      * from the cast, NOT a raw JSON string. We must handle both cases.
+     *
+     * STRATEGY: Normalized columns (data_title, data_description, etc.) are ONLY
+     * used as fallback when the raw data column is empty/null. This prevents the
+     * seeder's static values in normalized columns from overwriting live changes
+     * saved by the controller (which only writes to the 'data' column).
      */
     public function getDataAttribute($value)
     {
-        // 1. Start with raw data column (what controller saves to)
+        // Decode the data column (could be array from cast, or raw JSON string)
         $data = [];
         if (is_array($value)) {
-            // The 'data' => 'array' cast already decoded this from JSON
             $data = $value;
         } elseif (!empty($value)) {
-            // Raw JSON string from DB (cast not involved)
             $decoded = json_decode($value, true);
             if (is_array($decoded)) {
                 $data = $decoded;
             }
         }
 
-        // 2. Overlay normalized columns (seeder data) on top — these take priority
-        if (!empty($this->data_title)) $data['title'] = $this->data_title;
-        if (!empty($this->data_description)) $data['description'] = $this->data_description;
-        if (!empty($this->data_icon)) $data['icon'] = $this->data_icon;
-        if (!empty($this->data_image)) $data['image'] = $this->data_image;
-        if (!empty($this->data_link)) $data['link'] = $this->data_link;
-        if (!empty($this->data_button_text)) $data['button_text'] = $this->data_button_text;
+        // Always merge normalized columns on top of the data column.
+        // The controller now writes to BOTH the data column AND normalized columns/data_extra
+        // in sync, so this merge keeps the accessor output fully populated.
+        $normalized = [];
+        if (!empty($this->data_title)) $normalized['title'] = $this->data_title;
+        if (!empty($this->data_description)) $normalized['description'] = $this->data_description;
+        if (!empty($this->data_icon)) $normalized['icon'] = $this->data_icon;
+        if (!empty($this->data_image)) $normalized['image'] = $this->data_image;
+        if (!empty($this->data_link)) $normalized['link'] = $this->data_link;
+        if (!empty($this->data_button_text)) $normalized['button_text'] = $this->data_button_text;
 
-        // 3. Merge any extra content stored as JSON
         if (!empty($this->data_extra)) {
             $extra = json_decode($this->data_extra, true);
             if (is_array($extra)) {
-                $data = array_merge($data, $extra);
+                $normalized = array_merge($normalized, $extra);
             }
         }
 
-        return $data;
+        // Merged output: data column first, then normalized on top (so normalized overrides
+        // the data column if they differ — which shouldn't happen since controller syncs them)
+        return array_merge($data, $normalized);
     }
 
     /**
