@@ -86,12 +86,12 @@
             <div class="col-lg-2 col-md-6">
                 <h4 class="footer-heading">Quick Links</h4>
                 <ul class="footer-links">
-                    <li><a href="about.php">About Us</a></li>
-                    <li><a href="track-order.php">Tracking</a></li>
-                    <li><a href="contact-us.php">Contact Us</a></li>
-                    <li><a href="terms-and-conditions.php">Terms & Conditions</a></li>
-                    <li><a href="privacy-policy.php">Privacy Policy</a></li>
-                    <li><a href="refund-and-cancellation-policy.php">Cancellation & Refund Policy</a></li>
+                    <li><a href="{{ url('about') }}">About Us</a></li>
+                    <li><a href="{{ url('tracking') }}">Tracking</a></li>
+                    <li><a href="{{ url('contact-us') }}">Contact Us</a></li>
+                    <li><a href="{{ url('terms-and-conditions') }}">Terms & Conditions</a></li>
+                    <li><a href="{{ url('privacy-policy') }}">Privacy Policy</a></li>
+                    <li><a href="{{ url('refund-and-cancellation-policy') }}">Cancellation & Refund Policy</a></li>
                 </ul>
             </div>
 
@@ -99,9 +99,9 @@
             <div class="col-lg-2 col-md-6">
                 <h4 class="footer-heading">Our Services</h4>
                 <ul class="footer-links">
-                    <li><a href="express-air-freight-solutions.php">Air Freight Solution</a></li>
-                    <li><a href="ecommerce-logistics-solutions.php">Ecommerce Logistics Solutions</a></li>
-                    <li><a href="warehousing-solutions.php">Warehousing Solutions</a></li>
+                    <li><a href="{{ url('express-air-freight-solutions') }}">Air Freight Solution</a></li>
+                    <li><a href="{{ url('e-commerce-logistics-solutions') }}">Ecommerce Logistics Solutions</a></li>
+                    <li><a href="{{ url('warehousing-solutions') }}">Warehousing Solutions</a></li>
                 </ul>
             </div>
 
@@ -119,7 +119,7 @@
                 <div class="contact-item">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                     <div>
-                        <a href="#"  Building No. 1, Bypass Road,<br>
+                        <a href="{{ route('contact-us') }}" target="_blank"> Building No. 1, Bypass Road,<br>
                         Mahipalpur New Delhi -110037</a>
                     </div>
                 </div>
