@@ -226,7 +226,7 @@
                         <h3>{{ $ecosystemSection->content['partner_card_title'] ?? 'Our Partners' }}</h3>
                         <div class="uwd-pt-logo-grid">
                             @foreach($ecosystemPartnerCards as $card)
-                            <div class="uwd-pt-logo-item"><img src="{{ $card->image }}" class="img-fluid" alt="{{ $card->title ?? 'Partner' }}"></div>
+                            <div class="uwd-pt-logo-item"><img src="{{ asset($card->image) }}" class="img-fluid" alt="{{ $card->title ?? 'Partner' }}"></div>
                             @endforeach
                         </div>
                     </div>

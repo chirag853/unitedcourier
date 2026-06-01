@@ -744,6 +744,7 @@
                         <form>
                             <div class="row g-3 mb-3">
 
+                                <!-- name -->
                                 <div class="col-12">
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom" placeholder="Full Name">
@@ -751,13 +752,8 @@
                                     </div>
                                 </div>
                                 
-                                <div class="col-12">
-                                    <div class="input-group-custom">
-                                        <input type="tel" class="form-control input-custom" placeholder="Phone">
-                                        <i class="fas fa-phone"></i>
-                                    </div>
-                                </div>
 
+                                <!-- email -->
                                 <div class="col-12">
                                     <div class="input-group-custom">
                                         <input type="email" class="form-control input-custom" placeholder="Email">
@@ -765,6 +761,19 @@
                                     </div>
                                 </div>
 
+                                
+
+                                <!-- phone -->
+                                <div class="col-12">
+                                    <div class="input-group-custom">
+                                        <input type="tel" class="form-control input-custom" placeholder="Phone">
+                                        <i class="fas fa-phone"></i>
+                                    </div>
+                                </div>
+
+                                
+
+                                <!-- message -->
                                 <div class="col-12">
                                     <div class="input-group-custom">
                                         <textarea class="form-control input-custom" rows="2" placeholder="Message"></textarea>

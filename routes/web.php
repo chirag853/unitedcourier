@@ -35,6 +35,11 @@ Route::get('/shipping-rate-calculator', [WebsiteController::class, 'shippingRate
 Route::get('/hsn-finder', [WebsiteController::class, 'hsnFinder'])->name('hsn-finder');
 
 
+Route::get('/index', [customerController::class, 'index'])->name('customer.index');
+Route::get('/login', [customerController::class, 'login'])->name('login');
+Route::get('/get-started', [customerController::class, 'register'])->name('register');
+
+
 
 
 
@@ -488,7 +493,7 @@ Route::prefix('admin')->group(function () {
 
 // Customer routes
 Route::prefix('customer')->name('customer.')->group(function () {
-    Route::get('/index', [customerController::class, 'index'])->name('customer.index');
+    // Route::get('/index', [customerController::class, 'index'])->name('customer.index');
     Route::post('/register', [customerController::class, 'register'])->name('customer.register');
     Route::post('/login', [customerController::class, 'login'])->name('customer.login');
     Route::post('/logout', [customerController::class, 'logout'])->name('customer.logout');
@@ -499,10 +504,10 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/shipping-policy', [customerController::class, 'shippingPolicy'])->name('customer.shipping-policy');
     Route::get('/refund-policy', [customerController::class, 'refundPolicy'])->name('customer.refund-policy');
     Route::get('/cancellation-policy', [customerController::class, 'cancellationPolicy'])->name('customer.cancellation-policy');
-    Route::get('/', [customerController::class, 'login'])->name('login');
+    // Route::get('/', [customerController::class, 'login'])->name('login');
     Route::post('/check-phone', [customerController::class, 'checkPhone'])->name('check.phone');
     Route::post('/verify-otp', [customerController::class, 'verifyOtp'])->name('verify.otp');
-    Route::get('/register', [customerController::class, 'register'])->name('register');
+    // Route::get('/register', [customerController::class, 'register'])->name('register');
     Route::post('/register', [customerController::class, 'store'])->name('register.store');
     Route::get('/dashboard', [customerController::class, 'dashboard'])->name('dashboard');
     Route::post('/logout', [customerController::class, 'logout'])->name('logout');

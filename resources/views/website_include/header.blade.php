@@ -242,8 +242,8 @@
                 </ul>
                 <div class="d-flex flex-column flex-lg-row align-items-center gap-3">
                     <a class="nav-link menu-custom-item" href="{{ url('/tracking') }}">Tracking</a>
-                    <a href="{{ url('/customer') }}" class="menu-custom-item nav-link">Login</a>
-                    <a href="{{ url('/customer/register') }}" class="btn-signup-main w-100 w-lg-auto text-decoration-none">Get Started</a>
+                    <a href="{{ url('/login') }}" class="menu-custom-item nav-link">Login</a>
+                    <a href="{{ url('/get-started') }}" class="btn-signup-main w-100 w-lg-auto text-decoration-none">Get Started</a>
                 </div>
             </div>
         </div>
