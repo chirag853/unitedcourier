@@ -211,7 +211,8 @@
                     Our <span class="moving-gradient-text"> Privacy Policy</span>
                 </h1>
                 <p style="max-width: 100%;" class="text-center mb-5 lead">
-                    {{ $pageMeta->paragraphs ?? 'Your privacy is our priority. This policy outlines how United Worldwide Couriers collects, uses, and protects your information.' }}
+                    {!! $pageMeta->paragraphs !!}
+                    <!-- {{ $pageMeta->paragraphs ?? 'Your privacy is our priority. This policy outlines how United Worldwide Couriers collects, uses, and protects your information.' }} -->
                 </p>
             </div>
 
