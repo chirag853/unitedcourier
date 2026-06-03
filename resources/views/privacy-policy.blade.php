@@ -242,6 +242,14 @@
                         @if($policyUpdates)
                         <a href="#uwd-upd" class="uwd-pp-nav-link">{{ $policyUpdates->title ?? 'Policy Updates' }}</a>
                         @endif
+                        {{-- Dynamically added section nav links --}}
+                        @if($additionalSections->isNotEmpty())
+                            @foreach($additionalSections as $sectionKey => $section)
+                                @if($section && $section->paragraphs)
+                                <a href="#uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-nav-link">{{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</a>
+                                @endif
+                            @endforeach
+                        @endif
                         <a href="#uwd-con" class="uwd-pp-nav-link">Contact Support</a>
                     </nav>
                 </div>
@@ -299,6 +307,25 @@
                         <h2><i data-lucide="refresh-cw"></i> {{ $policyUpdates->title ?? 'Policy Updates' }}</h2>
                         <p>{!! $policyUpdates->paragraphs ?? 'We may update this privacy policy from time to time.' !!}</p>
                     </section>
+                    @endif
+
+                    {{-- Dynamically render additional sections added from backend --}}
+                    @if($additionalSections->isNotEmpty())
+                        @foreach($additionalSections as $sectionKey => $section)
+                            @if($section && $section->paragraphs)
+                            <section id="uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-section">
+                                <h2><i data-lucide="file-text"></i> {{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</h2>
+                                <p>{!! $section->paragraphs !!}</p>
+                                @if($section->list_items)
+                                <ul class="uwd-pp-list-group">
+                                    @foreach($section->list_items as $item)
+                                        <li>{{ $item }}</li>
+                                    @endforeach
+                                </ul>
+                                @endif
+                            </section>
+                            @endif
+                        @endforeach
                     @endif
 
                     @if($pageMeta)

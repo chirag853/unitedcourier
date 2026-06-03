@@ -19,6 +19,9 @@ class ShipmentInvoice extends Model
         'incoterms',
         'invoice_currency',
         'reference_number',
+        'status',
+        'delivery_type',
+        'assigned_delivery_person',
     ];
 
     protected $casts = [

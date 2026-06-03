@@ -74,6 +74,7 @@ Route::prefix('admin')->group(function () {
         // CRM Routes
     Route::get('/contacts', [AdminController::class, 'contacts'])->name('admin.contacts');
     Route::get('/companies', [AdminController::class, 'companies'])->name('admin.companies');
+    Route::post('/assign-delivery', [AdminController::class, 'assignDelivery'])->name('admin.assign-delivery');
     Route::get('/deals', [AdminController::class, 'deals'])->name('admin.deals');
     Route::get('/leads', [AdminController::class, 'leads'])->name('admin.leads');
     Route::get('/pipeline', [AdminController::class, 'pipeline'])->name('admin.pipeline');
@@ -541,4 +542,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/create-shipment', [customerController::class, 'storeShipment'])->name('create-shipment.store');
     Route::post('/ups-rate', [customerController::class, 'getUpsRate'])->name('ups.rate');
+    Route::post('/ups-ship', [customerController::class, 'createUpsShipment'])->name('ups.ship');
+    Route::get('/view-all-shipments', [customerController::class, 'viewAllShipments'])->name('view-all-shipments');
+    Route::post('/cancel-shipment/{id}', [customerController::class, 'cancelShipment'])->name('cancel-shipment');
 });

@@ -208,18 +208,29 @@ class WebsiteController extends Controller
     }
 
     public function privacyPolicy(){
-        $pageMeta = PrivacyPolicyPage::bySection('_page_meta')->first();
-        $dataCollection = PrivacyPolicyPage::bySection('data_collection')->first();
-        $dataUsage = PrivacyPolicyPage::bySection('data_usage')->first();
-        $dataSharing = PrivacyPolicyPage::bySection('data_sharing')->first();
-        $dataSecurity = PrivacyPolicyPage::bySection('data_security')->first();
-        $userRights = PrivacyPolicyPage::bySection('user_rights')->first();
-        $cookiesPolicy = PrivacyPolicyPage::bySection('cookies_policy')->first();
-        $policyUpdates = PrivacyPolicyPage::bySection('policy_updates')->first();
+        $pageMeta = PrivacyPolicyPage::bySection('_page_meta')->latest('id')->first();
+        $dataCollection = PrivacyPolicyPage::bySection('data_collection')->latest('id')->first();
+        $dataUsage = PrivacyPolicyPage::bySection('data_usage')->latest('id')->first();
+        $dataSharing = PrivacyPolicyPage::bySection('data_sharing')->latest('id')->first();
+        $dataSecurity = PrivacyPolicyPage::bySection('data_security')->latest('id')->first();
+        $userRights = PrivacyPolicyPage::bySection('user_rights')->latest('id')->first();
+        $cookiesPolicy = PrivacyPolicyPage::bySection('cookies_policy')->latest('id')->first();
+        $policyUpdates = PrivacyPolicyPage::bySection('policy_updates')->latest('id')->first();
+
+        // Fetch ALL additional sections that don't match predefined keys
+        $knownKeys = ['_page_meta', 'data_collection', 'data_usage', 'data_sharing', 'data_security', 'user_rights', 'cookies_policy', 'policy_updates'];
+        $additionalSections = PrivacyPolicyPage::whereNotIn('section_key', $knownKeys)
+            ->ordered()
+            ->get()
+            ->groupBy('section_key')
+            ->map(function ($items) {
+                return $items->last(); // Get the latest record for each section_key
+            });
         
         return view('privacy-policy', compact(
-            'pageMeta', 'dataCollection', 'dataUsage', 'dataSharing', 
-            'dataSecurity', 'userRights', 'cookiesPolicy', 'policyUpdates'
+            'pageMeta', 'dataCollection', 'dataUsage', 'dataSharing',
+            'dataSecurity', 'userRights', 'cookiesPolicy', 'policyUpdates',
+            'additionalSections'
         ));
     }
 

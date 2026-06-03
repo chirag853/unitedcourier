@@ -8,6 +8,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Contacts | CRMS - Advanced Bootstrap 5 Admin Template for Customer Management</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="description"
         content="Streamline your business with our advanced CRM template. Easily integrate and customize to manage sales, support, and customer interactions efficiently. Perfect for any business size">
     <meta name="keywords"
@@ -7121,15 +7122,14 @@
                                                             </div>
                                                             <div class="col-md-6">
                                                                 <div class="mb-3">
-                                                                    <label class="form-label">Invoice Currency<span
-                                                                            class="text-danger ms-1">*</span></label>
+                                                                    <label class="form-label">Invoice Currency<span class="text-danger ms-1">*</span></label>
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="invoice_currency">
-                                                                        <option value="">Select</option>
-                                                                        <option value="INR" {{ old('invoice_currency') == 'INR' ? 'selected' : '' }}>Ruppees</option>
-                                                                        <option value="USD" {{ old('invoice_currency') == 'USD' ? 'selected' : '' }}>USD Dollar</option>
+                                                                        <!-- <option value="">Select</option> -->
+                                                                        <option value="INR" {{ old('invoice_currency') == 'INR' ? 'selected' : '' }}>INR</option>
+                                                                        <!-- <option value="USD" {{ old('invoice_currency') == 'USD' ? 'selected' : '' }}>USD Dollar</option>
                                                                         <option value="GBP" {{ old('invoice_currency') == 'GBP' ? 'selected' : '' }}>Pound</option>
-                                                                        <option value="Dollar" {{ old('invoice_currency') == 'Dollar' ? 'selected' : '' }}>Dollar</option>
+                                                                        <option value="Dollar" {{ old('invoice_currency') == 'Dollar' ? 'selected' : '' }}>Dollar</option> -->
                                                                     </select>
                                                                 </div>
                                                             </div>
@@ -7886,6 +7886,25 @@
         return methodMap[methodValue] || '65';     // fallback
     }
 
+    // Map selected shipping method to UPS service description
+    function getServiceDescriptionFromShippingMethod(methodValue) {
+        const descMap = {
+            'DDP - United My Delivery': 'Ground',
+            'DDP - United Air Premium': 'Next Day Air',
+            'DDP - United GRD Premium': '2nd Day Air',
+            'DDP - United Air Express': 'Worldwide Express',
+            'DDP - United Prior Post': 'Standard',
+            'DDP - United ECO Post': 'Saver',
+            'DDP - United My Pickup': 'Ground',
+
+            'DDU - United My Delivery': 'Ground',
+            'DDU - United Air Premium': 'Next Day Air',
+            'DDU - United GRD Premium': '2nd Day Air',
+            'DDU - United My Pickup': 'Ground'
+        };
+        return descMap[methodValue] || 'Ground';
+    }
+
     // Build the UPS Rate payload from the form
     // function buildRatePayload() {
     //     const shipperCompany = getVal('input[name="shipper_company_names"]');
@@ -8255,17 +8274,9 @@
                 }
                 tableBody.innerHTML = rows;
             } else {
-                // Build detailed error message showing full UPS response
-                let errorMsg = '<strong>' + (data.message || 'Failed to get UPS rate') + '</strong>';
-                if (data.httpCode) {
-                    errorMsg += '<br><strong>HTTP Code:</strong> ' + data.httpCode;
-                }
-                if (data.decoded) {
-                    errorMsg += '<br><strong>Response:</strong><br><pre style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:12px;margin-top:5px;">' + JSON.stringify(data.decoded, null, 2) + '</pre>';
-                } else if (data.raw_response) {
-                    errorMsg += '<br><strong>Raw Response:</strong><br><pre style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:12px;margin-top:5px;">' + data.raw_response + '</pre>';
-                }
-                errorDiv.innerHTML = errorMsg;
+                // Clear previous table data and show clean error message
+                tableBody.innerHTML = '';
+                errorDiv.textContent = data.message || 'Failed to get UPS rate';
                 errorDiv.classList.remove('d-none');
                 resultDiv.style.display = 'block';
                 document.getElementById('rateStatusBadge').textContent = 'Error';
@@ -8274,6 +8285,7 @@
         })
         .catch(err => {
             console.error(err);
+            tableBody.innerHTML = '';
             errorDiv.textContent = 'Network error. Please try again.';
             errorDiv.classList.remove('d-none');
             resultDiv.style.display = 'block';
@@ -8307,6 +8319,202 @@
             });
         });
     });
+
+    // Build UPS ShipmentRequest payload for the UPS Ship API
+    function buildShipPayload() {
+        // Shipper
+        const shipperCompany = getVal('input[name="shipper_company_names"]');
+        const shipperContact = getVal('input[name="shipper_contact_person"]');
+        const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
+        const shipperPhone = getVal('input[name="shipper_phone_number"]');
+        const shipperAddressLine1 = getVal('input[name="shipper_address_line1"]');
+        const shipperAddressLine2 = getVal('input[name="shipper_address_line2"]');
+        const shipperAddressLine3 = getVal('input[name="shipper_address_line3"]');
+        const shipperPostal = getVal('input[name="shipper_pincode"]');
+        const shipperCity = getVal('input[name="shipper_city"]');
+        const shipperState = getVal('input[name="shipper_state"]');
+        const deliveryDest = getVal('select[name="delivery_destination"]');
+        const shipperCountry = 'IN';
+
+        const shipperAddressLine = [];
+        if (shipperAddressLine1) shipperAddressLine.push(shipperAddressLine1);
+        if (shipperAddressLine2) shipperAddressLine.push(shipperAddressLine2);
+        if (shipperAddressLine3) shipperAddressLine.push(shipperAddressLine3);
+
+        // Consignee
+        const consigneeName = getVal('input[name="consignee_name"]');
+        const consigneePhone = getVal('input[name="consignee_phone_number"]');
+        const consigneeAddressLine1 = getVal('input[name="consignee_address_line1"]');
+        const consigneeAddressLine2 = getVal('input[name="consignee_address_line2"]');
+        const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
+        const consigneePostal = getVal('input[name="consignee_zip_code"]');
+        const consigneeCity = getVal('input[name="consignee_city"]');
+        const consigneeState = getVal('input[name="consignee_state"]');
+        const destCountry = getCountryCodeFromDestination(deliveryDest) || 'US';
+
+        const consigneeAddressLine = [];
+        if (consigneeAddressLine1) consigneeAddressLine.push(consigneeAddressLine1);
+        if (consigneeAddressLine2) consigneeAddressLine.push(consigneeAddressLine2);
+        if (consigneeAddressLine3) consigneeAddressLine.push(consigneeAddressLine3);
+
+        // Selected shipping method
+        const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+        const serviceCode = selectedRadio ? getServiceCodeFromShippingMethod(selectedRadio.value) : '03';
+        const serviceDescription = selectedRadio ? getServiceDescriptionFromShippingMethod(selectedRadio.value) : 'Ground';
+
+        // Build Packages array from ALL package dimension rows
+        const packageRows = document.querySelectorAll('.rowContaineraddmore');
+        const packages = [];
+
+        packageRows.forEach(function(row) {
+            const weightKg = getNestedVal(row, 'actual_weight_kg');
+            const lengthCm = getNestedVal(row, 'length_cm');
+            const widthCm = getNestedVal(row, 'width_cm');
+            const heightCm = getNestedVal(row, 'height_cm');
+
+            // Skip empty rows if weight is not provided
+            if (!weightKg || isNaN(weightKg) || weightKg <= 0) {
+                return;
+            }
+
+            const pkg = {
+                Description: "Documents",
+                Packaging: { Code: "02" },
+                PackageWeight: {
+                    UnitOfMeasurement: { Code: "LBS" },
+                    Weight: weightKg
+                }
+            };
+
+            // Add dimensions only if all three are provided
+            if (lengthCm && widthCm && heightCm) {
+                pkg.Dimensions = {
+                    UnitOfMeasurement: { Code: "IN" },
+                    Length: lengthCm,
+                    Width: widthCm,
+                    Height: heightCm
+                };
+            } else {
+                pkg.Dimensions = {
+                    UnitOfMeasurement: { Code: "IN" },
+                    Length: "10",
+                    Width: "8",
+                    Height: "4"
+                };
+            }
+
+            packages.push(pkg);
+        });
+
+        // Fallback to a single default package if no rows were added
+        if (packages.length === 0) {
+            packages.push({
+                Description: "Documents",
+                Packaging: { Code: "02" },
+                PackageWeight: {
+                    UnitOfMeasurement: { Code: "LBS" },
+                    Weight: "5"
+                },
+                Dimensions: {
+                    UnitOfMeasurement: { Code: "IN" },
+                    Length: "10",
+                    Width: "8",
+                    Height: "4"
+                }
+            });
+        }
+
+        // Build ShipmentRequest payload matching the exact requested structure
+        const payload = {
+            ShipmentRequest: {
+                Shipment: {
+                    Shipper: {
+                        Name: shipperName,
+                        AttentionName: shipperContact || shipperName,
+                        CompanyDisplayableName: shipperName,
+                        Phone: { Number: shipperPhone || "" },
+                        ShipperNumber: "1255AK",
+                        Address: {
+                            AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
+                            City: shipperCity || "",
+                            StateProvinceCode: shipperState || "",
+                            PostalCode: shipperPostal || "",
+                            // CountryCode: shipperCountry
+                            CountryCode: "US"
+                        }
+                    },
+                    // Shipper: {
+                    //     Name: "SANDEEP KAPUR",
+                    //     AttentionName: "United",
+                    //     CompanyDisplayableName: "UWC",
+                    //     Phone: { Number: "6466741258" },
+                    //     ShipperNumber: "1255AK",
+                    //     Address: {
+                    //         AddressLine: "218 WEST 37 STREET 6TH FLOOR",
+                    //         City: "NEW YORK",
+                    //         StateProvinceCode: "NY",
+                    //         PostalCode: "10018",
+                    //         CountryCode: "US"
+                    //     }
+                    // },
+                    ShipFrom: {
+                        Name: shipperName,
+                        AttentionName: shipperContact || shipperName,
+                        Phone: { Number: shipperPhone},
+                        Address: {
+                            AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
+                            City: shipperCity,
+                            StateProvinceCode: shipperState,
+                            PostalCode: shipperPostal,
+                            CountryCode: "US"
+                        }
+                    },
+                    ShipTo: {
+                        Name: consigneeName,
+                        AttentionName: consigneeName,
+                        Phone: { Number: consigneePhone },
+                        Address: {
+                            AddressLine: consigneeAddressLine.length > 0 ? consigneeAddressLine : ["Receiver Address"],
+                            City: consigneeCity,
+                            StateProvinceCode: consigneeState,
+                            PostalCode: consigneePostal,
+                            CountryCode: destCountry
+                        }
+                    },
+                    PaymentInformation: {
+                        ShipmentCharge: {
+                            Type: "01",
+                            BillShipper: {
+                                AccountNumber: "1255AK"
+                            }
+                        }
+                    },
+                    Service: {
+                        Code: serviceCode,
+                        Description: serviceDescription
+                    },
+                    Package: packages
+                },
+                LabelSpecification: {
+                    LabelImageFormat: { Code: "GIF" }
+                }
+            }
+        };
+
+        return payload;
+    }
+
+    // Call UPS Ship API
+    function callUpsShipApi(payload) {
+        return fetch('/customer/ups-ship', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
+            },
+            body: JSON.stringify(payload)
+        }).then(res => res.json());
+    }
     </script>
     <script>
     // Handle Next button click to open Consignee Info accordion
@@ -8364,73 +8572,90 @@
                 // Show loading state
                 submitButton.disabled = true;
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
-                // Get form data
-                const formData = new FormData(form);
-                // Debug: Check if items are in form data
-                console.log('All form data entries:');
-                for (let [key, value] of formData.entries()) {
-                    console.log(key + ':', value);
-                }
-                // Debug: Specifically check items
-                const items = [];
-                for (let [key, value] of formData.entries()) {
-                    if (key.startsWith('items[')) {
-                        console.log('Item field:', key, 'Value:', value);
-                    }
-                }
-                // Submit via AJAX
-                fetch(form.action, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(response => response.json().then(data => ({
-                        ok: response.ok,
-                        status: response.status,
-                        data
-                    })))
-                    .then(({
-                        data
-                    }) => {
-                        if (data.success) {
-                            // Clear localStorage saved form data
-                            if (typeof clearShipmentFormStorage === 'function') {
-                                clearShipmentFormStorage();
-                            }
-                            // Show success message
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Success!',
-                                text: data.message,
-                                confirmButtonColor: '#2563eb'
-                            }).then(() => {
-                                // Reload page fresh after user dismisses popup
-                                window.location.reload();
+
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                    || document.querySelector('input[name="_token"]')?.value
+                    || '';
+
+                // Build UPS Ship API payload and call UPS FIRST
+                const shipPayload = buildShipPayload();
+                console.log('UPS Ship Payload:', shipPayload);
+
+                callUpsShipApi(shipPayload)
+                    .then(upsResult => {
+                        if (upsResult.success) {
+                            console.log('UPS Ship API success:', upsResult.shipmentResponse);
+                            // UPS succeeded - now save to database
+                            const formData = new FormData(form);
+                            // Append UPS shipment response for tracking storage
+                            formData.append('ups_shipment_response', JSON.stringify(upsResult.shipmentResponse));
+                            return fetch(form.action, {
+                                method: 'POST',
+                                body: formData,
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken
+                                }
+                            })
+                            .then(response => response.json().then(data => ({
+                                ok: response.ok,
+                                status: response.status,
+                                data
+                            })))
+                            .then(({ data }) => {
+                                if (data.success) {
+                                    // Clear localStorage saved form data
+                                    if (typeof clearShipmentFormStorage === 'function') {
+                                        clearShipmentFormStorage();
+                                    }
+                                    const trackingNumber = upsResult.shipmentResponse?.ShipmentResults?.PackageResults?.TrackingNumber || '';
+                                    let successHtml = '<p>' + data.message + '</p>';
+                                    if (trackingNumber) {
+                                        successHtml += '<p><strong>UPS Tracking Number:</strong> ' + trackingNumber + '</p>';
+                                    }
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Shipment Created!',
+                                        html: successHtml,
+                                        confirmButtonColor: '#2563eb'
+                                    }).then(() => {
+                                        // window.location.reload();
+                                    });
+                                } else {
+                                    const errorHtml = buildErrorHtml(data.errors);
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: data.message || 'Unable to create shipment',
+                                        html: errorHtml || 'Please check the form and try again.',
+                                        confirmButtonColor: '#dc3545'
+                                    });
+                                    if (data.errors) {
+                                        console.log('Validation errors:', data.errors);
+                                    }
+                                }
                             });
                         } else {
-                            const errorHtml = buildErrorHtml(data.errors);
-                            // Show error message
+                            // UPS failed - do NOT save to database
+                            console.warn('UPS Ship API failed:', upsResult.message);
+                            const upsErrorMsg = upsResult.message || 'Unknown UPS error';
+                            const rawResponse = upsResult.rawResponse ? JSON.stringify(upsResult.rawResponse, null, 2) : '';
                             Swal.fire({
                                 icon: 'error',
-                                title: data.message || 'Unable to create shipment',
-                                html: errorHtml || 'Please check the form and try again.',
+                                title: 'UPS Shipment Failed',
+                                html: '<p><strong>Error:</strong> ' + upsErrorMsg + '</p>' +
+                                      '<p>Shipment was not saved. Please try again.</p>' +
+                                      (rawResponse ? '<pre style="max-height:200px;overflow-y:auto;text-align:left;font-size:11px;">' + rawResponse + '</pre>' : ''),
                                 confirmButtonColor: '#dc3545'
                             });
-                            // Show validation errors if any
-                            if (data.errors) {
-                                console.log('Validation errors:', data.errors);
-                            }
                         }
                     })
-                    .catch(error => {
-                        console.error('Error:', error);
+                    .catch(upsError => {
+                        console.error('UPS Ship API network error:', upsError);
                         Swal.fire({
                             icon: 'error',
-                            title: 'Error!',
-                            text: 'Something went wrong. Please try again.',
+                            title: 'UPS Shipment Failed',
+                            text: 'Network error. Shipment was not saved. Please try again.',
                             confirmButtonColor: '#dc3545'
                         });
                     })

@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Models\Admin;
 use App\Models\NetworkOffice;
+use App\Models\ShipmentInvoice;
 
 class AdminController extends Controller
 {
@@ -56,7 +59,94 @@ class AdminController extends Controller
 
     public function companies()
     {
-        return view('admin.companies');
+        // Fetch ALL shipments across all customers with related data
+        $shipments = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
+            ->select(
+                'shipment_invoice.id',
+                'shipment_invoice.invoice_number',
+                'shipment_invoice.invoice_date',
+                'shipment_invoice.invoice_amount',
+                'shipment_invoice.incoterms',
+                'shipment_invoice.invoice_currency',
+                'shipment_invoice.reference_number',
+                'shipment_invoice.status',
+                'shipment_invoice.delivery_type',
+                'shipment_invoice.assigned_delivery_person',
+                'shipment_invoice.created_at',
+                'shipment_invoice.updated_at',
+                'shipper_info.id as shipper_id',
+                'shipper_info.company_name as shipper_company',
+                'shipper_info.contact_person as shipper_contact',
+                'shipper_info.city as shipper_city',
+                'shipper_info.state as shipper_state',
+                'shipper_info.awb_number',
+                'customers.id as customer_id',
+                'customers.first_name',
+                'customers.last_name',
+                'customers.email as customer_email',
+                'customers.phone_number as customer_phone',
+                'consignee_info.consignee_name',
+                'consignee_info.city as consignee_city',
+                'consignee_info.state as consignee_state',
+                'admin_user.name as delivery_person_name'
+            )
+            ->orderBy('shipment_invoice.created_at', 'desc')
+            ->get();
+
+        // Fetch delivery persons where type = 'Delivery_person'
+        $deliveryPersons = Admin::where('type', 'Delivery_person')
+            ->where('status', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'mobile']);
+
+        return view('admin.companies', compact('shipments', 'deliveryPersons'));
+    }
+
+    /**
+     * Assign delivery type and/or delivery person to a shipment.
+     */
+    public function assignDelivery(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+                'delivery_type' => 'required|string|in:DDU,DDP,Self',
+                'delivery_person_id' => 'nullable|integer|exists:admin_user,id',
+            ]);
+
+            $updateData = [
+                'delivery_type' => $request->delivery_type,
+            ];
+
+            // If Self is selected, assign delivery person; otherwise set to null
+            if ($request->delivery_type === 'Self') {
+                if (!$request->delivery_person_id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please select a delivery person for Self delivery type.'
+                    ]);
+                }
+                $updateData['assigned_delivery_person'] = $request->delivery_person_id;
+            } else {
+                $updateData['assigned_delivery_person'] = null;
+            }
+
+            ShipmentInvoice::where('id', $request->shipment_id)->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery assignment saved successfully.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
     }
 
     public function createShipment()

@@ -17,6 +17,8 @@ use App\Models\CsbInformation;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\CsbForm;
+use App\Models\CreateShipment;
+use App\Models\ShipmentTracking;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 
@@ -568,8 +570,10 @@ class customerController extends Controller
             }
 
             // Store Shipper Info
+            $awbNumber = $this->generateAwbNumber();
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
+                'awb_number' => $awbNumber,
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
@@ -678,6 +682,91 @@ class customerController extends Controller
                 \Log::info('No items data received');
             }
 
+            // Store into create_shipment table
+            $createShipment = CreateShipment::create([
+                'customer_id' => auth()->guard('customer')->id(),
+                'shipper_id' => $shipperId,
+                'awb_number' => $awbNumber,
+                'delivery_destination' => $validatedData['delivery_destination'],
+                'origin_type' => $validatedData['origin_type'],
+                'shipping_method' => $validatedData['shipping_method'] ?? null,
+                'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
+                'shipper_company_name' => $validatedData['shipper_company_names'],
+                'shipper_contact_person' => $validatedData['shipper_contact_person'],
+                'shipper_address_line1' => $validatedData['shipper_address_line1'],
+                'shipper_address_line2' => $validatedData['shipper_address_line2'] ?? null,
+                'shipper_address_line3' => $validatedData['shipper_address_line3'] ?? null,
+                'shipper_pincode' => $validatedData['shipper_pincode'],
+                'shipper_city' => $validatedData['shipper_city'],
+                'shipper_state' => $validatedData['shipper_state'],
+                'shipper_phone_number' => $validatedData['shipper_phone_number'],
+                'shipper_email' => $validatedData['shipper_emails'],
+                'shipper_email_opt_out' => $validatedData['shipper_email_opt_out'] ?? false,
+                'shipper_kyc_type' => $validatedData['shipper_kyc_type'] ?? null,
+                'shipper_kyc_number' => $validatedData['shipper_kyc_number'] ?? null,
+                'consignee_name' => $validatedData['consignee_name'],
+                'consignee_contact_person' => $validatedData['consignee_contact_person'],
+                'consignee_address_line1' => $validatedData['consignee_address_line1'],
+                'consignee_address_line2' => $validatedData['consignee_address_line2'] ?? null,
+                'consignee_address_line3' => $validatedData['consignee_address_line3'] ?? null,
+                'consignee_zip_code' => $validatedData['consignee_zip_code'],
+                'consignee_city' => $validatedData['consignee_city'],
+                'consignee_state' => $validatedData['consignee_state'] ?? null,
+                'consignee_phone_number' => $validatedData['consignee_phone_number'],
+                'consignee_email' => $validatedData['consignee_email'],
+                'consignee_email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
+                'invoice_number' => $validatedData['invoice_number'],
+                'invoice_date' => $validatedData['invoice_date'],
+                'invoice_amount' => $validatedData['invoice_amount'],
+                'incoterms' => $validatedData['incoterms'],
+                'invoice_currency' => $validatedData['invoice_currency'],
+                'reference_number' => $validatedData['reference_number'] ?? null,
+                'ecommerce' => $validatedData['ecommerce'] ?? 'No',
+                'scheme' => $validatedData['scheme'] ?? 'No',
+                'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
+                'lut_number' => $validatedData['lut_number'] ?? null,
+                'iec_code' => $validatedData['iec_code'] ?? null,
+                'gst_number' => $validatedData['gst_number'] ?? null,
+                'ad_code' => $validatedData['ad_code'] ?? null,
+                'bank_account_number' => $validatedData['bank_account_number'] ?? null,
+                'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
+                'status' => 'pending',
+            ]);
+
+            // Store UPS tracking data if ups_shipment_response is provided
+            $upsResponse = $request->input('ups_shipment_response');
+            if ($upsResponse) {
+                try {
+                    $shipmentResponse = is_string($upsResponse) ? json_decode($upsResponse, true) : $upsResponse;
+                    if ($shipmentResponse && isset($shipmentResponse['ShipmentResults'])) {
+                        ShipmentTracking::create([
+                            'customer_id' => auth()->guard('customer')->id(),
+                            'shipper_id' => $shipperId,
+                            'create_shipment_id' => $createShipment->id,
+                            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                            'raw_response' => $shipmentResponse,
+                            'status' => 'created',
+                        ]);
+                        \Log::info('Shipment tracking stored for shipment: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking: ' . $e->getMessage());
+                }
+            }
+
             if (!$request->expectsJson()) {
                 return back()->with('success', 'Shipment created successfully!');
             }
@@ -686,6 +775,7 @@ class customerController extends Controller
                 'success' => true,
                 'message' => 'Shipment created successfully!',
                 'data' => [
+                    'create_shipment_id' => $createShipment->id,
                     'shipper_id' => $shipper->id,
                     'consignee_id' => $consignee->id,
                     'package_id' => $packageIds[0] ?? null,
@@ -843,13 +933,19 @@ class customerController extends Controller
                 ]);
             }
 
-            // Return detailed debug info to client (useful in dev environment)
+            // Extract meaningful error message from UPS response
+            $errorMessage = 'Failed to get UPS rate';
+            if (isset($decoded['response']['errors'][0]['message'])) {
+                $errorMessage = $decoded['response']['errors'][0]['message'];
+            } elseif (isset($decoded['RateResponse']['Response']['Error'][0]['ErrorDescription'])) {
+                $errorMessage = $decoded['RateResponse']['Response']['Error'][0]['ErrorDescription'];
+            } elseif (isset($decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'])) {
+                $errorMessage = $decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'];
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'UPS API returned error',
-                'httpCode' => $httpCode,
-                'decoded' => $decoded,
-                'raw_response' => $response
+                'message' => $errorMessage,
             ], $httpCode ?: 500);
 
         } catch (\Exception $e) {
@@ -858,5 +954,248 @@ class customerController extends Controller
                 'message' => 'Server error: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get UPS OAuth access token for Ship API using provided credentials.
+     */
+    private function getUpsShipAccessToken()
+    {
+        $cacheKey = 'ups_ship_access_token';
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        $clientId = 'GSTEuQdy5XHnWalxGQECH4yhSqJAiydVNjho6AkPGn1ZwMYX';
+        $clientSecret = 'fVuQ8CMYIzxpABWkZFcOM3AyW0x4i1zo7mwiZk7gyLjpD1IWawoCXa3OXWNfVjao';
+        $tokenUrl = 'https://onlinetools.ups.com/security/v1/oauth/token';
+
+        $response = Http::withBasicAuth($clientId, $clientSecret)
+            ->asForm()
+            ->post($tokenUrl, ['grant_type' => 'client_credentials']);
+
+        if (!$response->successful()) {
+            \Log::error('UPS Ship token error: ' . $response->body());
+            throw new \Exception('Unable to retrieve UPS Ship access token');
+        }
+
+        $data = $response->json();
+
+        if (empty($data['access_token'])) {
+            \Log::error('UPS Ship token missing access_token: ' . $response->body());
+            throw new \Exception('UPS Ship access token not found in response');
+        }
+
+        $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 3600;
+        $ttl = max(60, $expiresIn - 60);
+        Cache::put($cacheKey, $data['access_token'], $ttl);
+
+        return $data['access_token'];
+    }
+
+    /**
+     * Proxy UPS Ship API call.
+     * POST https://onlinetools.ups.com/api/shipments/v2403/ship
+     */
+    public function createUpsShipment(Request $request)
+    {
+        try {
+            $payload = $request->all();
+
+            // Log payload for debugging
+            try {
+                \Log::info('UPS Ship payload: ' . substr(json_encode($payload), 0, 2000));
+            } catch (\Exception $e) {
+                // ignore logging errors
+            }
+
+            // Obtain cached UPS OAuth token
+            try {
+                $token = $this->getUpsShipAccessToken();
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to obtain UPS Ship access token: ' . $e->getMessage()
+                ], 500);
+            }
+
+            $ch = curl_init('https://onlinetools.ups.com/api/shipments/v2403/ship');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Authorization: Bearer ' . $token,
+                    'transId: ' . uniqid('ship_', true),
+                    'transactionSrc: unitedcourier',
+                ],
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                \Log::error('UPS Ship cURL error: ' . $curlError);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'UPS Ship API connection error',
+                    'curl_error' => $curlError
+                ], 500);
+            }
+
+            $decoded = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                \Log::warning('UPS Ship returned non-JSON response. HTTP: ' . $httpCode . ' Body: ' . $response);
+            } else {
+                \Log::info('UPS Ship response HTTP: ' . $httpCode . ' Body: ' . substr($response, 0, 2000));
+            }
+
+            if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['ShipmentResponse'])) {
+                $shipmentResponse = $decoded['ShipmentResponse'];
+
+                return response()->json([
+                    'success' => true,
+                    'shipmentResponse' => $shipmentResponse
+                ]);
+            }
+
+            // Extract meaningful error message
+            $errorMessage = 'Failed to create UPS shipment';
+            if (isset($decoded['response']['errors'][0]['message'])) {
+                $errorMessage = $decoded['response']['errors'][0]['message'];
+            } elseif (isset($decoded['ShipmentResponse']['Response']['Error'][0]['ErrorDescription'])) {
+                $errorMessage = $decoded['ShipmentResponse']['Response']['Error'][0]['ErrorDescription'];
+            } elseif (isset($decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'])) {
+                $errorMessage = $decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'];
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'rawResponse' => $decoded
+            ], $httpCode ?: 500);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Show all shipments for the logged-in customer.
+     */
+    public function viewAllShipments()
+    {
+        // Check if customer is logged in
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('customer.login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        // Get all shipper IDs for this customer
+        $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+
+        // Get all invoices for those shippers, with shipper info
+        $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
+            ->with(['invoiceItems'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('customer.view-all-shipments', compact('invoices'));
+    }
+
+    /**
+     * Cancel a shipment (set status to cancelled).
+     */
+    public function cancelShipment($id)
+    {
+        try {
+            // Check if customer is logged in
+            if (!auth()->guard('customer')->check()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated.'
+                ], 401);
+            }
+
+            $customerId = auth()->guard('customer')->id();
+
+            // Find the invoice and verify it belongs to this customer
+            $invoice = ShipmentInvoice::findOrFail($id);
+
+            // Verify the invoice's shipper belongs to this customer
+            $shipper = ShipperInfo::where('id', $invoice->shipper_id)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or does not belong to you.'
+                ], 403);
+            }
+
+            // Check if already cancelled
+            if ($invoice->status === 'cancelled') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This shipment is already cancelled.'
+                ], 400);
+            }
+
+            // Update status to cancelled
+            $invoice->update(['status' => 'cancelled']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipment cancelled successfully.'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error cancelling shipment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate a unique AWB number.
+     * Format: UWC + YYMMDD + 5-digit serial (resets daily)
+     * Example: UWC26060200001
+     */
+    private function generateAwbNumber()
+    {
+        $prefix = 'UWC';
+        $datePart = now()->format('ymd'); // e.g., 260602 for 2026-06-02
+
+        // Find the highest serial number for today's date prefix
+        $todayPrefix = $prefix . $datePart;
+        $lastAwb = ShipperInfo::where('awb_number', 'LIKE', $todayPrefix . '%')
+            ->orderBy('awb_number', 'desc')
+            ->value('awb_number');
+
+        if ($lastAwb) {
+            // Extract the serial number and increment
+            $lastSerial = (int) substr($lastAwb, -5);
+            $newSerial = $lastSerial + 1;
+        } else {
+            // Start from 1 for a new day
+            $newSerial = 1;
+        }
+
+        // Pad serial to 5 digits
+        $serialPart = str_pad($newSerial, 5, '0', STR_PAD_LEFT);
+
+        return $todayPrefix . $serialPart;
     }
 }
