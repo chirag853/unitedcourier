@@ -127,7 +127,7 @@
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-8">
-                                <form action="{{ url('/customer/create-shipment') }}" method="POST">
+                                <form action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
                                     @csrf
                                     <div class="accordion accordion-bordered" id="main_accordion">
                                         <!-- Basic Info -->
@@ -3623,8 +3623,8 @@
                                                                 <select class="form-select" name="consignee_state">
                                                                     <option value="">-- Select State --</option>
                                                                     @foreach($zones as $zone)
-                                                                        <option value="{{ $zone->zone_name }}" {{ old('consignee_state') == $zone->zone_name ? 'selected' : '' }}>
-                                                                            {{ $zone->zone_name }} (Zone {{ $zone->zone_number }})
+                                                                        <option value="{{ $zone->zone_code }}" {{ old('consignee_state') == $zone->zone_code ? 'selected' : '' }}>
+                                                                            {{ $zone->zone_name }} (Zone {{ $zone->zone_code }})
                                                                         </option>
                                                                     @endforeach
                                                                 </select>
@@ -7380,11 +7380,11 @@
                                                                     <div class="d-flex flex-wrap gap-2">
                                                                         @foreach($services as $service)
                                                                             @php
-                                                                                $radioValue = $network . ' - ' . $service->method;
+                                                                                $radioValue = $service->id;
                                                                                 $radioId = 'cs-' . $service->id;
                                                                             @endphp
                                                                             <div class="form-check">
-                                                                                <input type="radio" id="{{ $radioId }}" name="ddp_shipping_method" value="{{ $radioValue }}" {{ old('ddp_shipping_method') == $radioValue ? 'checked' : '' }} class="form-check-input">
+                                                                                <input type="radio" id="{{ $radioId }}" name="ddp_shipping_method" value="{{ $radioValue }}" data-method="{{ $service->method }}" data-network="{{ $network }}" data-scode="{{ $service->scode }}" {{ old('ddp_shipping_method') == $radioValue ? 'checked' : '' }} class="form-check-input">
                                                                                 <label class="form-check-label" for="{{ $radioId }}">{{ $service->method }} <small class="text-muted">({{ $service->tat }})</small></label>
                                                                             </div>
                                                                         @endforeach
@@ -7834,43 +7834,32 @@
         return map[dest] || 'US';
     }
 
-    // Map selected shipping method (from radio buttons in Rate Calculate section) to UPS service code
-    function getServiceCodeFromShippingMethod(methodValue) {
-        const methodMap = {
-            'DDP - United My Delivery': '03',      // UPS Ground
-            'DDP - United Air Premium': '01',      // UPS Next Day Air
-            'DDP - United GRD Premium': '02',      // UPS 2nd Day Air
-            'DDP - United Air Express': '07',      // UPS Worldwide Express
-            'DDP - United Prior Post': '11',       // UPS Standard
-            'DDP - United ECO Post': '65',         // UPS Saver
-            'DDP - United My Pickup': '03',
-
-            
-            'DDU - United My Delivery': '03',
-            'DDU - United Air Premium': '01',
-            'DDU - United GRD Premium': '02',
-            'DDU - United My Pickup': '03'
-        };
-        return methodMap[methodValue] || '65';     // fallback
+    // Get UPS service code from the selected radio button's data-scode attribute
+    function getServiceCodeFromRadio(radioElement) {
+        if (!radioElement) return '65';     // fallback to UPS Saver
+        return radioElement.dataset.scode || '65';
     }
 
-    // Map selected shipping method to UPS service description
-    function getServiceDescriptionFromShippingMethod(methodValue) {
+    // Get UPS service description from the selected radio button's data-method attribute
+    function getServiceDescriptionFromRadio(radioElement) {
+        if (!radioElement) return 'Ground'; // fallback
+        const method = (radioElement.dataset.method || '').toUpperCase();
         const descMap = {
-            'DDP - United My Delivery': 'Ground',
-            'DDP - United Air Premium': 'Next Day Air',
-            'DDP - United GRD Premium': '2nd Day Air',
-            'DDP - United Air Express': 'Worldwide Express',
-            'DDP - United Prior Post': 'Standard',
-            'DDP - United ECO Post': 'Saver',
-            'DDP - United My Pickup': 'Ground',
-
-            'DDU - United My Delivery': 'Ground',
-            'DDU - United Air Premium': 'Next Day Air',
-            'DDU - United GRD Premium': '2nd Day Air',
-            'DDU - United My Pickup': 'Ground'
+            'UNITED MY DELIVERY': 'Ground',
+            'UNITED AIR PREMIUM': 'Next Day Air',
+            'UNITED GRD PREMIUM': '2nd Day Air',
+            'UNITED AIR EXPRESS': 'Worldwide Express',
+            'UNITED PRIOR POST': 'Standard',
+            'UNITED ECO POST': 'Saver',
+            'UNITED MY PICKUP': 'Ground',
+            'DDP AIREXPRESS': 'Worldwide Express',
+            'DDU AIREXPRESS': 'Worldwide Express',
         };
-        return descMap[methodValue] || 'Ground';
+        // Check if method matches any key in the map
+        for (const [key, desc] of Object.entries(descMap)) {
+            if (method.includes(key)) return desc;
+        }
+        return 'Ground';
     }
 
     // Build the UPS Rate payload from the form
@@ -7969,7 +7958,7 @@
     const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
     const consigneePostal = getVal('input[name="consignee_zip_code"]');
     const consigneeCity = getVal('input[name="consignee_city"]');
-    const consigneeState = getVal('input[name="consignee_state"]');
+    const consigneeState = getVal('select[name="consignee_state"]');
     const deliveryDest = getVal('select[name="delivery_destination"]');
     const destCountry = getCountryCodeFromDestination(deliveryDest);
 
@@ -7985,8 +7974,7 @@
         alert('Please select a shipping method');
         return null;
     }
-    const methodValue = selectedRadio.value;
-    const serviceCode = getServiceCodeFromShippingMethod(methodValue);
+    const serviceCode = getServiceCodeFromRadio(selectedRadio);
 
     // Build Package array from ALL package dimension rows
     const packageRows = document.querySelectorAll('.rowContaineraddmore');
@@ -8205,10 +8193,14 @@
 
         // Get selected shipping method and consignee state
         const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked');
-        const shippingMethod = selectedRadio ? selectedRadio.value : '';
-        const consigneeState = getVal('input[name="consignee_state"]');
+        const serviceId = selectedRadio ? selectedRadio.value : '';
+        const consigneeState = getVal('select[name="consignee_state"]');
 
-        if (!shippingMethod) {
+        // Check if this is a zone-independent service (AIREXPRESS) using data-method attribute
+        const methodName = selectedRadio ? (selectedRadio.dataset.method || '') : '';
+        const isZoneIndependent = methodName.toUpperCase().includes('AIREXPRESS');
+
+        if (!serviceId) {
             alert('Please select a shipping method first.');
             if (btn) {
                 btn.disabled = false;
@@ -8217,7 +8209,8 @@
             return;
         }
 
-        if (!consigneeState) {
+        // For zone-dependent services, consignee state is required
+        if (!isZoneIndependent && !consigneeState) {
             alert('Please enter the consignee state first.');
             if (btn) {
                 btn.disabled = false;
@@ -8244,7 +8237,7 @@
                 'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
             },
             body: JSON.stringify({
-                shipping_method: shippingMethod,
+                service_id: serviceId,
                 total_weight: totalWeight,
                 consignee_state: consigneeState
             })
@@ -8270,7 +8263,9 @@
                         infoText = 'Showing Default Rates';
                     }
                     if (data.zone) {
-                        infoText += ' | Zone: ' + data.zone.zone_number + ' (' + data.zone.zone_name + ')';
+                        infoText += ' | Zone: ' + data.zone.zone_number + ' - ' + data.zone.zone_code + ' (' + data.zone.zone_name + ')';
+                    } else if (data.is_zone_independent) {
+                        infoText += ' | Zone: N/A (Zone Independent)';
                     }
                     customerInfo.textContent = infoText;
                 }
@@ -8280,10 +8275,11 @@
                 if (data.all_rates && data.all_rates.length > 0) {
                     data.all_rates.forEach(function(r) {
                         const isHighlighted = data.matched_rate && data.matched_rate.zone_no === r.zone_no && data.matched_rate.price === r.price;
+                        const zoneDisplay = data.is_zone_independent ? 'N/A' : r.zone_no;
                         rows += `<tr class="${isHighlighted ? 'table-success' : ''}">
                             <td>${data.service?.network || ''}</td>
                             <td>${data.service?.method || ''}</td>
-                            <td>${r.zone_no}</td>
+                            <td>${zoneDisplay}</td>
                             <td>${r.wt_range_start} - ${r.wt_range_end}</td>
                             <td><strong>${r.price}</strong></td>
                         </tr>`;
@@ -8366,7 +8362,7 @@
         const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
         const consigneePostal = getVal('input[name="consignee_zip_code"]');
         const consigneeCity = getVal('input[name="consignee_city"]');
-        const consigneeState = getVal('input[name="consignee_state"]');
+        const consigneeState = getVal('select[name="consignee_state"]');
         const destCountry = getCountryCodeFromDestination(deliveryDest) || 'US';
 
         const consigneeAddressLine = [];
@@ -8376,8 +8372,8 @@
 
         // Selected shipping method
         const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
-        const serviceCode = selectedRadio ? getServiceCodeFromShippingMethod(selectedRadio.value) : '03';
-        const serviceDescription = selectedRadio ? getServiceDescriptionFromShippingMethod(selectedRadio.value) : 'Ground';
+        const serviceCode = selectedRadio ? getServiceCodeFromRadio(selectedRadio) : '03';
+        const serviceDescription = selectedRadio ? getServiceDescriptionFromRadio(selectedRadio) : 'Ground';
 
         // Build Packages array from ALL package dimension rows
         const packageRows = document.querySelectorAll('.rowContaineraddmore');
@@ -8445,47 +8441,61 @@
         const payload = {
             ShipmentRequest: {
                 Shipment: {
-                    Shipper: {
-                        Name: shipperName,
-                        AttentionName: shipperContact || shipperName,
-                        CompanyDisplayableName: shipperName,
-                        Phone: { Number: shipperPhone || "" },
-                        ShipperNumber: "1255AK",
-                        Address: {
-                            AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
-                            City: shipperCity || "",
-                            StateProvinceCode: shipperState || "",
-                            PostalCode: shipperPostal || "",
-                            // CountryCode: shipperCountry
-                            CountryCode: "US"
-                        }
-                    },
                     // Shipper: {
-                    //     Name: "SANDEEP KAPUR",
-                    //     AttentionName: "United",
-                    //     CompanyDisplayableName: "UWC",
-                    //     Phone: { Number: "6466741258" },
+                    //     Name: shipperName,
+                    //     AttentionName: shipperContact || shipperName,
+                    //     CompanyDisplayableName: shipperName,
+                    //     Phone: { Number: shipperPhone || "" },
                     //     ShipperNumber: "1255AK",
                     //     Address: {
-                    //         AddressLine: "218 WEST 37 STREET 6TH FLOOR",
-                    //         City: "NEW YORK",
-                    //         StateProvinceCode: "NY",
-                    //         PostalCode: "10018",
+                    //         AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
+                    //         City: shipperCity || "",
+                    //         StateProvinceCode: shipperState || "",
+                    //         PostalCode: shipperPostal || "",
+                    //         // CountryCode: shipperCountry
                     //         CountryCode: "US"
                     //     }
                     // },
-                    ShipFrom: {
-                        Name: shipperName,
-                        AttentionName: shipperContact || shipperName,
-                        Phone: { Number: shipperPhone},
+                    Shipper: {
+                        Name: "SANDEEP KAPUR",
+                        AttentionName: "United",
+                        CompanyDisplayableName: "UWC",
+                        Phone: { Number: "6466741258" },
+                        ShipperNumber: "1255AK",
                         Address: {
-                            AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
-                            City: shipperCity,
-                            StateProvinceCode: shipperState,
-                            PostalCode: shipperPostal,
+                            AddressLine: "218 WEST 37 STREET 6TH FLOOR",
+                            City: "NEW YORK",
+                            StateProvinceCode: "NY",
+                            PostalCode: "10018",
                             CountryCode: "US"
                         }
                     },
+                    ShipFrom: {
+                        Name: "SANDEEP KAPUR",
+                        AttentionName: "United",
+                        Phone: {
+                            Number: "6466741258"
+                        },
+                        Address: {
+                            AddressLine: ["218 WEST 37 STREET 6TH FLOOR"],
+                            City: "NEW YORK",
+                            StateProvinceCode: "NY",
+                            PostalCode: "10018",
+                            CountryCode: "US"
+                        }
+                    },
+                    // ShipFrom: {
+                    //     Name: shipperName,
+                    //     AttentionName: shipperContact || shipperName,
+                    //     Phone: { Number: shipperPhone},
+                    //     Address: {
+                    //         AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
+                    //         City: shipperCity,
+                    //         StateProvinceCode: shipperState,
+                    //         PostalCode: shipperPostal,
+                    //         CountryCode: "US"
+                    //     }
+                    // },
                     ShipTo: {
                         Name: consigneeName,
                         AttentionName: consigneeName,

@@ -279,7 +279,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="assignDeliveryModalLabel">
-                        <i class="ti ti-truck-delivery me-1"></i> Assign Delivery
+                        <i class="ti ti-truck-delivery me-1"></i> Assign Pickup
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -294,43 +294,43 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-semibold">Delivery Type <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Pickup Type <span class="text-danger">*</span></label>
                             <div class="d-flex gap-4 mt-2">
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="delivery_type" id="delivery_ddu" value="DDU">
                                     <label class="form-check-label" for="delivery_ddu">
-                                        <strong>DDU</strong><br>
-                                        <small class="text-muted">Delivered Duty Unpaid</small>
+                                        <strong>Delhivery</strong><br>
+                                        <small class="text-muted">Pickup Duty Unpaid</small>
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="delivery_type" id="delivery_ddp" value="DDP">
                                     <label class="form-check-label" for="delivery_ddp">
-                                        <strong>DDP</strong><br>
-                                        <small class="text-muted">Delivered Duty Paid</small>
+                                        <strong>Shiprocket</strong><br>
+                                        <small class="text-muted">Pickup Duty Paid</small>
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="delivery_type" id="delivery_self" value="Self">
                                     <label class="form-check-label" for="delivery_self">
                                         <strong>Self</strong><br>
-                                        <small class="text-muted">Assign Delivery Person</small>
+                                        <small class="text-muted">Assign Pickup Person</small>
                                     </label>
                                 </div>
                             </div>
                         </div>
 
                         <div class="mb-3" id="deliveryPersonSection" style="display: none;">
-                            <label class="form-label fw-semibold">Select Delivery Person <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Select Pickup Person <span class="text-danger">*</span></label>
                             <select class="form-select" name="delivery_person_id" id="delivery_person_id">
-                                <option value="">-- Select Delivery Person --</option>
+                                <option value="">-- Select Pickup Person --</option>
                                 @foreach($deliveryPersons as $person)
                                     <option value="{{ $person->id }}">{{ $person->name }} @if($person->mobile) ({{ $person->mobile }}) @endif</option>
                                 @endforeach
                             </select>
                             @if($deliveryPersons->isEmpty())
                                 <div class="text-warning mt-1">
-                                    <small><i class="ti ti-alert-triangle"></i> No delivery persons found. Please add them in the admin users section.</small>
+                                    <small><i class="ti ti-alert-triangle"></i> No pickup persons found. Please add them in the admin users section.</small>
                                 </div>
                             @endif
                         </div>
