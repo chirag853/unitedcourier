@@ -146,60 +146,77 @@
                         </li>
                         <li class="submenu">
                             <a href="javascript:void(0);"
-                                class="{{ request()->is('admin/companies') ? 'active subdrop' : '' }}">
+                                class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') ? 'active subdrop' : '' }}">
                                 <i class="ti ti-dashboard"></i><span>Customer</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="{{ url('/admin/companies') }}"
-                                        class="{{ request()->is('admin/companies') ? 'active' : '' }}">View Customer
-                                        List</a></li>
+                                <li class="submenu submenu-two">
+                                    <a href="javascript:void(0);"
+                                        class="{{ request()->is('admin/companies') ? 'active' : '' }}">Shipment<span
+                                            class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="{{ url('/admin/companies') }}"
+                                                class="{{ request()->is('admin/companies') ? 'active' : '' }}">View All Shipments</a></li>
+                                    </ul>
+                                </li>
+                                <li class="submenu submenu-two">
+                                    <a href="javascript:void(0);"
+                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') ? 'active' : '' }}">KYC<span
+                                            class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="{{ url('/admin/kyc-pending') }}"
+                                                class="{{ request()->is('admin/kyc-pending') ? 'active' : '' }}">Pending Customer</a></li>
+                                        <li><a href="{{ url('/admin/kyc-approved') }}"
+                                                class="{{ request()->is('admin/kyc-approved') ? 'active' : '' }}">Approved Customer</a></li>
+                                    </ul>
+                                </li>
+                                <!-- <li class="submenu">
+                                    <a href="javascript:void(0);"><i class="ti ti-brand-airtable"></i><span>Shipping</span><span
+                                            class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="#">Create Shipment</a></li>
+                                        <li><a href="#">Modifiy Shipment</a></li>
+                                        <li><a href="#">Select Shipment</a></li>
+                                        <li><a href="#">Shipment Report</a></li>
+                                    </ul>
+                                </li> -->
+                                <li class="submenu submenu-two">
+                                    <a href="javascript:void(0);">Manifest<span class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="#">Create Manifest</a></li>
+                                        <li><a href="#">Edit Manifest</a></li>
+                                        <li><a href="#">Dispatch Manifest</a></li>
+                                        <li><a href="#">Manifest Report</a></li>
+                                    </ul>
+                                </li>
+                                <li class="submenu submenu-two">
+                                    <a href="javascript:void(0);">Account<span class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="#">Wallet Recharge</a></li>
+                                        <li><a href="#">Account Ledger</a></li>
+                                        <li><a href="#">Sale Report</a></li>
+                                        <li><a href="#">Payment Report</a></li>
+                                    </ul>
+                                </li>
+                                <li class="submenu submenu-two">
+                                    <a href="javascript:void(0);">Reports<span class="menu-arrow inside-submenu"></span></a>
+                                    <ul>
+                                        <li><a href="#">Status Report</a></li>
+                                        <li><a href="#">Hold Report</a></li>
+                                        <li><a href="#">Un Manifest Report</a></li>
+                                    </ul>
+                                </li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
                             </ul>
                         </li>
                         <li class="submenu">
-                            <a href="javascript:void(0);"><i class="ti ti-brand-airtable"></i><span>Shipping</span><span
-                                    class="menu-arrow"></span></a>
-                            <ul>
-                                <li><a href="#">Create Shipment</a></li>
-                                <li><a href="#">Modifiy Shipment</a></li>
-                                <li><a href="#">Select Shipment</a></li>
-                                <li><a href="#">Shipment Report</a></li>
-                            </ul>
-                        </li>
-                        <li class="submenu">
-                            <a href="javascript:void(0);">
-                                <i class="ti ti-user-star"></i><span>Manifest</span>
-                                <span class="menu-arrow"></span>
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/manage-rate*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-currency-rupee"></i><span>Manage Rate</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="#">Create Manifest</a></li>
-                                <li><a href="#">Edit Manifest</a></li>
-                                <li><a href="#">Dispatch Manifest</a></li>
-                                <li><a href="#">Manifest Report</a></li>
-                            </ul>
-                        </li>
-                        <li class="submenu">
-                            <a href="javascript:void(0);">
-                                <i class="ti ti-layout-grid"></i><span>Account</span>
-                                <span class="menu-arrow"></span>
-                            </a>
-                            <ul>
-                                <li><a href="#">Wallet Recharge</a></li>
-                                <li><a href="#">Account Ledger</a></li>
-                                <li><a href="#">Sale Report</a></li>
-                                <li><a href="#">Payment Report</a></li>
-                            </ul>
-                        </li>
-
-                        <li class="submenu">
-                            <a href="javascript:void(0);">
-                                <i class="ti ti-report-analytics"></i><span>Reports</span>
-                                <span class="menu-arrow"></span>
-                            </a>
-                            <ul>
-                                <li><a href="#">Status Report</a></li>
-                                <li><a href="#">Hold Report</a></li>
-                                <li><a href="#">Un Manifest Report</a></li>
+                                <li><a href="{{ url('/admin/manage-rate') }}"
+                                        class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
                             </ul>
                         </li>
                     </ul>

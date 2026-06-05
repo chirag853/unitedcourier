@@ -289,7 +289,7 @@ class customerController extends Controller
     {
         // Check if customer is logged in using auth guard
         if (!auth()->guard('customer')->check()) {
-            return redirect()->route('customer.login');
+            return redirect()->route('login');
         }
 
         $customer = auth()->guard('customer')->user();

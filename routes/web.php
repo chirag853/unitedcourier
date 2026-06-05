@@ -496,6 +496,18 @@ Route::prefix('admin')->group(function () {
     // FAQ Queries Management Routes
     Route::get('/change-faq-queries', [AdminController::class, 'changeFaqQueries'])->name('admin.change-faq-queries');
 
+    // KYC Pending Management Routes
+    Route::get('/kyc-pending', [AdminController::class, 'kycPending'])->name('admin.kyc-pending');
+    Route::get('/kyc-approved', [AdminController::class, 'kycApproved'])->name('admin.kyc-approved');
+    Route::post('/kyc-pending/approve/{id}', [AdminController::class, 'approveKyc'])->name('admin.kyc-pending.approve');
+    Route::post('/kyc-pending/reject/{id}', [AdminController::class, 'rejectKyc'])->name('admin.kyc-pending.reject');
+
+    // Manage Rate Routes
+    Route::get('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate');
+    Route::get('/manage-rate/get-customer-rates', [AdminController::class, 'getCustomerRates'])->name('admin.manage-rate.get-customer-rates');
+    Route::post('/manage-rate/update/{id}', [AdminController::class, 'updateRate'])->name('admin.manage-rate.update');
+    Route::post('/manage-rate/update-customer/{id}', [AdminController::class, 'updateCustomerRate'])->name('admin.manage-rate.update-customer');
+
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');
     Route::get('/subscription', [AdminController::class, 'subscription'])->name('admin.subscription');

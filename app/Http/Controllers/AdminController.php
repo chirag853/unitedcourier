@@ -4637,4 +4637,103 @@ class AdminController extends Controller
         return view('admin.change-faq-queries', compact('queries'));
     }
 
+    public function kycPending()
+    {
+        $kycDetails = \App\Models\KycDetail::with('customer')
+            ->where('kyc_status', 'pending')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        return view('admin.kyc-pending', compact('kycDetails'));
+    }
+
+    public function kycApproved()
+    {
+        $approvedKycDetails = \App\Models\KycDetail::with('customer')
+            ->where('kyc_status', 'approved')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        return view('admin.kyc-approved', compact('approvedKycDetails'));
+    }
+
+    public function approveKyc($id)
+    {
+        $kycDetail = \App\Models\KycDetail::findOrFail($id);
+        $kycDetail->kyc_status = 'approved';
+        $kycDetail->save();
+
+        // Clone all default rates (customer_id = 0) from courier_rates for the approved customer
+        $defaultRates = \App\Models\CourierRate::where('customer_id', 0)->get();
+
+        foreach ($defaultRates as $rate) {
+            $newRate = $rate->replicate();
+            $newRate->customer_id = $kycDetail->customer_id;
+            $newRate->save();
+        }
+
+        $ratesCount = $defaultRates->count();
+
+        return redirect()->route('admin.kyc-pending')
+            ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been approved successfully. ' . $ratesCount . ' courier rates copied.');
+    }
+
+    public function rejectKyc($id)
+    {
+        $kycDetail = \App\Models\KycDetail::findOrFail($id);
+        $kycDetail->kyc_status = 'rejected';
+        $kycDetail->save();
+
+        return redirect()->route('admin.kyc-pending')
+            ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been rejected.');
+    }
+
+    public function manageRate()
+    {
+        $defaultRates = \App\Models\CourierRate::with('service')
+            ->where('customer_id', 0)
+            ->orderBy('service_id')
+            ->orderBy('zone_no')
+            ->orderBy('wt_range_start')
+            ->get();
+
+        $customers = \App\Models\Customer::orderBy('first_name')->get();
+
+        $services = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
+
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services'));
+    }
+
+    public function getCustomerRates(Request $request)
+    {
+        $customerId = $request->customer_id;
+
+        $rates = \App\Models\CourierRate::with('service')
+            ->where('customer_id', $customerId)
+            ->orderBy('service_id')
+            ->orderBy('zone_no')
+            ->orderBy('wt_range_start')
+            ->get();
+
+        return response()->json(['rates' => $rates]);
+    }
+
+    public function updateRate(Request $request, $id)
+    {
+        $rate = \App\Models\CourierRate::findOrFail($id);
+        $rate->price = $request->price;
+        $rate->save();
+
+        return response()->json(['success' => true, 'message' => 'Rate updated successfully.']);
+    }
+
+    public function updateCustomerRate(Request $request, $id)
+    {
+        $rate = \App\Models\CourierRate::findOrFail($id);
+        $rate->price = $request->price;
+        $rate->save();
+
+        return response()->json(['success' => true, 'message' => 'Customer rate updated successfully.']);
+    }
+
 }
