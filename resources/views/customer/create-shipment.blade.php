@@ -3620,8 +3620,14 @@
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">State </label>
-                                                                <input type="text" class="form-control"
-                                                                    name="consignee_state" value="{{ old('consignee_state') }}" placeholder="State">
+                                                                <select class="form-select" name="consignee_state">
+                                                                    <option value="">-- Select State --</option>
+                                                                    @foreach($zones as $zone)
+                                                                        <option value="{{ $zone->zone_name }}" {{ old('consignee_state') == $zone->zone_name ? 'selected' : '' }}>
+                                                                            {{ $zone->zone_name }} (Zone {{ $zone->zone_number }})
+                                                                        </option>
+                                                                    @endforeach
+                                                                </select>
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -7363,87 +7369,49 @@
                                             <div class="accordion-collapse collapse" id="rate-calc"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
+                                                    @php
+                                                        $groupedServices = $courierServices->groupBy('network');
+                                                    @endphp
                                                     <div class="row">
-                                                        <div class="col-md-4">
-                                                            <div class="mb-4">
-                                                                <label class="form-label">DDP</label>
-                                                                <div class="d-flex flex-wrap gap-2">
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-my-delivery" name="ddp_shipping_method" value="DDP - United My Delivery" {{ old('ddp_shipping_method') == 'DDP - United My Delivery' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-my-delivery">United My Delivery</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-air-premium" name="ddp_shipping_method" value="DDP - United Air Premium" {{ old('ddp_shipping_method') == 'DDP - United Air Premium' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-air-premium">United Air Premium </label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-grd-premium" name="ddp_shipping_method" value="DDP - United GRD Premium" {{ old('ddp_shipping_method') == 'DDP - United GRD Premium' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-grd-premium">United GRD Premium </label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-air-express" name="ddp_shipping_method" value="DDP - United Air Express" {{ old('ddp_shipping_method') == 'DDP - United Air Express' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-air-express">United Air Express</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-prior-post" name="ddp_shipping_method" value="DDP - United Prior Post" {{ old('ddp_shipping_method') == 'DDP - United Prior Post' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-prior-post">United Prior Post</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-eco-post" name="ddp_shipping_method" value="DDP - United ECO Post" {{ old('ddp_shipping_method') == 'DDP - United ECO Post' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-eco-post">United ECO Post</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-my-pickup" name="ddp_shipping_method" value="DDP - United My Pickup" {{ old('ddp_shipping_method') == 'DDP - United My Pickup' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-my-pickup">United My Pickup</label>
-                                                                    </div>
-
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div class="col-md-4">
-                                                            <div class="mb-4">
-                                                                <label class="form-label">DDU</label>
-                                                                <div class="d-flex flex-wrap gap-2">
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-my-delivery1" name="ddp_shipping_method" value="DDU - United My Delivery" {{ old('ddp_shipping_method') == 'DDU - United My Delivery' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-my-delivery1">United My Delivery</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-air-premium1" name="ddp_shipping_method" value="DDU - United Air Premium" {{ old('ddp_shipping_method') == 'DDU - United Air Premium' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-air-premium1">United Air Premium </label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-grd-premium1" name="ddp_shipping_method" value="DDU - United GRD Premium" {{ old('ddp_shipping_method') == 'DDU - United GRD Premium' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-grd-premium1">United GRD Premium </label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="united-my-pickup1" name="ddp_shipping_method" value="DDU - United My Pickup" {{ old('ddp_shipping_method') == 'DDU - United My Pickup' ? 'checked' : '' }} class="form-check-input">
-                                                                        <label class="form-check-label" for="united-my-pickup1">United My Pickup</label>
+                                                        @foreach($groupedServices as $network => $services)
+                                                            <div class="col-md-4">
+                                                                <div class="mb-4">
+                                                                    <label class="form-label">{{ $network }}</label>
+                                                                    <div class="d-flex flex-wrap gap-2">
+                                                                        @foreach($services as $service)
+                                                                            @php
+                                                                                $radioValue = $network . ' - ' . $service->method;
+                                                                                $radioId = 'cs-' . $service->id;
+                                                                            @endphp
+                                                                            <div class="form-check">
+                                                                                <input type="radio" id="{{ $radioId }}" name="ddp_shipping_method" value="{{ $radioValue }}" {{ old('ddp_shipping_method') == $radioValue ? 'checked' : '' }} class="form-check-input">
+                                                                                <label class="form-check-label" for="{{ $radioId }}">{{ $service->method }} <small class="text-muted">({{ $service->tat }})</small></label>
+                                                                            </div>
+                                                                        @endforeach
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
+                                                        @endforeach
                                                     </div>
-                                                    <!-- UPS Rate Result -->
+                                                    <!-- Rate Result (from database) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
                                                         <div class="col-12">
                                                             <div class="card border">
                                                                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                                                                    <h6 class="mb-0">UPS Rate Response</h6>
+                                                                    <h6 class="mb-0">Rate Result</h6>
                                                                     <span class="badge bg-success" id="rateStatusBadge">Success</span>
                                                                 </div>
                                                                 <div class="card-body">
+                                                                    <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div>
                                                                     <div class="table-responsive">
                                                                         <table class="table table-bordered mb-0">
                                                                             <thead class="table-light">
                                                                                 <tr>
-                                                                                    <th>Service</th>
+                                                                                    <th>Network</th>
+                                                                                    <th>Method</th>
                                                                                     <th>Zone</th>
-                                                                                    <th>Weight</th>
-                                                                                    <th>Transportation Charges</th>
-                                                                                    <th>Total Charges</th>
-                                                                                    <th>Currency</th>
+                                                                                    <th>Weight Range (g)</th>
+                                                                                    <th>Price</th>
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody id="upsRateTableBody">
@@ -7455,7 +7423,7 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <!-- /UPS Rate Result -->
+                                                    <!-- /Rate Result -->
                                                 </div>
                                             </div>
                                         </div>
@@ -8215,11 +8183,13 @@
 };
 }
 
-    // Reusable function to call UPS rate API
+    // Fetch rate from courier_rates database table (phone-number based)
     function calculateRate() {
         const resultDiv = document.getElementById('upsRateResult');
         const tableBody = document.getElementById('upsRateTableBody');
         const errorDiv = document.getElementById('upsRateError');
+        const statusBadge = document.getElementById('rateStatusBadge');
+        const customerInfo = document.getElementById('rateCustomerInfo');
         const btn = document.getElementById('rateCalculateBtn');
 
         // Show the rate calculate accordion
@@ -8231,17 +8201,41 @@
         }
         resultDiv.style.display = 'none';
         errorDiv.classList.add('d-none');
+        if (customerInfo) customerInfo.style.display = 'none';
 
-        const payload = buildRatePayload();
-        if (!payload) {
-            // buildRatePayload already shows alert if no method selected
+        // Get selected shipping method and consignee state
+        const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked');
+        const shippingMethod = selectedRadio ? selectedRadio.value : '';
+        const consigneeState = getVal('input[name="consignee_state"]');
+
+        if (!shippingMethod) {
+            alert('Please select a shipping method first.');
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
             }
             return;
         }
-        console.log('Payload sent to UPS:', payload);
+
+        if (!consigneeState) {
+            alert('Please enter the consignee state first.');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
+            }
+            return;
+        }
+
+        // Calculate total weight from all package rows
+        let totalWeight = 0;
+        const packageRows = document.querySelectorAll('.rowContaineraddmore');
+        packageRows.forEach(function(row) {
+            const weightKg = getNestedVal(row, 'actual_weight_kg');
+            if (weightKg && !isNaN(weightKg) && parseFloat(weightKg) > 0) {
+                totalWeight += parseFloat(weightKg);
+            }
+        });
+        if (totalWeight <= 0) totalWeight = 1; // default 1kg
 
         fetch('/customer/ups-rate', {
             method: 'POST',
@@ -8249,48 +8243,71 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                shipping_method: shippingMethod,
+                total_weight: totalWeight,
+                consignee_state: consigneeState
+            })
         })
         .then(res => res.json())
         .then(data => {
-            if (data.success && data.rateResponse) {
-                const rate = data.rateResponse;
-                resultDiv.style.display = 'block';
-                document.getElementById('rateStatusBadge').textContent = 'Success';
-                document.getElementById('rateStatusBadge').className = 'badge bg-success';
+            resultDiv.style.display = 'block';
+            if (statusBadge) {
+                statusBadge.textContent = data.success ? 'Success' : 'Error';
+                statusBadge.className = data.success ? 'badge bg-success' : 'badge bg-danger';
+            }
 
+            if (data.success) {
+                // Show customer + zone info
+                if (customerInfo) {
+                    customerInfo.style.display = 'block';
+                    let infoText = '';
+                    if (data.customer_name) {
+                        infoText += data.customer_exists
+                            ? 'Customer: ' + data.customer_name + ' (Custom Rates)'
+                            : 'Customer: ' + data.customer_name + ' (Default Rates)';
+                    } else {
+                        infoText = 'Showing Default Rates';
+                    }
+                    if (data.zone) {
+                        infoText += ' | Zone: ' + data.zone.zone_number + ' (' + data.zone.zone_name + ')';
+                    }
+                    customerInfo.textContent = infoText;
+                }
+
+                // Build table rows
                 let rows = '';
-                if (Array.isArray(rate.RatedShipment)) {
-                    rate.RatedShipment.forEach(ship => {
-                        rows += `<tr>
-                            <td>${ship.Service?.Code || ''}</td>
-                            <td>${ship.Zone || ''}</td>
-                            <td>${ship.BillingWeight?.Weight || ''} ${ship.BillingWeight?.UnitOfMeasurement?.Code || ''}</td>
-                            <td>${ship.TransportationCharges?.MonetaryValue || ''}</td>
-                            <td><strong>${ship.TotalCharges?.MonetaryValue || ''}</strong></td>
-                            <td>${ship.TotalCharges?.CurrencyCode || ''}</td>
+                if (data.all_rates && data.all_rates.length > 0) {
+                    data.all_rates.forEach(function(r) {
+                        const isHighlighted = data.matched_rate && data.matched_rate.zone_no === r.zone_no && data.matched_rate.price === r.price;
+                        rows += `<tr class="${isHighlighted ? 'table-success' : ''}">
+                            <td>${data.service?.network || ''}</td>
+                            <td>${data.service?.method || ''}</td>
+                            <td>${r.zone_no}</td>
+                            <td>${r.wt_range_start} - ${r.wt_range_end}</td>
+                            <td><strong>${r.price}</strong></td>
                         </tr>`;
                     });
+                } else {
+                    rows = '<tr><td colspan="5" class="text-center">No rates found for this weight range.</td></tr>';
                 }
                 tableBody.innerHTML = rows;
             } else {
-                // Clear previous table data and show clean error message
                 tableBody.innerHTML = '';
-                errorDiv.textContent = data.message || 'Failed to get UPS rate';
+                errorDiv.textContent = data.message || 'Failed to get rate';
                 errorDiv.classList.remove('d-none');
-                resultDiv.style.display = 'block';
-                document.getElementById('rateStatusBadge').textContent = 'Error';
-                document.getElementById('rateStatusBadge').className = 'badge bg-danger';
             }
         })
         .catch(err => {
-            console.error(err);
+            console.error('Rate error:', err);
             tableBody.innerHTML = '';
             errorDiv.textContent = 'Network error. Please try again.';
             errorDiv.classList.remove('d-none');
             resultDiv.style.display = 'block';
-            document.getElementById('rateStatusBadge').textContent = 'Error';
-            document.getElementById('rateStatusBadge').className = 'badge bg-danger';
+            if (statusBadge) {
+                statusBadge.textContent = 'Error';
+                statusBadge.className = 'badge bg-danger';
+            }
         })
         .finally(() => {
             if (btn) {

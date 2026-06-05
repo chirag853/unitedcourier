@@ -293,7 +293,9 @@ class customerController extends Controller
         }
 
         $customer = auth()->guard('customer')->user();
-        return view('customer.create-shipment', compact('customer'));
+        $courierServices = \App\Models\CourierService::all();
+        $zones = \App\Models\Zone::orderBy('zone_name')->get();
+        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones'));
     }
     
     public function kycSubmit(Request $request)
@@ -863,90 +865,120 @@ class customerController extends Controller
     public function getUpsRate(Request $request)
     {
         try {
-            $payload = $request->all();
+            $shippingMethod = $request->shipping_method;
+            $totalWeight = floatval($request->total_weight ?? 0);
+            $consigneeState = $request->consignee_state;
 
-            // Ensure origin/ShipFrom postal code exists. If missing, copy from Shipper Address postal code.
-            $shipFromPostal = data_get($payload, 'RateRequest.Shipment.ShipFrom.Address.PostalCode');
-            if (empty($shipFromPostal)) {
-                $shipperPostal = data_get($payload, 'RateRequest.Shipment.Shipper.Address.PostalCode');
-                if (!empty($shipperPostal)) {
-                    data_set($payload, 'RateRequest.Shipment.ShipFrom.Address.PostalCode', $shipperPostal);
-                }
-            }
-
-            // Log payload for debugging (truncate large payloads)
-            try {
-                \Log::info('UPS Rate payload: ' . substr(json_encode($payload), 0, 2000));
-            } catch (\Exception $e) {
-                // ignore logging errors
-            }
-
-            // Obtain cached UPS OAuth token
-            try {
-                $token = $this->getUpsAccessToken();
-            } catch (\Exception $e) {
+            if (empty($shippingMethod)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to obtain UPS access token: ' . $e->getMessage()
-                ], 500);
+                    'message' => 'Shipping method is required.'
+                ], 400);
             }
 
-            $ch = curl_init('https://onlinetools.ups.com/api/rating/v2409/Rate');
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($payload),
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Accept: application/json',
-                    'Authorization: Bearer ' . $token,
-                ],
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_SSL_VERIFYPEER => false, // Set true in production
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($ch);
-            curl_close($ch);
-            if ($curlError) {
-                \Log::error('UPS Rate cURL error: ' . $curlError);
+            if (empty($consigneeState)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'UPS API connection error',
-                    'curl_error' => $curlError
-                ], 500);
+                    'message' => 'Consignee state is required to determine zone.'
+                ], 400);
             }
 
-            // Try to decode JSON, but keep raw response for debugging
-            $decoded = json_decode($response, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                \Log::warning('UPS Rate returned non-JSON response. HTTP: ' . $httpCode . ' Body: ' . $response);
-            } else {
-                \Log::info('UPS Rate response HTTP: ' . $httpCode . ' Body: ' . substr($response, 0, 2000));
-            }
+            // Get the currently logged-in customer
+            $customer = auth()->guard('customer')->user();
+            $customerId = $customer ? $customer->id : 0;
+            $customerExists = $customer ? true : false;
 
-            if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['RateResponse'])) {
+            if (!$customer) {
                 return response()->json([
-                    'success' => true,
-                    'rateResponse' => $decoded['RateResponse']
-                ]);
+                    'success' => false,
+                    'message' => 'You must be logged in to view rates.'
+                ], 401);
             }
 
-            // Extract meaningful error message from UPS response
-            $errorMessage = 'Failed to get UPS rate';
-            if (isset($decoded['response']['errors'][0]['message'])) {
-                $errorMessage = $decoded['response']['errors'][0]['message'];
-            } elseif (isset($decoded['RateResponse']['Response']['Error'][0]['ErrorDescription'])) {
-                $errorMessage = $decoded['RateResponse']['Response']['Error'][0]['ErrorDescription'];
-            } elseif (isset($decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'])) {
-                $errorMessage = $decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'];
+            // Look up zone by consignee state name (case-insensitive)
+            $zone = \App\Models\Zone::where('zone_name', 'LIKE', $consigneeState)->first();
+
+            if (!$zone) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No zone found for state: ' . $consigneeState
+                ], 404);
             }
+
+            // Parse shipping method to extract type and method
+            // Format: "DDP - United My Delivery" or "DDU - United Air Premium"
+            $parts = explode(' - ', $shippingMethod);
+            $type = $parts[0] ?? '';
+            $methodName = $parts[1] ?? '';
+
+            // Find matching CourierService
+            $service = \App\Models\CourierService::where('network', $type)
+                ->where('method', $methodName)
+                ->first();
+
+            if (!$service) {
+                $service = \App\Models\CourierService::where('method', $methodName)->first();
+            }
+
+            if (!$service) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No matching service found for: ' . $shippingMethod
+                ], 404);
+            }
+
+            // Find matching courier rates for the customer (or default) filtered by zone
+            $rates = \App\Models\CourierRate::where('customer_id', $customerId)
+                ->where('service_id', $service->id)
+                ->where('zone_no', $zone->zone_number)
+                ->orderBy('wt_range_start')
+                ->get();
+
+            // If no customer-specific rates found, fall back to default rates
+            if ($rates->isEmpty() && $customerId !== 0) {
+                $rates = \App\Models\CourierRate::where('customer_id', 0)
+                    ->where('service_id', $service->id)
+                    ->where('zone_no', $zone->zone_number)
+                    ->orderBy('wt_range_start')
+                    ->get();
+                $customerExists = false;
+            }
+
+            // Filter rates by weight — only include rates where weight falls within the range
+            $filteredRates = $rates->filter(function ($r) use ($totalWeight) {
+                return $totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end;
+            });
 
             return response()->json([
-                'success' => false,
-                'message' => $errorMessage,
-            ], $httpCode ?: 500);
+                'success' => true,
+                'customer_exists' => $customerExists,
+                'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
+                'zone' => [
+                    'zone_number' => $zone->zone_number,
+                    'zone_name' => $zone->zone_name,
+                ],
+                'service' => [
+                    'network' => $service->network,
+                    'method' => $service->method,
+                    'type' => $service->type,
+                    'tat' => $service->tat,
+                ],
+                'matched_rate' => $filteredRates->isNotEmpty() ? [
+                    'zone_no' => $filteredRates->first()->zone_no,
+                    'wt_range_start' => $filteredRates->first()->wt_range_start,
+                    'wt_range_end' => $filteredRates->first()->wt_range_end,
+                    'price' => $filteredRates->first()->price,
+                ] : null,
+                'all_rates' => $filteredRates->map(function ($r) {
+                    return [
+                        'id' => $r->id,
+                        'zone_no' => $r->zone_no,
+                        'wt_range_start' => $r->wt_range_start,
+                        'wt_range_end' => $r->wt_range_end,
+                        'price' => $r->price,
+                    ];
+                })->values(),
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([

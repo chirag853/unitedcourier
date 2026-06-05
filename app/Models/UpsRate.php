@@ -41,4 +41,12 @@ class UpsRate extends Model
     {
         return $this->belongsTo(Zone::class, 'zone_id', 'zone_id');
     }
+
+    /**
+     * Get the customer that this rate belongs to.
+     */
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
+    }
 }
