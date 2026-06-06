@@ -34,6 +34,6 @@ class DefaultRate extends Model
      */
     public function zone()
     {
-        return $this->belongsTo(Zone::class, 'zone_id', 'zone_id');
+        return $this->belongsTo(Zone::class, 'zone_id', 'id');
     }
 }

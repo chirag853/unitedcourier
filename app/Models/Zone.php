@@ -11,7 +11,7 @@ class Zone extends Model
 
     protected $table = 'zone';
 
-    protected $primaryKey = 'zone_id';
+    protected $primaryKey = 'id';
 
     protected $fillable = [
         'zone_name',
@@ -29,6 +29,6 @@ class Zone extends Model
      */
     public function upsRates()
     {
-        return $this->hasMany(UpsRate::class, 'zone_id', 'zone_id');
+        return $this->hasMany(UpsRate::class, 'zone_id', 'id');
     }
 }

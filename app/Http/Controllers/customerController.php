@@ -864,17 +864,6 @@ class customerController extends Controller
     public function getUpsRate(Request $request)
     {
         try {
-            $customer = auth()->guard('customer')->user();
-            $customerId = $customer ? $customer->id : 0;
-            $customerExists = $customer ? true : false;
-
-            if (!$customer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You must be logged in to view rates.'
-                ], 401);
-            }
-
             $serviceId = $request->service_id;
             $totalWeight = floatval($request->total_weight ?? 0);
             $consigneeState = $request->consignee_state;
@@ -889,58 +878,40 @@ class customerController extends Controller
             // Find matching CourierService by ID
             $service = \App\Models\CourierService::find($serviceId);
 
-            if (empty($service)) {
+            if (!$service) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No matching service found for ID: ' . $serviceId
                 ], 404);
             }
 
-            if($service['service_code']=='UPSGR'){
-                //zone
-                echo "Z";
-                $zone = \App\Models\Zone::where('zone_code', 'LIKE', $consigneeState)->first();
-                $zone_id = $zone['id'];
-
-                $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-                ->where('service_id', $service->id)
-                ->where('zone_no', $zone_id)
-                ->whereRaw('? BETWEEN wt_range_start AND wt_range_end', [$totalWeight])
-                ->first();
-                print_r($rates);
-
-            }
-            else{
-                //without Zone
-                  echo "WZ";
-                $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-                ->where('service_id', $service->id)
-                ->whereRaw('? BETWEEN wt_range_start AND wt_range_end', [$totalWeight])
-                ->first();
-                print_r($rates);
-              
-
-            }
-
             // Check if this is a zone-independent service (e.g., AIREXPRESS)
-            /*$isZoneIndependent = str_contains(strtoupper($service->method), 'AIREXPRESS');
-
+            $isZoneIndependent = str_contains(strtoupper($service->method), 'AIREXPRESS');
 
             // For zone-dependent services, consignee state is required
-            if (empty($isZoneIndependent) && empty($consigneeState)) {
+            if (!$isZoneIndependent && empty($consigneeState)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Consignee state is required to determine zone.'
                 ], 400);
-            }*/
+            }
 
             // Get the currently logged-in customer
-            
+            $customer = auth()->guard('customer')->user();
+            $customerId = $customer ? $customer->id : 0;
+            $customerExists = $customer ? true : false;
+
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to view rates.'
+                ], 401);
+            }
 
             // Look up zone by consignee state name (only for zone-dependent services)
-            /*$zone = null;
-            if (!empty($isZoneIndependent)) {
-                $zone = \App\Models\Zone::where('zone_name', 'LIKE', $consigneeState)->first();
+            $zone = null;
+            if (!$isZoneIndependent) {
+                $zone = \App\Models\Zone::where('zone_code', $consigneeState)->first();
 
                 if (!$zone) {
                     return response()->json([
@@ -948,48 +919,47 @@ class customerController extends Controller
                         'message' => 'No zone found for state: ' . $consigneeState
                     ], 404);
                 }
-            }*/
+            }
 
             // Find matching courier rates for the customer (or default)
             // For zone-independent services (AIREXPRESS), filter by zone_no = null or 0
-            // if ($isZoneIndependent) { 
-            //     $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-            //         ->where('service_id', $service->id)
-            //         ->where(function($q) {
-            //             $q->whereNull('zone_no')->orWhere('zone_no', 0);
-            //         })
-            //         ->orderBy('wt_range_start')
-            //         ->get();
+            if ($isZoneIndependent) {
+                $rates = \App\Models\CourierRate::where('customer_id', $customerId)
+                    ->where('service_id', $service->id)
+                    ->where(function($q) {
+                        $q->whereNull('zone_no')->orWhere('zone_no', 0);
+                    })
+                    ->orderBy('wt_range_start')
+                    ->get();
 
-            //     // If no customer-specific rates found, fall back to default rates
-            //     if ($rates->isEmpty() && $customerId !== 0) {
-            //         $rates = \App\Models\CourierRate::where('customer_id', 0)
-            //             ->where('service_id', $service->id)
-            //             ->where(function($q) {
-            //                 $q->whereNull('zone_no')->orWhere('zone_no', 0);
-            //             })
-            //             ->orderBy('wt_range_start')
-            //             ->get();
-            //         $customerExists = false;
-            //     }
-            // } else {
-                
-            //     $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-            //         ->where('service_id', $service->id)
-            //         ->where('zone_no', $zone->zone_number)
-            //         ->orderBy('wt_range_start')
-            //         ->get();
+                // If no customer-specific rates found, fall back to default rates
+                if ($rates->isEmpty() && $customerId !== 0) {
+                    $rates = \App\Models\CourierRate::where('customer_id', 0)
+                        ->where('service_id', $service->id)
+                        ->where(function($q) {
+                            $q->whereNull('zone_no')->orWhere('zone_no', 0);
+                        })
+                        ->orderBy('wt_range_start')
+                        ->get();
+                    $customerExists = false;
+                }
+            } else {
+                $rates = \App\Models\CourierRate::where('customer_id', $customerId)
+                    ->where('service_id', $service->id)
+                    ->where('zone_no', $zone->zone_number)
+                    ->orderBy('wt_range_start')
+                    ->get();
 
-            //     // If no customer-specific rates found, fall back to default rates
-            //     if ($rates->isEmpty() && $customerId !== 0) {
-            //         $rates = \App\Models\CourierRate::where('customer_id', 0)
-            //             ->where('service_id', $service->id)
-            //             ->where('zone_no', $zone->zone_number)
-            //             ->orderBy('wt_range_start')
-            //             ->get();
-            //         $customerExists = false;
-            //     }
-            // }
+                // If no customer-specific rates found, fall back to default rates
+                if ($rates->isEmpty() && $customerId !== 0) {
+                    $rates = \App\Models\CourierRate::where('customer_id', 0)
+                        ->where('service_id', $service->id)
+                        ->where('zone_no', $zone->zone_number)
+                        ->orderBy('wt_range_start')
+                        ->get();
+                    $customerExists = false;
+                }
+            }
 
             // Find the rate that matches the current weight (for highlighting)
             // Filter rates by weight — only include rates where weight falls within the range
@@ -1002,11 +972,12 @@ class customerController extends Controller
                 'customer_exists' => $customerExists,
                 'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
                 'zone' => $zone ? [
+                    'zone_id' => $zone->id,
                     'zone_number' => $zone->zone_number,
                     'zone_name' => $zone->zone_name,
                     'zone_code' => $zone->zone_code,
                 ] : null,
-                // 'is_zone_independent' => $isZoneIndependent,
+                'is_zone_independent' => $isZoneIndependent,
                 'service' => [
                     'network' => $service->network,
                     'method' => $service->method,
