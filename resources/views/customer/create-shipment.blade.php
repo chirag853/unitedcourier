@@ -6823,22 +6823,6 @@
                                         .rowContaineraddmore {
                                             position: relative;
                                         }
-
-                                        .delete-row {
-                                            position: absolute;
-                                            top: -8px;
-                                            right: -8px;
-                                            background: red;
-                                            color: #fff;
-                                            border: none;
-                                            border-radius: 50%;
-                                            width: 26px;
-                                            height: 26px;
-                                            cursor: pointer;
-                                            font-size: 16px;
-                                            line-height: 26px;
-                                            text-align: center;
-                                        }
                                         </style>
 
 
@@ -6854,8 +6838,23 @@
                                             </div>
                                             <div class="accordion-collapse collapse" id="social"
                                                 data-bs-parent="#main_accordion">
-                                                <div class="accordion-body border-top">
+                                                <div class="accordion-body border-top" id="packageDimensionBody">
+                                                    <!-- Number of Boxes -->
+                                                    <div class="row mb-3">
+                                                        <div class="col-md-3">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Number of Boxes</label>
+                                                                <input type="number" class="form-control" id="numberOfBoxes" name="number_of_boxes" value="{{ old('number_of_boxes', '1') }}" min="1" max="50" placeholder="Number of Boxes">
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <div class="row rowContaineraddmore">
+                                                        <div class="col-md-1">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Box #</label>
+                                                                <input type="text" class="form-control packageBoxNumber" readonly value="1">
+                                                            </div>
+                                                        </div>
                                                         <div class="col-md-2">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Actual Weight (kg)</label>
@@ -6885,7 +6884,7 @@
                                                                     name="packages[0][height_cm]" value="{{ old('packages.0.height_cm') }}" placeholder="Height (cm)">
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-4">
+                                                        <div class="col-md-3">
                                                             <div class="mb-3 mb-md-0">
                                                                 <label class="form-label">Volumetric Weight
                                                                     (L*B*H/5000=VOL
@@ -6896,9 +6895,6 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <button type="button" class="btn btn-primary mt-3" id="addRowBtn">+
-                                                        Add
-                                                        More</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -6921,33 +6917,54 @@
                                                         input.name = 'packages[' + index + '][' + field + ']';
                                                     }
                                                 });
+
+                                                // Update box number display
+                                                const boxNumInput = row.querySelector('.packageBoxNumber');
+                                                if (boxNumInput) {
+                                                    boxNumInput.value = index + 1;
+                                                }
                                             });
                                         }
 
-                                        document.getElementById('addRowBtn').addEventListener('click', function() {
-                                            let lastRow = document.querySelector(
-                                                '.rowContaineraddmore:last-of-type');
-                                            // Clone row
-                                            let newRow = lastRow.cloneNode(true);
-                                            // Clear inputs
-                                            newRow.querySelectorAll('input').forEach(input => input.value = '');
-                                            // Remove any existing delete button (safety)
-                                            let oldDelete = newRow.querySelector('.delete-row');
-                                            if (oldDelete) oldDelete.remove();
-                                            // Create delete button ONLY for new rows
-                                            let deleteBtn = document.createElement('button');
-                                            deleteBtn.innerHTML = '×';
-                                            deleteBtn.type = 'button';
-                                            deleteBtn.className = 'delete-row';
-                                            deleteBtn.onclick = function() {
-                                                newRow.remove();
-                                                reindexPackageRows();
-                                            };
-                                            newRow.appendChild(deleteBtn);
-                                            // Insert above button
-                                            let btn = document.getElementById('addRowBtn');
-                                            btn.parentNode.insertBefore(newRow, btn);
+                                        function syncPackageRows() {
+                                            const numBoxes = parseInt(document.getElementById('numberOfBoxes').value) || 1;
+                                            const container = document.getElementById('packageDimensionBody');
+                                            const existingRows = container.querySelectorAll('.rowContaineraddmore');
+                                            const currentCount = existingRows.length;
+
+                                            if (numBoxes > currentCount) {
+                                                // Add rows by cloning the first row
+                                                const templateRow = existingRows[0];
+                                                for (let i = currentCount; i < numBoxes; i++) {
+                                                    let newRow = templateRow.cloneNode(true);
+                                                    // Clear input values except box number (gets set by reindex)
+                                                    newRow.querySelectorAll('input:not(.packageBoxNumber)').forEach(input => input.value = '');
+                                                    container.appendChild(newRow);
+                                                }
+                                            } else if (numBoxes < currentCount) {
+                                                // Remove excess rows from the end
+                                                for (let i = currentCount - 1; i >= numBoxes; i--) {
+                                                    existingRows[i].remove();
+                                                }
+                                            }
+
                                             reindexPackageRows();
+                                            updateBoxNoDropdowns();
+                                        }
+
+                                        document.getElementById('numberOfBoxes').addEventListener('input', function() {
+                                            let val = parseInt(this.value);
+                                            if (val < 1) { this.value = 1; }
+                                            if (val > 50) { this.value = 50; }
+                                            syncPackageRows();
+                                        });
+
+                                        // Initialize on DOM ready
+                                        document.addEventListener('DOMContentLoaded', function() {
+                                            const numBoxes = parseInt(document.getElementById('numberOfBoxes').value) || 1;
+                                            if (numBoxes > 1) {
+                                                syncPackageRows();
+                                            }
                                         });
                                         </script>
                                         <!-- CSB INFO -->
@@ -7167,9 +7184,11 @@
                                                                 <tbody id="invoiceTable">
                                                                     <!-- ROW -->
                                                                     <tr>
-                                                                        <td><input type="text"
+                                                                        <td><select
                                                                                 class="form-control boxNo"
-                                                                                name="items[0][box_no]" value="{{ old('items.0.box_no', '1') }}">
+                                                                                name="items[0][box_no]">
+                                                                                <option value="1" selected>1</option>
+                                                                            </select>
                                                                         </td>
                                                                         <td><label class="form-label">Description <span
                                                                                     class="text-danger">*</span></label>
@@ -7260,6 +7279,30 @@
                                                         }
                                                         </style>
                                                         <script>
+                                                        // Build box number dropdown options based on numberOfBoxes
+                                                        function updateBoxNoDropdowns() {
+                                                            const numBoxes = parseInt(document.getElementById('numberOfBoxes').value) || 1;
+                                                            document.querySelectorAll('.boxNo').forEach(function(selectEl) {
+                                                                const currentValue = selectEl.value;
+                                                                // Clear existing options
+                                                                selectEl.innerHTML = '';
+                                                                // Add options 1 through numBoxes
+                                                                for (let i = 1; i <= numBoxes; i++) {
+                                                                    const option = document.createElement('option');
+                                                                    option.value = i;
+                                                                    option.textContent = i;
+                                                                    if (i == currentValue) {
+                                                                        option.selected = true;
+                                                                    }
+                                                                    selectEl.appendChild(option);
+                                                                }
+                                                                // If current value is no longer valid, default to 1
+                                                                if (parseInt(selectEl.value) > numBoxes || !selectEl.value) {
+                                                                    selectEl.value = '1';
+                                                                }
+                                                            });
+                                                        }
+
                                                         // ADD ROW
                                                         document.getElementById('tableaddRowBtn').addEventListener(
                                                             'click',
@@ -7269,23 +7312,22 @@
                                                                 let lastRow = rows[rows.length - 1];
                                                                 let newRow = lastRow.cloneNode(true);
                                                                 let newIndex = rows.length;
-                                                                // clear inputs and select
+                                                                // Clear text/number inputs
                                                                 newRow.querySelectorAll('input').forEach(input =>
-                                                                    input
-                                                                    .value = '');
-                                                                newRow.querySelector('select').value = '';
-                                                                // update input names with new index
+                                                                    input.value = '');
+                                                                // Reset unit_type select to empty
+                                                                const unitTypeSelect = newRow.querySelector('select[name$="[unit_type]"]');
+                                                                if (unitTypeSelect) unitTypeSelect.value = '';
+                                                                // Update names with new index
+                                                                const boxNoSelect = newRow.querySelector('.boxNo');
+                                                                if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
                                                                 let inputs = newRow.querySelectorAll('input');
-                                                                let select = newRow.querySelector('select');
-                                                                inputs[0].name = 'items[' + newIndex + '][box_no]';
-                                                                inputs[0].value = newIndex + 1;
-                                                                inputs[1].name = 'items[' + newIndex +
-                                                                    '][description]';
-                                                                inputs[2].name = 'items[' + newIndex + '][hs_code]';
-                                                                select.name = 'items[' + newIndex + '][unit_type]';
-                                                                inputs[3].name = 'items[' + newIndex + '][qty]';
-                                                                inputs[4].name = 'items[' + newIndex +
-                                                                    '][unit_rate]';
+                                                                // inputs: description, hs_code, qty, unit_rate, amount
+                                                                if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
+                                                                if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
+                                                                if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][qty]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][unit_rate]';
                                                                 // remove old button
                                                                 let actionCell = newRow.children[7];
                                                                 actionCell.innerHTML = '';
@@ -7296,12 +7338,13 @@
                                                                 btn.onclick = function() {
                                                                     newRow.remove();
                                                                     updateTotal();
-                                                                    updateBoxNumbers();
                                                                     updateInputNames();
+                                                                    updateBoxNoDropdowns();
                                                                 };
                                                                 actionCell.appendChild(btn);
                                                                 table.appendChild(newRow);
                                                                 updateInputNames();
+                                                                updateBoxNoDropdowns();
                                                             });
                                                         // AUTO CALCULATION
                                                         document.addEventListener('input', function(e) {
@@ -7323,34 +7366,25 @@
                                                             });
                                                             document.getElementById('totalAmount').value = total;
                                                         }
-                                                        // UPDATE BOX NUMBER
-                                                        function updateBoxNumbers() {
-                                                            document.querySelectorAll('.boxNo').forEach((input,
-                                                                index) => {
-                                                                input.value = index + 1;
-                                                            });
-                                                        }
                                                         // UPDATE INPUT NAMES
                                                         function updateInputNames() {
                                                             let rows = document.querySelectorAll('#invoiceTable tr');
                                                             rows.forEach((row, index) => {
-                                                                row.querySelector('.boxNo').name = 'items[' +
-                                                                    index + '][box_no]';
-                                                                row.querySelector('.boxNo').value = index + 1;
+                                                                const boxNoSelect = row.querySelector('.boxNo');
+                                                                if (boxNoSelect) boxNoSelect.name = 'items[' + index + '][box_no]';
                                                                 let inputs = row.querySelectorAll('input');
-                                                                let select = row.querySelector('select');
-                                                                if (inputs[1]) inputs[1].name = 'items[' +
-                                                                    index + '][description]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' +
-                                                                    index + '][hs_code]';
-                                                                if (select) select.name = 'items[' + index +
-                                                                    '][unit_type]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' +
-                                                                    index + '][qty]';
-                                                                if (inputs[4]) inputs[4].name = 'items[' +
-                                                                    index + '][unit_rate]';
+                                                                let unitTypeSelect = row.querySelector('select[name$="[unit_type]"]');
+                                                                if (inputs[0]) inputs[0].name = 'items[' + index + '][description]';
+                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][hs_code]';
+                                                                if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][qty]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][unit_rate]';
                                                             });
                                                         }
+                                                        // Initialize dropdowns on DOM ready
+                                                        document.addEventListener('DOMContentLoaded', function() {
+                                                            updateBoxNoDropdowns();
+                                                        });
                                                         </script>
                                                     </div>
                                                 </div>
@@ -7816,360 +7850,6 @@
         return input ? input.value.trim() : '';
     }
 
-    // Convert kg to lbs (1 kg = 2.20462 lbs)
-    function kgToLbs(kg) {
-        return (parseFloat(kg) * 2.20462).toFixed(2);
-    }
-
-    // Map delivery destination text to country code
-    function getCountryCodeFromDestination(dest) {
-        const map = {
-            'US- United State of America': 'US',
-            'India': 'IN',
-            'UK - United Kingdom': 'GB',
-            'China': 'CN',
-            'Russia': 'RU',
-            'Srilanka': 'LK'
-        };
-        return map[dest] || 'US';
-    }
-
-    // Get UPS service code from the selected radio button's data-scode attribute
-    function getServiceCodeFromRadio(radioElement) {
-        if (!radioElement) return '65';     // fallback to UPS Saver
-        return radioElement.dataset.scode || '65';
-    }
-
-    // Get UPS service description from the selected radio button's data-method attribute
-    function getServiceDescriptionFromRadio(radioElement) {
-        if (!radioElement) return 'Ground'; // fallback
-        const method = (radioElement.dataset.method || '').toUpperCase();
-        const descMap = {
-            'UNITED MY DELIVERY': 'Ground',
-            'UNITED AIR PREMIUM': 'Next Day Air',
-            'UNITED GRD PREMIUM': '2nd Day Air',
-            'UNITED AIR EXPRESS': 'Worldwide Express',
-            'UNITED PRIOR POST': 'Standard',
-            'UNITED ECO POST': 'Saver',
-            'UNITED MY PICKUP': 'Ground',
-            'DDP AIREXPRESS': 'Worldwide Express',
-            'DDU AIREXPRESS': 'Worldwide Express',
-        };
-        // Check if method matches any key in the map
-        for (const [key, desc] of Object.entries(descMap)) {
-            if (method.includes(key)) return desc;
-        }
-        return 'Ground';
-    }
-
-    // Build the UPS Rate payload from the form
-    // function buildRatePayload() {
-    //     const shipperCompany = getVal('input[name="shipper_company_names"]');
-    //     const shipperContact = getVal('input[name="shipper_contact_person"]');
-    //     const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
-    //     const shipperPostal = getVal('input[name="shipper_pincode"]');
-    //     const shipperCity = getVal('input[name="shipper_city"]');
-    //     const shipperState = getVal('input[name="shipper_state"]');
-    //     const shipperCountry = 'IN';
-
-    //     const consigneePostal = getVal('input[name="consignee_zip_code"]');
-    //     const deliveryDest = getVal('select[name="delivery_destination"]');
-    //     const destCountry = getCountryCodeFromDestination(deliveryDest);
-
-    //     let selectedMethod = '';
-    //     const radio = document.querySelector('input[name="ddp_shipping_method"]:checked');
-    //     if (radio) selectedMethod = radio.value;
-    //     const serviceCode = getServiceCodeFromShippingMethod(selectedMethod);
-
-    //     let weightKg = getVal('input[name="packages[0][actual_weight_kg]"]');
-    //     if (!weightKg) weightKg = '1';
-
-    //     return {
-    //         RateRequest: {
-    //             Shipment: {
-    //                 Shipper: {
-    //                     Name: shipperName,
-    //                     ShipperNumber: "1255AK",
-    //                     Address: {
-    //                         City: shipperCity,
-    //                         StateProvinceCode: shipperState,
-    //                         PostalCode: shipperPostal,
-    //                         CountryCode: shipperCountry
-    //                     }
-    //                 },
-    //                 ShipFrom: {
-    //                     Address: {
-    //                         PostalCode: shipperPostal,
-    //                         CountryCode: shipperCountry
-    //                     }
-    //                 },
-    //                 ShipTo: {
-    //                     Address: {
-    //                         PostalCode: consigneePostal,
-    //                         CountryCode: destCountry
-    //                     }
-    //                 },
-    //                 Service: {
-    //                     // Code: serviceCode
-    //                     Code: "65"
-    //                 },
-    //                 Package: {
-    //                     PackagingType: {
-    //                         Code: "02"
-    //                     },
-    //                     PackageWeight: {
-    //                         UnitOfMeasurement: {
-    //                             Code: "KGS"
-    //                         },
-    //                         Weight: weightKg
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     };
-    // }
-
-
-    function buildRatePayload() {
-    // Shipper
-    const shipperCompany = getVal('input[name="shipper_company_names"]');
-    const shipperContact = getVal('input[name="shipper_contact_person"]');
-    const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
-    const shipperPhone = getVal('input[name="shipper_phone_number"]');
-    const shipperAddressLine1 = getVal('input[name="shipper_address_line1"]');
-    const shipperAddressLine2 = getVal('input[name="shipper_address_line2"]');
-    const shipperAddressLine3 = getVal('input[name="shipper_address_line3"]');
-    const shipperPostal = getVal('input[name="shipper_pincode"]');
-    const shipperCity = getVal('input[name="shipper_city"]');
-    const shipperState = getVal('input[name="shipper_state"]');
-    const shipperCountry = 'IN';
-
-    // Build Shipper AddressLine array
-    const shipperAddressLine = [];
-    if (shipperAddressLine1) shipperAddressLine.push(shipperAddressLine1);
-    if (shipperAddressLine2) shipperAddressLine.push(shipperAddressLine2);
-    if (shipperAddressLine3) shipperAddressLine.push(shipperAddressLine3);
-
-    // Consignee
-    const consigneeName = getVal('input[name="consignee_name"]');
-    const consigneePhone = getVal('input[name="consignee_phone_number"]');
-    const consigneeAddressLine1 = getVal('input[name="consignee_address_line1"]');
-    const consigneeAddressLine2 = getVal('input[name="consignee_address_line2"]');
-    const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
-    const consigneePostal = getVal('input[name="consignee_zip_code"]');
-    const consigneeCity = getVal('input[name="consignee_city"]');
-    const consigneeState = getVal('select[name="consignee_state"]');
-    const deliveryDest = getVal('select[name="delivery_destination"]');
-    const destCountry = getCountryCodeFromDestination(deliveryDest);
-
-    // Build Consignee AddressLine array
-    const consigneeAddressLine = [];
-    if (consigneeAddressLine1) consigneeAddressLine.push(consigneeAddressLine1);
-    if (consigneeAddressLine2) consigneeAddressLine.push(consigneeAddressLine2);
-    if (consigneeAddressLine3) consigneeAddressLine.push(consigneeAddressLine3);
-
-    // Selected shipping method
-    const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
-    if (!selectedRadio) {
-        alert('Please select a shipping method');
-        return null;
-    }
-    const serviceCode = getServiceCodeFromRadio(selectedRadio);
-
-    // Build Package array from ALL package dimension rows
-    const packageRows = document.querySelectorAll('.rowContaineraddmore');
-    const packages = [];
-
-    packageRows.forEach(function(row, index) {
-        const weightKg = getNestedVal(row, 'actual_weight_kg');
-        const lengthCm = getNestedVal(row, 'length_cm');
-        const widthCm = getNestedVal(row, 'width_cm');
-        const heightCm = getNestedVal(row, 'height_cm');
-
-        // Skip empty rows if weight is not provided
-        if (!weightKg || isNaN(weightKg) || weightKg <= 0) {
-            return;
-        }
-
-        const pkg = {
-            PackagingType: { Code: "02" }, // Customer Supplied Package
-            PackageWeight: {
-                UnitOfMeasurement: { Code: "KGS" },
-                Weight: weightKg
-            }
-        };
-
-        // Add dimensions only if all three are provided
-        if (lengthCm && widthCm && heightCm) {
-            pkg.Dimensions = {
-                UnitOfMeasurement: { Code: "CM" },
-                Length: lengthCm,
-                Width: widthCm,
-                Height: heightCm
-            };
-        }
-
-        packages.push(pkg);
-    });
-
-    // Fallback: if no valid package rows, send a single default 1kg package
-    if (packages.length === 0) {
-        packages.push({
-            PackagingType: { Code: "02" },
-            PackageWeight: {
-                UnitOfMeasurement: { Code: "KGS" },
-                Weight: "1"
-            }
-        });
-    }
-
-    // return {
-    //     RateRequest: {
-    //         Request: {
-    //             RequestOption: "Rate"
-    //         },
-    //         Shipment: {
-    //             Shipper: {
-    //                 Name: shipperName,
-    //                 AttentionName: shipperContact || shipperName,
-    //                 ShipperNumber: "1255AK",
-    //                 Phone: {
-    //                     Number: shipperPhone || ""
-    //                 },
-    //                 Address: {
-    //                     AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Not Provided"],
-    //                     City: shipperCity,
-    //                     StateProvinceCode: shipperState,
-    //                     PostalCode: shipperPostal,
-    //                     CountryCode: shipperCountry
-    //                 }
-    //             },
-    //             ShipFrom: {
-    //                 Name: shipperName,
-    //                 AttentionName: shipperContact || shipperName,
-    //                 Phone: {
-    //                     Number: shipperPhone || ""
-    //                 },
-    //                 Address: {
-    //                     AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Not Provided"],
-    //                     City: shipperCity,
-    //                     StateProvinceCode: shipperState,
-    //                     PostalCode: shipperPostal,
-    //                     CountryCode: shipperCountry
-    //                 }
-    //             },
-    //             ShipTo: {
-    //                 Name: consigneeName || "Consignee",
-    //                 AttentionName: consigneeName || "Consignee",
-    //                 Phone: {
-    //                     Number: consigneePhone || ""
-    //                 },
-    //                 Address: {
-    //                     AddressLine: consigneeAddressLine.length > 0 ? consigneeAddressLine : ["Not Provided"],
-    //                     City: consigneeCity,
-    //                     StateProvinceCode: consigneeState,
-    //                     PostalCode: consigneePostal,
-    //                     CountryCode: destCountry
-    //                 }
-    //             },
-    //             Service: {
-    //                 Code: serviceCode
-    //             },
-    //             Package: packages
-    //         }
-    //     }
-    // };
-
-    return {
-    RateRequest: {
-        Request: {
-            RequestOption: "Rate"
-        },
-
-        PickupType: {
-            Code: "01"
-        },
-
-        CustomerClassification: {
-            Code: "01"
-        },
-
-        Shipment: {
-            Shipper: {
-                Name: shipperName,
-                AttentionName: shipperContact || shipperName,
-
-                // VALID UPS ACCOUNT
-                ShipperNumber: "1255AK",
-
-                Phone: {
-                    Number: shipperPhone || ""
-                },
-
-                Address: {
-                    AddressLine:
-                        shipperAddressLine.length > 0
-                            ? shipperAddressLine
-                            : ["Not Provided"],
-
-                    City: shipperCity,
-                    StateProvinceCode: shipperState,
-                    PostalCode: shipperPostal,
-                    CountryCode: shipperCountry
-                }
-            },
-
-            ShipFrom: {
-                Name: shipperName,
-                AttentionName: shipperContact || shipperName,
-
-                Phone: {
-                    Number: shipperPhone || ""
-                },
-
-                Address: {
-                    AddressLine:
-                        shipperAddressLine.length > 0
-                            ? shipperAddressLine
-                            : ["Not Provided"],
-
-                    City: shipperCity,
-                    StateProvinceCode: shipperState,
-                    PostalCode: shipperPostal,
-                    CountryCode: shipperCountry
-                }
-            },
-
-            ShipTo: {
-                Name: consigneeName || "Consignee",
-                AttentionName: consigneeName || "Consignee",
-
-                Phone: {
-                    Number: consigneePhone || ""
-                },
-
-                Address: {
-                    AddressLine:
-                        consigneeAddressLine.length > 0
-                            ? consigneeAddressLine
-                            : ["Not Provided"],
-
-                    City: consigneeCity,
-                    StateProvinceCode: consigneeState,
-                    PostalCode: consigneePostal,
-                    CountryCode: destCountry
-                }
-            },
-
-            Service: {
-                Code: serviceCode
-            },
-
-            Package: packages
-        }
-    }
-};
-}
 
     // Fetch rate from courier_rates database table (phone-number based)
     function calculateRate() {
@@ -8333,215 +8013,6 @@
         });
     });
 
-    // Build UPS ShipmentRequest payload for the UPS Ship API
-    function buildShipPayload() {
-        // Shipper
-        const shipperCompany = getVal('input[name="shipper_company_names"]');
-        const shipperContact = getVal('input[name="shipper_contact_person"]');
-        const shipperName = shipperCompany || shipperContact || 'Unknown Shipper';
-        const shipperPhone = getVal('input[name="shipper_phone_number"]');
-        const shipperAddressLine1 = getVal('input[name="shipper_address_line1"]');
-        const shipperAddressLine2 = getVal('input[name="shipper_address_line2"]');
-        const shipperAddressLine3 = getVal('input[name="shipper_address_line3"]');
-        const shipperPostal = getVal('input[name="shipper_pincode"]');
-        const shipperCity = getVal('input[name="shipper_city"]');
-        const shipperState = getVal('input[name="shipper_state"]');
-        const deliveryDest = getVal('select[name="delivery_destination"]');
-        const shipperCountry = 'IN';
-
-        const shipperAddressLine = [];
-        if (shipperAddressLine1) shipperAddressLine.push(shipperAddressLine1);
-        if (shipperAddressLine2) shipperAddressLine.push(shipperAddressLine2);
-        if (shipperAddressLine3) shipperAddressLine.push(shipperAddressLine3);
-
-        // Consignee
-        const consigneeName = getVal('input[name="consignee_name"]');
-        const consigneePhone = getVal('input[name="consignee_phone_number"]');
-        const consigneeAddressLine1 = getVal('input[name="consignee_address_line1"]');
-        const consigneeAddressLine2 = getVal('input[name="consignee_address_line2"]');
-        const consigneeAddressLine3 = getVal('input[name="consignee_address_line3"]');
-        const consigneePostal = getVal('input[name="consignee_zip_code"]');
-        const consigneeCity = getVal('input[name="consignee_city"]');
-        const consigneeState = getVal('select[name="consignee_state"]');
-        const destCountry = getCountryCodeFromDestination(deliveryDest) || 'US';
-
-        const consigneeAddressLine = [];
-        if (consigneeAddressLine1) consigneeAddressLine.push(consigneeAddressLine1);
-        if (consigneeAddressLine2) consigneeAddressLine.push(consigneeAddressLine2);
-        if (consigneeAddressLine3) consigneeAddressLine.push(consigneeAddressLine3);
-
-        // Selected shipping method
-        const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
-        const serviceCode = selectedRadio ? getServiceCodeFromRadio(selectedRadio) : '03';
-        const serviceDescription = selectedRadio ? getServiceDescriptionFromRadio(selectedRadio) : 'Ground';
-
-        // Build Packages array from ALL package dimension rows
-        const packageRows = document.querySelectorAll('.rowContaineraddmore');
-        const packages = [];
-
-        packageRows.forEach(function(row) {
-            const weightKg = getNestedVal(row, 'actual_weight_kg');
-            const lengthCm = getNestedVal(row, 'length_cm');
-            const widthCm = getNestedVal(row, 'width_cm');
-            const heightCm = getNestedVal(row, 'height_cm');
-
-            // Skip empty rows if weight is not provided
-            if (!weightKg || isNaN(weightKg) || weightKg <= 0) {
-                return;
-            }
-
-            const pkg = {
-                Description: "Documents",
-                Packaging: { Code: "02" },
-                PackageWeight: {
-                    UnitOfMeasurement: { Code: "LBS" },
-                    Weight: weightKg
-                }
-            };
-
-            // Add dimensions only if all three are provided
-            if (lengthCm && widthCm && heightCm) {
-                pkg.Dimensions = {
-                    UnitOfMeasurement: { Code: "IN" },
-                    Length: lengthCm,
-                    Width: widthCm,
-                    Height: heightCm
-                };
-            } else {
-                pkg.Dimensions = {
-                    UnitOfMeasurement: { Code: "IN" },
-                    Length: "10",
-                    Width: "8",
-                    Height: "4"
-                };
-            }
-
-            packages.push(pkg);
-        });
-
-        // Fallback to a single default package if no rows were added
-        if (packages.length === 0) {
-            packages.push({
-                Description: "Documents",
-                Packaging: { Code: "02" },
-                PackageWeight: {
-                    UnitOfMeasurement: { Code: "LBS" },
-                    Weight: "5"
-                },
-                Dimensions: {
-                    UnitOfMeasurement: { Code: "IN" },
-                    Length: "10",
-                    Width: "8",
-                    Height: "4"
-                }
-            });
-        }
-
-        // Build ShipmentRequest payload matching the exact requested structure
-        const payload = {
-            ShipmentRequest: {
-                Shipment: {
-                    // Shipper: {
-                    //     Name: shipperName,
-                    //     AttentionName: shipperContact || shipperName,
-                    //     CompanyDisplayableName: shipperName,
-                    //     Phone: { Number: shipperPhone || "" },
-                    //     ShipperNumber: "1255AK",
-                    //     Address: {
-                    //         AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
-                    //         City: shipperCity || "",
-                    //         StateProvinceCode: shipperState || "",
-                    //         PostalCode: shipperPostal || "",
-                    //         // CountryCode: shipperCountry
-                    //         CountryCode: "US"
-                    //     }
-                    // },
-                    Shipper: {
-                        Name: "SANDEEP KAPUR",
-                        AttentionName: "United",
-                        CompanyDisplayableName: "UWC",
-                        Phone: { Number: "6466741258" },
-                        ShipperNumber: "1255AK",
-                        Address: {
-                            AddressLine: "218 WEST 37 STREET 6TH FLOOR",
-                            City: "NEW YORK",
-                            StateProvinceCode: "NY",
-                            PostalCode: "10018",
-                            CountryCode: "US"
-                        }
-                    },
-                    ShipFrom: {
-                        Name: "SANDEEP KAPUR",
-                        AttentionName: "United",
-                        Phone: {
-                            Number: "6466741258"
-                        },
-                        Address: {
-                            AddressLine: ["218 WEST 37 STREET 6TH FLOOR"],
-                            City: "NEW YORK",
-                            StateProvinceCode: "NY",
-                            PostalCode: "10018",
-                            CountryCode: "US"
-                        }
-                    },
-                    // ShipFrom: {
-                    //     Name: shipperName,
-                    //     AttentionName: shipperContact || shipperName,
-                    //     Phone: { Number: shipperPhone},
-                    //     Address: {
-                    //         AddressLine: shipperAddressLine.length > 0 ? shipperAddressLine : ["Shipper Address"],
-                    //         City: shipperCity,
-                    //         StateProvinceCode: shipperState,
-                    //         PostalCode: shipperPostal,
-                    //         CountryCode: "US"
-                    //     }
-                    // },
-                    ShipTo: {
-                        Name: consigneeName,
-                        AttentionName: consigneeName,
-                        Phone: { Number: consigneePhone },
-                        Address: {
-                            AddressLine: consigneeAddressLine.length > 0 ? consigneeAddressLine : ["Receiver Address"],
-                            City: consigneeCity,
-                            StateProvinceCode: consigneeState,
-                            PostalCode: consigneePostal,
-                            CountryCode: destCountry
-                        }
-                    },
-                    PaymentInformation: {
-                        ShipmentCharge: {
-                            Type: "01",
-                            BillShipper: {
-                                AccountNumber: "1255AK"
-                            }
-                        }
-                    },
-                    Service: {
-                        Code: serviceCode,
-                        Description: serviceDescription
-                    },
-                    Package: packages
-                },
-                LabelSpecification: {
-                    LabelImageFormat: { Code: "GIF" }
-                }
-            }
-        };
-
-        return payload;
-    }
-
-    // Call UPS Ship API
-    function callUpsShipApi(payload) {
-        return fetch('/customer/ups-ship', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
-            },
-            body: JSON.stringify(payload)
-        }).then(res => res.json());
-    }
     </script>
     <script>
     // Handle Next button click to open Consignee Info accordion
@@ -8600,97 +8071,89 @@
                 submitButton.disabled = true;
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
 
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-                    || document.querySelector('input[name="_token"]')?.value
-                    || '';
+                // Get selected service_id from radio button
+                const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+                if (!selectedRadio) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'No Shipping Method Selected',
+                        text: 'Please select a shipping method before creating a shipment.',
+                        confirmButtonColor: '#dc3545'
+                    });
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalText;
+                    return;
+                }
 
-                // Build UPS Ship API payload and call UPS FIRST
-                const shipPayload = buildShipPayload();
-                console.log('UPS Ship Payload:', shipPayload);
+                const serviceId = selectedRadio.value;
 
-                callUpsShipApi(shipPayload)
-                    .then(upsResult => {
-                        if (upsResult.success) {
-                            console.log('UPS Ship API success:', upsResult.shipmentResponse);
-                            // UPS succeeded - now save to database
-                            const formData = new FormData(form);
-                            // Append UPS shipment response for tracking storage
-                            formData.append('ups_shipment_response', JSON.stringify(upsResult.shipmentResponse));
-                            return fetch(form.action, {
-                                method: 'POST',
-                                body: formData,
-                                headers: {
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Accept': 'application/json',
-                                    'X-CSRF-TOKEN': csrfToken
-                                }
-                            })
-                            .then(response => response.json().then(data => ({
-                                ok: response.ok,
-                                status: response.status,
-                                data
-                            })))
-                            .then(({ data }) => {
-                                if (data.success) {
-                                    // Clear localStorage saved form data
-                                    if (typeof clearShipmentFormStorage === 'function') {
-                                        clearShipmentFormStorage();
-                                    }
-                                    const trackingNumber = upsResult.shipmentResponse?.ShipmentResults?.PackageResults?.TrackingNumber || '';
-                                    let successHtml = '<p>' + data.message + '</p>';
-                                    if (trackingNumber) {
-                                        successHtml += '<p><strong>UPS Tracking Number:</strong> ' + trackingNumber + '</p>';
-                                    }
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Shipment Created!',
-                                        html: successHtml,
-                                        confirmButtonColor: '#2563eb'
-                                    }).then(() => {
-                                        // window.location.reload();
-                                    });
-                                } else {
-                                    const errorHtml = buildErrorHtml(data.errors);
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: data.message || 'Unable to create shipment',
-                                        html: errorHtml || 'Please check the form and try again.',
-                                        confirmButtonColor: '#dc3545'
-                                    });
-                                    if (data.errors) {
-                                        console.log('Validation errors:', data.errors);
-                                    }
-                                }
-                            });
-                        } else {
-                            // UPS failed - do NOT save to database
-                            console.warn('UPS Ship API failed:', upsResult.message);
-                            const upsErrorMsg = upsResult.message || 'Unknown UPS error';
-                            const rawResponse = upsResult.rawResponse ? JSON.stringify(upsResult.rawResponse, null, 2) : '';
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'UPS Shipment Failed',
-                                html: '<p><strong>Error:</strong> ' + upsErrorMsg + '</p>' +
-                                      '<p>Shipment was not saved. Please try again.</p>' +
-                                      (rawResponse ? '<pre style="max-height:200px;overflow-y:auto;text-align:left;font-size:11px;">' + rawResponse + '</pre>' : ''),
-                                confirmButtonColor: '#dc3545'
-                            });
+                // Submit form via AJAX - controller handles UPS payload + API call + DB storage
+                const formData = new FormData(form);
+                formData.append('service_id', serviceId);
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => response.json().then(data => ({
+                    ok: response.ok,
+                    status: response.status,
+                    data
+                })))
+                .then(({ ok, status, data }) => {
+                    if (data.success) {
+                        // Clear localStorage saved form data
+                        if (typeof clearShipmentFormStorage === 'function') {
+                            clearShipmentFormStorage();
                         }
-                    })
-                    .catch(upsError => {
-                        console.error('UPS Ship API network error:', upsError);
+                        const trackingNumber = data.tracking_number || '';
+                        let successHtml = '<p>' + data.message + '</p>';
+                        if (trackingNumber) {
+                            successHtml += '<p><strong>UPS Tracking Number:</strong> ' + trackingNumber + '</p>';
+                        }
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Shipment Created!',
+                            html: successHtml,
+                            confirmButtonColor: '#2563eb'
+                        }).then(() => {
+                            // window.location.reload();
+                        });
+                    } else {
+                        // Error could be UPS failure or validation error (controller handles both)
+                        const errorHtml = buildErrorHtml(data.errors);
+                        const rawResponse = data.rawResponse ? JSON.stringify(data.rawResponse, null, 2) : '';
+                        let errorDisplayHtml = errorHtml || 'Please check the form and try again.' +
+                            (rawResponse ? '<pre style="max-height:200px;overflow-y:auto;text-align:left;font-size:11px;">' + rawResponse + '</pre>' : '');
                         Swal.fire({
                             icon: 'error',
-                            title: 'UPS Shipment Failed',
-                            text: 'Network error. Shipment was not saved. Please try again.',
+                            title: data.message || 'Unable to create shipment',
+                            html: errorDisplayHtml,
                             confirmButtonColor: '#dc3545'
                         });
-                    })
-                    .finally(() => {
-                        // Reset button state
-                        submitButton.disabled = false;
-                        submitButton.innerHTML = originalText;
+                        if (data.errors) {
+                            console.log('Validation errors:', data.errors);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Shipment creation network error:', err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Shipment Creation Failed',
+                        text: 'Network error. Please try again.',
+                        confirmButtonColor: '#dc3545'
                     });
+                })
+                .finally(() => {
+                    // Reset button state
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalText;
+                });
             });
         });
     });
@@ -8848,17 +8311,15 @@
                 }
             });
 
-            // Ensure enough package rows exist
+            // Ensure enough package rows exist by setting numberOfBoxes
             const packageRows = form.querySelectorAll('.rowContaineraddmore');
-            const addPackageBtn = document.getElementById('addRowBtn');
-            if (addPackageBtn && maxPackageIndex > 0 &&
+            const numberOfBoxesInput = document.getElementById('numberOfBoxes');
+            if (numberOfBoxesInput && maxPackageIndex > 0 &&
                 packageRows.length <= maxPackageIndex) {
-                const rowsToAdd = maxPackageIndex - packageRows.length + 1;
-                for (let i = 0; i < rowsToAdd; i++) {
-                    try {
-                        addPackageBtn.click();
-                    } catch (e) {}
-                }
+                numberOfBoxesInput.value = maxPackageIndex + 1;
+                try {
+                    syncPackageRows();
+                } catch (e) {}
             }
 
             // Ensure enough invoice item rows exist
