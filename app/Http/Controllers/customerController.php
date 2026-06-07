@@ -716,9 +716,16 @@ class customerController extends Controller
             if (isset($validatedData['items']) && is_array($validatedData['items'])) {
                 foreach ($validatedData['items'] as $item) {
                     \Log::info('Processing item:', $item);
+                    // Map box_no to package_dimension_id (box_no 1 = packageIds[0], box_no 2 = packageIds[1], etc.)
+                    $boxNo = $item['box_no'] ?? null;
+                    $packageDimensionId = null;
+                    if ($boxNo !== null && isset($packageIds[$boxNo - 1])) {
+                        $packageDimensionId = $packageIds[$boxNo - 1];
+                    }
                     ShipmentInvoiceItem::create([
                         'invoice_id' => $invoice->id,
-                        'box_no' => $item['box_no'] ?? null,
+                        'package_dimension_id' => $packageDimensionId,
+                        'box_no' => $boxNo,
                         'description' => $item['description'] ?? null,
                         'hs_code' => $item['hs_code'] ?? null,
                         'unit_type' => $item['unit_type'] ?? null,

@@ -39,6 +39,14 @@ class PackageDimension extends Model
     }
 
     /**
+     * Get the invoice items for this package dimension.
+     */
+    public function invoiceItems()
+    {
+        return $this->hasMany(ShipmentInvoiceItem::class, 'package_dimension_id');
+    }
+
+    /**
      * Calculate volumetric weight based on dimensions.
      */
     public function calculateVolumetricWeight()

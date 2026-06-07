@@ -13,6 +13,7 @@ class ShipmentInvoiceItem extends Model
 
     protected $fillable = [
         'invoice_id',
+        'package_dimension_id',
         'box_no',
         'description',
         'hs_code',
@@ -23,6 +24,7 @@ class ShipmentInvoiceItem extends Model
 
     protected $casts = [
         'invoice_id' => 'integer',
+        'package_dimension_id' => 'integer',
         'box_no' => 'integer',
         'qty' => 'decimal:2',
         'unit_rate' => 'decimal:2',
@@ -35,6 +37,14 @@ class ShipmentInvoiceItem extends Model
     public function shipmentInvoice()
     {
         return $this->belongsTo(ShipmentInvoice::class, 'invoice_id');
+    }
+
+    /**
+     * Get the package dimension for this item.
+     */
+    public function packageDimension()
+    {
+        return $this->belongsTo(PackageDimension::class, 'package_dimension_id');
     }
 
     /**
