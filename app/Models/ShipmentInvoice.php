@@ -47,6 +47,14 @@ class ShipmentInvoice extends Model
     }
 
     /**
+     * Get the shipper info for this invoice.
+     */
+    public function shipperInfo()
+    {
+        return $this->belongsTo(ShipperInfo::class, 'shipper_id');
+    }
+
+    /**
      * Get the total amount from invoice items.
      */
     public function getTotalAmountAttribute()

@@ -17,6 +17,8 @@
     <meta name="robots" content="index, follow">
     <!-- Favicon -->
     <link rel="shortcut icon" href="{{ asset('assets/img/favicon.png') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    
     <!-- Apple Icon -->
     <link rel="apple-touch-icon" href="{{ asset('assets/img/apple-icon.png') }}">
     <!-- Theme Config Js -->
@@ -126,8 +128,8 @@
                     </div> -->
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-8">
-                                <form action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
+                            <div class="col-md-9">
+                                <form id="shipmentForm" action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
                                     @csrf
                                     <div class="accordion accordion-bordered" id="main_accordion">
                                         <!-- Basic Info -->
@@ -295,8 +297,11 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Address Line 2 <span
-                                                                        class="text-danger">*</span></label>
+                                                                <label class="form-label">
+                                                                    Address Line 2 
+                                                                    <!-- <span
+                                                                        class="text-danger">*</span> -->
+                                                                    </label>
                                                                 <input type="text" class="form-control"
                                                                     name="shipper_address_line2" value="{{ old('shipper_address_line2') }}"
                                                                     placeholder="Address Line 2">
@@ -304,8 +309,10 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Address Line 3 <span
-                                                                        class="text-danger">*</span></label>
+                                                                <label class="form-label">Address Line 3 
+                                                                    <!-- <span
+                                                                        class="text-danger">*</span> -->
+                                                                    </label>
                                                                 <input type="text" class="form-control"
                                                                     name="shipper_address_line3" value="{{ old('shipper_address_line3') }}"
                                                                     placeholder="Address Line 3">
@@ -3499,14 +3506,14 @@
                                                                     <label class="form-label">Email <span
                                                                             class="text-danger">*</span></label>
                                                                     <div class="form-check form-switch mb-1">
-                                                                        <label
+                                                                        <!-- <label
                                                                             class="form-check-label d-flex align-items-center gap-2">
                                                                             <span>Email Opt Out</span>
                                                                             <input
                                                                                 class="form-check-input form-check-input-sm switchCheckDefault ms-auto"
                                                                                 type="checkbox" role="switch"
                                                                                 checked="">
-                                                                        </label>
+                                                                        </label> -->
                                                                     </div>
                                                                 </div>
                                                                 <input type="email" class="form-control"
@@ -3586,8 +3593,10 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Address Line 2 <span
-                                                                        class="text-danger">*</span></label>
+                                                                <label class="form-label">Address Line 2 
+                                                                    <!-- <span
+                                                                        class="text-danger">*</span> -->
+                                                                    </label>
                                                                 <input type="text" class="form-control"
                                                                     name="consignee_address_line2" value="{{ old('consignee_address_line2') }}"
                                                                     placeholder="Address Line 2">
@@ -3595,7 +3604,10 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Address Line 3 </label>
+                                                                <label class="form-label">Address Line 3 
+                                                                    <!-- <span
+                                                                        class="text-danger">*</span> -->
+                                                                    </label>
                                                                 <input type="text" class="form-control"
                                                                     name="consignee_address_line3" value="{{ old('consignee_address_line3') }}"
                                                                     placeholder="Address Line 3">
@@ -6794,7 +6806,7 @@
                                                                     class="d-flex justify-content-between align-items-center">
                                                                     <label class="form-label">Email <span
                                                                             class="text-danger">*</span></label>
-                                                                    <div class="form-check form-switch mb-1">
+                                                                    <!-- <div class="form-check form-switch mb-1">
                                                                         <label
                                                                             class="form-check-label d-flex align-items-center gap-2">
                                                                             <span>Email Opt Out</span>
@@ -6803,7 +6815,7 @@
                                                                                 type="checkbox" role="switch"
                                                                                 checked="">
                                                                         </label>
-                                                                    </div>
+                                                                    </div> -->
                                                                 </div>
                                                                 <input type="email" class="form-control"
                                                                     name="consignee_email" value="{{ old('consignee_email') }}" placeholder="Email Address">
@@ -6822,6 +6834,27 @@
                                         <style>
                                         .rowContaineraddmore {
                                             position: relative;
+                                        }
+                                        .package-card {
+                                            border: 1px solid #dee2e6;
+                                            border-radius: 8px;
+                                            padding: 16px;
+                                            margin-bottom: 12px;
+                                            background: #fff;
+                                        }
+                                        .package-card-header {
+                                            background: #f0f0f3;
+                                            border-radius: 6px 6px 0 0;
+                                            padding: 8px 12px;
+                                            margin: -16px -16px 12px -16px;
+                                            font-weight: 600;
+                                            color: #495057;
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: space-between;
+                                        }
+                                        .package-card-header .box-number {
+                                            font-size: 14px;
                                         }
                                         </style>
 
@@ -6848,52 +6881,63 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div class="row rowContaineraddmore">
-                                                        <div class="col-md-1">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Box #</label>
-                                                                <input type="text" class="form-control packageBoxNumber" readonly value="1">
+                                                    <!-- Package Cards Container -->
+                                                    <div id="packageCardsContainer">
+                                                    <div class="package-card rowContaineraddmore">
+                                                        <div class="package-card-header">
+                                                            <span class="box-number"><i class="ti ti-box me-1"></i> Box #<span class="packageBoxNumber">1</span></span>
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Act. Wt (Kg)</label>
+                                                                    <input type="number" class="form-control" step="0.01"
+                                                                        name="packages[0][actual_weight_kg]" value="{{ old('packages.0.actual_weight_kg') }}"
+                                                                        placeholder="Act. Wt">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Length (cm)</label>
+                                                                    <input type="number" class="form-control" step="0.01"
+                                                                        name="packages[0][length_cm]" value="{{ old('packages.0.length_cm') }}" placeholder="Length">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Width (cm)</label>
+                                                                    <input type="number" class="form-control" step="0.01"
+                                                                        name="packages[0][width_cm]" value="{{ old('packages.0.width_cm') }}" placeholder="Width">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Height (cm)</label>
+                                                                    <input type="number" class="form-control" step="0.01"
+                                                                        name="packages[0][height_cm]" value="{{ old('packages.0.height_cm') }}" placeholder="Height">
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-2">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Actual Weight (kg)</label>
-                                                                <input type="number" class="form-control"
-                                                                    name="packages[0][actual_weight_kg]" value="{{ old('packages.0.actual_weight_kg') }}"
-                                                                    placeholder="Actual Weight (kg)">
+                                                        <div class="row">
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">VOL WT (Kg)</label>
+                                                                    <input type="text" class="form-control"
+                                                                        readonly
+                                                                        name="packages[0][volumetric_weight]" value="{{ old('packages.0.volumetric_weight') }}"
+                                                                        placeholder="VOL WT">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Chg. Wt (Kg)</label>
+                                                                    <input type="text" class="form-control chargeable-weight-input" readonly
+                                                                        name="packages[0][chargeable_weight]" value="{{ old('packages.0.chargeable_weight') }}"
+                                                                        placeholder="Auto">
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-2">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Length (cm) </label>
-                                                                <input type="number" class="form-control"
-                                                                    name="packages[0][length_cm]" value="{{ old('packages.0.length_cm') }}" placeholder="Length (cm)">
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Width (cm) </label>
-                                                                <input type="number" class="form-control"
-                                                                    name="packages[0][width_cm]" value="{{ old('packages.0.width_cm') }}" placeholder="Width (cm)">
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Height (cm)</label>
-                                                                <input type="number" class="form-control"
-                                                                    name="packages[0][height_cm]" value="{{ old('packages.0.height_cm') }}" placeholder="Height (cm)">
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <div class="mb-3 mb-md-0">
-                                                                <label class="form-label">Volumetric Weight
-                                                                    (L*B*H/5000=VOL
-                                                                    WT)</label>
-                                                                <input type="text" class="form-control"
-                                                                    name="packages[0][volumetric_weight]" value="{{ old('packages.0.volumetric_weight') }}"
-                                                                    placeholder="volumetric weight">
-                                                            </div>
-                                                        </div>
+                                                    </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -6908,7 +6952,8 @@
                                                     'length_cm',
                                                     'width_cm',
                                                     'height_cm',
-                                                    'volumetric_weight'
+                                                    'volumetric_weight',
+                                                    'chargeable_weight'
                                                 ];
 
                                                 fields.forEach(function(field) {
@@ -6918,17 +6963,28 @@
                                                     }
                                                 });
 
-                                                // Update box number display
-                                                const boxNumInput = row.querySelector('.packageBoxNumber');
-                                                if (boxNumInput) {
-                                                    boxNumInput.value = index + 1;
+                                                // Update box number display (span element)
+                                                const boxNumSpan = row.querySelector('.packageBoxNumber');
+                                                if (boxNumSpan) {
+                                                    boxNumSpan.textContent = index + 1;
                                                 }
                                             });
                                         }
 
+                                        function updateChargeableWeight(card) {
+                                            const actualWtInput = card.querySelector('[name$="[actual_weight_kg]"]');
+                                            const volWtInput = card.querySelector('[name$="[volumetric_weight]"]');
+                                            const chgWtInput = card.querySelector('[name$="[chargeable_weight]"]');
+                                            if (chgWtInput) {
+                                                const actualWt = parseFloat(actualWtInput?.value) || 0;
+                                                const volWt = parseFloat(volWtInput?.value) || 0;
+                                                chgWtInput.value = Math.max(actualWt, volWt).toFixed(2);
+                                            }
+                                        }
+
                                         function syncPackageRows() {
                                             const numBoxes = parseInt(document.getElementById('numberOfBoxes').value) || 1;
-                                            const container = document.getElementById('packageDimensionBody');
+                                            const container = document.getElementById('packageCardsContainer');
                                             const existingRows = container.querySelectorAll('.rowContaineraddmore');
                                             const currentCount = existingRows.length;
 
@@ -6937,8 +6993,15 @@
                                                 const templateRow = existingRows[0];
                                                 for (let i = currentCount; i < numBoxes; i++) {
                                                     let newRow = templateRow.cloneNode(true);
-                                                    // Clear input values except box number (gets set by reindex)
-                                                    newRow.querySelectorAll('input:not(.packageBoxNumber)').forEach(input => input.value = '');
+                                                    // Clear input values (box number span gets set by reindex)
+                                                    newRow.querySelectorAll('input').forEach(input => {
+                                                        if (!input.classList.contains('chargeable-weight-input')) {
+                                                            input.value = '';
+                                                        }
+                                                    });
+                                                    // Reset chargeable weight
+                                                    const chgWtInput = newRow.querySelector('.chargeable-weight-input');
+                                                    if (chgWtInput) chgWtInput.value = '';
                                                     container.appendChild(newRow);
                                                 }
                                             } else if (numBoxes < currentCount) {
@@ -6951,6 +7014,26 @@
                                             reindexPackageRows();
                                             updateBoxNoDropdowns();
                                         }
+
+                                        // Auto-calculate volumetric & chargeable weight on dimension input changes
+                                        document.getElementById('packageCardsContainer').addEventListener('input', function(e) {
+                                            const card = e.target.closest('.rowContaineraddmore');
+                                            if (!card) return;
+                                            const targetName = e.target.getAttribute('name') || '';
+                                            if (targetName.match(/\[(length_cm|width_cm|height_cm)\]$/)) {
+                                                const l = parseFloat(card.querySelector('[name$="[length_cm]"]')?.value) || 0;
+                                                const w = parseFloat(card.querySelector('[name$="[width_cm]"]')?.value) || 0;
+                                                const h = parseFloat(card.querySelector('[name$="[height_cm]"]')?.value) || 0;
+                                                const volWtInput = card.querySelector('[name$="[volumetric_weight]"]');
+                                                if (volWtInput && l > 0 && w > 0 && h > 0) {
+                                                    volWtInput.value = ((l * w * h) / 5000).toFixed(2);
+                                                }
+                                                updateChargeableWeight(card);
+                                            }
+                                            if (targetName.match(/\[actual_weight_kg\]$/) || targetName.match(/\[volumetric_weight\]$/)) {
+                                                updateChargeableWeight(card);
+                                            }
+                                        });
 
                                         document.getElementById('numberOfBoxes').addEventListener('input', function() {
                                             let val = parseInt(this.value);
@@ -7174,9 +7257,12 @@
                                                                         <th>Box No.</th>
                                                                         <th>Description</th>
                                                                         <th>HS Code</th>
+                                                                        <th>HTS Code</th>
                                                                         <th>Unit Type</th>
                                                                         <th>QTY</th>
-                                                                        <th>Unit Rates</th>
+                                                                        <th>Rates</th>
+                                                                        <th>IGST(%)</th>
+                                                                        <th>IGST</th>
                                                                         <th>Amount</th>
                                                                         <th>Action</th>
                                                                     </tr>
@@ -7190,15 +7276,19 @@
                                                                                 <option value="1" selected>1</option>
                                                                             </select>
                                                                         </td>
-                                                                        <td><label class="form-label">Description <span
-                                                                                    class="text-danger">*</span></label>
-                                                                            <input type="text" class="form-control"
+                                                                        <td>
+                                                                            <!-- <label class="form-label">Description <span
+                                                                                    class="text-danger">*</span></label> -->
+                                                                            <input type="text" class="form-control description-input"
                                                                                 name="items[0][description]" value="{{ old('items.0.description') }}"
-                                                                                placeholder="Description">
+                                                                                placeholder="Description" autocomplete="off">
                                                                         </td>
-                                                                        <td><input type="text" class="form-control"
+                                                                        <td><input type="text" class="form-control hs-code-input"
                                                                                 name="items[0][hs_code]" value="{{ old('items.0.hs_code') }}"
                                                                                 placeholder="HS Code"></td>
+                                                                        <td><input type="text" class="form-control hts-code-input"
+                                                                                name="items[0][hts_code]" value="{{ old('items.0.hts_code') }}"
+                                                                                placeholder="HTS Code"></td>
                                                                         <td>
                                                                             <select class="form-control"
                                                                                 name="items[0][unit_type]">
@@ -7222,25 +7312,37 @@
                                                                         <td><input type="number"
                                                                                 class="form-control qty"
                                                                                 name="items[0][qty]" value="{{ old('items.0.qty') }}"
-                                                                                placeholder="Quantity">
+                                                                                placeholder="QTY">
                                                                         </td>
                                                                         <td><input type="number"
                                                                                 class="form-control rate"
                                                                                 name="items[0][unit_rate]" value="{{ old('items.0.unit_rate') }}"
-                                                                                placeholder="Unit Rate">
+                                                                                placeholder="Rate">
+                                                                        </td>
+                                                                        <td><input type="number"
+                                                                                class="form-control igst-percentage"
+                                                                                name="items[0][igst_percentage]" value="{{ old('items.0.igst_percentage') }}"
+                                                                                placeholder="IGST %" step="0.01" min="0" max="100">
+                                                                        </td>
+                                                                        <td><input type="text"
+                                                                                class="form-control igst-amount" readonly
+                                                                                placeholder="IGST">
                                                                         </td>
                                                                         <td><input type="text"
                                                                                 class="form-control amount" readonly
                                                                                 placeholder="Amount">
                                                                         </td>
-                                                                        <td></td>
+                                                                        <td>
+                                                                            <!-- <i class="bi bi-plus-lg"></i> -->
+                                                                            <div class="add-more mb-3" id="tableaddRowBtn">➕ 
+                                                                            </div>
+                                                                        </td>
                                                                     </tr>
                                                                 </tbody>
                                                             </table>
                                                         </div>
 
-                                                        <div class="add-more mb-3" id="tableaddRowBtn">➕ Add another
-                                                        </div>
+                                                        
                                                         <div class="mt-3 d-flex align-items-end gap-3">
                                                             <div>
                                                                 <label>Total Amount</label>
@@ -7313,8 +7415,11 @@
                                                                 let newRow = lastRow.cloneNode(true);
                                                                 let newIndex = rows.length;
                                                                 // Clear text/number inputs
-                                                                newRow.querySelectorAll('input').forEach(input =>
-                                                                    input.value = '');
+                                                                newRow.querySelectorAll('input').forEach(input => {
+                                                                    input.value = '';
+                                                                    // Remove hs autocomplete marker so it re-attaches
+                                                                    delete input.dataset.hsAttached;
+                                                                });
                                                                 // Reset unit_type select to empty
                                                                 const unitTypeSelect = newRow.querySelector('select[name$="[unit_type]"]');
                                                                 if (unitTypeSelect) unitTypeSelect.value = '';
@@ -7322,14 +7427,17 @@
                                                                 const boxNoSelect = newRow.querySelector('.boxNo');
                                                                 if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
                                                                 let inputs = newRow.querySelectorAll('input');
-                                                                // inputs: description, hs_code, qty, unit_rate, amount
+                                                                // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
                                                                 if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
                                                                 if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][qty]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][unit_rate]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
+                                                                if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
+                                                                if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
+                                                                if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
                                                                 // remove old button
-                                                                let actionCell = newRow.children[7];
+                                                                let actionCell = newRow.children[10];
                                                                 actionCell.innerHTML = '';
                                                                 // add delete button
                                                                 let btn = document.createElement('button');
@@ -7348,13 +7456,15 @@
                                                             });
                                                         // AUTO CALCULATION
                                                         document.addEventListener('input', function(e) {
-                                                            if (e.target.classList.contains('qty') || e.target
-                                                                .classList.contains('rate')) {
+                                                            if (e.target.classList.contains('qty') || e.target.classList.contains('rate') || e.target.classList.contains('igst-percentage')) {
                                                                 let row = e.target.closest('tr');
-                                                                let qty = row.querySelector('.qty').value || 0;
-                                                                let rate = row.querySelector('.rate').value ||
-                                                                    0;
-                                                                row.querySelector('.amount').value = qty * rate;
+                                                                let qty = parseFloat(row.querySelector('.qty').value) || 0;
+                                                                let rate = parseFloat(row.querySelector('.rate').value) || 0;
+                                                                let igstPct = parseFloat(row.querySelector('.igst-percentage').value) || 0;
+                                                                let amount = qty * rate;
+                                                                let igstAmount = (amount * igstPct) / 100;
+                                                                row.querySelector('.igst-amount').value = igstAmount.toFixed(2);
+                                                                row.querySelector('.amount').value = (amount + igstAmount).toFixed(2);
                                                                 updateTotal();
                                                             }
                                                         });
@@ -7376,9 +7486,10 @@
                                                                 let unitTypeSelect = row.querySelector('select[name$="[unit_type]"]');
                                                                 if (inputs[0]) inputs[0].name = 'items[' + index + '][description]';
                                                                 if (inputs[1]) inputs[1].name = 'items[' + index + '][hs_code]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hts_code]';
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][qty]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][unit_rate]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][qty]';
+                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][unit_rate]';
                                                             });
                                                         }
                                                         // Initialize dropdowns on DOM ready
@@ -7408,7 +7519,7 @@
                                                     @endphp
                                                     <div class="row">
                                                         @foreach($groupedServices as $network => $services)
-                                                            <div class="col-md-4">
+                                                            <div class="col-md-6">
                                                                 <div class="mb-4">
                                                                     <label class="form-label">{{ $network }}</label>
                                                                     <div class="d-flex flex-wrap gap-2">
@@ -7466,11 +7577,14 @@
                                     <!-- /Access -->
                                     <div class="mt-4 d-flex align-items-center justify-content-end">
                                         <button type="reset" class="btn btn-light me-2">Reset</button>
-                                        <button type="submit" class="btn btn-primary">Create Now</button>
+                                        <button type="button" class="btn btn-primary" id="previewOrderBtn">
+                                            <i class="ti ti-eye me-1"></i> Preview Order
+                                        </button>
+                                        <button type="submit" class="btn btn-primary d-none" id="hiddenSubmitBtn">Create Now</button>
                                     </div>
                                 </form>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <div class="tips-card"
                                     style="background: #f3f3f3; padding: 15px; position: sticky; top:80px">
                                     <div class="tips-title" style="text-align: center;">
@@ -7731,6 +7845,191 @@
         </div>
     </div>
     <!-- /Add New Deals -->
+    <!-- Preview Order Modal -->
+    <div class="modal fade" id="previewOrderModal" tabindex="-1" aria-labelledby="previewOrderModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="previewOrderModalLabel">
+                        <i class="ti ti-eye me-2"></i> Order Preview
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- Shipper Info -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-user me-1"></i> Shipper Info (Ship From)
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4"><strong>Company Name:</strong> <span id="preview_shipper_company"></span></div>
+                                <div class="col-md-4"><strong>Contact Person:</strong> <span id="preview_shipper_contact"></span></div>
+                                <div class="col-md-4"><strong>Phone:</strong> <span id="preview_shipper_phone"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Email:</strong> <span id="preview_shipper_email"></span></div>
+                                <div class="col-md-8"><strong>Address:</strong> <span id="preview_shipper_address"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Pincode:</strong> <span id="preview_shipper_pincode"></span></div>
+                                <div class="col-md-4"><strong>City:</strong> <span id="preview_shipper_city"></span></div>
+                                <div class="col-md-4"><strong>State:</strong> <span id="preview_shipper_state"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>KYC Type:</strong> <span id="preview_shipper_kyc_type"></span></div>
+                                <div class="col-md-4"><strong>KYC Number:</strong> <span id="preview_shipper_kyc_number"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consignee Info -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-truck me-1"></i> Consignee Info (Ship To)
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4"><strong>Consignee Name:</strong> <span id="preview_consignee_name"></span></div>
+                                <div class="col-md-4"><strong>Contact Person:</strong> <span id="preview_consignee_contact"></span></div>
+                                <div class="col-md-4"><strong>Phone:</strong> <span id="preview_consignee_phone"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Email:</strong> <span id="preview_consignee_email"></span></div>
+                                <div class="col-md-8"><strong>Address:</strong> <span id="preview_consignee_address"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>ZIP Code:</strong> <span id="preview_consignee_zip"></span></div>
+                                <div class="col-md-4"><strong>City:</strong> <span id="preview_consignee_city"></span></div>
+                                <div class="col-md-4"><strong>State:</strong> <span id="preview_consignee_state"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shipment Details -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-package me-1"></i> Shipment Details
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4"><strong>Delivery Destination:</strong> <span id="preview_delivery_destination"></span></div>
+                                <div class="col-md-4"><strong>Origin Type:</strong> <span id="preview_origin_type"></span></div>
+                                <div class="col-md-4"><strong>Shipping Method:</strong> <span id="preview_shipping_method"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Package Dimensions -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-box me-1"></i> Package Dimensions
+                        </div>
+                        <div class="card-body" id="preview_packages_container">
+                        </div>
+                    </div>
+
+                    <!-- CSB Information -->
+                    <div class="card mb-3" id="preview_csb_section" style="display:none;">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-file-text me-1"></i> CSB Information
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3"><strong>E-commerce:</strong> <span id="preview_ecommerce"></span></div>
+                                <div class="col-md-3"><strong>Scheme:</strong> <span id="preview_scheme"></span></div>
+                                <div class="col-md-3"><strong>Bond UT/IGST:</strong> <span id="preview_bond_ut_igst"></span></div>
+                                <div class="col-md-3"><strong>LUT Number:</strong> <span id="preview_lut_number"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3"><strong>IEC Code:</strong> <span id="preview_iec_code"></span></div>
+                                <div class="col-md-3"><strong>GST Number:</strong> <span id="preview_gst_number"></span></div>
+                                <div class="col-md-3"><strong>AD Code:</strong> <span id="preview_ad_code"></span></div>
+                                <div class="col-md-3"><strong>Bank Account:</strong> <span id="preview_bank_account"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3"><strong>Bank IFSC:</strong> <span id="preview_bank_ifsc"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Details -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-receipt me-1"></i> Invoice Details
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3"><strong>Invoice Number:</strong> <span id="preview_invoice_number"></span></div>
+                                <div class="col-md-3"><strong>Invoice Date:</strong> <span id="preview_invoice_date"></span></div>
+                                <div class="col-md-3"><strong>Invoice Amount:</strong> <span id="preview_invoice_amount"></span></div>
+                                <div class="col-md-3"><strong>Incoterms:</strong> <span id="preview_incoterms"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3"><strong>Currency:</strong> <span id="preview_invoice_currency"></span></div>
+                                <div class="col-md-3"><strong>Reference Number:</strong> <span id="preview_reference_number"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Items -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-list-details me-1"></i> Invoice Items
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm align-middle text-center">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Box No.</th>
+                                            <th>Description</th>
+                                            <th>HS Code</th>
+                                            <th>HTS Code</th>
+                                            <th>Unit Type</th>
+                                            <th>QTY</th>
+                                            <th>Rate</th>
+                                            <th>Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview_items_table"></tbody>
+                                    <tfoot>
+                                        <tr class="fw-bold">
+                                            <td colspan="6"></td>
+                                            <td>Total Amount:</td>
+                                            <td id="preview_total_amount"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shipping Method / Rate -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-coin me-1"></i> Shipping Rate
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span></div>
+                                <div class="col-md-6"><strong>Rate:</strong> <span id="preview_rate_result"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                        <i class="ti ti-arrow-left me-1"></i> Back to Edit
+                    </button>
+                    <button type="button" class="btn btn-primary" id="previewCreateNowBtn">
+                        <i class="ti ti-check me-1"></i> Create Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- /Preview Order Modal -->
     <!-- success modal -->
     <div class="modal fade" id="create_success">
         <div class="modal-dialog modal-dialog-centered modal-sm rounded-0">
@@ -8058,6 +8357,203 @@
 
             return messages.length ? '<ul class="text-start mb-0 ps-3">' + messages.join('') + '</ul>' : '';
         }
+
+        // ===== Preview Order Modal Logic =====
+        document.getElementById('previewOrderBtn').addEventListener('click', function() {
+            const form = document.getElementById('shipmentForm');
+            const getVal = (name) => {
+                const el = form.querySelector('[name="' + name + '"]');
+                if (!el) return '';
+                if (el.type === 'select-one' || el.tagName === 'SELECT') {
+                    return el.options[el.selectedIndex]?.text || '';
+                }
+                if (el.type === 'radio') {
+                    const checked = form.querySelector('[name="' + name + '"]:checked');
+                    return checked ? checked.value : '';
+                }
+                if (el.type === 'checkbox') {
+                    return el.checked ? 'Yes' : 'No';
+                }
+                return el.value || '';
+            };
+            const getSelectVal = (name) => {
+                const el = form.querySelector('[name="' + name + '"]');
+                if (!el) return '';
+                // Handle Select2
+                const select2El = $(el).data('select2');
+                if (select2El) {
+                    return $(el).select2('data')[0]?.text || el.value || '';
+                }
+                return el.options[el.selectedIndex]?.text || '';
+            };
+
+            // Shipper Info
+            document.getElementById('preview_shipper_company').textContent = getVal('shipper_company_names');
+            document.getElementById('preview_shipper_contact').textContent = getVal('shipper_contact_person');
+            document.getElementById('preview_shipper_phone').textContent = getVal('shipper_phone_number');
+            document.getElementById('preview_shipper_email').textContent = getVal('shipper_emails');
+            const shipperAddr = [
+                getVal('shipper_address_line1'),
+                getVal('shipper_address_line2'),
+                getVal('shipper_address_line3')
+            ].filter(a => a).join(', ');
+            document.getElementById('preview_shipper_address').textContent = shipperAddr;
+            document.getElementById('preview_shipper_pincode').textContent = getVal('shipper_pincode');
+            document.getElementById('preview_shipper_city').textContent = getVal('shipper_city');
+            document.getElementById('preview_shipper_state').textContent = getVal('shipper_state');
+            document.getElementById('preview_shipper_kyc_type').textContent = getSelectVal('shipper_kyc_type');
+            document.getElementById('preview_shipper_kyc_number').textContent = getVal('shipper_kyc_number');
+
+            // Consignee Info
+            document.getElementById('preview_consignee_name').textContent = getVal('consignee_name');
+            document.getElementById('preview_consignee_contact').textContent = getVal('consignee_contact_person');
+            document.getElementById('preview_consignee_phone').textContent = getVal('consignee_phone_number');
+            document.getElementById('preview_consignee_email').textContent = getVal('consignee_email');
+            const consigneeAddr = [
+                getVal('consignee_address_line1'),
+                getVal('consignee_address_line2'),
+                getVal('consignee_address_line3')
+            ].filter(a => a).join(', ');
+            document.getElementById('preview_consignee_address').textContent = consigneeAddr;
+            document.getElementById('preview_consignee_zip').textContent = getVal('consignee_zip_code');
+            document.getElementById('preview_consignee_city').textContent = getVal('consignee_city');
+            document.getElementById('preview_consignee_state').textContent = getSelectVal('consignee_state');
+
+            // Shipment Details
+            document.getElementById('preview_delivery_destination').textContent = getSelectVal('delivery_destination');
+            document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
+            document.getElementById('preview_shipping_method').textContent = getSelectVal('shipping_method');
+
+            // Package Dimensions
+            const packagesContainer = document.getElementById('preview_packages_container');
+            packagesContainer.innerHTML = '';
+            const packageRows = form.querySelectorAll('[name^="packages["]');
+            const packageIndices = new Set();
+            packageRows.forEach(el => {
+                const match = el.name.match(/packages\[(\d+)\]/);
+                if (match) packageIndices.add(parseInt(match[1]));
+            });
+            packageIndices.forEach(idx => {
+                const card = document.createElement('div');
+                card.className = 'package-card';
+                card.innerHTML = `
+                    <div class="package-card-header">
+                        <span class="box-number"><i class="ti ti-box me-1"></i> Box #${idx + 1}</span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3"><strong>Act. Wt:</strong> ${getVal('packages[' + idx + '][actual_weight_kg]') || '-'} Kg</div>
+                        <div class="col-md-3"><strong>Length:</strong> ${getVal('packages[' + idx + '][length_cm]') || '-'} cm</div>
+                        <div class="col-md-3"><strong>Width:</strong> ${getVal('packages[' + idx + '][width_cm]') || '-'} cm</div>
+                        <div class="col-md-3"><strong>Height:</strong> ${getVal('packages[' + idx + '][height_cm]') || '-'} cm</div>
+                    </div>
+                    <div class="row mt-1">
+                        <div class="col-md-3"><strong>VOL WT:</strong> ${getVal('packages[' + idx + '][volumetric_weight]') || '-'} Kg</div>
+                        <div class="col-md-3"><strong>Chg. Wt:</strong> ${getVal('packages[' + idx + '][chargeable_weight]') || '-'} Kg</div>
+                    </div>
+                `;
+                packagesContainer.appendChild(card);
+            });
+
+            // CSB Information
+            const originType = form.querySelector('[name="origin_type"]');
+            const originTypeValue = originType ? originType.value : '';
+            const csbSection = document.getElementById('preview_csb_section');
+            if (originTypeValue === 'CSB V' || originTypeValue === 'CSB IV') {
+                csbSection.style.display = 'block';
+                document.getElementById('preview_ecommerce').textContent = getVal('ecommerce');
+                document.getElementById('preview_scheme').textContent = getVal('scheme');
+                document.getElementById('preview_bond_ut_igst').textContent = getVal('bond_ut_igst');
+                document.getElementById('preview_lut_number').textContent = getVal('lut_number');
+                document.getElementById('preview_iec_code').textContent = getVal('iec_code');
+                document.getElementById('preview_gst_number').textContent = getVal('gst_number');
+                document.getElementById('preview_ad_code').textContent = getVal('ad_code');
+                document.getElementById('preview_bank_account').textContent = getVal('bank_account_number');
+                document.getElementById('preview_bank_ifsc').textContent = getVal('bank_ifsc_code');
+            } else {
+                csbSection.style.display = 'none';
+            }
+
+            // Invoice Details
+            document.getElementById('preview_invoice_number').textContent = getVal('invoice_number');
+            document.getElementById('preview_invoice_date').textContent = getVal('invoice_date');
+            document.getElementById('preview_invoice_amount').textContent = getVal('invoice_amount');
+            document.getElementById('preview_incoterms').textContent = getSelectVal('incoterms');
+            document.getElementById('preview_invoice_currency').textContent = getSelectVal('invoice_currency');
+            document.getElementById('preview_reference_number').textContent = getVal('reference_number');
+
+            // Invoice Items
+            const itemsTable = document.getElementById('preview_items_table');
+            itemsTable.innerHTML = '';
+            const itemRows = form.querySelectorAll('#invoiceTable tr');
+            let totalAmount = 0;
+            itemRows.forEach((row, idx) => {
+                const boxNo = getVal('items[' + idx + '][box_no]');
+                const desc = getVal('items[' + idx + '][description]');
+                const hsCode = getVal('items[' + idx + '][hs_code]');
+                const htsCode = getVal('items[' + idx + '][hts_code]');
+                const unitType = getVal('items[' + idx + '][unit_type]');
+                const qty = getVal('items[' + idx + '][qty]');
+                const unitRate = getVal('items[' + idx + '][unit_rate]');
+                const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate)).toFixed(2) : '0.00';
+                if (parseFloat(amount) > 0) totalAmount += parseFloat(amount);
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${boxNo}</td>
+                    <td>${desc}</td>
+                    <td>${hsCode}</td>
+                    <td>${htsCode}</td>
+                    <td>${unitType}</td>
+                    <td>${qty}</td>
+                    <td>${unitRate}</td>
+                    <td>${amount}</td>
+                `;
+                itemsTable.appendChild(tr);
+            });
+            document.getElementById('preview_total_amount').textContent = totalAmount.toFixed(2);
+
+            // Shipping Method / Rate
+            const selectedRadio = form.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+            document.getElementById('preview_selected_method').textContent = selectedRadio ? selectedRadio.dataset.method || selectedRadio.value : 'Not selected';
+            const upsRateResultDiv = document.getElementById('upsRateResult');
+            if (upsRateResultDiv && upsRateResultDiv.style.display !== 'none') {
+                const rateRows = document.getElementById('upsRateTableBody');
+                if (rateRows && rateRows.rows.length > 0) {
+                    const priceCell = rateRows.rows[0].cells[4];
+                    document.getElementById('preview_rate_result').textContent = priceCell ? priceCell.textContent.trim() : 'Calculated';
+                } else {
+                    document.getElementById('preview_rate_result').textContent = 'Calculated';
+                }
+            } else {
+                document.getElementById('preview_rate_result').textContent = 'Not calculated';
+            }
+
+            // Show the modal
+            const previewModal = new bootstrap.Modal(document.getElementById('previewOrderModal'));
+            previewModal.show();
+        });
+        // ===== /Preview Order Modal Logic =====
+
+        // ===== Preview "Create Now" Button Handler =====
+        document.getElementById('previewCreateNowBtn').addEventListener('click', function() {
+            // Close the preview modal
+            const previewModalEl = document.getElementById('previewOrderModal');
+            const previewModalInstance = bootstrap.Modal.getInstance(previewModalEl);
+            if (previewModalInstance) {
+                previewModalInstance.hide();
+            }
+
+            // Wait for modal to fully close, then trigger the hidden submit button
+            previewModalEl.addEventListener('hidden.bs.modal', function() {
+                const hiddenSubmitBtn = document.getElementById('hiddenSubmitBtn');
+                if (hiddenSubmitBtn) {
+                    hiddenSubmitBtn.click();
+                }
+                // Remove this one-time listener so it doesn't accumulate
+                previewModalEl.removeEventListener('hidden.bs.modal', this);
+            }, { once: true });
+        });
+        // ===== /Preview "Create Now" Button Handler =====
 
         forms.forEach(function(form) {
             form.addEventListener('submit', function(e) {
@@ -8463,6 +8959,156 @@
                 });
             }
         });
+    })();
+
+    // ===== HS Code Autocomplete =====
+    (function() {
+        const HS_SEARCH_URL = '{{ route("customer.search-hs-codes") }}';
+
+        // Create a single global dropdown appended to <body> with fixed positioning
+        const globalDropdown = document.createElement('div');
+        globalDropdown.className = 'hs-global-dropdown';
+        globalDropdown.style.display = 'none';
+        document.body.appendChild(globalDropdown);
+
+        // CSS for global dropdown
+        const style = document.createElement('style');
+        style.textContent = `
+            .hs-global-dropdown {
+                position: fixed;
+                z-index: 99999;
+                background: #fff;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                max-height: 220px;
+                overflow-y: auto;
+                min-width: 280px;
+                max-width: 400px;
+                box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            }
+            .hs-suggestion-item {
+                padding: 10px 14px;
+                cursor: pointer;
+                border-bottom: 1px solid #eee;
+                font-size: 13px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .hs-suggestion-item:last-child { border-bottom: none; }
+            .hs-suggestion-item:hover { background: #f0f7ff; }
+            .hs-suggestion-item .hs-item-desc { font-weight: 500; color: #333; }
+            .hs-suggestion-item .hs-item-code { color: #6c757d; font-size: 11px; white-space: nowrap; }
+        `;
+        document.head.appendChild(style);
+
+        let debounceTimer = null;
+        let currentInput = null;
+
+        function positionDropdown(input) {
+            const rect = input.getBoundingClientRect();
+            globalDropdown.style.top = (rect.bottom + 4) + 'px';
+            globalDropdown.style.left = rect.left + 'px';
+            globalDropdown.style.width = Math.max(rect.width, 280) + 'px';
+        }
+
+        function fetchSuggestions(input) {
+            clearTimeout(debounceTimer);
+            const query = input.value.trim();
+            currentInput = input;
+
+            if (query.length < 2) {
+                globalDropdown.style.display = 'none';
+                return;
+            }
+
+            debounceTimer = setTimeout(function() {
+                fetch(HS_SEARCH_URL + '?q=' + encodeURIComponent(query), {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    globalDropdown.innerHTML = '';
+                    if (data.length === 0) {
+                        globalDropdown.style.display = 'none';
+                        return;
+                    }
+                    data.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'hs-suggestion-item';
+                        div.innerHTML = '<span class="hs-item-desc">' + escapeHtml(item.items) + '</span>' +
+                            '<span class="hs-item-code">HS: ' + escapeHtml(item.hs_code || '') + ' | HTS: ' + escapeHtml(item.hts_code || '') + '</span>';
+                        div.addEventListener('mousedown', function(e) {
+                            e.preventDefault(); // Prevent blur from firing before click
+                            input.value = item.items;
+                            const row = input.closest('tr');
+                            const hsInput = row.querySelector('.hs-code-input') || row.querySelector('input[name$="[hs_code]"]');
+                            if (hsInput) hsInput.value = item.hs_code || '';
+                            const htsInput = row.querySelector('.hts-code-input') || row.querySelector('input[name$="[hts_code]"]');
+                            if (htsInput) htsInput.value = item.hts_code || '';
+                            globalDropdown.style.display = 'none';
+                        });
+                        globalDropdown.appendChild(div);
+                    });
+                    positionDropdown(input);
+                    globalDropdown.style.display = 'block';
+                })
+                .catch(() => { globalDropdown.style.display = 'none'; });
+            }, 300);
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Attach to all description inputs (existing and future)
+        function attachAutocomplete(input) {
+            if (input.dataset.hsAttached) return;
+            input.dataset.hsAttached = 'true';
+            input.classList.add('description-input');
+
+            // Also ensure the hs_code and hts_code inputs have the class
+            const row = input.closest('tr');
+            const hsInput = row.querySelector('input[name$="[hs_code]"]');
+            if (hsInput) hsInput.classList.add('hs-code-input');
+            const htsInput = row.querySelector('input[name$="[hts_code]"]');
+            if (htsInput) htsInput.classList.add('hts-code-input');
+
+            input.addEventListener('input', function() { fetchSuggestions(input); });
+            input.addEventListener('blur', function() {
+                setTimeout(function() { globalDropdown.style.display = 'none'; }, 200);
+            });
+            input.addEventListener('focus', function() {
+                if (input.value.trim().length >= 2) fetchSuggestions(input);
+            });
+            // Reposition dropdown on scroll/resize
+            input.addEventListener('keydown', function() {
+                if (globalDropdown.style.display === 'block' && currentInput === input) {
+                    setTimeout(function() { positionDropdown(input); }, 0);
+                }
+            });
+        }
+
+        // Reposition on scroll within any scrollable container
+        document.addEventListener('scroll', function(e) {
+            if (globalDropdown.style.display === 'block' && currentInput) {
+                positionDropdown(currentInput);
+            }
+        }, true);
+
+        // Initial attachment
+        document.querySelectorAll('input[name$="[description]"]').forEach(attachAutocomplete);
+
+        // Re-attach after rows are added/updated (observe DOM changes)
+        const table = document.getElementById('invoiceTable');
+        if (table) {
+            const observer = new MutationObserver(function() {
+                document.querySelectorAll('input[name$="[description]"]').forEach(attachAutocomplete);
+            });
+            observer.observe(table, { childList: true, subtree: true });
+        }
     })();
     </script>
     <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"

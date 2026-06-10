@@ -519,6 +519,7 @@ class customerController extends Controller
                 'packages.*.width_cm' => 'nullable|numeric|min:0',
                 'packages.*.height_cm' => 'nullable|numeric|min:0',
                 'packages.*.volumetric_weight' => 'nullable|numeric|min:0',
+                'packages.*.chargeable_weight' => 'nullable|numeric|min:0',
 
                 // CSB Information
                 'ecommerce' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
@@ -544,6 +545,7 @@ class customerController extends Controller
                 'items.*.box_no' => 'nullable|integer',
                 'items.*.description' => 'nullable|string|max:500',
                 'items.*.hs_code' => 'nullable|string|max:50',
+                'items.*.hts_code' => 'nullable|string|max:50',
                 'items.*.unit_type' => 'nullable|string|max:50',
                 'items.*.qty' => 'nullable|numeric|min:0',
                 'items.*.unit_rate' => 'nullable|numeric|min:0',
@@ -681,6 +683,7 @@ class customerController extends Controller
                     'width_cm' => $packageData['width_cm'] ?? null,
                     'height_cm' => $packageData['height_cm'] ?? null,
                     'volumetric_weight' => $packageData['volumetric_weight'] ?? null,
+                    'chargeable_weight' => $packageData['chargeable_weight'] ?? null,
                 ]);
 
                 $packageIds[] = $package->id;
@@ -728,6 +731,7 @@ class customerController extends Controller
                         'box_no' => $boxNo,
                         'description' => $item['description'] ?? null,
                         'hs_code' => $item['hs_code'] ?? null,
+                        'hts_code' => $item['hts_code'] ?? null,
                         'unit_type' => $item['unit_type'] ?? null,
                         'qty' => $item['qty'] ?? null,
                         'unit_rate' => $item['unit_rate'] ?? null,
@@ -1204,7 +1208,15 @@ class customerController extends Controller
         $shipperAttentionName = "United";
         $shipperCompanyDisplayableName = "UWC";
         $shipperPhone = "6466741258";
-        $shipperNumber = "1255AK";
+
+
+        // Shipper number based on service weight column:
+        // - Services with weight "OZS" or "OZS/LBS" (Saver): X19700
+        // - Services with weight "LBS" (2nd Day Air / Ground): 1255AK
+        $serviceWeight = $service->weight ?? 'LBS';
+        $isSaver = str_contains($serviceWeight, 'OZS');
+        $shipperNumber = $isSaver ? "X19700" : "1255AK";
+
         $shipperAddressLine = "218 WEST 37 STREET 6TH FLOOR";
         $shipperCity = "NEW YORK";
         $shipperState = "NY";
@@ -1233,6 +1245,37 @@ class customerController extends Controller
         $serviceCode = $service->scode;
         $serviceDescription = $this->getServiceDescriptionFromMethod($service->method);
 
+        // Weight unit determined by courier_services.weight column:
+        // - "LBS" → always LBS, no service code override
+        // - "OZS" → always OZS, service code from scode
+        // - "OZS/LBS" → dynamic: convert KG→LBS, <1 LBS → OZS + code 92, ≥1 LBS → LBS + code 93
+        $weightUnit = 'LBS';
+        if ($serviceWeight === 'OZS') {
+            $serviceCode = $service->scode;
+            $weightUnit = 'OZS';
+        } elseif ($serviceWeight === 'OZS/LBS') {
+            $maxWeightKg = 0;
+            $preScanRows = $validatedData['packages'] ?? [];
+            foreach ($preScanRows as $pkgData) {
+                $w = floatval($pkgData['actual_weight_kg'] ?? 0);
+
+                if ($w > $maxWeightKg) {
+                    $maxWeightKg = $w;
+                }
+            }
+            // Convert max weight to LBS and check threshold
+            $maxWeightLbs = $maxWeightKg * 2.205;
+            if ($maxWeightLbs > 0 && $maxWeightLbs < 1) {
+                // Less than 1 LBS → service code 92, weight unit OZS
+                $serviceCode = '92';
+                $weightUnit = 'OZS';
+            } else {
+                // 1 LBS or greater → service code 93, weight unit LBS
+                // echo "Max weight in LBS: $maxWeightLbs\n";
+                $serviceCode = '93';
+                $weightUnit = 'LBS';
+            }
+        }
         // Build Packages array from form data
         $packages = [];
         $packageRows = $validatedData['packages'] ?? [];
@@ -1242,12 +1285,27 @@ class customerController extends Controller
                 continue;
             }
 
+            // Convert weight from KG to the appropriate unit:
+            // - OZS: 1 KG = 35.274 OZS (for saver ≤0.440 KG, service code 92)
+            // - LBS: 1 KG = 2.20462 LBS (for all other services and saver >0.440 KG)
+            $convertedWeight = $weightUnit === 'OZS'
+                ? round($weightKg * 35.274, 2)
+                : round($weightKg * 2.20462, 2);
+
             $pkg = [
                 'Description' => 'Documents',
                 'Packaging' => ['Code' => '02'],
+
+                'ReferenceNumber' => [
+                    [
+                        'Code' => '9S',
+                        'Value' => 'ORDER12345'
+                    ]
+                ],
+
                 'PackageWeight' => [
-                    'UnitOfMeasurement' => ['Code' => 'LBS'],
-                    'Weight' => (string) $weightKg,
+                    'UnitOfMeasurement' => ['Code' => $weightUnit],
+                    'Weight' => (string) $convertedWeight,
                 ],
             ];
 
@@ -1276,12 +1334,20 @@ class customerController extends Controller
 
         // Fallback: single default package if no valid packages
         if (empty($packages)) {
+            // Fallback: ~5KG converted to appropriate weight unit
+            $fallbackWeight = $weightUnit === 'OZS' ? '176.37' : '11.02';
             $packages[] = [
                 'Description' => 'Documents',
+                'ReferenceNumber' => [
+                    [
+                        "Code" => "9S",
+                        "Value" => "ORDER12345"
+                    ]
+                ],
                 'Packaging' => ['Code' => '02'],
                 'PackageWeight' => [
-                    'UnitOfMeasurement' => ['Code' => 'LBS'],
-                    'Weight' => '5',
+                    'UnitOfMeasurement' => ['Code' => $weightUnit],
+                    'Weight' => $fallbackWeight,
                 ],
                 'Dimensions' => [
                     'UnitOfMeasurement' => ['Code' => 'IN'],
@@ -1295,6 +1361,12 @@ class customerController extends Controller
         // Build the full ShipmentRequest payload (same structure as JS)
         $payload = [
             'ShipmentRequest' => [
+                'Request' => [
+                    'RequestOption' => 'validate',
+                    'TransactionReference' => [
+                        'CustomerContext' => 'ORDER-12345'
+                    ]
+                ],
                 'Shipment' => [
                     'Shipper' => [
                         'Name' => $shipperName,
@@ -1338,7 +1410,7 @@ class customerController extends Controller
                         'ShipmentCharge' => [
                             'Type' => '01',
                             'BillShipper' => [
-                                'AccountNumber' => '1255AK',
+                                'AccountNumber' => $shipperNumber,
                             ],
                         ],
                     ],
@@ -1346,10 +1418,11 @@ class customerController extends Controller
                         'Code' => $serviceCode,
                         'Description' => $serviceDescription,
                     ],
+                    
                     'Package' => $packages,
                 ],
                 'LabelSpecification' => [
-                    'LabelImageFormat' => ['Code' => 'GIF'],
+                    'LabelImageFormat' => ['Code' => 'PDF'],
                 ],
             ],
         ];
@@ -1509,11 +1582,111 @@ class customerController extends Controller
 
         // Get all invoices for those shippers, with shipper info
         $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
-            ->with(['invoiceItems'])
+            ->with(['invoiceItems', 'shipperInfo.shipmentTracking', 'shipperInfo.consigneeInfo', 'shipperInfo.packageDimensions'])
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return view('customer.view-all-shipments', compact('invoices'));
+        // Prepare shipment details data for the detail modal (JS-friendly format)
+        $shipmentDetails = $invoices->mapWithKeys(function($invoice) {
+            $shipper = $invoice->shipperInfo;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $tracking = $shipper ? $shipper->shipmentTracking : null;
+            $packages = $shipper ? $shipper->packageDimensions : collect([]);
+            $items = $invoice->invoiceItems;
+
+            // Extract label data from package_results
+            // UPS Ship API uses "ShippingLabel" key (not "LabelImage")
+            // Structure: ShippingLabel.ImageFormat.Code + ShippingLabel.GraphicImage
+            $hasLabel = false;
+            $labelFormat = null;
+            $graphicImage = null;
+            if ($tracking && $tracking->package_results) {
+                $pkgResults = $tracking->package_results;
+                $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
+                if (isset($firstPkg['ShippingLabel'])) {
+                    $hasLabel = true;
+                    $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                    $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+                } elseif (isset($firstPkg['LabelImage'])) {
+                    // Fallback for older/different UPS response format
+                    $hasLabel = true;
+                    $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                    $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+                }
+            }
+            return [
+                $invoice->id => [
+                    'awb_number' => $shipper ? $shipper->awb_number : null,
+                    'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+                    'invoice_number' => $invoice->invoice_number,
+                    'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
+                    'invoice_amount' => number_format($invoice->invoice_amount, 2),
+                    'invoice_currency' => $invoice->invoice_currency,
+                    'incoterms' => $invoice->incoterms,
+                    'reference_number' => $invoice->reference_number,
+                    'status' => $invoice->status,
+                    'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
+                    'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($shipper ? $shipper->delivery_destination : '')) : null,
+                    'shipper' => $shipper ? [
+                        'company' => $shipper->company_name,
+                        'contact' => $shipper->contact_person,
+                        'phone' => $shipper->phone_number,
+                        'email' => $shipper->email,
+                        'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
+                        'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                    ] : null,
+                    'consignee' => $consignee ? [
+                        'name' => $consignee->consignee_name,
+                        'contact' => $consignee->contact_person,
+                        'phone' => $consignee->phone_number,
+                        'email' => $consignee->email,
+                        'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
+                        'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                    ] : null,
+                    'destination' => $shipper ? $shipper->delivery_destination : null,
+                    'origin_type' => $shipper ? $shipper->origin_type : null,
+                    'shipping_method' => $shipper ? $shipper->shipping_method : null,
+                    'packages' => $packages->map(function($pkg, $idx) {
+                        return [
+                            'index' => $idx + 1,
+                            'weight' => $pkg->actual_weight_kg,
+                            'length' => $pkg->length_cm,
+                            'width' => $pkg->width_cm,
+                            'height' => $pkg->height_cm,
+                            'volumetric' => $pkg->volumetric_weight,
+                            'chargeable' => $pkg->chargeable_weight,
+                        ];
+                    })->values()->toArray(),
+                    'items' => $items->map(function($item) {
+                        $qty = $item->qty ?? 0;
+                        $rate = $item->unit_rate ?? 0;
+                        $amount = $qty * $rate;
+                        return [
+                            'box_no' => $item->box_no,
+                            'description' => $item->description,
+                            'hs_code' => $item->hs_code,
+                            'hts_code' => $item->hts_code,
+                            'unit_type' => $item->unit_type,
+                            'qty' => $qty,
+                            'unit_rate' => $rate,
+                            'amount' => number_format($amount, 2),
+                        ];
+                    })->values()->toArray(),
+                    'items_total' => number_format($items->sum(function($item) { return ($item->qty ?? 0) * ($item->unit_rate ?? 0); }), 2),
+                    'charges' => $tracking ? [
+                        'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
+                        'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
+                        'total' => $tracking->total_charges_currency . ' ' . ($tracking->total_charges_amount ?? '-'),
+                        'billing_weight' => ($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'),
+                    ] : null,
+                    'has_label' => $hasLabel,
+                    'label_format' => $labelFormat,
+                    'graphic_image' => $graphicImage,
+                ]
+            ];
+        });
+
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails'));
     }
 
     /**
@@ -1576,6 +1749,20 @@ class customerController extends Controller
      * Format: UWC + YYMMDD + 5-digit serial (resets daily)
      * Example: UWC26060200001
      */
+    public function searchHsCodes(Request $request)
+    {
+        $query = $request->get('q', '');
+        if (strlen($query) < 2) {
+            return response()->json([]);
+        }
+
+        $results = \App\Models\HsHtsCode::where('items', 'LIKE', "%{$query}%")
+            ->limit(20)
+            ->get(['id', 'items', 'hs_code', 'hts_code']);
+
+        return response()->json($results);
+    }
+
     private function generateAwbNumber()
     {
         $prefix = 'UWC';

@@ -46,4 +46,44 @@ class ShipperInfo extends Model
     {
         return $this->hasMany(Shipment::class, 'shipper_id');
     }
+
+    /**
+     * Get the consignee info for this shipper.
+     */
+    public function consigneeInfo()
+    {
+        return $this->hasOne(ConsigneeInfo::class, 'shipper_id');
+    }
+
+    /**
+     * Get the shipment tracking for this shipper.
+     */
+    public function shipmentTracking()
+    {
+        return $this->hasOne(ShipmentTracking::class, 'shipper_id');
+    }
+
+    /**
+     * Get the package dimensions for this shipper.
+     */
+    public function packageDimensions()
+    {
+        return $this->hasMany(PackageDimension::class, 'shipper_id');
+    }
+
+    /**
+     * Get the CSB information for this shipper.
+     */
+    public function csbInformation()
+    {
+        return $this->hasOne(CsbInformation::class, 'shipper_id');
+    }
+
+    /**
+     * Get the shipment invoices for this shipper.
+     */
+    public function invoices()
+    {
+        return $this->hasMany(ShipmentInvoice::class, 'shipper_id');
+    }
 }

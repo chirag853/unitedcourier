@@ -15,11 +15,16 @@ class CourierService extends Model
 
     protected $fillable = [
         'shipper_code',
+        'method_code',
         'network',
         'service_code',
+        'scode',
         'type',
         'method',
         'tat',
+        'description',
+        'weight',
+        'real_name',
     ];
 
     /**

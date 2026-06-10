@@ -17,9 +17,12 @@ class ShipmentInvoiceItem extends Model
         'box_no',
         'description',
         'hs_code',
+        'hts_code',
         'unit_type',
         'qty',
         'unit_rate',
+        'igst_percentage',
+        'igst_amount',
     ];
 
     protected $casts = [
@@ -29,6 +32,8 @@ class ShipmentInvoiceItem extends Model
         'qty' => 'decimal:2',
         'unit_rate' => 'decimal:2',
         'amount' => 'decimal:2',
+        'igst_percentage' => 'decimal:2',
+        'igst_amount' => 'decimal:2',
     ];
 
     /**

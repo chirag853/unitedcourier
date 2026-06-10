@@ -19,6 +19,7 @@ class PackageDimension extends Model
         'width_cm',
         'height_cm',
         'volumetric_weight',
+        'chargeable_weight',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class PackageDimension extends Model
         'width_cm' => 'decimal:2',
         'height_cm' => 'decimal:2',
         'volumetric_weight' => 'decimal:2',
+        'chargeable_weight' => 'decimal:2',
         'created_at' => 'datetime',
     ];
 
@@ -69,6 +71,10 @@ class PackageDimension extends Model
             if ($package->length_cm && $package->width_cm && $package->height_cm) {
                 $package->volumetric_weight = $package->calculateVolumetricWeight();
             }
+            // Auto-calculate chargeable weight (max of actual and volumetric)
+            $actual = floatval($package->actual_weight_kg) ?: 0;
+            $volumetric = floatval($package->volumetric_weight) ?: 0;
+            $package->chargeable_weight = max($actual, $volumetric);
         });
     }
 }

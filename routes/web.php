@@ -557,4 +557,5 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/ups-ship', [customerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [customerController::class, 'viewAllShipments'])->name('view-all-shipments');
     Route::post('/cancel-shipment/{id}', [customerController::class, 'cancelShipment'])->name('cancel-shipment');
+    Route::get('/search-hs-codes', [customerController::class, 'searchHsCodes'])->name('search-hs-codes');
 });
