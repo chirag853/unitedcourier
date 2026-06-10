@@ -6822,9 +6822,11 @@
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
-                                                            <button type="button" class="btn btn-primary"
+                                                            <!-- <button type="button" class="btn btn-primary"
                                                                 data-bs-toggle="modal"
-                                                                data-bs-target="#create_success">Save Consignee</button>
+                                                                data-bs-target="#create_success">Save Consignee</button> -->
+                                                                <button type="button" class="btn btn-primary"
+                                                                id="nextTopackage">Next</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -8324,6 +8326,19 @@
                 $('#basic').collapse('hide');
                 // Open Consignee Info accordion
                 $('#address').collapse('show');
+            });
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const nextButton = document.getElementById('nextTopackage');
+        if (nextButton) {
+            nextButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                // Close Shipper Info accordion
+                $('#address').collapse('hide');
+                // Open Consignee Info accordion
+                $('#social').collapse('show');
             });
         }
     });
