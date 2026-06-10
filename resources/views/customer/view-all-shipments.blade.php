@@ -498,6 +498,8 @@
                                         <th>Unit</th>
                                         <th>Qty</th>
                                         <th>Rate</th>
+                                        <th>IGST(%)</th>
+                                        <th>IGST</th>
                                         <th>Amount</th>
                                     </tr>
                                 </thead>
@@ -691,6 +693,8 @@
                     '<td>' + (item.unit_type || '-') + '</td>' +
                     '<td>' + (item.qty || '-') + '</td>' +
                     '<td>' + (item.unit_rate || '-') + '</td>' +
+                    '<td>' + (item.igst_percentage || '-') + '</td>' +
+                    '<td>' + (item.igst_amount || '-') + '</td>' +
                     '<td>' + item.amount + '</td>';
                 itemsTable.appendChild(row);
             });

@@ -7328,10 +7328,12 @@
                                                                         </td>
                                                                         <td><input type="text"
                                                                                 class="form-control igst-amount" readonly
+                                                                                name="items[0][igst_amount]"
                                                                                 placeholder="IGST">
                                                                         </td>
                                                                         <td><input type="text"
                                                                                 class="form-control amount" readonly
+                                                                                name="items[0][amount]"
                                                                                 placeholder="Amount">
                                                                         </td>
                                                                         <td>
@@ -7492,6 +7494,9 @@
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
                                                                 if (inputs[3]) inputs[3].name = 'items[' + index + '][qty]';
                                                                 if (inputs[4]) inputs[4].name = 'items[' + index + '][unit_rate]';
+                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][igst_percentage]';
+                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_amount]';
+                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][amount]';
                                                             });
                                                         }
                                                         // Initialize dropdowns on DOM ready

@@ -549,6 +549,9 @@ class customerController extends Controller
                 'items.*.unit_type' => 'nullable|string|max:50',
                 'items.*.qty' => 'nullable|numeric|min:0',
                 'items.*.unit_rate' => 'nullable|numeric|min:0',
+                'items.*.igst_percentage' => 'nullable|numeric|min:0|max:100',
+                'items.*.igst_amount' => 'nullable|numeric|min:0',
+                'items.*.amount' => 'nullable|numeric|min:0',
 
                 // Shipping service selection (for UPS payload)
                 'service_id' => 'required|integer',
@@ -735,6 +738,9 @@ class customerController extends Controller
                         'unit_type' => $item['unit_type'] ?? null,
                         'qty' => $item['qty'] ?? null,
                         'unit_rate' => $item['unit_rate'] ?? null,
+                        'igst_percentage' => $item['igst_percentage'] ?? null,
+                        'igst_amount' => $item['igst_amount'] ?? null,
+                        'amount' => $item['amount'] ?? null,
                     ]);
                 }
             } else {
@@ -1660,7 +1666,11 @@ class customerController extends Controller
                     'items' => $items->map(function($item) {
                         $qty = $item->qty ?? 0;
                         $rate = $item->unit_rate ?? 0;
-                        $amount = $qty * $rate;
+                        $igstPct = $item->igst_percentage ?? 0;
+                        $igstAmt = $item->igst_amount ?? 0;
+                        $baseAmount = $qty * $rate;
+                        // Use stored amount if available, otherwise calculate
+                        $amount = $item->amount ?? ($baseAmount + $igstAmt);
                         return [
                             'box_no' => $item->box_no,
                             'description' => $item->description,
@@ -1669,10 +1679,18 @@ class customerController extends Controller
                             'unit_type' => $item->unit_type,
                             'qty' => $qty,
                             'unit_rate' => $rate,
+                            'igst_percentage' => $igstPct,
+                            'igst_amount' => number_format($igstAmt, 2),
                             'amount' => number_format($amount, 2),
                         ];
                     })->values()->toArray(),
-                    'items_total' => number_format($items->sum(function($item) { return ($item->qty ?? 0) * ($item->unit_rate ?? 0); }), 2),
+                    'items_total' => number_format($items->sum(function($item) {
+                        $qty = $item->qty ?? 0;
+                        $rate = $item->unit_rate ?? 0;
+                        $igstAmt = $item->igst_amount ?? 0;
+                        $amount = $item->amount ?? ($qty * $rate + $igstAmt);
+                        return $amount;
+                    }), 2),
                     'charges' => $tracking ? [
                         'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
                         'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),

@@ -23,6 +23,7 @@ class ShipmentInvoiceItem extends Model
         'unit_rate',
         'igst_percentage',
         'igst_amount',
+        'amount',
     ];
 
     protected $casts = [
