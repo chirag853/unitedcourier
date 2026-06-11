@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Customer;
+use App\Models\Wallet;
 use App\Models\BusinessCategory;
 use App\Models\KycDetail;
 use App\Models\AboutPageContent;
@@ -21,6 +22,7 @@ use App\Models\ShipmentTracking;
 use App\Models\CourierService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class customerController extends Controller
 {
@@ -1622,15 +1624,16 @@ class customerController extends Controller
             }
             return [
                 $invoice->id => [
+                    'shipper_id' => $shipper ? $shipper->id : null,
                     'awb_number' => $shipper ? $shipper->awb_number : null,
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
-                    'invoice_amount' => number_format($invoice->invoice_amount, 2),
+                    'invoice_amount' => number_format($invoice->total_amount, 2),
                     'invoice_currency' => $invoice->invoice_currency,
                     'incoterms' => $invoice->incoterms,
                     'reference_number' => $invoice->reference_number,
-                    'status' => $invoice->status,
+                    'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
                     'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
                     'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($shipper ? $shipper->delivery_destination : '')) : null,
                     'shipper' => $shipper ? [
@@ -1708,6 +1711,100 @@ class customerController extends Controller
     }
 
     /**
+     * Pay for a shipment - deduct from wallet and set status to ready.
+     */
+    public function payNow(Request $request)
+    {
+        try {
+            // Check if customer is logged in
+            if (!auth()->guard('customer')->check()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated.'
+                ], 401);
+            }
+
+            $customerId = auth()->guard('customer')->id();
+
+            // Validate request
+            $validated = $request->validate([
+                'invoice_id' => 'required|integer',
+                'shipper_id' => 'required|integer',
+                'amount' => 'required|numeric|min:0.01',
+            ]);
+
+            $invoiceId = $validated['invoice_id'];
+            $shipperId = $validated['shipper_id'];
+            $amount = $validated['amount'];
+
+            // Find the shipper info and verify it belongs to this customer
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or does not belong to you.'
+                ], 403);
+            }
+
+            // Check if already paid (status is ready)
+            if ($shipper->status === 'ready') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This shipment has already been paid for.'
+                ]);
+            }
+
+            // Find the customer's wallet
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+
+            if (!$wallet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Wallet not found. Please contact support.'
+                ]);
+            }
+
+            // Check if wallet balance is sufficient
+            if ($wallet->balance < $amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient wallet balance. Your current balance is ₹' . number_format($wallet->balance, 2)
+                ]);
+            }
+
+            // Deduct amount from wallet and update shipper status in a transaction
+            DB::transaction(function () use ($wallet, $amount, $shipper) {
+                $wallet->decrement('balance', $amount);
+                $shipper->status = 'ready';
+                $shipper->save();
+            });
+
+            // Refresh wallet to get new balance
+            $wallet->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment successful! Shipment status updated to Ready.',
+                'new_balance' => (float) $wallet->balance
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all())
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error processing payment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Cancel a shipment (set status to cancelled).
      */
     public function cancelShipment($id)
@@ -1758,6 +1855,87 @@ class customerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error cancelling shipment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Mark a shipment as packed (called when Print Label is clicked from Ready status).
+     */
+    public function markPacked(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $customerId = auth()->guard('customer')->id();
+            $shipperId = $request->input('shipper_id');
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
+            }
+
+            if ($shipper->status !== 'ready') {
+                return response()->json(['success' => false, 'message' => 'Shipment is not in Ready status.'], 400);
+            }
+
+            $shipper->status = 'packed';
+            $shipper->save();
+
+            return response()->json(['success' => true, 'message' => 'Status updated to Packed.']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Recharge the authenticated customer's wallet.
+     */
+    public function walletRecharge(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $validated = $request->validate([
+                'amount' => 'required|numeric|min:1',
+            ]);
+
+            $customerId = auth()->guard('customer')->id();
+            $amount = $validated['amount'];
+
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+
+            if (!$wallet) {
+                return response()->json(['success' => false, 'message' => 'Wallet not found. Please contact support.']);
+            }
+
+            DB::transaction(function () use ($wallet, $amount) {
+                $wallet->increment('balance', $amount);
+            });
+
+            $wallet->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Wallet recharged successfully! ₹' . number_format($amount, 2) . ' has been added.',
+                'new_balance' => (float) $wallet->balance,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error processing recharge: ' . $e->getMessage(),
             ], 500);
         }
     }

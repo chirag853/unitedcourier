@@ -39,7 +39,9 @@
     <!-- Flatpickr CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <!-- Tabler Icon CSS -->
-    <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
+    <!-- <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}"> -->
+    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+
     <!-- Simplebar CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/simplebar/simplebar.min.css') }}">
     <!-- Main CSS -->
@@ -7354,7 +7356,7 @@
                                                                     class="form-control w-100" readonly>
                                                             </div>
                                                             <button type="button" class="btn btn-primary" id="rateCalculateBtn">
-                                                                <i class="ti ti-calculator me-1"></i> Rate Calculate
+                                                                <i class="ti ti-calculator me-1"></i> Next
                                                             </button>
                                                         </div>
                                                         <style>

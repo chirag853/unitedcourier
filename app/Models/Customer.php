@@ -40,4 +40,9 @@ class Customer extends Authenticatable
     {
         return $this->password_hash;
     }
+
+    public function wallet()
+    {
+        return $this->hasOne(Wallet::class);
+    }
 }

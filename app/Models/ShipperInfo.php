@@ -31,6 +31,7 @@ class ShipperInfo extends Model
         'email_opt_out',
         'kyc_type',
         'kyc_number',
+        'status',
     ];
 
     protected $casts = [

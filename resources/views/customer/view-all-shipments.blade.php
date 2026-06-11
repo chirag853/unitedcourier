@@ -8,7 +8,7 @@
     <title>View All Shipments | United Courier</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
     <!-- Favicon -->
     <link rel="shortcut icon" href="{{ asset('assets/img/favicon.png') }}">
     <!-- Apple Icon -->
@@ -22,7 +22,9 @@
     <!-- Flatpickr CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <!-- Tabler Icon CSS -->
-    <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
+    <!-- <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}"> -->
+    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+
     <!-- Select2 CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
     <!-- Simplebar CSS -->
@@ -31,19 +33,26 @@
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
 
     <style>
-        .badge-status-active {
-            background-color: #28a745;
-            color: #fff;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-size: 12px;
+        .card {
+            background: #fff;
+            border-radius: 20px;
         }
-        .badge-status-cancelled {
-            background-color: #dc3545;
-            color: #fff;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-size: 12px;
+
+        .btn-light {
+            background: #f5f6f8;
+            border: none;
+            color: #243b63;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #2f66f3;
+            border: none;
+            font-weight: 500;
+        }
+
+        .rounded-pill {
+            border-radius: 50px !important;
         }
         .btn-cancel {
             background-color: #dc3545;
@@ -62,31 +71,6 @@
         .btn-cancel:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-        }
-        .card-header-actions {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .table-actions {
-            display: flex;
-            gap: 6px;
-        }
-        .table-actions .btn {
-            padding: 4px 10px;
-            font-size: 13px;
-        }
-        .awb-link {
-            color: #2563eb;
-            cursor: pointer;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .awb-link:hover {
-            color: #1d4ed8;
-            text-decoration: underline;
         }
         .detail-section {
             border-bottom: 1px solid #e9ecef;
@@ -239,15 +223,60 @@
 
                 <!-- Success/Error Messages -->
                 <div id="alertContainer"></div>
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-body p-4">
+                        <div class="d-flex flex-wrap gap-3">
 
-                <!-- Shipments Table Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-header-actions">
-                            <h5 class="card-title mb-0">My Shipments</h5>
-                            <span class="text-muted" style="font-size:13px;">Total: {{ $invoices->count() }} shipment(s)</span>
+                            <button class="btn btn-primary rounded-pill px-4 py-2 status-filter-btn" data-filter="all">
+                                All Orders
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="draft">
+                                Drafts
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="ready">
+                                Ready
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="packed">
+                                Packed
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="manifested">
+                                Manifested
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="received">
+                                Received
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="dispatched">
+                                Dispatched
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="cancelled">
+                                Cancelled
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="delivered">
+                                Delivered
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="disputed">
+                                Disputed
+                            </button>
+
+                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="on_hold">
+                                On Hold
+                            </button>
+
                         </div>
                     </div>
+                </div>
+                <h5 class="fw-bold mb-3" id="statusFilterHeading">All Orders</h5>
+                <!-- Shipments Table Card -->
+                <div class="card border shadow">
                     <div class="card-body">
                         @if($invoices->isEmpty())
                             <div class="text-center py-5">
@@ -257,62 +286,106 @@
                             </div>
                         @else
                             <div class="table-responsive">
-                                <table id="shipmentsTable" class="table table-hover table-centered mb-0">
+                                <table id="shipmentsTable" class="table table-bordered table-hover">
                                     <thead class="table-light">
                                         <tr>
                                             <th>#</th>
                                             <th>AWB Number</th>
-                                            <th>Ship From → Ship To</th>
-                                            <th>Invoice Date</th>
+                                            <!-- <th>Ship From → Ship To</th> -->
+                                            <th>Consignee Details</th>
+                                            <!-- <th>Invoice Date</th> -->
                                             <th>Amount</th>
                                             <th>Currency</th>
                                             <th>Incoterms</th>
-                                            <th>Reference No.</th>
+                                            <!-- <th>Reference No.</th> -->
                                             <th>Status</th>
-                                            <th>Label</th>
+                                            <th>Print Label</th>
+                                            <th>Pay Now</th>
                                             <th>Created</th>
                                             <th class="text-center">Cancel</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @foreach($invoices as $index => $invoice)
-                                        <tr id="invoice-row-{{ $invoice->id }}">
+                                        @php
+                                            $rowStatus = 'draft';
+                                            if ($invoice->status === 'cancelled') {
+                                                $rowStatus = 'cancelled';
+                                            } elseif ($invoice->shipperInfo && $invoice->shipperInfo->status) {
+                                                $rowStatus = $invoice->shipperInfo->status;
+                                            }
+                                        @endphp
+                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}">
                                             <td>{{ $index + 1 }}</td>
                                             <td>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
-                                                    <a href="#" class="awb-link"
-                                                       data-invoice-id="{{ $invoice->id }}"
-                                                       onclick="showShipmentDetail({{ $invoice->id }}); return false;">
+                                                    <span class="badge bg-dark" style="cursor:pointer;"
+                                                          data-invoice-id="{{ $invoice->id }}"
+                                                          onclick="showShipmentDetail({{ $invoice->id }});">
                                                         {{ $invoice->shipperInfo->awb_number }}
-                                                    </a>
+                                                    </span>
                                                 @else
                                                     <strong>{{ $invoice->invoice_number }}</strong>
                                                 @endif
                                             </td>
                                             <td style="font-size:12px;">
                                                 @php
-                                                    $shipFrom = $invoice->shipperInfo ? trim(($invoice->shipperInfo->city ?? '') . ', ' . ($invoice->shipperInfo->state ?? '') . ' - ' . ($invoice->shipperInfo->pincode ?? '') . ', India') : '-';
+                                                    $shipFrom = $invoice->shipperInfo ? trim(($invoice->shipperInfo->city ?? '') . ', ' . ($invoice->shipperInfo->state ?? '') . ', India') : 'India';
                                                     $shipTo = $invoice->shipperInfo && $invoice->shipperInfo->consigneeInfo
-                                                        ? trim(($invoice->shipperInfo->consigneeInfo->city ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->state ?? '') . ' - ' . ($invoice->shipperInfo->consigneeInfo->zip_code ?? '') . ', ' . ($invoice->shipperInfo->delivery_destination ?? ''))
+                                                        ? trim(($invoice->shipperInfo->consigneeInfo->city ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->state ?? '') . ', ' . ($invoice->shipperInfo->delivery_destination ?? ''))
                                                         : '-';
                                                 @endphp
-                                                <span style="color:#2563eb;font-weight:500;">{{ $shipFrom }}</span>
-                                                <i class="ti ti-arrow-right" style="color:#6c757d;font-size:12px;"></i>
-                                                <span style="color:#dc3545;font-weight:500;">{{ $shipTo }}</span>
+                                                <span>{{ $shipFrom }}</span>
+                                                <i class="ti ti-arrow-right mx-1" style="color:#6c757d;font-size:11px;"></i>
+                                                <span>{{ $shipTo }}</span>
                                             </td>
-                                            <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td>
-                                            <td>{{ number_format($invoice->invoice_amount, 2) }}</td>
+                                            <!-- <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td> -->
+                                            <td>{{ number_format($invoice->total_amount, 2) }}</td>
                                             <td>{{ $invoice->invoice_currency }}</td>
                                             <td>{{ $invoice->incoterms }}</td>
-                                            <td>{{ $invoice->reference_number ?: '-' }}</td>
+                                            <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
                                             <td>
-                                                @if($invoice->status === 'cancelled')
-                                                    <span class="badge-status-cancelled">Cancelled</span>
-                                                @else
-                                                    <span class="badge-status-active">Active</span>
-                                                @endif
+                                                @php
+                                                    $displayStatus = $invoice->status === 'cancelled' ? 'cancelled' : ($invoice->shipperInfo && $invoice->shipperInfo->status ? $invoice->shipperInfo->status : 'draft');
+                                                    $statusBadge = [
+                                                        'draft' => 'badge bg-warning text-dark',
+                                                        'ready' => 'badge bg-info',
+                                                        'packed' => 'badge bg-primary',
+                                                        'manifested' => 'badge bg-secondary',
+                                                        'received' => 'badge bg-success',
+                                                        'dispatched' => 'badge bg-dark',
+                                                        'delivered' => 'badge bg-success',
+                                                        'cancelled' => 'badge bg-danger',
+                                                        'disputed' => 'badge bg-warning',
+                                                        'on_hold' => 'badge bg-secondary',
+                                                    ];
+                                                    $statusLabel = [
+                                                        'draft' => 'Draft',
+                                                        'ready' => 'Ready',
+                                                        'packed' => 'Packed',
+                                                        'manifested' => 'Manifested',
+                                                        'received' => 'Received',
+                                                        'dispatched' => 'Dispatched',
+                                                        'delivered' => 'Delivered',
+                                                        'cancelled' => 'Cancelled',
+                                                        'disputed' => 'Disputed',
+                                                        'on_hold' => 'On Hold',
+                                                    ];
+                                                @endphp
+                                                <span class="{{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
                                             </td>
                                             <td class="text-center">
+                                                @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                    <button class="btn btn-sm btn-outline-primary print-label-btn"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-printer me-1"></i>Print
+                                                    </button>
+                                                @else
+                                                    <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @endif
+                                            </td>
+                                            <!-- <td class="text-center">
                                                 @if(isset($shipmentDetails[$invoice->id]) && $shipmentDetails[$invoice->id]['has_label'])
                                                     <a href="#" class="label-link"
                                                        onclick="viewLabel({{ $invoice->id }}); return false;">
@@ -320,6 +393,21 @@
                                                     </a>
                                                 @else
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @endif
+                                            </td> -->
+                                            <td class="text-center">
+                                                @if($invoice->status === 'cancelled')
+                                                    <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @elseif($invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft')
+                                                    <span class="text-muted" style="font-size:12px;">Paid</span>
+                                                @else
+                                                    <button class="btn btn-sm btn-success pay-now-btn"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                            data-amount="{{ $invoice->total_amount }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-credit-card me-1"></i>Pay Now
+                                                    </button>
                                                 @endif
                                             </td>
                                             <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
@@ -348,10 +436,6 @@
 
             </div>
             <!-- End Content -->
-
-            <!-- Footer -->
-            @include('customer.partials.footer')
-            <!-- End Footer -->
 
         </div>
         <!-- End Page Wrapper -->
@@ -582,6 +666,124 @@
         </div>
     </div>
 
+    <!-- Pay Now Modal -->
+    <div class="modal fade" id="payNowModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-credit-card me-2"></i>Pay Now</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Shipment AWB / Invoice</label>
+                        <input type="text" class="form-control" id="payShipmentRef" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Amount to Pay (₹)</label>
+                        <input type="number" disabled class="form-control" id="payAmount" min="0.01" step="0.01" placeholder="Enter amount">
+                    </div>
+                    <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-0" style="border-radius:8px;">
+                        <i class="ti ti-wallet fs-18 me-2"></i>
+                        <div>
+                            <span class="fw-semibold">Wallet Balance:</span>
+                            <span class="fw-bold text-primary" id="payWalletBalance">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmPayNowBtn">
+                        <i class="ti ti-credit-card me-1"></i>Confirm Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Label Modal -->
+    <div class="modal fade" id="printLabelModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-printer me-2"></i>Print Label</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3" id="printLabelBody">
+                    <!-- Company Logo + Barcode Row -->
+                    <div class="row align-items-center mb-3">
+                        <div class="col-4">
+                            <img src="{{ asset('assets/img/logo.png') }}" alt="United Courier" style="max-height:65px;">
+                        </div>
+                        <div class="col-8 text-end">
+                            <svg id="printLabelBarcode"></svg>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Ship From / Ship To -->
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <strong style="font-size:13px;">SHIP FROM</strong>
+                            <p class="mb-1" style="font-size:13px;" id="printShipperCompany">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printShipperContact">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printShipperAddress">-</p>
+                            <p class="mb-0" style="font-size:12px;" id="printShipperCityStatePin">-</p>
+                            <p class="mb-0" style="font-size:12px;">Phone: <span id="printShipperPhone">-</span></p>
+                        </div>
+                        <div class="col-6">
+                            <strong style="font-size:13px;">SHIP TO</strong>
+                            <p class="mb-1" style="font-size:13px;" id="printConsigneeName">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printConsigneeContact">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printConsigneeAddress">-</p>
+                            <p class="mb-0" style="font-size:12px;" id="printConsigneeCityStateZip">-</p>
+                            <p class="mb-0" style="font-size:12px;">Phone: <span id="printConsigneePhone">-</span></p>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Invoice Items -->
+                    <div id="printItemsSection">
+                        <strong style="font-size:13px;">INVOICE ITEMS</strong>
+                        <div class="table-responsive mt-1">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:11px;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Box</th>
+                                        <th>Description</th>
+                                        <th>HS Code</th>
+                                        <th>Qty</th>
+                                        <th>Rate</th>
+                                        <th>IGST(%)</th>
+                                        <th>IGST</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="printItemsTable"></tbody>
+                            </table>
+                        </div>
+                        <div class="text-end mt-1" style="font-size:13px;">
+                            <strong>Total: <span id="printItemsTotal">0.00</span></strong>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Package Dimensions -->
+                    <div id="printPackagesSection">
+                        <strong style="font-size:13px;">PACKAGE DIMENSIONS</strong>
+                        <div id="printPackagesContainer" class="mt-1"></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="printLabel()">
+                        <i class="ti ti-printer me-1"></i>Print
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JsBarcode CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
     <!-- Datatable JS -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
     <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
@@ -784,17 +986,197 @@
             $('#shipmentsTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
-                responsive: true,
+                columnDefs: [
+                    { targets: [7, 8], visible: false }
+                ],
                 language: {
                     search: "Search shipments:",
                     emptyTable: "No shipments found."
                 }
             });
 
+            // Status filter button click handler
+            $('.status-filter-btn').on('click', function () {
+                const filter = $(this).data('filter');
+
+                // Update button active state
+                $('.status-filter-btn').removeClass('btn-primary').addClass('btn-light');
+                $(this).removeClass('btn-light').addClass('btn-primary');
+
+                // Update heading
+                $('#statusFilterHeading').text($(this).text());
+
+                // Filter DataTable using custom search on data-status attribute
+                const dt = $('#shipmentsTable').DataTable();
+                $.fn.dataTable.ext.search = []; // Clear previous custom filters
+
+                // Column visibility: Print Label=7, Pay Now=8
+                if (filter === 'all') {
+                    dt.column(7).visible(false); // Hide Print Label
+                    dt.column(8).visible(false); // Hide Pay Now
+                    dt.draw();
+                    return;
+                } else if (filter === 'draft') {
+                    dt.column(7).visible(false); // Hide Print Label
+                    dt.column(8).visible(true);  // Show Pay Now
+                } else if (filter === 'ready') {
+                    dt.column(7).visible(true);  // Show Print Label
+                    dt.column(8).visible(false); // Hide Pay Now
+                } else if (filter === 'packed') {
+                    dt.column(7).visible(true);  // Show Print Label
+                    dt.column(8).visible(false); // Hide Pay Now
+                } else {
+                    dt.column(7).visible(true);  // Show Print Label
+                    dt.column(8).visible(true);  // Show Pay Now
+                }
+
+                $.fn.dataTable.ext.search.push(function (settings, rowData, rowIndex) {
+                    const tr = dt.row(rowIndex).node();
+                    return $(tr).data('status') === filter;
+                });
+                dt.draw();
+            });
+
+            // Print Label button click handler (delegated)
+            $('#shipmentsTable').on('click', '.print-label-btn', function () {
+                const invoiceId = $(this).data('invoice-id');
+                const data = shipmentData[invoiceId];
+                if (!data) return;
+
+                // Populate Barcode
+                document.getElementById('printLabelBarcode').innerHTML = '';
+                JsBarcode('#printLabelBarcode', data.awb_number || 'N/A', {
+                    format: 'CODE128',
+                    lineColor: '#000',
+                    width: 2,
+                    height: 100,
+                    displayValue: true,
+                    fontSize: 16
+                });
+
+                // Shipper Info
+                if (data.shipper) {
+                    $('#printShipperCompany').text(data.shipper.company || '-');
+                    $('#printShipperContact').text(data.shipper.contact || '-');
+                    $('#printShipperAddress').text(data.shipper.address || '-');
+                    $('#printShipperCityStatePin').text(data.shipper.city_state_pin || '-');
+                    $('#printShipperPhone').text(data.shipper.phone || '-');
+                } else {
+                    $('#printShipperCompany,#printShipperContact,#printShipperAddress,#printShipperCityStatePin').text('-');
+                    $('#printShipperPhone').text('-');
+                }
+
+                // Consignee Info
+                if (data.consignee) {
+                    $('#printConsigneeName').text(data.consignee.name || '-');
+                    $('#printConsigneeContact').text(data.consignee.contact || '-');
+                    $('#printConsigneeAddress').text(data.consignee.address || '-');
+                    $('#printConsigneeCityStateZip').text(data.consignee.city_state_zip || '-');
+                    $('#printConsigneePhone').text(data.consignee.phone || '-');
+                } else {
+                    $('#printConsigneeName,#printConsigneeContact,#printConsigneeAddress,#printConsigneeCityStateZip').text('-');
+                    $('#printConsigneePhone').text('-');
+                }
+
+                // Invoice Items
+                const itemsTable = document.getElementById('printItemsTable');
+                const itemsSection = document.getElementById('printItemsSection');
+                itemsTable.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    itemsSection.style.display = 'block';
+                    data.items.forEach(function(item) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = '<td>' + (item.box_no || '-') + '</td>' +
+                            '<td>' + (item.description || '-') + '</td>' +
+                            '<td>' + (item.hs_code || '-') + '</td>' +
+                            '<td>' + (item.qty || '-') + '</td>' +
+                            '<td>' + (item.unit_rate || '-') + '</td>' +
+                            '<td>' + (item.igst_percentage || '-') + '</td>' +
+                            '<td>' + (item.igst_amount || '-') + '</td>' +
+                            '<td>' + item.amount + '</td>';
+                        itemsTable.appendChild(row);
+                    });
+                    $('#printItemsTotal').text(data.items_total);
+                } else {
+                    itemsSection.style.display = 'none';
+                }
+
+                // Package Dimensions
+                const packagesContainer = document.getElementById('printPackagesContainer');
+                const packagesSection = document.getElementById('printPackagesSection');
+                packagesContainer.innerHTML = '';
+                if (data.packages && data.packages.length > 0) {
+                    packagesSection.style.display = 'block';
+                    data.packages.forEach(function(pkg) {
+                        const card = document.createElement('div');
+                        card.style.cssText = 'border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;';
+                        card.innerHTML = '<strong>Box #' + pkg.index + '</strong>: ' +
+                            'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
+                            'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
+                            'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg';
+                        packagesContainer.appendChild(card);
+                    });
+                } else {
+                    packagesSection.style.display = 'none';
+                }
+
+                // If status is ready, mark as packed via AJAX before showing modal
+                const $row = $(this).closest('tr');
+                if (data.status === 'ready' && data.shipper_id) {
+                    $.ajax({
+                        url: '{{ url("/customer/mark-packed") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: data.shipper_id
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                // Update row data-status for DataTable filtering
+                                $row.attr('data-status', 'packed');
+                                // Update status badge
+                                const $badge = $row.find('td:eq(6) span');
+                                $badge.removeClass().addClass('badge bg-primary').text('Packed');
+                                // Update shipmentData cache
+                                shipmentData[invoiceId].status = 'packed';
+                                
+
+                                // Trigger event so modal close handler knows to redraw table
+                                $(document).trigger('print-status-changed');
+
+                                setTimeout(() => {
+                                    window.location.reload(); // Reload to update all data - can be optimized to just redraw table row if needed
+                                }, 1500);
+                            }
+                        },
+                        error: function () {
+                            // Silently fail - modal still opens
+                        }
+                    });
+                }
+
+                $('#printLabelModal').modal('show');
+            });
+
+            // When Print Label modal closes, redraw table if status was changed
+            let printStatusChanged = false;
+            $('#printLabelModal').on('hidden.bs.modal', function () {
+                if (printStatusChanged) {
+                    printStatusChanged = false;
+                    $('#shipmentsTable').DataTable().draw();
+                }
+            });
+
+            // Track when Print Label triggers a status change
+            $(document).on('print-status-changed', function () {
+                printStatusChanged = true;
+            });
+
             // Cancel button click handler
             let cancelId = null;
 
-            $('.cancel-btn').on('click', function () {
+            // Cancel button click handler (delegated)
+            $('#shipmentsTable').on('click', '.cancel-btn', function () {
                 cancelId = $(this).data('id');
                 const invoiceRef = $(this).data('invoice');
                 $('#cancelInvoiceRef').text(invoiceRef);
@@ -816,9 +1198,10 @@
                     },
                     success: function (response) {
                         if (response.success) {
-                            // Update row UI
+                            // Update row UI - set status to cancelled
                             const row = $('#invoice-row-' + cancelId);
-                            row.find('.badge-status-active').removeClass('badge-status-active').addClass('badge-status-cancelled').text('Cancelled');
+                            row.attr('data-status', 'cancelled');
+                            row.find('.badge').removeClass().addClass('badge bg-danger').text('Cancelled');
                             row.find('.cancel-btn').prop('disabled', true)
                                 .html('<i class="ti ti-x"></i> Cancelled')
                                 .removeClass('cancel-btn')
@@ -843,6 +1226,102 @@
                 });
             });
 
+            // Pay Now button click handler
+            @php
+                $authCustomer = auth()->guard('customer')->user();
+                $currentWalletBalance = $authCustomer && $authCustomer->wallet ? $authCustomer->wallet->balance : 0;
+            @endphp
+            let payInvoiceId = null;
+            let payShipperId = null;
+            const walletBalance = {{ $currentWalletBalance }};
+
+            // Update wallet balance display in modal
+            $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+
+            // Pay Now button click handler (delegated)
+            $('#shipmentsTable').on('click', '.pay-now-btn', function () {
+                payInvoiceId = $(this).data('invoice-id');
+                payShipperId = $(this).data('shipper-id');
+                const amount = $(this).data('amount');
+
+                // Set reference and default amount
+                const refText = shipmentData[payInvoiceId] ? (shipmentData[payInvoiceId].awb_number || shipmentData[payInvoiceId].invoice_number) : 'Shipment #' + payInvoiceId;
+                $('#payShipmentRef').val(refText);
+                $('#payAmount').val(amount);
+                $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+
+                $('#payNowModal').modal('show');
+            });
+
+            // Confirm Pay Now
+            $('#confirmPayNowBtn').on('click', function () {
+                if (!payInvoiceId || !payShipperId) return;
+
+                const amount = parseFloat($('#payAmount').val());
+                if (!amount || amount <= 0) {
+                    showAlert('danger', 'Please enter a valid amount to pay.');
+                    return;
+                }
+                if (amount > walletBalance) {
+                    showAlert('danger', 'Insufficient wallet balance! Your balance is ₹' + number_format(walletBalance, 2));
+                    return;
+                }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+                $.ajax({
+                    url: '{{ url("/customer/pay-now") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        invoice_id: payInvoiceId,
+                        shipper_id: payShipperId,
+                        amount: amount
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            $('#payNowModal').modal('hide');
+                            // Show success popup
+                            const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + response.message + '<br>New wallet balance: ₹' + number_format(response.new_balance, 2) + '</p><button class="btn btn-success px-4" id="paymentSuccessOkBtn">OK</button></div></div></div></div>';
+                            $('body').append(popupHtml);
+                            const successPopup = new bootstrap.Modal(document.getElementById('paymentSuccessPopup'), { backdrop: 'static', keyboard: false });
+                            successPopup.show();
+
+                            // Reload page when OK is clicked or modal is hidden
+                            $('#paymentSuccessOkBtn').on('click', function () {
+                                window.location.reload();
+                            });
+                            document.getElementById('paymentSuccessPopup').addEventListener('hidden.bs.modal', function () {
+                                window.location.reload();
+                                this.remove();
+                            });
+                        } else {
+                            showAlert('danger', response.message);
+                            $('#payNowModal').modal('hide');
+                        }
+                        btn.prop('disabled', false).html('<i class="ti ti-credit-card me-1"></i>Confirm Payment');
+                    },
+                    error: function (xhr) {
+                        let msg = 'Error processing payment.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $('#payNowModal').modal('hide');
+                        btn.prop('disabled', false).html('<i class="ti ti-credit-card me-1"></i>Confirm Payment');
+                    }
+                });
+            });
+
+            // number_format helper for JS
+            function number_format(num, decimals) {
+                decimals = decimals || 2;
+                const parts = num.toFixed(decimals).split('.');
+                parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                return parts.join('.');
+            }
+
             // Show alert helper
             function showAlert(type, message) {
                 const alertHtml = '<div class="alert alert-' + type + ' alert-dismissible fade show" role="alert">' +
@@ -859,6 +1338,45 @@
             }
 
         });
+
+        // Print Label function (outside document.ready so it's globally accessible)
+        function printLabel() {
+            const modalBody = document.getElementById('printLabelBody');
+            const content = modalBody.cloneNode(true);
+            const printWindow = window.open('', '_blank', 'width=800,height=700');
+            printWindow.document.write('<!DOCTYPE html><html><head><title>Print Label</title>');
+            printWindow.document.write('<style>');
+            printWindow.document.write('body{font-family:Arial,sans-serif;padding:15px;color:#000;font-size:12px;}');
+            printWindow.document.write('table{border-collapse:collapse;width:100%;margin-bottom:8px;}');
+            printWindow.document.write('table th,table td{border:1px solid #333;padding:3px 5px;text-align:left;}');
+            printWindow.document.write('table th{background:#eee;font-weight:bold;}');
+            printWindow.document.write('.text-center{text-align:center;}');
+            printWindow.document.write('.text-end{text-align:right;}');
+            printWindow.document.write('.fw-bold{font-weight:bold;}');
+            printWindow.document.write('.row{display:flex;gap:15px;margin-bottom:10px;}');
+            printWindow.document.write('.col-6{flex:1;border:1px solid #333;padding:8px;}');
+            printWindow.document.write('hr{border:none;border-top:1px dashed #ccc;margin:8px 0;}');
+            printWindow.document.write('svg{max-width:100%;height:auto;}');
+            printWindow.document.write('@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}');
+            printWindow.document.write('</style></head><body>');
+            printWindow.document.write(content.innerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+
+            printWindow.onload = function() {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            };
+
+            if (printWindow.document.readyState === 'complete') {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            }
+        }
     </script>
 
 </body>
