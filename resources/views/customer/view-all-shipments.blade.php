@@ -274,7 +274,12 @@
                         </div>
                     </div>
                 </div>
-                <h5 class="fw-bold mb-3" id="statusFilterHeading">All Orders</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0" id="statusFilterHeading">All Orders</h5>
+                    <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
+                        <i class="ti ti-package-export me-1"></i> Bulk Manifest
+                    </button>
+                </div>
                 <!-- Shipments Table Card -->
                 <div class="card border shadow">
                     <div class="card-body">
@@ -289,6 +294,7 @@
                                 <table id="shipmentsTable" class="table table-bordered table-hover">
                                     <thead class="table-light">
                                         <tr>
+                                            <th><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
                                             <th>#</th>
                                             <th>AWB Number</th>
                                             <!-- <th>Ship From → Ship To</th> -->
@@ -301,6 +307,7 @@
                                             <th>Status</th>
                                             <th>Print Label</th>
                                             <th>Pay Now</th>
+                                            <th>Manifest</th>
                                             <th>Created</th>
                                             <th class="text-center">Cancel</th>
                                         </tr>
@@ -315,7 +322,10 @@
                                                 $rowStatus = $invoice->shipperInfo->status;
                                             }
                                         @endphp
-                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}">
+                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
+                                            <td class="text-center">
+                                                <input type="checkbox" class="shipment-checkbox bulk-manifest-checkbox" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" style="display:none;">
+                                            </td>
                                             <td>{{ $index + 1 }}</td>
                                             <td>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
@@ -408,6 +418,24 @@
                                                             style="padding:4px 12px;font-size:13px;border-radius:4px;">
                                                         <i class="ti ti-credit-card me-1"></i>Pay Now
                                                     </button>
+                                                @endif
+                                            </td>
+                                            <td class="text-center manifest-col">
+                                                @php
+                                                    $isPacked = $invoice->shipperInfo && $invoice->shipperInfo->status === 'packed';
+                                                    $isManifested = $invoice->shipperInfo && $invoice->shipperInfo->status === 'manifested';
+                                                @endphp
+                                                @if($isPacked)
+                                                    <button class="btn btn-sm btn-outline-success manifest-single-btn"
+                                                            data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-package-export me-1"></i>Manifest
+                                                    </button>
+                                                @elseif($isManifested)
+                                                    <span class="badge bg-success" style="font-size:11px;">Manifested</span>
+                                                @else
+                                                    <span class="text-muted" style="font-size:12px;">-</span>
                                                 @endif
                                             </td>
                                             <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
@@ -983,11 +1011,14 @@
         $(document).ready(function () {
 
             // Initialize DataTable
+            // Column layout: 0=Checkbox, 1=#, 2=AWB, 3=Consignee, 4=Amount, 5=Currency,
+            //                 6=Incoterms, 7=Status, 8=Print Label, 9=Pay Now, 10=Manifest,
+            //                 11=Created, 12=Cancel
             $('#shipmentsTable').DataTable({
-                order: [[0, 'asc']],
+                order: [[1, 'asc']],
                 pageLength: 25,
                 columnDefs: [
-                    { targets: [7, 8], visible: false }
+                    { targets: [0, 8, 9, 10], visible: false }
                 ],
                 language: {
                     search: "Search shipments:",
@@ -1010,24 +1041,44 @@
                 const dt = $('#shipmentsTable').DataTable();
                 $.fn.dataTable.ext.search = []; // Clear previous custom filters
 
-                // Column visibility: Print Label=7, Pay Now=8
+                // Column visibility: Checkbox=0, Print Label=8, Pay Now=9, Manifest=10
                 if (filter === 'all') {
-                    dt.column(7).visible(false); // Hide Print Label
-                    dt.column(8).visible(false); // Hide Pay Now
+                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(8).visible(false);  // Hide Print Label
+                    dt.column(9).visible(false);  // Hide Pay Now
+                    dt.column(10).visible(false); // Hide Manifest
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    $('#bulkManifestBtn').hide();
                     dt.draw();
                     return;
                 } else if (filter === 'draft') {
-                    dt.column(7).visible(false); // Hide Print Label
-                    dt.column(8).visible(true);  // Show Pay Now
+                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(8).visible(false);  // Hide Print Label
+                    dt.column(9).visible(true);   // Show Pay Now
+                    dt.column(10).visible(false); // Hide Manifest
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    $('#bulkManifestBtn').hide();
                 } else if (filter === 'ready') {
-                    dt.column(7).visible(true);  // Show Print Label
-                    dt.column(8).visible(false); // Hide Pay Now
+                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(8).visible(true);   // Show Print Label
+                    dt.column(9).visible(false);  // Hide Pay Now
+                    dt.column(10).visible(false); // Hide Manifest
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    $('#bulkManifestBtn').hide();
                 } else if (filter === 'packed') {
-                    dt.column(7).visible(true);  // Show Print Label
-                    dt.column(8).visible(false); // Hide Pay Now
+                    dt.column(0).visible(true);   // Show Checkbox
+                    dt.column(8).visible(true);   // Show Print Label
+                    dt.column(9).visible(false);  // Hide Pay Now
+                    dt.column(10).visible(true);  // Show Manifest
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
+                    $('#bulkManifestBtn').show();
                 } else {
-                    dt.column(7).visible(true);  // Show Print Label
-                    dt.column(8).visible(true);  // Show Pay Now
+                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(8).visible(true);   // Show Print Label
+                    dt.column(9).visible(false);  // Hide Pay Now
+                    dt.column(10).visible(false); // Hide Manifest
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    $('#bulkManifestBtn').hide();
                 }
 
                 $.fn.dataTable.ext.search.push(function (settings, rowData, rowIndex) {
@@ -1135,7 +1186,7 @@
                                 // Update row data-status for DataTable filtering
                                 $row.attr('data-status', 'packed');
                                 // Update status badge
-                                const $badge = $row.find('td:eq(6) span');
+                                const $badge = $row.find('td:eq(7) span');
                                 $badge.removeClass().addClass('badge bg-primary').text('Packed');
                                 // Update shipmentData cache
                                 shipmentData[invoiceId].status = 'packed';
@@ -1336,6 +1387,155 @@
                     $('.alert').alert('close');
                 }, 5000);
             }
+
+            // =============================================
+            // MANIFEST: Single shipment manifest button
+            // =============================================
+            $('#shipmentsTable').on('click', '.manifest-single-btn', function () {
+                const $btn = $(this);
+                const shipperId = $btn.data('shipper-id');
+                const invoiceId = $btn.data('invoice-id');
+
+                if (!shipperId) return;
+
+                // Confirm with user
+                if (!confirm('Are you sure you want to manifest this shipment? This will call the UPS Ship API to create the shipment.')) {
+                    return;
+                }
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_id: shipperId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            // Update row status to manifested
+                            const $row = $('#invoice-row-' + invoiceId);
+                            $row.attr('data-status', 'manifested');
+                            // Update status badge
+                            const $badge = $row.find('td:eq(7) span');
+                            $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                            // Update manifest column
+                            const $manifestCol = $row.find('.manifest-col');
+                            $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                            // Update Pay Now column
+                            const $payCol = $row.find('td:eq(9)');
+                            $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+
+                            showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A'));
+                        } else {
+                            showAlert('danger', response.message || 'Manifest failed.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Error manifesting shipment.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                    }
+                });
+            });
+
+            // =============================================
+            // BULK MANIFEST: Manifest multiple selected shipments
+            // =============================================
+            $('#bulkManifestBtn').on('click', function () {
+                const $checked = $('.bulk-manifest-checkbox:checked');
+                if ($checked.length === 0) {
+                    showAlert('warning', 'Please select at least one shipment to manifest.');
+                    return;
+                }
+
+                const shipperIds = $checked.map(function () {
+                    return $(this).data('shipper-id');
+                }).get();
+
+                if (!confirm('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)? This will call the UPS Ship API for each shipment.')) {
+                    return;
+                }
+
+                const $btn = $(this);
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting ' + shipperIds.length + ' shipment(s)...');
+
+                $.ajax({
+                    url: '{{ url("/customer/bulk-manifest") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_ids: shipperIds
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            const results = response.results;
+                            // Update each successfully manifested row
+                            if (results.success && results.success.length > 0) {
+                                results.success.forEach(function (item) {
+                                    const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
+                                    $row.attr('data-status', 'manifested');
+                                    const $badge = $row.find('td:eq(7) span');
+                                    $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                                    const $manifestCol = $row.find('.manifest-col');
+                                    $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                                    const $payCol = $row.find('td:eq(9)');
+                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                                });
+                            }
+
+                            // Uncheck all
+                            $('#selectAllCheckbox, .bulk-manifest-checkbox').prop('checked', false);
+
+                            const failedCount = results.failed ? results.failed.length : 0;
+                            if (failedCount > 0) {
+                                let failMsg = 'Some shipments failed to manifest:\n';
+                                results.failed.forEach(function (f) {
+                                    failMsg += '- Shipment #' + f.shipper_id + ': ' + f.message + '\n';
+                                });
+                                showAlert('warning', failMsg.replace(/\n/g, '<br>'));
+                            } else {
+                                showAlert('success', response.message);
+                            }
+
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                        } else {
+                            showAlert('danger', response.message || 'Bulk manifest failed.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Error during bulk manifest.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                    }
+                });
+            });
+
+            // =============================================
+            // SELECT ALL: Check/Uncheck all visible checkboxes
+            // =============================================
+            $('#selectAllCheckbox').on('change', function () {
+                const isChecked = $(this).is(':checked');
+                $('.bulk-manifest-checkbox:visible').prop('checked', isChecked);
+            });
+
+            // Uncheck "Select All" if any individual checkbox is unchecked
+            $(document).on('change', '.bulk-manifest-checkbox', function () {
+                if (!$(this).is(':checked')) {
+                    $('#selectAllCheckbox').prop('checked', false);
+                } else if ($('.bulk-manifest-checkbox:visible:checked').length === $('.bulk-manifest-checkbox:visible').length) {
+                    $('#selectAllCheckbox').prop('checked', true);
+                }
+            });
 
         });
 

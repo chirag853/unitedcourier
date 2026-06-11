@@ -555,8 +555,6 @@ class customerController extends Controller
                 'items.*.igst_amount' => 'nullable|numeric|min:0',
                 'items.*.amount' => 'nullable|numeric|min:0',
 
-                // Shipping service selection (for UPS payload)
-                'service_id' => 'required|integer',
             ]);
 
             // Check if origin_type is CSB V and customer has CSB status 1 (CSB-IV only)
@@ -582,47 +580,19 @@ class customerController extends Controller
                 }
             }
 
-            // Look up selected courier service for UPS payload
-            $serviceId = $validatedData['service_id'];
-            $service = CourierService::find($serviceId);
-            if (!$service) {
-                if (!$request->expectsJson()) {
-                    return back()
-                        ->withErrors(['service_id' => 'The selected shipping service is invalid.'])
-                        ->withInput()
-                        ->with('error', 'Invalid shipping service selected.');
+            // Resolve shipping_method from service_id when the shipping_method
+            // <select> dropdown is empty but a DDP/DDU radio button was selected.
+            // The JS at line 8610 sends 'service_id' alongside FormData.
+            if (empty($validatedData['shipping_method'])) {
+                $serviceId = $request->input('service_id');
+                if ($serviceId) {
+                    $courierService = CourierService::find($serviceId);
+                    if ($courierService) {
+                        $validatedData['shipping_method'] = $courierService->method;
+                        \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
+                    }
                 }
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid shipping service selected.',
-                    'errors' => ['service_id' => ['The selected shipping service is invalid.']]
-                ], 422);
             }
-
-            // Build UPS Ship payload and call UPS API
-            $upsPayload = $this->buildUpsShipPayload($validatedData, $service);
-            $upsResult = $this->callUpsShipApiInternal($upsPayload);
-
-            if (!$upsResult['success']) {
-                // UPS failed - do NOT save to database
-                $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
-                if (!$request->expectsJson()) {
-                    return back()
-                        ->withInput()
-                        ->with('error', 'UPS Shipment Failed: ' . $errorMessage);
-                }
-                return response()->json([
-                    'success' => false,
-                    'message' => 'UPS Shipment Failed: ' . $errorMessage,
-                    'rawResponse' => $upsResult['rawResponse'] ?? null
-                ], 500);
-            }
-
-            // UPS succeeded - extract tracking info for later storage
-            $shipmentResponse = $upsResult['shipmentResponse'];
-            $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
-                ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
-                ?? null;
 
             // Store Shipper Info
             $awbNumber = $this->generateAwbNumber();
@@ -797,38 +767,8 @@ class customerController extends Controller
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
                 'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
-                'status' => 'pending',
+                'status' => 'draft',
             ]);
-
-            // Store UPS tracking data from the UPS Ship API response
-            if (isset($shipmentResponse) && isset($shipmentResponse['ShipmentResults'])) {
-                try {
-                    ShipmentTracking::create([
-                        'customer_id' => auth()->guard('customer')->id(),
-                        'shipper_id' => $shipperId,
-                        'create_shipment_id' => $createShipment->id,
-                        'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
-                        'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
-                        'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
-                        'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
-                        'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
-                        'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
-                        'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
-                        'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
-                        'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
-                        'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
-                        'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
-                        'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
-                        'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
-                        'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
-                        'raw_response' => $shipmentResponse,
-                        'status' => 'created',
-                    ]);
-                    \Log::info('Shipment tracking stored for shipment: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
-                } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking: ' . $e->getMessage());
-                }
-            }
 
             if (!$request->expectsJson()) {
                 return back()->with('success', 'Shipment created successfully!');
@@ -837,7 +777,6 @@ class customerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Shipment created successfully!',
-                'tracking_number' => $trackingNumber,
                 'data' => [
                     'create_shipment_id' => $createShipment->id,
                     'shipper_id' => $shipper->id,
@@ -1277,11 +1216,13 @@ class customerController extends Controller
                 // Less than 1 LBS → service code 92, weight unit OZS
                 $serviceCode = '92';
                 $weightUnit = 'OZS';
+                $serviceDescription = 'Ground Saver Less than 1 lb';
             } else {
                 // 1 LBS or greater → service code 93, weight unit LBS
                 // echo "Max weight in LBS: $maxWeightLbs\n";
                 $serviceCode = '93';
                 $weightUnit = 'LBS';
+                $serviceDescription = 'Ground Saver 1 lbs or grater';
             }
         }
         // Build Packages array from form data
@@ -1435,6 +1376,7 @@ class customerController extends Controller
             ],
         ];
 
+        // print_r($payload);
         return $payload;
     }
 
@@ -1891,6 +1833,439 @@ class customerController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Manifest a single shipment - call UPS Ship API and store tracking data.
+     * Only works for shipments in 'packed' status.
+     */
+    public function manifestShipment(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $customerId = auth()->guard('customer')->id();
+            $shipperId = $request->input('shipper_id');
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
+            }
+
+            if ($shipper->status !== 'packed') {
+                return response()->json(['success' => false, 'message' => 'Shipment must be in Packed status to manifest.'], 400);
+            }
+
+            // Build UPS payload from DB records
+            $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+            if (!$payloadResult['success']) {
+                return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
+            }
+            $upsPayload = $payloadResult['payload'];
+
+            // Call UPS Ship API
+            $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+            if (!$upsResult['success']) {
+                $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
+                return response()->json([
+                    'success' => false,
+                    'message' => 'UPS Shipment Failed: ' . $errorMessage,
+                    'rawResponse' => $upsResult['rawResponse'] ?? null
+                ], 500);
+            }
+
+            // UPS succeeded - store tracking data
+            $shipmentResponse = $upsResult['shipmentResponse'];
+            $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                ?? null;
+
+            // Get create_shipment record
+            $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+            try {
+                ShipmentTracking::updateOrCreate(
+                    ['shipper_id' => $shipperId],
+                    [
+                        'customer_id' => $customerId,
+                        'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                        'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                        'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                        'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                        'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                        'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                        'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                        'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                        'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                        'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                        'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                        'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                        'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                        'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                        'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                        'raw_response' => $shipmentResponse,
+                        'status' => 'created',
+                    ]
+                );
+
+                // Update shipper status to manifested
+                $shipper->status = 'manifested';
+                $shipper->save();
+
+                \Log::info('Shipment manifested: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+            } catch (\Exception $e) {
+                \Log::error('Failed to store shipment tracking for manifest: ' . $e->getMessage());
+                return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipment manifested successfully!',
+                'tracking_number' => $trackingNumber,
+                'shipper_id' => $shipperId,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Bulk manifest multiple shipments at once.
+     */
+    public function bulkManifestShipments(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $customerId = auth()->guard('customer')->id();
+            $shipperIds = $request->input('shipper_ids', []);
+
+            if (empty($shipperIds) || !is_array($shipperIds)) {
+                return response()->json(['success' => false, 'message' => 'No shipments selected.'], 400);
+            }
+
+            $results = [
+                'success' => [],
+                'failed' => [],
+                'total' => count($shipperIds),
+            ];
+
+            foreach ($shipperIds as $shipperId) {
+                try {
+                    $shipper = ShipperInfo::where('id', $shipperId)
+                        ->where('customer_id', $customerId)
+                        ->first();
+
+                    if (!$shipper) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Shipment not found'];
+                        continue;
+                    }
+
+                    if ($shipper->status !== 'packed') {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Not in Packed status'];
+                        continue;
+                    }
+
+                    $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                    if (!$payloadResult['success']) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
+                        continue;
+                    }
+                    $upsPayload = $payloadResult['payload'];
+
+                    $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+                    if (!$upsResult['success']) {
+                        $results['failed'][] = [
+                            'shipper_id' => $shipperId,
+                            'message' => 'UPS API error: ' . ($upsResult['message'] ?? 'Unknown'),
+                        ];
+                        continue;
+                    }
+
+                    $shipmentResponse = $upsResult['shipmentResponse'];
+                    $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                        ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                        ?? null;
+
+                    $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                            'raw_response' => $shipmentResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    $results['success'][] = [
+                        'shipper_id' => $shipperId,
+                        'tracking_number' => $trackingNumber,
+                    ];
+
+                    \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested successfully.');
+
+                } catch (\Exception $e) {
+                    $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $e->getMessage()];
+                    \Log::error('Bulk manifest error for shipper ' . $shipperId . ': ' . $e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk manifest completed. ' . count($results['success']) . ' succeeded, ' . count($results['failed']) . ' failed out of ' . $results['total'] . ' shipments.',
+                'results' => $results,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Build UPS Ship API payload from database records (for manifest).
+     * Reads ShipperInfo, ConsigneeInfo, PackageDimension from DB instead of form data.
+     */
+    private function buildUpsShipPayloadFromDb($shipper)
+    {
+        // Get consignee info
+        $consignee = $shipper->consigneeInfo;
+        if (!$consignee) {
+            \Log::warning('buildUpsShipPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        // Get shipping method and lookup courier service
+        // Try multiple sources because older shipments may have null in shipper_info.shipping_method.
+        $shippingMethod = $shipper->shipping_method;
+        $fallbackSource = null;
+
+        if (!$shippingMethod) {
+            // Fallback 1: Check create_shipment table (same column populated at storeShipment line 729)
+            $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
+            if ($createShipmentMethod) {
+                $shippingMethod = $createShipmentMethod;
+                $fallbackSource = 'create_shipment';
+                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from create_shipment for shipper #' . $shipper->id . ' → "' . $shippingMethod . '"');
+            }
+        }
+
+        if (!$shippingMethod) {
+            // Fallback 2: Check package_dimension table (populated from package_shipping_method field)
+            $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
+                ->whereNotNull('shipping_method')
+                ->value('shipping_method');
+            if ($pkgMethod) {
+                $shippingMethod = $pkgMethod;
+                $fallbackSource = 'package_dimension';
+                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from package_dimension for shipper #' . $shipper->id . ' → "' . $shippingMethod . '"');
+            }
+        }
+
+        if (!$shippingMethod) {
+            // Last resort: use the first available CourierService as default.
+            // The <select name="shipping_method"> in create-shipment.blade.php line 235
+            // is permanently hidden (display:none), so older shipments have no
+            // shipping method stored anywhere. We default to the first service.
+            $defaultService = CourierService::orderBy('id', 'asc')->first();
+            if ($defaultService) {
+                $shippingMethod = $defaultService->method;
+                $fallbackSource = 'default_first_service';
+                \Log::warning('buildUpsShipPayloadFromDb: ALL sources null for shipper #' . $shipper->id . ' — defaulting to first CourierService: "' . $shippingMethod . '"');
+            }
+        }
+
+        if (!$shippingMethod) {
+            \Log::warning('buildUpsShipPayloadFromDb: shipping_method is null/empty for shipper #' . $shipper->id . ' (checked shipper_info, create_shipment, package_dimension, default)');
+            return ['success' => false, 'message' => 'Shipping method is not set for this shipment. Please edit the shipment and select a shipping method.'];
+        }
+
+        // If we resolved from a fallback, persist it back to shipper_info so future calls work directly.
+        if ($fallbackSource && !$shipper->shipping_method) {
+            $shipper->shipping_method = $shippingMethod;
+            $shipper->save();
+            \Log::info('buildUpsShipPayloadFromDb: Persisted shipping_method to shipper_info #' . $shipper->id . ' → "' . $shippingMethod . '"');
+        }
+
+        // Multi-tier CourierService lookup
+        $service = $this->findCourierService($shippingMethod, $shipper->id);
+
+        if (!$service) {
+            return ['success' => false, 'message' => 'No matching courier service found for shipping method: "' . $shippingMethod . '".'];
+        }
+
+        // Build a $validatedData array from DB records matching the format
+        // that buildUpsShipPayload() expects, then delegate to it.
+        $packagesData = [];
+        foreach ($shipper->packageDimensions as $pkg) {
+            $packagesData[] = [
+                'actual_weight_kg' => $pkg->actual_weight_kg,
+                'length_cm' => $pkg->length_cm,
+                'width_cm' => $pkg->width_cm,
+                'height_cm' => $pkg->height_cm,
+            ];
+        }
+
+        $validatedData = [
+            'consignee_name' => $consignee->consignee_name,
+            'consignee_phone_number' => $consignee->phone_number,
+            'consignee_address_line1' => $consignee->address_line1,
+            'consignee_address_line2' => $consignee->address_line2,
+            'consignee_address_line3' => $consignee->address_line3,
+            'consignee_city' => $consignee->city,
+            'consignee_state' => $consignee->state ?? '',
+            'consignee_zip_code' => $consignee->zip_code,
+            'delivery_destination' => $shipper->delivery_destination,
+            'packages' => $packagesData,
+        ];
+
+        $upsPayload = $this->buildUpsShipPayload($validatedData, $service);
+        return ['success' => true, 'payload' => $upsPayload];
+    }
+
+    /**
+     * Multi-tier CourierService lookup from a shipping method string.
+     * Tiers: exact → case-insensitive → str_contains → word-by-word → collapsed-string
+     * Logs all available methods on total failure for diagnostics.
+     */
+    private function findCourierService($shippingMethod, $shipperId)
+    {
+        // Tier 1: Exact match
+        $service = CourierService::where('method', $shippingMethod)->first();
+        if ($service) {
+            \Log::info('findCourierService: Exact match "' . $shippingMethod . '" for shipper #' . $shipperId);
+            return $service;
+        }
+
+        // Tier 2: Case-insensitive exact match
+        $service = CourierService::whereRaw('LOWER(method) = ?', [strtolower($shippingMethod)])->first();
+        if ($service) {
+            \Log::info('findCourierService: Case-insensitive match "' . $shippingMethod . '" → "' . $service->method . '" for shipper #' . $shipperId);
+            return $service;
+        }
+
+        // Tier 3: str_contains partial match (both directions)
+        $methodUpper = strtoupper($shippingMethod);
+        $allServices = CourierService::all();
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            if (str_contains($svcUpper, $methodUpper) || str_contains($methodUpper, $svcUpper)) {
+                \Log::info('findCourierService: str_contains match "' . $shippingMethod . '" → "' . $svc->method . '" for shipper #' . $shipperId);
+                return $svc;
+            }
+        }
+
+        // Tier 4: Word-by-word normalized match with abbreviation detection.
+        // Handles cases like "United Ground Premium" ↔ "UNITED GRD PREMIUM"
+        // by checking if short words (2-3 chars) are abbreviations of longer words.
+        $formWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $methodUpper));
+        $formWords = array_values(array_filter($formWords, function($w) { return strlen($w) > 0; }));
+
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            $svcWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $svcUpper));
+            $svcWords = array_values(array_filter($svcWords, function($w) { return strlen($w) > 0; }));
+
+            if (empty($formWords) || empty($svcWords)) continue;
+
+            $matchedCount = 0;
+            $unmatchedLongWords = 0;
+            foreach ($formWords as $fw) {
+                $found = false;
+                foreach ($svcWords as $sw) {
+                    if ($fw === $sw || str_contains($fw, $sw) || str_contains($sw, $fw)) {
+                        $found = true;
+                        break;
+                    }
+                    // Abbreviation check: if one word is short (2-3 chars) and the
+                    // other is longer, check if short word's chars appear in order.
+                    $shorter = strlen($fw) <= strlen($sw) ? $fw : $sw;
+                    $longer  = strlen($fw) >  strlen($sw) ? $fw : $sw;
+                    if (strlen($shorter) >= 2 && strlen($shorter) <= 3 && strlen($longer) >= 4) {
+                        if ($this->isAbbreviationOf($shorter, $longer)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                }
+                if ($found) {
+                    $matchedCount++;
+                } elseif (strlen($fw) >= 4) {
+                    $unmatchedLongWords++;
+                }
+            }
+
+            // Match if all long words matched and at least 50% of total words matched
+            $totalWords = count($formWords);
+            if ($unmatchedLongWords === 0 && $matchedCount > 0 && ($matchedCount / $totalWords) >= 0.5) {
+                \Log::info('findCourierService: Word-by-word match "' . $shippingMethod . '" → "' . $svc->method . '" (matched ' . $matchedCount . '/' . $totalWords . ' words) for shipper #' . $shipperId);
+                return $svc;
+            }
+        }
+
+        // Tier 5: Collapsed-string match (remove all spaces and non-alphanumeric)
+        $collapsedForm = preg_replace('/[^A-Za-z0-9]/', '', $methodUpper);
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            $collapsedSvc = preg_replace('/[^A-Za-z0-9]/', '', $svcUpper);
+            if (str_contains($collapsedForm, $collapsedSvc) || str_contains($collapsedSvc, $collapsedForm)) {
+                \Log::info('findCourierService: Collapsed-string match "' . $shippingMethod . '" → "' . $svc->method . '" for shipper #' . $shipperId);
+                return $svc;
+            }
+        }
+
+        // No match found — log all available methods for diagnostics
+        $availableMethods = CourierService::pluck('method')->toArray();
+        \Log::warning('findCourierService: No match for "' . $shippingMethod . '" (shipper #' . $shipperId . '). Available methods: ' . implode(', ', $availableMethods));
+
+        return null;
+    }
+
+    /**
+     * Check if a short string (2-3 chars) is an abbreviation of a longer string.
+     * Returns true if all characters of $short appear in $long in order.
+     * Example: isAbbreviationOf("GRD", "GROUND") → true
+     *          isAbbreviationOf("EXP", "EXPRESS") → true
+     */
+    private function isAbbreviationOf($short, $long)
+    {
+        $shortLen = strlen($short);
+        $longLen = strlen($long);
+        if ($shortLen > $longLen) return false;
+
+        $si = 0;
+        for ($li = 0; $li < $longLen && $si < $shortLen; $li++) {
+            if ($short[$si] === $long[$li]) {
+                $si++;
+            }
+        }
+        return $si === $shortLen;
     }
 
     /**

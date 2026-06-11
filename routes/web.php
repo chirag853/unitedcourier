@@ -560,5 +560,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/wallet-recharge', [customerController::class, 'walletRecharge'])->name('wallet-recharge');
     Route::post('/cancel-shipment/{id}', [customerController::class, 'cancelShipment'])->name('cancel-shipment');
     Route::post('/mark-packed', [customerController::class, 'markPacked'])->name('mark-packed');
+    Route::post('/manifest', [customerController::class, 'manifestShipment'])->name('manifest');
+    Route::post('/bulk-manifest', [customerController::class, 'bulkManifestShipments'])->name('bulk-manifest');
     Route::get('/search-hs-codes', [customerController::class, 'searchHsCodes'])->name('search-hs-codes');
 });
