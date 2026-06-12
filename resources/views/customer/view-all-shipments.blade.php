@@ -1072,6 +1072,14 @@
                     dt.column(10).visible(true);  // Show Manifest
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
                     $('#bulkManifestBtn').show();
+                } else if (filter === 'manifested') {
+                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(8).visible(false);  // Hide Print Label
+                    dt.column(9).visible(false);  // Hide Pay Now
+                    dt.column(10).visible(false); // Hide Manifest
+                    dt.column(12).visible(false); // Hide Cancel
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    $('#bulkManifestBtn').hide();
                 } else {
                     dt.column(0).visible(false);  // Hide Checkbox
                     dt.column(8).visible(true);   // Show Print Label

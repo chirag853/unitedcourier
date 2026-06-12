@@ -870,13 +870,113 @@ class customerController extends Controller
             $totalWeight = floatval($request->total_weight ?? 0);
             $consigneeState = $request->consignee_state;
 
-            if (empty($serviceId)) {
+            // Get the currently logged-in customer
+            $customer = auth()->guard('customer')->user();
+            $customerId = $customer ? $customer->id : 0;
+
+            if (!$customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Service ID is required.'
-                ], 400);
+                    'message' => 'You must be logged in to view rates.'
+                ], 401);
             }
 
+            // ALL-SERVICES MODE: When service_id is empty, return best matching rate for every service
+            if (empty($serviceId)) {
+                // Look up zone by consignee state
+                $zone = null;
+                if (!empty($consigneeState)) {
+                    $zone = \App\Models\Zone::where('zone_code', $consigneeState)->first();
+                }
+
+                $allServices = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
+                $allRates = [];
+                $customerRatesExist = false;
+
+                foreach ($allServices as $service) {
+                    $isZoneIndependent = str_contains(strtoupper($service->method), 'AIREXPRESS');
+
+                    // Skip zone-dependent services when no zone is found
+                    if (!$isZoneIndependent && !$zone) {
+                        continue;
+                    }
+
+                    // Fetch rates for this service
+                    $rates = collect();
+                    if ($isZoneIndependent) {
+                        $rates = \App\Models\CourierRate::where('customer_id', $customerId)
+                            ->where('service_id', $service->id)
+                            ->where(function($q) {
+                                $q->whereNull('zone_no')->orWhere('zone_no', 0);
+                            })
+                            ->orderBy('wt_range_start')
+                            ->get();
+
+                        if ($rates->isEmpty() && $customerId !== 0) {
+                            $rates = \App\Models\CourierRate::where('customer_id', 0)
+                                ->where('service_id', $service->id)
+                                ->where(function($q) {
+                                    $q->whereNull('zone_no')->orWhere('zone_no', 0);
+                                })
+                                ->orderBy('wt_range_start')
+                                ->get();
+                        }
+                    } else {
+                        $rates = \App\Models\CourierRate::where('customer_id', $customerId)
+                            ->where('service_id', $service->id)
+                            ->where('zone_no', $zone->zone_number)
+                            ->orderBy('wt_range_start')
+                            ->get();
+
+                        if ($rates->isNotEmpty()) {
+                            $customerRatesExist = true;
+                        }
+
+                        if ($rates->isEmpty() && $customerId !== 0) {
+                            $rates = \App\Models\CourierRate::where('customer_id', 0)
+                                ->where('service_id', $service->id)
+                                ->where('zone_no', $zone->zone_number)
+                                ->orderBy('wt_range_start')
+                                ->get();
+                        }
+                    }
+
+                    // Find rate matching the current weight
+                    $matchedRate = $rates->filter(function ($r) use ($totalWeight) {
+                        return $totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end;
+                    })->first();
+
+                    if ($matchedRate) {
+                        $allRates[] = [
+                            'service_id' => $service->id,
+                            'method' => $service->method,
+                            'method_display' => $service->method . ' ' . $service->tat,
+                            'network' => $service->network,
+                            'method_code' => $service->method_code,
+                            'tat' => $service->tat,
+                            'delivery_days' => $service->tat,
+                            'scode' => $service->scode,
+                            'price' => $matchedRate->price,
+                            'zone_no' => $matchedRate->zone_no,
+                        ];
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'customer_exists' => $customerRatesExist,
+                    'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
+                    'zone' => $zone ? [
+                        'zone_id' => $zone->id,
+                        'zone_number' => $zone->zone_number,
+                        'zone_name' => $zone->zone_name,
+                        'zone_code' => $zone->zone_code,
+                    ] : null,
+                    'all_rates' => $allRates,
+                ]);
+            }
+
+            // SINGLE-SERVICE MODE: original behavior when service_id is provided
             // Find matching CourierService by ID
             $service = \App\Models\CourierService::find($serviceId);
 
@@ -898,18 +998,6 @@ class customerController extends Controller
                 ], 400);
             }
 
-            // Get the currently logged-in customer
-            $customer = auth()->guard('customer')->user();
-            $customerId = $customer ? $customer->id : 0;
-            $customerExists = $customer ? true : false;
-
-            if (!$customer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You must be logged in to view rates.'
-                ], 401);
-            }
-
             // Look up zone by consignee state name (only for zone-dependent services)
             $zone = null;
             if (!$isZoneIndependent) {
@@ -925,6 +1013,7 @@ class customerController extends Controller
 
             // Find matching courier rates for the customer (or default)
             // For zone-independent services (AIREXPRESS), filter by zone_no = null or 0
+            $customerExists = true;
             if ($isZoneIndependent) {
                 $rates = \App\Models\CourierRate::where('customer_id', $customerId)
                     ->where('service_id', $service->id)

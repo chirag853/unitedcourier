@@ -46,6 +46,11 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/simplebar/simplebar.min.css') }}">
     <!-- Main CSS -->
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
+    <style>
+        .modal-header-gradient {
+    background: linear-gradient(to right, #2563eb, #9333ea);
+}
+    </style>
 </head>
 
 <body>
@@ -7523,31 +7528,8 @@
                                             <div class="accordion-collapse collapse" id="rate-calc"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
-                                                    @php
-                                                        $groupedServices = $courierServices->groupBy('network');
-                                                    @endphp
-                                                    <div class="row">
-                                                        @foreach($groupedServices as $network => $services)
-                                                            <div class="col-md-6">
-                                                                <div class="mb-4">
-                                                                    <label class="form-label">{{ $network }}</label>
-                                                                    <div class="d-flex flex-wrap gap-2">
-                                                                        @foreach($services as $service)
-                                                                            @php
-                                                                                $radioValue = $service->id;
-                                                                                $radioId = 'cs-' . $service->id;
-                                                                            @endphp
-                                                                            <div class="form-check">
-                                                                                <input type="radio" id="{{ $radioId }}" name="ddp_shipping_method" value="{{ $radioValue }}" data-method="{{ $service->method }}" data-network="{{ $network }}" data-scode="{{ $service->scode }}" {{ old('ddp_shipping_method') == $radioValue ? 'checked' : '' }} class="form-check-input">
-                                                                                <label class="form-check-label" for="{{ $radioId }}">{{ $service->method }} <small class="text-muted">({{ $service->tat }})</small></label>
-                                                                            </div>
-                                                                        @endforeach
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        @endforeach
-                                                    </div>
-                                                    <!-- Rate Result (from database) -->
+                                                    
+                                                    <!-- Rate Result (card/list layout) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
                                                         <div class="col-12">
                                                             <div class="card border">
@@ -7557,26 +7539,83 @@
                                                                 </div>
                                                                 <div class="card-body">
                                                                     <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div>
-                                                                    <div class="table-responsive">
-                                                                        <table class="table table-bordered mb-0">
-                                                                            <thead class="table-light">
-                                                                                <tr>
-                                                                                    <th>Network</th>
-                                                                                    <th>Method</th>
-                                                                                    <th>Zone</th>
-                                                                                    <th>Weight Range (g)</th>
-                                                                                    <th>Price</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody id="upsRateTableBody">
-                                                                            </tbody>
-                                                                        </table>
+                                                                    <!-- <div class="d-flex align-items-center gap-2 mb-3 text-muted small fw-semibold">
+                                                                        <span class="ms-1">Method</span>
+                                                                        <span class="ms-auto">Delivery Days</span>
+                                                                        <span class="ms-3">Price</span>
+                                                                    </div> -->
+                                                                    <div id="upsRateCardList">
+                                                                        <!-- JS populates rate cards here -->
                                                                     </div>
                                                                     <div id="upsRateError" class="alert alert-danger mt-3 d-none"></div>
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <style>
+                                                        .rate-card {
+                                                            display: flex;
+                                                            align-items: center;
+                                                            padding: 14px 16px;
+                                                            border: 2px solid #e5e7eb;
+                                                            border-radius: 10px;
+                                                            margin-bottom: 10px;
+                                                            cursor: pointer;
+                                                            transition: all 0.2s ease;
+                                                            background: #fff;
+                                                        }
+                                                        .rate-card:hover {
+                                                            border-color: #93c5fd;
+                                                            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+                                                        }
+                                                        .rate-card.selected {
+                                                            border-color: #2563eb;
+                                                            background: #eff6ff;
+                                                            box-shadow: 0 2px 12px rgba(37, 99, 235, 0.15);
+                                                        }
+                                                        .rate-card .rate-radio-wrap {
+                                                            flex-shrink: 0;
+                                                            margin-right: 16px;
+                                                        }
+                                                        .rate-card .rate-radio-wrap input[type="radio"] {
+                                                            width: 18px;
+                                                            height: 18px;
+                                                            accent-color: #2563eb;
+                                                            cursor: pointer;
+                                                        }
+                                                        .rate-card .rate-method {
+                                                            flex: 1;
+                                                            font-weight: 600;
+                                                            color: #1e293b;
+                                                            font-size: 0.95rem;
+                                                        }
+                                                        .rate-card .rate-days {
+                                                            flex-shrink: 0;
+                                                            margin-right: 40px;
+                                                            color: #64748b;
+                                                            font-size: 0.9rem;
+                                                            min-width: 60px;
+                                                            text-align: center;
+                                                        }
+                                                        .rate-card .rate-price {
+                                                            flex-shrink: 0;
+                                                            font-weight: 700;
+                                                            color: #2563eb;
+                                                            font-size: 1.05rem;
+                                                            min-width: 80px;
+                                                            text-align: right;
+                                                        }
+                                                        .rate-card .rate-network-badge {
+                                                            display: inline-block;
+                                                            padding: 2px 8px;
+                                                            border-radius: 4px;
+                                                            font-size: 0.7rem;
+                                                            font-weight: 600;
+                                                            background: #dbeafe;
+                                                            color: #1d4ed8;
+                                                            margin-right: 6px;
+                                                        }
+                                                    </style>
                                                     <!-- /Rate Result -->
                                                 </div>
                                             </div>
@@ -7858,8 +7897,8 @@
     <div class="modal fade" id="previewOrderModal" tabindex="-1" aria-labelledby="previewOrderModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="previewOrderModalLabel">
+                <div class="modal-header modal-header-gradient">
+                    <h5 class="modal-title text-white" id="previewOrderModalLabel">
                         <i class="ti ti-eye me-2"></i> Order Preview
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -8159,10 +8198,10 @@
     }
 
 
-    // Fetch rate from courier_rates database table (phone-number based)
+    // Fetch rates for ALL courier services and show as selectable card list
     function calculateRate() {
         const resultDiv = document.getElementById('upsRateResult');
-        const tableBody = document.getElementById('upsRateTableBody');
+        const cardList = document.getElementById('upsRateCardList');
         const errorDiv = document.getElementById('upsRateError');
         const statusBadge = document.getElementById('rateStatusBadge');
         const customerInfo = document.getElementById('rateCustomerInfo');
@@ -8179,33 +8218,7 @@
         errorDiv.classList.add('d-none');
         if (customerInfo) customerInfo.style.display = 'none';
 
-        // Get selected shipping method and consignee state
-        const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked');
-        const serviceId = selectedRadio ? selectedRadio.value : '';
         const consigneeState = getVal('select[name="consignee_state"]');
-
-        // Check if this is a zone-independent service (AIREXPRESS) using data-method attribute
-        const methodName = selectedRadio ? (selectedRadio.dataset.method || '') : '';
-        const isZoneIndependent = methodName.toUpperCase().includes('AIREXPRESS');
-
-        if (!serviceId) {
-            alert('Please select a shipping method first.');
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
-            }
-            return;
-        }
-
-        // For zone-dependent services, consignee state is required
-        if (!isZoneIndependent && !consigneeState) {
-            alert('Please enter the consignee state first.');
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
-            }
-            return;
-        }
 
         // Calculate total weight from all package rows
         let totalWeight = 0;
@@ -8218,6 +8231,7 @@
         });
         if (totalWeight <= 0) totalWeight = 1; // default 1kg
 
+        // Always send empty service_id to get rates for ALL services
         fetch('/customer/ups-rate', {
             method: 'POST',
             headers: {
@@ -8225,7 +8239,7 @@
                 'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
             },
             body: JSON.stringify({
-                service_id: serviceId,
+                service_id: '',
                 total_weight: totalWeight,
                 consignee_state: consigneeState
             })
@@ -8252,39 +8266,80 @@
                     }
                     if (data.zone) {
                         infoText += ' | Zone: ' + data.zone.zone_number + ' - ' + data.zone.zone_code + ' (' + data.zone.zone_name + ')';
-                    } else if (data.is_zone_independent) {
-                        infoText += ' | Zone: N/A (Zone Independent)';
                     }
                     customerInfo.textContent = infoText;
                 }
 
-                // Build table rows
-                let rows = '';
+                // Build selectable rate cards
+                let cardsHtml = '';
                 if (data.all_rates && data.all_rates.length > 0) {
-                    data.all_rates.forEach(function(r) {
-                        const isHighlighted = data.matched_rate && data.matched_rate.zone_no === r.zone_no && data.matched_rate.price === r.price;
-                        const zoneDisplay = data.is_zone_independent ? 'N/A' : r.zone_no;
-                        rows += `<tr class="${isHighlighted ? 'table-success' : ''}">
-                            <td>${data.service?.network || ''}</td>
-                            <td>${data.service?.method || ''}</td>
-                            <td>${zoneDisplay}</td>
-                            <td>${r.wt_range_start} - ${r.wt_range_end}</td>
-                            <td><strong>${r.price}</strong></td>
-                        </tr>`;
+                    data.all_rates.forEach(function(r, index) {
+                        const checked = index === 0 ? 'checked' : '';
+                        const selectedClass = index === 0 ? ' selected' : '';
+                        cardsHtml += `
+                        <div class="rate-card${selectedClass}" data-service-id="${r.service_id}">
+                            <div class="rate-radio-wrap">
+                                <input type="radio" name="rate_select" value="${r.service_id}"
+                                    data-method="${r.method}"
+                                    data-network="${r.network}"
+                                    data-tat="${r.tat}"
+                                    data-method_code="${r.method_code || ''}"
+                                    data-price="${r.price}"
+                                    ${checked}>
+                            </div>
+                            <div class="rate-method">
+                                <span class="rate-network-badge">${r.method_code || ''}</span>
+                                ${r.method}
+                            </div>
+                            <div class="rate-days">${r.delivery_days || r.tat}</div>
+                            <div class="rate-price">INR - ${r.price}</div>
+                        </div>`;
                     });
                 } else {
-                    rows = '<tr><td colspan="5" class="text-center">No rates found for this weight range.</td></tr>';
+                    cardsHtml = '<div class="text-center text-muted py-4">No rates found. Please check consignee state and package weights.</div>';
                 }
-                tableBody.innerHTML = rows;
+                cardList.innerHTML = cardsHtml;
+
+                // Attach click handlers to rate cards
+                cardList.querySelectorAll('.rate-card').forEach(function(card) {
+                    card.addEventListener('click', function(e) {
+                        // Don't trigger if clicking the radio directly (it handles itself)
+                        if (e.target.tagName === 'INPUT') return;
+
+                        // Select the radio inside this card
+                        const radio = this.querySelector('input[name="rate_select"]');
+                        if (radio) {
+                            radio.checked = true;
+                            // Trigger change event for any listeners
+                            radio.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+
+                        // Update selected state
+                        cardList.querySelectorAll('.rate-card').forEach(c => c.classList.remove('selected'));
+                        this.classList.add('selected');
+                    });
+                });
+
+                // Radio change handlers for selected state
+                cardList.querySelectorAll('input[name="rate_select"]').forEach(function(radio) {
+                    radio.addEventListener('change', function() {
+                        if (this.checked) {
+                            // Remove selected from all cards, add to parent card
+                            cardList.querySelectorAll('.rate-card').forEach(c => c.classList.remove('selected'));
+                            const card = this.closest('.rate-card');
+                            if (card) card.classList.add('selected');
+                        }
+                    });
+                });
             } else {
-                tableBody.innerHTML = '';
+                cardList.innerHTML = '';
                 errorDiv.textContent = data.message || 'Failed to get rate';
                 errorDiv.classList.remove('d-none');
             }
         })
         .catch(err => {
             console.error('Rate error:', err);
-            tableBody.innerHTML = '';
+            cardList.innerHTML = '';
             errorDiv.textContent = 'Network error. Please try again.';
             errorDiv.classList.remove('d-none');
             resultDiv.style.display = 'block';
@@ -8296,7 +8351,7 @@
         .finally(() => {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Rate Calculate';
+                btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Next';
             }
         });
     }
@@ -8311,14 +8366,13 @@
             });
         }
 
-        // Auto-calculate rate when any shipping method radio button changes
-        document.querySelectorAll('input[name="ddp_shipping_method"]').forEach(function(radio) {
-            radio.addEventListener('change', function() {
-                if (this.checked) {
-                    calculateRate();
-                }
+        // Auto-calculate rate when consignee state changes
+        const consigneeStateEl = document.querySelector('select[name="consignee_state"]');
+        if (consigneeStateEl) {
+            consigneeStateEl.addEventListener('change', function() {
+                calculateRate();
             });
-        });
+        }
     });
 
     </script>
@@ -8534,21 +8588,12 @@
             });
             document.getElementById('preview_total_amount').textContent = totalAmount.toFixed(2);
 
-            // Shipping Method / Rate
-            const selectedRadio = form.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
-            document.getElementById('preview_selected_method').textContent = selectedRadio ? selectedRadio.dataset.method || selectedRadio.value : 'Not selected';
-            const upsRateResultDiv = document.getElementById('upsRateResult');
-            if (upsRateResultDiv && upsRateResultDiv.style.display !== 'none') {
-                const rateRows = document.getElementById('upsRateTableBody');
-                if (rateRows && rateRows.rows.length > 0) {
-                    const priceCell = rateRows.rows[0].cells[4];
-                    document.getElementById('preview_rate_result').textContent = priceCell ? priceCell.textContent.trim() : 'Calculated';
-                } else {
-                    document.getElementById('preview_rate_result').textContent = 'Calculated';
-                }
-            } else {
-                document.getElementById('preview_rate_result').textContent = 'Not calculated';
-            }
+            // Shipping Method / Rate — read from the rate table radio selection
+            const selectedRateRadio = form.querySelector('input[name="rate_select"]:checked');
+            const selectedMethod = selectedRateRadio ? (selectedRateRadio.dataset.method || '') : 'Not selected';
+            const selectedPrice = selectedRateRadio ? (selectedRateRadio.dataset.price || '') : 'Not calculated';
+            document.getElementById('preview_selected_method').textContent = selectedMethod;
+            document.getElementById('preview_rate_result').textContent = selectedPrice;
 
             // Show the modal
             const previewModal = new bootstrap.Modal(document.getElementById('previewOrderModal'));
@@ -8589,21 +8634,29 @@
                 submitButton.disabled = true;
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
 
-                // Get selected service_id from radio button
-                const selectedRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
-                if (!selectedRadio) {
+                // Get selected service_id from rate table radio button (preferred)
+                // or fall back to the old ddp_shipping_method radio
+                const rateRadio = document.querySelector('input[name="rate_select"]:checked');
+                const ddpRadio = document.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+
+                let serviceId = null;
+                if (rateRadio) {
+                    serviceId = rateRadio.value;
+                } else if (ddpRadio) {
+                    serviceId = ddpRadio.value;
+                }
+
+                if (!serviceId) {
                     Swal.fire({
                         icon: 'error',
                         title: 'No Shipping Method Selected',
-                        text: 'Please select a shipping method before creating a shipment.',
+                        text: 'Please use Rate Calculate to select a shipping method before creating a shipment.',
                         confirmButtonColor: '#dc3545'
                     });
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalText;
                     return;
                 }
-
-                const serviceId = selectedRadio.value;
 
                 // Submit form via AJAX - controller handles UPS payload + API call + DB storage
                 const formData = new FormData(form);
