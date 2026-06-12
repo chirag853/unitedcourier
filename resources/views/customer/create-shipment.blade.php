@@ -195,48 +195,6 @@
                                                 </div>
                                             </div>
                                             -->
-                                                        <h5 style="margin-bottom: 20px;">Shipment Type</h5>
-                                                        <div class="col-md-6">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Delivery Destination<span
-                                                                        class="text-danger ms-1">*</span></label>
-                                                                <select class="select2 select2-hidden-accessible"
-                                                                    name="delivery_destination" data-toggle="select2"
-                                                                    data-select2-id="12" tabindex="-1"
-                                                                    aria-hidden="true">
-                                                                    <option data-select2-id="12" value="">Select</option>
-                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
-                                                                    <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>India</option>
-                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
-                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}>China</option>
-                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>Russia</option>
-                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>Srilanka</option>
-                                                                </select>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-6">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Origin Type<span
-                                                                        class="text-danger ms-1">*</span></label>
-                                                                <select class="select2 select2-hidden-accessible"
-                                                                    name="origin_type" data-toggle="select2"
-                                                                    data-select2-id="13" id="originType" tabindex="-1"
-                                                                    aria-hidden="true">
-                                                                    <option data-select2-id="13" value="">Select
-                                                                    </option>
-                                                                    <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
-                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
-                                                                </select>
-                                                                <div id="originTypeError" class="text-danger mt-1"
-                                                                    style="display: none;">
-                                                                    Please enroll for CSB V to create shipments with CSB
-                                                                    V origin type. <a
-                                                                        href="{{ route('customer.csb5-form') }}"
-                                                                        class="text-danger fw-bold">Go to CSB V
-                                                                        Onboarding</a>
-                                                                </div>
-                                                            </div>
-                                                        </div>
                                                         <div class="col-md-4" style="display:none">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Shipping Method <span
@@ -3571,6 +3529,50 @@
                                             <div class="accordion-collapse collapse" id="address"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
+                                                    <h5 style="margin-bottom: 20px;">Shipment Type</h5>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Delivery Destination<span
+                                                                        class="text-danger ms-1">*</span></label>
+                                                                <select class="select2 select2-hidden-accessible"
+                                                                    name="delivery_destination" data-toggle="select2"
+                                                                    data-select2-id="12" tabindex="-1"
+                                                                    aria-hidden="true">
+                                                                    <option value="">Select</option>
+                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
+                                                                    <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
+                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
+                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}> CN - China</option>
+                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>RU - Russia</option>
+                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Origin Type<span
+                                                                        class="text-danger ms-1">*</span></label>
+                                                                <select class="select2 select2-hidden-accessible"
+                                                                    name="origin_type" data-toggle="select2"
+                                                                    data-select2-id="13" id="originType" tabindex="-1"
+                                                                    aria-hidden="true">
+                                                                    
+                                                                    <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
+                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
+                                                                </select>
+                                                                <div id="originTypeError" class="text-danger mt-1"
+                                                                    style="display: none;">
+                                                                    Please enroll for CSB V to create shipments with CSB
+                                                                    V origin type. <a
+                                                                        href="{{ route('customer.csb5-form') }}"
+                                                                        class="text-danger fw-bold">Go to CSB V
+                                                                        Onboarding</a>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <hr>
                                                     <div class="row">
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
@@ -7553,67 +7555,185 @@
                                                         </div>
                                                     </div>
                                                     <style>
-                                                        .rate-card {
-                                                            display: flex;
-                                                            align-items: center;
-                                                            padding: 14px 16px;
-                                                            border: 2px solid #e5e7eb;
-                                                            border-radius: 10px;
-                                                            margin-bottom: 10px;
-                                                            cursor: pointer;
-                                                            transition: all 0.2s ease;
+                                                        .rate-comparison-card {
                                                             background: #fff;
+                                                            border-radius: 10px;
+                                                            border: 2px solid #e5e7eb;
+                                                            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                                                            margin-bottom: 12px;
+                                                            overflow: hidden;
+                                                            animation: fadeIn 0.3s ease-out;
+                                                            cursor: pointer;
                                                         }
-                                                        .rate-card:hover {
+                                                        .rate-comparison-card:hover {
                                                             border-color: #93c5fd;
                                                             box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
                                                         }
-                                                        .rate-card.selected {
+                                                        .rate-comparison-card.selected {
                                                             border-color: #2563eb;
                                                             background: #eff6ff;
                                                             box-shadow: 0 2px 12px rgba(37, 99, 235, 0.15);
                                                         }
-                                                        .rate-card .rate-radio-wrap {
-                                                            flex-shrink: 0;
-                                                            margin-right: 16px;
+                                                        .rate-comparison-card .rate-comparison-card-body {
+                                                            padding: 16px 20px;
                                                         }
-                                                        .rate-card .rate-radio-wrap input[type="radio"] {
+                                                        .carrier-badge {
+                                                            display: flex;
+                                                            align-items: center;
+                                                            gap: 12px;
+                                                        }
+                                                        .carrier-logo-container {
+                                                            width: 44px;
+                                                            height: 44px;
+                                                            border-radius: 10px;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                            flex-shrink: 0;
+                                                        }
+                                                        .service-info .service-title {
+                                                            font-weight: 700;
+                                                            font-size: 0.95rem;
+                                                            color: #1e293b;
+                                                            line-height: 1.2;
+                                                        }
+                                                        .service-info .service-subtitle {
+                                                            font-size: 0.75rem;
+                                                            color: #64748b;
+                                                            margin-top: 2px;
+                                                        }
+                                                        .service-info .service-tat {
+                                                            font-size: 0.75rem;
+                                                            color: #6366f1;
+                                                            font-weight: 500;
+                                                            margin-top: 2px;
+                                                        }
+                                                        .status-badge {
+                                                            display: inline-block;
+                                                            font-size: 0.7rem;
+                                                            font-weight: 600;
+                                                            color: #059669;
+                                                            background: #d1fae5;
+                                                            padding: 2px 8px;
+                                                            border-radius: 12px;
+                                                            margin-top: 4px;
+                                                        }
+                                                        .status-badge i {
+                                                            font-size: 0.6rem;
+                                                            margin-right: 3px;
+                                                        }
+                                                        .price-section {
+                                                            text-align: right;
+                                                        }
+                                                        .price-amount {
+                                                            font-size: 1.3rem;
+                                                            font-weight: 700;
+                                                            color: #1e293b;
+                                                        }
+                                                        .price-amount .price-symbol {
+                                                            font-size: 0.85rem;
+                                                            font-weight: 600;
+                                                            color: #64748b;
+                                                        }
+                                                        .tax-info {
+                                                            font-size: 0.7rem;
+                                                            color: #059669;
+                                                            margin-top: 2px;
+                                                        }
+                                                        .tax-info i {
+                                                            font-size: 0.6rem;
+                                                            margin-right: 3px;
+                                                        }
+                                                        .action-container {
+                                                            gap: 12px;
+                                                        }
+                                                        .breakdown-toggle {
+                                                            color: #2563eb;
+                                                            font-size: 0.8rem;
+                                                            font-weight: 600;
+                                                            text-decoration: none;
+                                                            white-space: nowrap;
+                                                        }
+                                                        .breakdown-toggle:hover {
+                                                            color: #1d4ed8;
+                                                        }
+                                                        .breakdown-toggle .chevron {
+                                                            transition: transform 0.2s ease;
+                                                        }
+                                                        .breakdown-toggle[aria-expanded="true"] .chevron {
+                                                            transform: rotate(180deg);
+                                                        }
+                                                        .breakdown-section {
+                                                            border-top: 1px solid #e5e7eb;
+                                                            padding: 16px 20px;
+                                                            background: #f8fafc;
+                                                        }
+                                                        .breakdown-grid {
+                                                            display: grid;
+                                                            grid-template-columns: 1fr 1fr;
+                                                            gap: 16px;
+                                                        }
+                                                        .breakdown-column {
+                                                            display: flex;
+                                                            flex-direction: column;
+                                                            gap: 6px;
+                                                        }
+                                                        .breakdown-title {
+                                                            font-weight: 700;
+                                                            font-size: 0.8rem;
+                                                            color: #475569;
+                                                            text-transform: uppercase;
+                                                            letter-spacing: 0.5px;
+                                                            margin-bottom: 4px;
+                                                            padding-bottom: 4px;
+                                                            border-bottom: 1px dashed #cbd5e1;
+                                                        }
+                                                        .breakdown-row {
+                                                            display: flex;
+                                                            justify-content: space-between;
+                                                            font-size: 0.82rem;
+                                                            color: #334155;
+                                                        }
+                                                        .breakdown-label {
+                                                            color: #64748b;
+                                                        }
+                                                        .breakdown-value {
+                                                            font-weight: 600;
+                                                            color: #1e293b;
+                                                        }
+                                                        .total-breakdown {
+                                                            margin-top: 14px;
+                                                            padding-top: 12px;
+                                                            border-top: 2px solid #2563eb;
+                                                        }
+                                                        .total-row {
+                                                            display: flex;
+                                                            justify-content: space-between;
+                                                            align-items: center;
+                                                        }
+                                                        .total-label {
+                                                            font-weight: 700;
+                                                            font-size: 0.9rem;
+                                                            color: #1e293b;
+                                                        }
+                                                        .total-label i {
+                                                            color: #2563eb;
+                                                            margin-right: 6px;
+                                                        }
+                                                        .total-amount {
+                                                            font-size: 1.3rem;
+                                                            font-weight: 700;
+                                                            color: #2563eb;
+                                                        }
+                                                        @keyframes fadeIn {
+                                                            from { opacity: 0; transform: translateY(8px); }
+                                                            to { opacity: 1; transform: translateY(0); }
+                                                        }
+                                                        .form-check-input.service-radio {
                                                             width: 18px;
                                                             height: 18px;
                                                             accent-color: #2563eb;
                                                             cursor: pointer;
-                                                        }
-                                                        .rate-card .rate-method {
-                                                            flex: 1;
-                                                            font-weight: 600;
-                                                            color: #1e293b;
-                                                            font-size: 0.95rem;
-                                                        }
-                                                        .rate-card .rate-days {
-                                                            flex-shrink: 0;
-                                                            margin-right: 40px;
-                                                            color: #64748b;
-                                                            font-size: 0.9rem;
-                                                            min-width: 60px;
-                                                            text-align: center;
-                                                        }
-                                                        .rate-card .rate-price {
-                                                            flex-shrink: 0;
-                                                            font-weight: 700;
-                                                            color: #2563eb;
-                                                            font-size: 1.05rem;
-                                                            min-width: 80px;
-                                                            text-align: right;
-                                                        }
-                                                        .rate-card .rate-network-badge {
-                                                            display: inline-block;
-                                                            padding: 2px 8px;
-                                                            border-radius: 4px;
-                                                            font-size: 0.7rem;
-                                                            font-weight: 600;
-                                                            background: #dbeafe;
-                                                            color: #1d4ed8;
-                                                            margin-right: 6px;
                                                         }
                                                     </style>
                                                     <!-- /Rate Result -->
@@ -8059,9 +8179,31 @@
                             <i class="ti ti-coin me-1"></i> Shipping Rate
                         </div>
                         <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span></div>
-                                <div class="col-md-6"><strong>Rate:</strong> <span id="preview_rate_result"></span></div>
+                            <div class="row mb-3">
+                                <div class="col-12"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span></div>
+                                <div class="col-12"><strong>Network:</strong> <span id="preview_selected_network"></span></div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm mb-0" style="max-width: 400px;">
+                                    <tbody>
+                                        <tr>
+                                            <td class="fw-semibold">Base Price</td>
+                                            <td class="text-end" id="preview_base_price">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold text-warning">Fuel Surcharge</td>
+                                            <td class="text-end text-warning" id="preview_fuel_charge">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold text-purple">GST</td>
+                                            <td class="text-end text-purple" id="preview_gst_amount">-</td>
+                                        </tr>
+                                        <tr class="table-primary fw-bold">
+                                            <td>Total</td>
+                                            <td class="text-end" id="preview_rate_total">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -8270,29 +8412,152 @@
                     customerInfo.textContent = infoText;
                 }
 
-                // Build selectable rate cards
+                // Build selectable rate cards with breakdown
                 let cardsHtml = '';
                 if (data.all_rates && data.all_rates.length > 0) {
                     data.all_rates.forEach(function(r, index) {
                         const checked = index === 0 ? 'checked' : '';
                         const selectedClass = index === 0 ? ' selected' : '';
+
+                        // Compute fuel and GST amounts
+                        const basePrice = parseFloat(r.price) || 0;
+                        const fuelPct = parseFloat(r.fuel_percentage) || 0;
+                        const fuelCharge = parseFloat(r.fuel_charge) || 0;
+                        const gstPct = parseFloat(r.gst_percentage) || 0;
+                        const gstAmount = parseFloat(r.gst_amount) || 0;
+                        const computedFuel = fuelCharge > 0 ? fuelCharge : (basePrice * fuelPct / 100);
+                        const computedGst = gstAmount > 0 ? gstAmount : ((basePrice + computedFuel) * gstPct / 100);
+                        const totalPrice = basePrice + computedFuel + computedGst;
+
+                        // Build rate breakdown JSON
+                        const rateData = JSON.stringify({
+                            base: basePrice.toFixed(2),
+                            fuel: computedFuel.toFixed(2),
+                            gst: computedGst.toFixed(2),
+                            demand: '0.00',
+                            remote: '0.00',
+                            oversize: '0.00',
+                            goGreen: '0.00',
+                            misc: '',
+                            miscAmount: '0.00',
+                            total: totalPrice.toFixed(2)
+                        });
+
+                        // Carrier initials from network (first 2 chars)
+                        const network = r.network || '';
+                        const carrierInitials = network.substring(0, 2).toUpperCase() || '${network}';
+
+                        // Generate consistent color from network name
+                        let hue = 0;
+                        for (let i = 0; i < network.length; i++) {
+                            hue = (hue * 31 + network.charCodeAt(i)) % 360;
+                        }
+                        const bgColor = 'hsl(' + hue + ', 70%, 50%)';
+
                         cardsHtml += `
-                        <div class="rate-card${selectedClass}" data-service-id="${r.service_id}">
-                            <div class="rate-radio-wrap">
-                                <input type="radio" name="rate_select" value="${r.service_id}"
-                                    data-method="${r.method}"
-                                    data-network="${r.network}"
-                                    data-tat="${r.tat}"
-                                    data-method_code="${r.method_code || ''}"
-                                    data-price="${r.price}"
-                                    ${checked}>
+                        <div class="rate-comparison-card${selectedClass}" data-service-id="${r.service_id}">
+                            <div class="rate-comparison-card-body">
+                                <div class="row g-3 align-items-center">
+                                    <div class="col-lg-6">
+                                        <div class="carrier-badge">
+                                            <div class="carrier-logo-container" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important;">
+                                                <span class="text-white fw-bold fs-18">${carrierInitials}</span>
+                                            </div>
+                                            <div class="service-info">
+                                                <div class="service-title">${r.method}</div>
+                                                <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'} Days</div>
+                                                <span class="status-badge">
+                                                    <i class="fas fa-check-circle"></i>
+                                                    Available
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <div class="row h-100 align-items-center">
+                                            <div class="col-md-7">
+                                                <div class="price-section">
+                                                    <div class="price-container">
+                                                        <div class="price-amount">
+                                                            <span class="price-symbol">₹</span> ${totalPrice.toFixed(2)}
+                                                        </div>
+                                                        <div class="tax-info">
+                                                            <i class="fas fa-check-circle"></i>
+                                                            All taxes included
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-5">
+                                                <div class="action-container d-flex align-items-center justify-content-between">
+                                                    <div class="form-check m-0 d-flex align-items-center">
+                                                        <input type="radio" name="rate_select" value="${r.service_id}"
+                                                            class="form-check-input me-2 service-radio"
+                                                            data-method="${r.method}"
+                                                            data-network="${r.network}"
+                                                            data-tat="${r.tat}"
+                                                            data-method_code="${r.method_code || ''}"
+                                                            data-price="${r.price}"
+                                                            data-rate='${rateData}'
+                                                            id="service_${index}"
+                                                            ${checked}>
+                                                        <label class="form-check-label small fw-semibold" for="service_${index}">
+                                                            Select
+                                                        </label>
+                                                    </div>
+                                                    <button class="breakdown-toggle btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#breakdown-${index}" aria-expanded="false" aria-controls="breakdown-${index}">
+                                                        <span>break price</span>
+                                                        <i class="fas fa-chevron-down chevron ms-1"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="breakdown-${index}" class="accordion-collapse collapse" data-bs-parent="#upsRateCardList">
+                                    <div class="breakdown-section">
+                                        <div class="breakdown-grid">
+                                            <div class="breakdown-column">
+                                                <div class="breakdown-title">Base Charges</div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Base Rate</span>
+                                                    <span class="breakdown-value">₹ ${basePrice.toFixed(2)}</span>
+                                                </div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Fuel Percentage</span>
+                                                    <span class="breakdown-value">${fuelPct.toFixed(2)}%</span>
+                                                </div>
+                                            </div>
+                                            <div class="breakdown-column">
+                                                <div class="breakdown-title">Tax & Surcharges</div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Fuel Surcharge</span>
+                                                    <span class="breakdown-value">₹ ${computedFuel.toFixed(2)}</span>
+                                                </div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">GST Amount</span>
+                                                    <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
+                                                </div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Per KG Rate*</span>
+                                                    <span class="breakdown-value">₹ ${totalPrice.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="total-breakdown">
+                                            <div class="total-row">
+                                                <div class="total-label">
+                                                    <i class="fas fa-receipt"></i>
+                                                    Total Amount
+                                                </div>
+                                                <div class="total-amount">
+                                                    ₹ ${totalPrice.toFixed(2)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="rate-method">
-                                <span class="rate-network-badge">${r.method_code || ''}</span>
-                                ${r.method}
-                            </div>
-                            <div class="rate-days">${r.delivery_days || r.tat}</div>
-                            <div class="rate-price">INR - ${r.price}</div>
                         </div>`;
                     });
                 } else {
@@ -8300,22 +8565,21 @@
                 }
                 cardList.innerHTML = cardsHtml;
 
-                // Attach click handlers to rate cards
-                cardList.querySelectorAll('.rate-card').forEach(function(card) {
+                // Attach click handlers to rate cards (excluding breakdown toggle)
+                cardList.querySelectorAll('.rate-comparison-card').forEach(function(card) {
                     card.addEventListener('click', function(e) {
-                        // Don't trigger if clicking the radio directly (it handles itself)
-                        if (e.target.tagName === 'INPUT') return;
+                        // Don't intercept clicks on breakdown toggle, radio, or collapse elements
+                        if (e.target.closest('.breakdown-toggle') || e.target.closest('.accordion-collapse') || e.target.tagName === 'INPUT') return;
 
                         // Select the radio inside this card
                         const radio = this.querySelector('input[name="rate_select"]');
                         if (radio) {
                             radio.checked = true;
-                            // Trigger change event for any listeners
                             radio.dispatchEvent(new Event('change', { bubbles: true }));
                         }
 
                         // Update selected state
-                        cardList.querySelectorAll('.rate-card').forEach(c => c.classList.remove('selected'));
+                        cardList.querySelectorAll('.rate-comparison-card').forEach(c => c.classList.remove('selected'));
                         this.classList.add('selected');
                     });
                 });
@@ -8324,9 +8588,8 @@
                 cardList.querySelectorAll('input[name="rate_select"]').forEach(function(radio) {
                     radio.addEventListener('change', function() {
                         if (this.checked) {
-                            // Remove selected from all cards, add to parent card
-                            cardList.querySelectorAll('.rate-card').forEach(c => c.classList.remove('selected'));
-                            const card = this.closest('.rate-card');
+                            cardList.querySelectorAll('.rate-comparison-card').forEach(c => c.classList.remove('selected'));
+                            const card = this.closest('.rate-comparison-card');
                             if (card) card.classList.add('selected');
                         }
                     });
@@ -8591,9 +8854,20 @@
             // Shipping Method / Rate — read from the rate table radio selection
             const selectedRateRadio = form.querySelector('input[name="rate_select"]:checked');
             const selectedMethod = selectedRateRadio ? (selectedRateRadio.dataset.method || '') : 'Not selected';
-            const selectedPrice = selectedRateRadio ? (selectedRateRadio.dataset.price || '') : 'Not calculated';
+            const selectedNetwork = selectedRateRadio ? (selectedRateRadio.dataset.network || '') : '-';
             document.getElementById('preview_selected_method').textContent = selectedMethod;
-            document.getElementById('preview_rate_result').textContent = selectedPrice;
+            document.getElementById('preview_selected_network').textContent = selectedNetwork;
+
+            let rateData = { base: '0.00', fuel: '0.00', gst: '0.00', total: '0.00' };
+            if (selectedRateRadio && selectedRateRadio.dataset.rate) {
+                try {
+                    rateData = JSON.parse(selectedRateRadio.dataset.rate);
+                } catch(e) {}
+            }
+            document.getElementById('preview_base_price').textContent = 'INR ' + parseFloat(rateData.base).toFixed(2);
+            document.getElementById('preview_fuel_charge').textContent = 'INR ' + parseFloat(rateData.fuel).toFixed(2);
+            document.getElementById('preview_gst_amount').textContent = 'INR ' + parseFloat(rateData.gst).toFixed(2);
+            document.getElementById('preview_rate_total').textContent = 'INR ' + parseFloat(rateData.total).toFixed(2);
 
             // Show the modal
             const previewModal = new bootstrap.Modal(document.getElementById('previewOrderModal'));
@@ -8657,10 +8931,21 @@
                     submitButton.innerHTML = originalText;
                     return;
                 }
+// Submit form via AJAX - controller handles UPS payload + API call + DB storage
+const formData = new FormData(form);
+formData.append('service_id', serviceId);
 
-                // Submit form via AJAX - controller handles UPS payload + API call + DB storage
-                const formData = new FormData(form);
-                formData.append('service_id', serviceId);
+// Append fuel, GST, and total price from the selected rate card's data-rate JSON
+if (rateRadio && rateRadio.dataset.rate) {
+    try {
+        const rateData = JSON.parse(rateRadio.dataset.rate);
+        formData.append('fuel_charge', rateData.fuel || '0');
+        formData.append('fuel_percentage', rateRadio.dataset.fuel_percentage || '0');
+        formData.append('gst_amount', rateData.gst || '0');
+        formData.append('gst_percentage', rateRadio.dataset.gst_percentage || '0');
+        formData.append('total_price', rateData.total || rateRadio.dataset.price || '0');
+    } catch(e) {}
+}
 
                 fetch(form.action, {
                     method: 'POST',

@@ -342,7 +342,7 @@
                                                 @php
                                                     $shipFrom = $invoice->shipperInfo ? trim(($invoice->shipperInfo->city ?? '') . ', ' . ($invoice->shipperInfo->state ?? '') . ', India') : 'India';
                                                     $shipTo = $invoice->shipperInfo && $invoice->shipperInfo->consigneeInfo
-                                                        ? trim(($invoice->shipperInfo->consigneeInfo->city ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->state ?? '') . ', ' . ($invoice->shipperInfo->delivery_destination ?? ''))
+                                                        ? trim(($invoice->shipperInfo->consigneeInfo->city ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->state ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->delivery_destination ?? ''))
                                                         : '-';
                                                 @endphp
                                                 <span>{{ $shipFrom }}</span>

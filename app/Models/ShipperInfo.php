@@ -14,8 +14,6 @@ class ShipperInfo extends Model
     protected $fillable = [
         'customer_id',
         'awb_number',
-        'delivery_destination',
-        'origin_type',
         'shipping_method',
         'shipper_same_as_customer',
         'company_name',

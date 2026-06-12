@@ -13,6 +13,8 @@ class ConsigneeInfo extends Model
 
     protected $fillable = [
         'shipper_id',
+        'delivery_destination',
+        'origin_type',
         'consignee_name',
         'contact_person',
         'address_line1',

@@ -599,8 +599,6 @@ class customerController extends Controller
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
                 'awb_number' => $awbNumber,
-                'delivery_destination' => $validatedData['delivery_destination'],
-                'origin_type' => $validatedData['origin_type'],
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
                 'company_name' => $validatedData['shipper_company_names'],
@@ -623,6 +621,8 @@ class customerController extends Controller
             // Store Consignee Info
             $consignee = ConsigneeInfo::create([
                 'shipper_id' => $shipperId,
+                'delivery_destination' => $validatedData['delivery_destination'],
+                'origin_type' => $validatedData['origin_type'],
                 'consignee_name' => $validatedData['consignee_name'],
                 'contact_person' => $validatedData['consignee_contact_person'],
                 'address_line1' => $validatedData['consignee_address_line1'],
@@ -958,6 +958,10 @@ class customerController extends Controller
                             'scode' => $service->scode,
                             'price' => $matchedRate->price,
                             'zone_no' => $matchedRate->zone_no,
+                            'fuel_charge' => $matchedRate->fuel_charge,
+                            'fuel_percentage' => $matchedRate->fuel_percentage,
+                            'gst_percentage' => $matchedRate->gst_percentage,
+                            'gst_amount' => $matchedRate->gst_amount,
                         ];
                     }
                 }
@@ -1080,6 +1084,10 @@ class customerController extends Controller
                     'wt_range_start' => $filteredRates->first()->wt_range_start,
                     'wt_range_end' => $filteredRates->first()->wt_range_end,
                     'price' => $filteredRates->first()->price,
+                    'fuel_charge' => $filteredRates->first()->fuel_charge,
+                    'fuel_percentage' => $filteredRates->first()->fuel_percentage,
+                    'gst_percentage' => $filteredRates->first()->gst_percentage,
+                    'gst_amount' => $filteredRates->first()->gst_amount,
                 ] : null,
                 'all_rates' => $filteredRates->map(function ($r) {
                     return [
@@ -1088,6 +1096,10 @@ class customerController extends Controller
                         'wt_range_start' => $r->wt_range_start,
                         'wt_range_end' => $r->wt_range_end,
                         'price' => $r->price,
+                        'fuel_charge' => $r->fuel_charge,
+                        'fuel_percentage' => $r->fuel_percentage,
+                        'gst_percentage' => $r->gst_percentage,
+                        'gst_amount' => $r->gst_amount,
                     ];
                 })->values(),
             ]);
@@ -1666,7 +1678,7 @@ class customerController extends Controller
                     'reference_number' => $invoice->reference_number,
                     'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
                     'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
-                    'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($shipper ? $shipper->delivery_destination : '')) : null,
+                    'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? '')) : null,
                     'shipper' => $shipper ? [
                         'company' => $shipper->company_name,
                         'contact' => $shipper->contact_person,
@@ -1683,8 +1695,8 @@ class customerController extends Controller
                         'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
                         'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
                     ] : null,
-                    'destination' => $shipper ? $shipper->delivery_destination : null,
-                    'origin_type' => $shipper ? $shipper->origin_type : null,
+                    'destination' => $consignee ? $consignee->delivery_destination : null,
+                    'origin_type' => $consignee ? $consignee->origin_type : null,
                     'shipping_method' => $shipper ? $shipper->shipping_method : null,
                     'packages' => $packages->map(function($pkg, $idx) {
                         return [
@@ -2230,7 +2242,7 @@ class customerController extends Controller
             'consignee_city' => $consignee->city,
             'consignee_state' => $consignee->state ?? '',
             'consignee_zip_code' => $consignee->zip_code,
-            'delivery_destination' => $shipper->delivery_destination,
+            'delivery_destination' => $consignee->delivery_destination,
             'packages' => $packagesData,
         ];
 

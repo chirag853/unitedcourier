@@ -18,12 +18,20 @@ class CourierRate extends Model
         'wt_range_end',
         'zone_no',
         'price',
+        'fuel_charge',
+        'fuel_percentage',
+        'gst_percentage',
+        'gst_amount',
     ];
 
     protected $casts = [
         'wt_range_start' => 'decimal:3',
         'wt_range_end' => 'decimal:3',
         'price' => 'decimal:2',
+        'fuel_charge' => 'decimal:2',
+        'fuel_percentage' => 'decimal:2',
+        'gst_percentage' => 'decimal:2',
+        'gst_amount' => 'decimal:2',
     ];
 
     /**
