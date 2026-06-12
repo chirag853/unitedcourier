@@ -1,4 +1,9 @@
 <header class="navbar-header">
+
+    <!-- change after ftp -->
+    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+
+
     <div class="page-container topbar-menu">
         <div class="d-flex align-items-center gap-2">
 

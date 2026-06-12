@@ -65,6 +65,7 @@ class AdminController extends Controller
             ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
             ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
             ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
+            ->where('shipper_info.status', 'manifested')
             ->select(
                 'shipment_invoice.id',
                 'shipment_invoice.invoice_number',
