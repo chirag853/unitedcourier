@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use App\Models\Admin;
 use App\Models\NetworkOffice;
 use App\Models\ShipmentInvoice;
@@ -109,6 +110,7 @@ class AdminController extends Controller
 
     /**
      * Assign delivery type and/or delivery person to a shipment.
+     * When DDU (Delhivery) is selected, also calls the Delhivery API to create a pickup.
      */
     public function assignDelivery(Request $request)
     {
@@ -138,15 +140,278 @@ class AdminController extends Controller
 
             ShipmentInvoice::where('id', $request->shipment_id)->update($updateData);
 
-            return response()->json([
+            // If DDU (Delhivery) is selected, call the Delhivery API
+            $delhiveryResponse = null;
+            if ($request->delivery_type === 'DDU') {
+                $delhiveryResponse = $this->callDelhiveryApi($request->shipment_id);
+            }
+
+            $response = [
                 'success' => true,
                 'message' => 'Delivery assignment saved successfully.'
-            ]);
+            ];
+
+            // Include Delhivery API response if applicable
+            if ($delhiveryResponse !== null) {
+                $response['delhivery'] = $delhiveryResponse;
+                if (!$delhiveryResponse['success']) {
+                    $response['message'] = 'Delivery assignment saved, but Delhivery API call failed: ' . $delhiveryResponse['message'];
+                } else {
+                    $response['message'] = 'Delivery assignment saved and Delhivery pickup created successfully.';
+                }
+            }
+
+            return response()->json($response);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Call the Delhivery API to create a pickup/shipment.
+     *
+     * @param int $shipmentId
+     * @return array
+     */
+    private function callDelhiveryApi($shipmentId)
+    {
+        try {
+            // Fetch shipment with all related data
+            $shipment = DB::table('shipment_invoice')
+                ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+                ->leftJoin('package_dimension', 'shipper_info.id', '=', 'package_dimension.shipper_id')
+                ->where('shipment_invoice.id', $shipmentId)
+                ->select(
+                    'shipment_invoice.id',
+                    'shipment_invoice.invoice_number',
+                    'shipment_invoice.invoice_amount',
+                    'shipment_invoice.invoice_currency',
+                    'shipment_invoice.reference_number',
+                    'shipper_info.id as shipper_id',
+                    'shipper_info.company_name',
+                    'shipper_info.contact_person',
+                    'shipper_info.address_line1',
+                    'shipper_info.address_line2',
+                    'shipper_info.address_line3',
+                    'shipper_info.pincode',
+                    'shipper_info.city as shipper_city',
+                    'shipper_info.state as shipper_state',
+                    'shipper_info.phone_number as shipper_phone',
+                    'shipper_info.email as shipper_email',
+                    'shipper_info.awb_number',
+                    'consignee_info.consignee_name',
+                    'consignee_info.contact_person as consignee_contact',
+                    'consignee_info.address_line1 as consignee_add1',
+                    'consignee_info.address_line2 as consignee_add2',
+                    'consignee_info.address_line3 as consignee_add3',
+                    'consignee_info.zip_code as consignee_pin',
+                    'consignee_info.city as consignee_city',
+                    'consignee_info.state as consignee_state',
+                    'consignee_info.phone_number as consignee_phone',
+                    'consignee_info.email as consignee_email',
+                    'package_dimension.actual_weight_kg',
+                    'package_dimension.length_cm',
+                    'package_dimension.width_cm as pkg_width',
+                    'package_dimension.height_cm as pkg_height'
+                )
+                ->first();
+
+            if (!$shipment) {
+                return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
+            }
+
+            // Build the full address string for consignee
+            $consigneeAddress = trim(
+                ($shipment->consignee_add1 ?? '') . ' ' .
+                ($shipment->consignee_add2 ?? '') . ' ' .
+                ($shipment->consignee_add3 ?? '')
+            );
+
+            // Determine payment mode based on incoterms or default to prepaid
+            $paymentMode = 'prepaid';
+
+            // Build shipments array for Delhivery API
+            $shipmentsData = [
+                [
+                    'name' => $shipment->consignee_name ?? $shipment->consignee_contact ?? 'Consignee',
+                    'add' => $consigneeAddress ?: 'Address not provided',
+                    'pin' => $shipment->consignee_pin ?? '',
+                    'city' => $shipment->consignee_city ?? '',
+                    'state' => $shipment->consignee_state ?? '',
+                    'country' => 'India',
+                    'phone' => $shipment->consignee_phone ?? '',
+                    'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
+                    'payment_mode' => $paymentMode,
+                    'quantity' => 1,
+                    'total_amount' => $shipment->invoice_amount ?? 0,
+                    'cod_amount' => $paymentMode === 'COD' ? ($shipment->invoice_amount ?? 0) : 0,
+                    'shipping_mode' => 'Surface',
+                    'shipment_width' => $shipment->pkg_width ?? 0,
+                    'shipment_height' => $shipment->pkg_height ?? 0,
+                    'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
+                ]
+            ];
+
+            // Build pickup_location object - name must remain unchanged as specified
+            $pickupLocation = [
+                'name' => 'ac549e-UNITEDWORLDWIDECOURI-do',
+            ];
+
+            // Build the full data structure
+            $data = [
+                'shipments' => $shipmentsData,
+                'pickup_location' => $pickupLocation,
+            ];
+
+            // Make the API call to Delhivery
+            // Note: asForm() sets Content-Type to application/x-www-form-urlencoded automatically
+            // The Delhivery API expects form-encoded body with Accept: application/json header
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token 462d4dd4644874ba774fa599aef160a97ed3fa7f',
+            ])->asForm()->post('https://track.delhivery.com/api/cmu/create.json', [
+                'format' => 'json',
+                'data' => json_encode($data),
+            ]);
+
+            if ($response->successful()) {
+                $apiResponse = $response->json();
+                return [
+                    'success' => true,
+                    'message' => 'Delhivery pickup created successfully.',
+                    'data' => $apiResponse,
+                ];
+            } else {
+                $apiResponse = $response->json();
+                $errorMessage = 'Delhivery API returned error.';
+                if (is_array($apiResponse)) {
+                    // Delhivery sometimes returns errors in various formats
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = $apiResponse['error'];
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['rmk'])) {
+                        $errorMessage = $apiResponse['rmk'];
+                    }
+                }
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'status_code' => $response->status(),
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Delhivery API call failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Display delivery persons management page.
+     */
+    public function deliveryPersons()
+    {
+        $deliveryPersons = Admin::where('type', 'Delivery_person')
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.delivery-persons', compact('deliveryPersons'));
+    }
+
+    /**
+     * Store a new delivery person.
+     */
+    public function storeDeliveryPerson(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:admin_user,email',
+                'mobile' => 'nullable|string|max:20',
+                'password' => 'required|string|min:6',
+                'designation' => 'nullable|string|max:100',
+                'state' => 'nullable|string|max:100',
+                'city' => 'nullable|string|max:100',
+                'status' => 'nullable|in:0,1',
+            ]);
+
+            Admin::create([
+                'type' => 'Delivery_person',
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'mobile' => $validated['mobile'] ?? null,
+                'password' => bcrypt($validated['password']),
+                'designation' => $validated['designation'] ?? null,
+                'state' => $validated['state'] ?? null,
+                'city' => $validated['city'] ?? null,
+                'status' => $validated['status'] ?? 1,
+            ]);
+
+            return redirect()->route('admin.delivery-persons')
+                ->with('success', 'Delivery person added successfully!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('admin.delivery-persons')
+                ->with('error', 'Validation failed: ' . $e->getMessage())
+                ->withInput();
+        } catch (\Exception $e) {
+            return redirect()->route('admin.delivery-persons')
+                ->with('error', 'Error: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
+     * Update an existing delivery person.
+     */
+    public function updateDeliveryPerson(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:admin_user,email,' . $id,
+                'mobile' => 'nullable|string|max:20',
+                'password' => 'nullable|string|min:6',
+                'designation' => 'nullable|string|max:100',
+                'state' => 'nullable|string|max:100',
+                'city' => 'nullable|string|max:100',
+                'status' => 'nullable|in:0,1',
+            ]);
+
+            $deliveryPerson = Admin::where('type', 'Delivery_person')->findOrFail($id);
+
+            $updateData = [
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'mobile' => $validated['mobile'] ?? null,
+                'designation' => $validated['designation'] ?? null,
+                'state' => $validated['state'] ?? null,
+                'city' => $validated['city'] ?? null,
+                'status' => $validated['status'] ?? 1,
+            ];
+
+            if (!empty($validated['password'])) {
+                $updateData['password'] = bcrypt($validated['password']);
+            }
+
+            $deliveryPerson->update($updateData);
+
+            return redirect()->route('admin.delivery-persons')
+                ->with('success', 'Delivery person updated successfully!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('admin.delivery-persons')
+                ->with('error', 'Validation failed: ' . $e->getMessage())
+                ->withInput();
+        } catch (\Exception $e) {
+            return redirect()->route('admin.delivery-persons')
+                ->with('error', 'Error: ' . $e->getMessage())
+                ->withInput();
         }
     }
 

@@ -219,6 +219,16 @@
                                         class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
                             </ul>
                         </li>
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/delivery-persons*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-user-cog"></i><span>Admin Management</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ url('/admin/delivery-persons') }}"
+                                        class="{{ request()->is('admin/delivery-persons') ? 'active' : '' }}">Delivery Person</a></li>
+                            </ul>
+                        </li>
                     </ul>
                 </li>
                 <li class="menu-title"><span>Others</span></li>

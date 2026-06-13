@@ -429,7 +429,12 @@
                 }
 
                 const $btn = $('#assignDeliveryBtn');
-                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Saving...');
+                // Show contextual loading text based on delivery type
+                if (deliveryType === 'DDU') {
+                    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Creating Delhivery Pickup...');
+                } else {
+                    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Saving...');
+                }
 
                 $.ajax({
                     url: '{{ route("admin.assign-delivery") }}',
@@ -440,12 +445,43 @@
                     },
                     success: function(response) {
                         if (response.success) {
-                            showAssignDeliveryAlert(response.message, 'success');
+                            let alertMsg = response.message;
+
+                            // If Delhivery API was called, show additional details
+                            if (response.delhivery) {
+                                const delhivery = response.delhivery;
+                                if (delhivery.success) {
+                                    // Show waybill/awb info from Delhivery if available
+                                    let waybillInfo = '';
+                                    const delhiveryData = delhivery.data || {};
+                                    // Extract waybill from rmk array or packages array
+                                    if (delhiveryData.rmk && delhiveryData.rmk.length > 0) {
+                                        waybillInfo = '<br><strong>Delhivery Waybill: ' + delhiveryData.rmk[0] + '</strong>';
+                                    } else if (delhiveryData.packages && delhiveryData.packages.length > 0) {
+                                        waybillInfo = '<br><strong>Delhivery Waybill: ' + (delhiveryData.packages[0].waybill || '') + '</strong>';
+                                    }
+                                    if (delhiveryData.packages && delhiveryData.packages.length > 0) {
+                                        waybillInfo += '<br>Ref: ' + (delhiveryData.packages[0].ref || '');
+                                    }
+                                    alertMsg += waybillInfo;
+                                    showAssignDeliveryAlert(alertMsg, 'success');
+                                } else {
+                                    // Delhivery API call failed but assignment was saved
+                                    let failMsg = alertMsg;
+                                    if (delhivery.message) {
+                                        failMsg += '<br><small class="text-muted">Delhivery Error: ' + delhivery.message + '</small>';
+                                    }
+                                    showAssignDeliveryAlert(failMsg, 'warning');
+                                }
+                            } else {
+                                showAssignDeliveryAlert(alertMsg, 'success');
+                            }
+
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
                             // Reload page after a short delay to reflect changes
                             setTimeout(function() {
                                 location.reload();
-                            }, 1500);
+                            }, 2500);
                         } else {
                             showAssignDeliveryAlert(response.message || 'Something went wrong.', 'danger');
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
@@ -482,7 +518,7 @@
              */
             function showAssignDeliveryAlert(message, type) {
                 const $alert = $('#assignDeliveryAlert');
-                $alert.removeClass('d-none alert-success alert-danger').addClass('alert-' + type).html(message);
+                $alert.removeClass('d-none alert-success alert-danger alert-warning').addClass('alert-' + type).html(message);
             }
 
         });
