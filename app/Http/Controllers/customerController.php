@@ -1848,7 +1848,7 @@ class customerController extends Controller
     }
 
     /**
-     * Cancel a shipment (set status to cancelled).
+     * Cancel a shipment (set status to cancelled) and refund wallet if paid.
      */
     public function cancelShipment($id)
     {
@@ -1886,12 +1886,43 @@ class customerController extends Controller
                 ], 400);
             }
 
-            // Update status to cancelled
-            $invoice->update(['status' => 'cancelled']);
+            // Determine if the shipment was paid (shipper status is ready/packed/manifested)
+            $wasPaid = in_array($shipper->status, ['ready', 'packed', 'manifested']);
+            $refundAmount = 0;
+
+            // Update status to cancelled and refund wallet if paid
+            DB::transaction(function () use ($invoice, $shipper, $wasPaid, $customerId, &$refundAmount) {
+                $invoice->update(['status' => 'cancelled']);
+                $shipper->update(['status' => 'cancelled']);
+
+                if ($wasPaid) {
+                    // Calculate the amount that was paid (total from invoice items)
+                    $refundAmount = $invoice->total_amount;
+
+                    if ($refundAmount > 0) {
+                        // Find the customer's wallet and refund the amount
+                        $wallet = Wallet::where('customer_id', $customerId)->first();
+                        if ($wallet) {
+                            $wallet->increment('balance', $refundAmount);
+                        }
+                    }
+                }
+            });
+
+            // Refresh wallet to get new balance
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+            $newBalance = $wallet ? (float) $wallet->balance : 0;
+
+            $message = 'Shipment cancelled successfully.';
+            if ($refundAmount > 0) {
+                $message = 'Shipment cancelled successfully. ₹' . number_format($refundAmount, 2) . ' has been refunded to your wallet.';
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Shipment cancelled successfully.'
+                'message' => $message,
+                'refund_amount' => $refundAmount,
+                'new_balance' => $newBalance,
             ]);
 
         } catch (\Exception $e) {

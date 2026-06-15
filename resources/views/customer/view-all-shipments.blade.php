@@ -447,7 +447,9 @@
                                                 @else
                                                     <button class="btn btn-cancel cancel-btn"
                                                             data-id="{{ $invoice->id }}"
-                                                            data-invoice="{{ $invoice->invoice_number }}">
+                                                            data-invoice="{{ $invoice->invoice_number }}"
+                                                            data-amount="{{ $invoice->total_amount }}"
+                                                            data-paid="{{ $invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft' ? '1' : '0' }}">
                                                         <i class="ti ti-ban"></i> Cancel
                                                     </button>
                                                 @endif
@@ -684,6 +686,9 @@
                 </div>
                 <div class="modal-body">
                     <p class="mb-0">Are you sure you want to cancel shipment <strong id="cancelInvoiceRef"></strong>?</p>
+                    <p id="cancelRefundInfo" class="mt-2 mb-0" style="font-size:13px;color:#28a745;display:none;">
+                        <i class="ti ti-refund me-1"></i> <strong id="cancelRefundAmount"></strong> will be refunded to your wallet.
+                    </p>
                     <p class="text-muted mt-2 mb-0" style="font-size:13px;">This action cannot be undone.</p>
                 </div>
                 <div class="modal-footer border-0 pt-0">
@@ -1238,7 +1243,18 @@
             $('#shipmentsTable').on('click', '.cancel-btn', function () {
                 cancelId = $(this).data('id');
                 const invoiceRef = $(this).data('invoice');
+                const isPaid = $(this).data('paid') == 1;
+                const amount = $(this).data('amount');
                 $('#cancelInvoiceRef').text(invoiceRef);
+
+                // Show refund info if shipment was paid
+                if (isPaid && amount > 0) {
+                    $('#cancelRefundInfo').show();
+                    $('#cancelRefundAmount').text('₹' + number_format(amount, 2));
+                } else {
+                    $('#cancelRefundInfo').hide();
+                }
+
                 $('#cancelModal').modal('show');
             });
 
@@ -1261,10 +1277,21 @@
                             const row = $('#invoice-row-' + cancelId);
                             row.attr('data-status', 'cancelled');
                             row.find('.badge').removeClass().addClass('badge bg-danger').text('Cancelled');
-                            row.find('.cancel-btn').prop('disabled', true)
+                            row.find('.cancel-btn, .btn-cancel').prop('disabled', true)
                                 .html('<i class="ti ti-x"></i> Cancelled')
                                 .removeClass('cancel-btn')
                                 .addClass('disabled');
+
+                            // Update Pay Now column to show N/A
+                            row.find('.pay-now-btn').replaceWith('<span class="text-muted" style="font-size:12px;">N/A</span>');
+
+                            // Update wallet balance display if refund was issued
+                            if (response.refund_amount > 0 && response.new_balance) {
+                                // Update wallet balance in header
+                                const formattedBalance = '₹' + number_format(response.new_balance, 2);
+                                const spans = document.querySelectorAll('#walletBalanceBtn span');
+                                spans.forEach(function(el) { el.textContent = formattedBalance; });
+                            }
 
                             showAlert('success', response.message);
                         } else {
@@ -1376,6 +1403,7 @@
             // number_format helper for JS
             function number_format(num, decimals) {
                 decimals = decimals || 2;
+                num = parseFloat(num);
                 const parts = num.toFixed(decimals).split('.');
                 parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                 return parts.join('.');
