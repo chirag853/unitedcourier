@@ -3541,11 +3541,11 @@
                                                                     aria-hidden="true">
                                                                     <option value="">Select</option>
                                                                     <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
-                                                                    <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
                                                                     <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
+                                                                    <!-- <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
                                                                     <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}> CN - China</option>
                                                                     <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>RU - Russia</option>
-                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option>
+                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option> -->
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -7233,7 +7233,7 @@
                                                                         <option value="">Select</option>
                                                                         <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
                                                                         <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
-                                                                        <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option>
+                                                                        <!-- <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option> -->
                                                                     </select>
                                                                 </div>
                                                             </div>
@@ -8155,8 +8155,10 @@
                                             <th>HS Code</th>
                                             <th>HTS Code</th>
                                             <th>Unit Type</th>
+                                            <!-- i want to fetch gst rate -->
                                             <th>QTY</th>
                                             <th>Rate</th>
+                                            <th>GST Rate</th>
                                             <th>Amount</th>
                                         </tr>
                                     </thead>
@@ -8180,8 +8182,8 @@
                         </div>
                         <div class="card-body">
                             <div class="row mb-3">
-                                <div class="col-12"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span></div>
-                                <div class="col-12"><strong>Network:</strong> <span id="preview_selected_network"></span></div>
+                                <div class="col-12"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span> <span id="preview_selected_tat"></span> </div>
+                                <div class="col-12 d-none"><strong>Network:</strong> <span id="preview_selected_network"></span></div>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-bordered table-sm mb-0" style="max-width: 400px;">
@@ -8461,7 +8463,7 @@
                                     <div class="col-lg-6">
                                         <div class="carrier-badge">
                                             <div class="carrier-logo-container" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important;">
-                                                <span class="text-white fw-bold fs-18">${carrierInitials}</span>
+                                                <span class="text-white fw-bold fs-15">UWC</span>
                                             </div>
                                             <div class="service-info">
                                                 <div class="service-title">${r.method}</div>
@@ -8833,7 +8835,10 @@
                 const unitType = getVal('items[' + idx + '][unit_type]');
                 const qty = getVal('items[' + idx + '][qty]');
                 const unitRate = getVal('items[' + idx + '][unit_rate]');
-                const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate)).toFixed(2) : '0.00';
+                const gstRate = getVal('items[' + idx + '][igst_amount]');
+                // const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate)).toFixed(2) : '0.00';
+                // i want to add gstRate to the amount calculation, so the total amount includes GST
+                const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate) + parseFloat(gstRate)).toFixed(2) : '0.00';
                 if (parseFloat(amount) > 0) totalAmount += parseFloat(amount);
 
                 const tr = document.createElement('tr');
@@ -8845,6 +8850,7 @@
                     <td>${unitType}</td>
                     <td>${qty}</td>
                     <td>${unitRate}</td>
+                    <td>${gstRate}</td>
                     <td>${amount}</td>
                 `;
                 itemsTable.appendChild(tr);
@@ -8855,6 +8861,8 @@
             const selectedRateRadio = form.querySelector('input[name="rate_select"]:checked');
             const selectedMethod = selectedRateRadio ? (selectedRateRadio.dataset.method || '') : 'Not selected';
             const selectedNetwork = selectedRateRadio ? (selectedRateRadio.dataset.network || '') : '-';
+            const selectedTat = selectedRateRadio ? (selectedRateRadio.dataset.tat || '') : '-';
+            document.getElementById('preview_selected_tat').textContent = selectedTat;
             document.getElementById('preview_selected_method').textContent = selectedMethod;
             document.getElementById('preview_selected_network').textContent = selectedNetwork;
 

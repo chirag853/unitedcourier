@@ -224,26 +224,26 @@ class AdminController extends Controller
                 return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
             }
 
-            // Build the full address string for consignee
-            $consigneeAddress = trim(
-                ($shipment->consignee_add1 ?? '') . ' ' .
-                ($shipment->consignee_add2 ?? '') . ' ' .
-                ($shipment->consignee_add3 ?? '')
+            // Build the full address string for shipper (origin)
+            $shipperAddress = trim(
+                ($shipment->address_line1 ?? '') . ' ' .
+                ($shipment->address_line2 ?? '') . ' ' .
+                ($shipment->address_line3 ?? '')
             );
 
             // Determine payment mode based on incoterms or default to prepaid
             $paymentMode = 'prepaid';
 
-            // Build shipments array for Delhivery API
+            // Build shipments array for Delhivery API with shipper_info details
             $shipmentsData = [
                 [
-                    'name' => $shipment->consignee_name ?? $shipment->consignee_contact ?? 'Consignee',
-                    'add' => $consigneeAddress ?: 'Address not provided',
-                    'pin' => $shipment->consignee_pin ?? '',
-                    'city' => $shipment->consignee_city ?? '',
-                    'state' => $shipment->consignee_state ?? '',
+                    'name' => $shipment->company_name ?? $shipment->contact_person ?? 'Shipper',
+                    'add' => $shipperAddress ?: 'Address not provided',
+                    'pin' => $shipment->pincode ?? '',
+                    'city' => $shipment->shipper_city ?? '',
+                    'state' => $shipment->shipper_state ?? '',
                     'country' => 'India',
-                    'phone' => $shipment->consignee_phone ?? '',
+                    'phone' => $shipment->shipper_phone ?? '',
                     'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
                     'payment_mode' => $paymentMode,
                     'quantity' => 1,
@@ -255,6 +255,8 @@ class AdminController extends Controller
                     'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
                 ]
             ];
+
+            
 
             // Build pickup_location object - name must remain unchanged as specified
             $pickupLocation = [

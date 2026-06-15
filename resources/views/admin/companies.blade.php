@@ -457,12 +457,13 @@
                                     // Extract waybill from rmk array or packages array
                                     if (delhiveryData.rmk && delhiveryData.rmk.length > 0) {
                                         waybillInfo = '<br><strong>Delhivery Waybill: ' + delhiveryData.rmk[0] + '</strong>';
-                                    } else if (delhiveryData.packages && delhiveryData.packages.length > 0) {
+                                    } 
+                                    else if (delhiveryData.packages && delhiveryData.packages.length > 0) {
                                         waybillInfo = '<br><strong>Delhivery Waybill: ' + (delhiveryData.packages[0].waybill || '') + '</strong>';
                                     }
-                                    if (delhiveryData.packages && delhiveryData.packages.length > 0) {
-                                        waybillInfo += '<br>Ref: ' + (delhiveryData.packages[0].ref || '');
-                                    }
+                                    // if (delhiveryData.packages && delhiveryData.packages.length > 0) {
+                                    //     waybillInfo += '<br>Ref: ' + (delhiveryData.packages[0].ref || '');
+                                    // }
                                     alertMsg += waybillInfo;
                                     showAssignDeliveryAlert(alertMsg, 'success');
                                 } else {
@@ -480,7 +481,7 @@
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
                             // Reload page after a short delay to reflect changes
                             setTimeout(function() {
-                                location.reload();
+                                // location.reload();
                             }, 2500);
                         } else {
                             showAssignDeliveryAlert(response.message || 'Something went wrong.', 'danger');
