@@ -8585,7 +8585,7 @@
                     const zoneKeys = Object.keys(zoneGroups).filter(k => k !== 'general');
                     zoneKeys.forEach(function(zoneKey) {
                         console.log('Rendering rates for zone:', zoneKey, 'with rates:', zoneGroups[zoneKey]);
-                        console.log(zoneGroups[zoneKey][0].zone_name);
+                        // console.log(zoneGroups[zoneKey][0].zone_name);
                         // Build zone header label using zone info from response
                         let zoneLabel = 'Zone ' + zoneKey;
                         if (data.zone && String(data.zone.zone_number) === zoneKey) {
