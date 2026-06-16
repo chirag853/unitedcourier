@@ -1934,7 +1934,7 @@ class customerController extends Controller
     }
 
     /**
-     * Manifest a single shipment - call UPS Ship API and store tracking data.
+     * Manifest a single shipment - check network (UPS vs Ship Global) and call appropriate API.
      * Only works for shipments in 'packed' status.
      */
     public function manifestShipment(Request $request)
@@ -1959,75 +1959,163 @@ class customerController extends Controller
                 return response()->json(['success' => false, 'message' => 'Shipment must be in Packed status to manifest.'], 400);
             }
 
-            // Build UPS payload from DB records
-            $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
-            if (!$payloadResult['success']) {
-                return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
-            }
-            $upsPayload = $payloadResult['payload'];
+            // Determine the network from the shipping method's CourierService
+            $shippingMethod = $this->resolveShippingMethod($shipper);
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
-            // Call UPS Ship API
-            $upsResult = $this->callUpsShipApiInternal($upsPayload);
+            \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '"');
 
-            if (!$upsResult['success']) {
-                $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
+            // Route to appropriate API based on network
+            if ($network === 'ship global' || $network === 'shipglobal') {
+                // Call Ship Global API
+                $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+                if (!$shipGlobalResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ship Global API Failed: ' . ($shipGlobalResult['message'] ?? 'Unknown error'),
+                        'ship_global_response' => $shipGlobalResult['data'] ?? null,
+                    ], 500);
+                }
+
+                // Ship Global succeeded - store tracking data
+                $apiResponse = $shipGlobalResult['data'] ?? [];
+                $trackingNumber = null;
+                // Ship Global returns tracking/reference number in various possible formats
+                // Priority: waybill_number > tracking_number > awb_number > order_number
+                if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+                    $trackingNumber = $apiResponse['data']['waybill_number'];
+                } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+                    $trackingNumber = $apiResponse['waybill_number'];
+                } elseif (isset($apiResponse['tracking_number'])) {
+                    $trackingNumber = $apiResponse['tracking_number'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+                    $trackingNumber = $apiResponse['data']['tracking_number'];
+                } elseif (isset($apiResponse['awb_number'])) {
+                    $trackingNumber = $apiResponse['awb_number'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+                    $trackingNumber = $apiResponse['data']['awb_number'];
+                } elseif (isset($apiResponse['waybill'])) {
+                    $trackingNumber = $apiResponse['waybill'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+                    $trackingNumber = $apiResponse['data']['waybill'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                    // If no waybill/tracking yet, use order_number as reference (label: "manual" case)
+                    $trackingNumber = $apiResponse['data']['order_number'];
+                } elseif (isset($apiResponse['order_number'])) {
+                    $trackingNumber = $apiResponse['order_number'];
+                }
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Ship Global order created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to manifested
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    \Log::info('Shipment manifested via Ship Global: ' . ($trackingNumber ?? 'N/A'));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking for Ship Global manifest: ' . $e->getMessage());
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                }
+
                 return response()->json([
-                    'success' => false,
-                    'message' => 'UPS Shipment Failed: ' . $errorMessage,
-                    'rawResponse' => $upsResult['rawResponse'] ?? null
-                ], 500);
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Ship Global!',
+                    'tracking_number' => $trackingNumber,
+                    'shipper_id' => $shipperId,
+                    'network' => 'Ship Global',
+                    'ship_global_response' => $apiResponse,
+                ]);
+
+            } else {
+                // Default: Call UPS Ship API
+                $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                if (!$payloadResult['success']) {
+                    return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
+                }
+                $upsPayload = $payloadResult['payload'];
+
+                $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+                if (!$upsResult['success']) {
+                    $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'UPS Shipment Failed: ' . $errorMessage,
+                        'rawResponse' => $upsResult['rawResponse'] ?? null
+                    ], 500);
+                }
+
+                // UPS succeeded - store tracking data
+                $shipmentResponse = $upsResult['shipmentResponse'];
+                $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                    ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                    ?? null;
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                            'raw_response' => $shipmentResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to manifested
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    \Log::info('Shipment manifested via UPS: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking for manifest: ' . $e->getMessage());
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via UPS!',
+                    'tracking_number' => $trackingNumber,
+                    'shipper_id' => $shipperId,
+                    'network' => 'UPS',
+                ]);
             }
-
-            // UPS succeeded - store tracking data
-            $shipmentResponse = $upsResult['shipmentResponse'];
-            $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
-                ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
-                ?? null;
-
-            // Get create_shipment record
-            $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
-
-            try {
-                ShipmentTracking::updateOrCreate(
-                    ['shipper_id' => $shipperId],
-                    [
-                        'customer_id' => $customerId,
-                        'create_shipment_id' => $createShipment ? $createShipment->id : null,
-                        'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
-                        'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
-                        'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
-                        'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
-                        'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
-                        'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
-                        'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
-                        'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
-                        'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
-                        'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
-                        'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
-                        'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
-                        'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
-                        'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
-                        'raw_response' => $shipmentResponse,
-                        'status' => 'created',
-                    ]
-                );
-
-                // Update shipper status to manifested
-                $shipper->status = 'manifested';
-                $shipper->save();
-
-                \Log::info('Shipment manifested: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
-            } catch (\Exception $e) {
-                \Log::error('Failed to store shipment tracking for manifest: ' . $e->getMessage());
-                return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Shipment manifested successfully!',
-                'tracking_number' => $trackingNumber,
-                'shipper_id' => $shipperId,
-            ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
         }
@@ -2072,63 +2160,144 @@ class customerController extends Controller
                         continue;
                     }
 
-                    $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
-                    if (!$payloadResult['success']) {
-                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
-                        continue;
-                    }
-                    $upsPayload = $payloadResult['payload'];
+                    // Determine the network from the shipping method's CourierService
+                    $shippingMethod = $this->resolveShippingMethod($shipper);
+                    $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+                    $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
-                    $upsResult = $this->callUpsShipApiInternal($upsPayload);
+                    \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '"');
 
-                    if (!$upsResult['success']) {
-                        $results['failed'][] = [
+                    if ($network === 'ship global' || $network === 'shipglobal') {
+                        // Call Ship Global API
+                        $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+
+                        if (!$shipGlobalResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Ship Global API error: ' . ($shipGlobalResult['message'] ?? 'Unknown'),
+                            ];
+                            continue;
+                        }
+
+                        $apiResponse = $shipGlobalResult['data'] ?? [];
+                        $trackingNumber = null;
+                        // Ship Global returns tracking/reference number in various possible formats
+                        // Priority: waybill_number > tracking_number > awb_number > order_number
+                        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+                            $trackingNumber = $apiResponse['data']['waybill_number'];
+                        } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+                            $trackingNumber = $apiResponse['waybill_number'];
+                        } elseif (isset($apiResponse['tracking_number'])) {
+                            $trackingNumber = $apiResponse['tracking_number'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+                            $trackingNumber = $apiResponse['data']['tracking_number'];
+                        } elseif (isset($apiResponse['awb_number'])) {
+                            $trackingNumber = $apiResponse['awb_number'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+                            $trackingNumber = $apiResponse['data']['awb_number'];
+                        } elseif (isset($apiResponse['waybill'])) {
+                            $trackingNumber = $apiResponse['waybill'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+                            $trackingNumber = $apiResponse['data']['waybill'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                            // If no waybill/tracking yet, use order_number as reference (label: "manual" case)
+                            $trackingNumber = $apiResponse['data']['order_number'];
+                        } elseif (isset($apiResponse['order_number'])) {
+                            $trackingNumber = $apiResponse['order_number'];
+                        }
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $customerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Ship Global order created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        $results['success'][] = [
                             'shipper_id' => $shipperId,
-                            'message' => 'UPS API error: ' . ($upsResult['message'] ?? 'Unknown'),
+                            'tracking_number' => $trackingNumber,
+                            'network' => 'Ship Global',
                         ];
-                        continue;
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Ship Global.');
+
+                    } else {
+                        // Default: Call UPS Ship API
+                        $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                        if (!$payloadResult['success']) {
+                            $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
+                            continue;
+                        }
+                        $upsPayload = $payloadResult['payload'];
+
+                        $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+                        if (!$upsResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'UPS API error: ' . ($upsResult['message'] ?? 'Unknown'),
+                            ];
+                            continue;
+                        }
+
+                        $shipmentResponse = $upsResult['shipmentResponse'];
+                        $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                            ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                            ?? null;
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $customerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                                'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                                'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                                'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                                'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                                'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                                'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                                'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                                'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                                'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                                'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                                'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                                'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                                'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                                'raw_response' => $shipmentResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'network' => 'UPS',
+                        ];
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via UPS.');
                     }
-
-                    $shipmentResponse = $upsResult['shipmentResponse'];
-                    $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
-                        ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
-                        ?? null;
-
-                    $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
-
-                    ShipmentTracking::updateOrCreate(
-                        ['shipper_id' => $shipperId],
-                        [
-                            'customer_id' => $customerId,
-                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
-                            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
-                            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
-                            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
-                            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
-                            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
-                            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
-                            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
-                            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
-                            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
-                            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
-                            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
-                            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
-                            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
-                            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
-                            'raw_response' => $shipmentResponse,
-                            'status' => 'created',
-                        ]
-                    );
-
-                    $shipper->status = 'manifested';
-                    $shipper->save();
-
-                    $results['success'][] = [
-                        'shipper_id' => $shipperId,
-                        'tracking_number' => $trackingNumber,
-                    ];
-
-                    \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested successfully.');
 
                 } catch (\Exception $e) {
                     $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $e->getMessage()];
@@ -2364,6 +2533,317 @@ class customerController extends Controller
             }
         }
         return $si === $shortLen;
+    }
+
+    /**
+     * Resolve the shipping method for a shipper from multiple sources.
+     * Tries: shipper_info.shipping_method → create_shipment.shipping_method →
+     *        package_dimension.shipping_method → first CourierService as default.
+     *
+     * @param ShipperInfo $shipper
+     * @return string
+     */
+    private function resolveShippingMethod($shipper)
+    {
+        $shippingMethod = $shipper->shipping_method;
+
+        if (!$shippingMethod) {
+            $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
+            if ($createShipmentMethod) {
+                $shippingMethod = $createShipmentMethod;
+            }
+        }
+
+        if (!$shippingMethod) {
+            $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
+                ->whereNotNull('shipping_method')
+                ->value('shipping_method');
+            if ($pkgMethod) {
+                $shippingMethod = $pkgMethod;
+            }
+        }
+
+        if (!$shippingMethod) {
+            $defaultService = CourierService::orderBy('id', 'asc')->first();
+            if ($defaultService) {
+                $shippingMethod = $defaultService->method;
+            }
+        }
+
+        return $shippingMethod ?? '';
+    }
+
+    /**
+     * Call the Ship Global API to create an order/shipment.
+     * Two-step process:
+     * 1. Generate Bearer token from customers.php
+     * 2. Create order via addOrder.php using the Bearer token
+     *
+     * @param ShipperInfo $shipper
+     * @return array
+     */
+    private function callShipGlobalApiFromDb($shipper)
+    {
+        try {
+            // Step 1: Generate Bearer token from Ship Global
+            $tokenResponse = Http::withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post('https://labels.shipglobal.in/api/v1/customers.php', [
+                'email' => 'csd@unitedcouriers.biz',
+                'password' => 'mSN7KbhrZ0uvb229YWO',
+            ]);
+
+            if (!$tokenResponse->successful()) {
+                $tokenError = $tokenResponse->json();
+                $errorMessage = 'Ship Global token generation failed.';
+                if (is_array($tokenError)) {
+                    if (isset($tokenError['error'])) {
+                        $errorMessage = is_string($tokenError['error']) ? $tokenError['error'] : json_encode($tokenError['error']);
+                    } elseif (isset($tokenError['message'])) {
+                        $errorMessage = $tokenError['message'];
+                    }
+                }
+                \Log::error('Ship Global token generation failed: ' . $errorMessage . ' | Status: ' . $tokenResponse->status());
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                ];
+            }
+
+            $tokenData = $tokenResponse->json();
+            $bearerToken = null;
+
+            // Extract token from various possible response formats
+            if (isset($tokenData['token'])) {
+                $bearerToken = $tokenData['token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['token'])) {
+                $bearerToken = $tokenData['data']['token'];
+            } elseif (isset($tokenData['access_token'])) {
+                $bearerToken = $tokenData['access_token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['access_token'])) {
+                $bearerToken = $tokenData['data']['access_token'];
+            }
+
+            if (!$bearerToken) {
+                \Log::error('Ship Global: No token found in response. Response: ' . json_encode($tokenData));
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in Ship Global authentication response.',
+                ];
+            }
+
+            \Log::info('Ship Global token generated successfully.');
+
+            // Step 2: Build the order payload and create the order
+            $consignee = $shipper->consigneeInfo;
+            $packages = $shipper->packageDimensions;
+            $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+            if (!$consignee) {
+                return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+            }
+
+            // Get package dimensions (use first package)
+            $firstPackage = $packages->first();
+            $packageWeightKg = $firstPackage ? (float)$firstPackage->actual_weight_kg : 0.5;
+            $packageLength = $firstPackage ? (float)$firstPackage->length_cm : 10;
+            $packageBreadth = $firstPackage ? (float)$firstPackage->width_cm : 10;
+            $packageHeight = $firstPackage ? (float)$firstPackage->height_cm : 10;
+
+            // Get consignee country code from delivery_destination
+            $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+            // Build shipper address string
+            $shipperAddress = trim(
+                ($shipper->address_line1 ?? '') . ' ' .
+                ($shipper->address_line2 ?? '') . ' ' .
+                ($shipper->address_line3 ?? '')
+            );
+
+            // Build consignee address string
+            $consigneeAddress = trim(
+                ($consignee->address_line1 ?? '') . ' ' .
+                ($consignee->address_line2 ?? '') . ' ' .
+                ($consignee->address_line3 ?? '')
+            );
+
+            // Split shipper name into first/last
+            // Ship Global requires both firstname and lastname to be non-empty
+            $shipperNameParts = preg_split('/\s+/', trim($shipper->contact_person ?? $shipper->company_name ?? 'Shipper'), 2);
+            $sellerFirstname = $shipperNameParts[0] ?? 'Shipper';
+            $sellerLastname = !empty($shipperNameParts[1]) ? $shipperNameParts[1] : $sellerFirstname;
+
+            // Split consignee name into first/last
+            // Ship Global requires both firstname and lastname to be non-empty
+            $consigneeNameParts = preg_split('/\s+/', trim($consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee'), 2);
+            $consigneeFirstname = $consigneeNameParts[0] ?? 'Consignee';
+            $consigneeLastname = !empty($consigneeNameParts[1]) ? $consigneeNameParts[1] : $consigneeFirstname;
+
+            // Get invoice details
+            $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+            $invoiceDate = $invoice ? ($invoice->invoice_date ? $invoice->invoice_date->format('Y-m-d') : '') : '';
+            $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'USD') : 'USD';
+            $orderReference = $shipper->awb_number ?? ($invoice ? ($invoice->reference_number ?? '') : '');
+
+            // Get csb5_status from customer
+            $customer = Customer::find($shipper->customer_id);
+            $csb5Status = 0;
+            if ($customer && $customer->csb_status) {
+                $csb5Status = (int)$customer->csb_status;
+            }
+
+            // Get the courier service code for the shipping method
+            $shippingMethod = $this->resolveShippingMethod($shipper);
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
+
+            // Build vendor_order_items from invoice items
+            $vendorOrderItems = [];
+            if ($invoice) {
+                $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+                foreach ($invoiceItems as $item) {
+                    $vendorOrderItems[] = [
+                        'vendor_order_item_name' => $item->description ?? '',
+                        'vendor_order_item_sku' => $item->hs_code ?? $item->hts_code ?? '',
+                        'vendor_order_item_quantity' => (int)$item->qty,
+                        'vendor_order_item_unit_price' => (float)$item->unit_rate,
+                        'vendor_order_item_hsn' => $item->hs_code ?? '',
+                        'vendor_order_item_tax_rate' => (float)$item->igst_percentage,
+                    ];
+                }
+            }
+
+            // If no invoice items, add a default item
+            if (empty($vendorOrderItems)) {
+                $vendorOrderItems[] = [
+                    'vendor_order_item_name' => 'General Merchandise',
+                    'vendor_order_item_sku' => '',
+                    'vendor_order_item_quantity' => 1,
+                    'vendor_order_item_unit_price' => (float)($invoice ? $invoice->invoice_amount : 0),
+                    'vendor_order_item_hsn' => '',
+                    'vendor_order_item_tax_rate' => 0,
+                ];
+            }
+
+            // Build the Ship Global order payload
+            $payload = [
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'order_reference' => $orderReference,
+                'service' => $serviceCode,
+                'package_weight' => (float)$packageWeightKg,
+                'package_length' => (float)$packageLength,
+                'package_breadth' => (float)$packageBreadth,
+                'package_height' => (float)$packageHeight,
+                'currency_code' => $currencyCode,
+                'csb5_status' => $csb5Status,
+                'seller_nickname' => 'UnitedW',
+                'seller_firstname' => $sellerFirstname,
+                'seller_lastname' => $sellerLastname,
+                'seller_mobile' => $shipper->phone_number ?? '',
+                'seller_email' => $shipper->email ?? '',
+                'seller_company' => $shipper->company_name ?? '',
+                'seller_address' => $shipperAddress ?: 'Address not provided',
+                'seller_city' => $shipper->city ?? '',
+                'seller_postcode' => $shipper->pincode ?? '',
+                'seller_country_code' => 'IN',
+                'seller_state' => $shipper->state ?? '',
+                'customer_shipping_firstname' => $consigneeFirstname,
+                'customer_shipping_lastname' => $consigneeLastname,
+                'customer_shipping_mobile' => $consignee->phone_number ?? '',
+                'customer_shipping_email' => $consignee->email ?? '',
+                'customer_shipping_company' => $consignee->consignee_name ?? '',
+                'customer_shipping_address' => $consigneeAddress ?: 'Address not provided',
+                'customer_shipping_city' => $consignee->city ?? '',
+                'customer_shipping_postcode' => $consignee->zip_code ?? '',
+                'customer_shipping_country_code' => $consigneeCountryCode,
+                'customer_shipping_state' => $consignee->state ?? '',
+                'vendor_order_items' => $vendorOrderItems,
+                // i want abw number in tracking field but ship global api is not accepting it so i am leaving it blank for now
+                'tracking' => $shipper->awb_number ?? ''
+                // 'mailClass' => '',
+                // 'deliveryConfirmation' => '',
+                // 'retry' => false,
+            ];
+            echo "<pre>"; print_r($payload); // Debug: print payload to console/log
+            // return;
+            \Log::info('Ship Global order payload for shipper #' . $shipper->id . ': ' . json_encode($payload));
+
+            // Step 2: Call the addOrder.php API with Bearer token
+            $orderResponse = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Authorization' => 'Bearer ' . $bearerToken,
+            ])->post('https://labels.shipglobal.in/api/v1/addOrder.php', $payload);
+
+            $apiResponse = $orderResponse->json();
+
+            // Ship Global may return HTTP 200 but with "success": false in the body
+            // (e.g., label: "manual" means order created but label needs manual generation)
+            // We treat it as success if an order_number was returned, regardless of body success flag
+            $orderNumber = null;
+            if (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                $orderNumber = $apiResponse['data']['order_number'];
+            } elseif (isset($apiResponse['order_number'])) {
+                $orderNumber = $apiResponse['order_number'];
+            }
+
+            if ($orderResponse->successful() && $orderNumber) {
+                \Log::info('Ship Global order created for shipper #' . $shipper->id . '. Order#: ' . $orderNumber . '. Response: ' . json_encode($apiResponse));
+                return [
+                    'success' => true,
+                    'message' => 'Ship Global order created successfully. Order#: ' . $orderNumber,
+                    'data' => $apiResponse,
+                ];
+            } elseif ($orderResponse->successful() && !$orderNumber) {
+                // HTTP 200 but no order_number — could be a validation/business error in the body
+                $errorMessage = 'Ship Global API returned no order number.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
+                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Ship Global order creation: HTTP 200 but no order_number. Response: ' . json_encode($apiResponse));
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                ];
+            } else {
+                $apiResponse = $orderResponse->json();
+                $errorMessage = 'Ship Global API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    // Append validation details if available (Ship Global returns field-level errors in "details")
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
+                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Ship Global order creation failed: ' . $errorMessage . ' | Status: ' . $orderResponse->status() . ' | Response: ' . json_encode($apiResponse));
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'status_code' => $orderResponse->status(),
+                ];
+            }
+        } catch (\Exception $e) {
+            \Log::error('Ship Global API call failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Ship Global API call failed: ' . $e->getMessage(),
+            ];
+        }
     }
 
     /**

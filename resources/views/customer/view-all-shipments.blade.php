@@ -1435,7 +1435,7 @@
                 if (!shipperId) return;
 
                 // Confirm with user
-                if (!confirm('Are you sure you want to manifest this shipment? This will call the UPS Ship API to create the shipment.')) {
+                if (!confirm('Are you sure you want to manifest this shipment? This will call the appropriate shipping API (UPS or Ship Global) based on the shipment network.')) {
                     return;
                 }
 
@@ -1494,7 +1494,7 @@
                     return $(this).data('shipper-id');
                 }).get();
 
-                if (!confirm('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)? This will call the UPS Ship API for each shipment.')) {
+                if (!confirm('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)? This will call the appropriate shipping API (UPS or Ship Global) based on each shipment\'s network.')) {
                     return;
                 }
 
