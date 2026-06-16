@@ -14,6 +14,7 @@ class Zone extends Model
     protected $primaryKey = 'id';
 
     protected $fillable = [
+        'zone_id',
         'zone_name',
         'zone_code',
         'description',

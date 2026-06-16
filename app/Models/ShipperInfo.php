@@ -29,6 +29,7 @@ class ShipperInfo extends Model
         'email_opt_out',
         'kyc_type',
         'kyc_number',
+        'service_rate_id',
         'status',
     ];
 

@@ -8414,12 +8414,13 @@
                     customerInfo.textContent = infoText;
                 }
 
-                // Build selectable rate cards with breakdown
+                // Build selectable rate cards with breakdown — grouped by zone
                 let cardsHtml = '';
                 if (data.all_rates && data.all_rates.length > 0) {
-                    data.all_rates.forEach(function(r, index) {
-                        const checked = index === 0 ? 'checked' : '';
-                        const selectedClass = index === 0 ? ' selected' : '';
+                    // Helper function to render a single rate card
+                    function renderRateCard(r, idx, isChecked) {
+                        const checked = isChecked ? 'checked' : '';
+                        const selectedClass = isChecked ? ' selected' : '';
 
                         // Compute fuel and GST amounts
                         const basePrice = parseFloat(r.price) || 0;
@@ -8445,18 +8446,7 @@
                             total: totalPrice.toFixed(2)
                         });
 
-                        // Carrier initials from network (first 2 chars)
-                        const network = r.network || '';
-                        const carrierInitials = network.substring(0, 2).toUpperCase() || '${network}';
-
-                        // Generate consistent color from network name
-                        let hue = 0;
-                        for (let i = 0; i < network.length; i++) {
-                            hue = (hue * 31 + network.charCodeAt(i)) % 360;
-                        }
-                        const bgColor = 'hsl(' + hue + ', 70%, 50%)';
-
-                        cardsHtml += `
+                        return `
                         <div class="rate-comparison-card${selectedClass}" data-service-id="${r.service_id}">
                             <div class="rate-comparison-card-body">
                                 <div class="row g-3 align-items-center">
@@ -8466,9 +8456,10 @@
                                                 <span class="text-white fw-bold fs-15">UWC</span>
                                             </div>
                                             <div class="service-info">
-                                                <div class="service-title">${r.method}</div>
-                                                <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'} Days</div>
-                                                <span class="status-badge">
+                                            <div class="service-title">${r.method}</div>
+                                            <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'} Days</div>
+                                            ${r.zone_no ? '<div class="service-zone" style="font-size: 12px; color: #666;"><i class="fas fa-map-marker-alt me-1"></i>' + (r.zone_name ? r.zone_name + ' (' + r.zone_code + ')' : 'Zone ' + r.zone_no) + '</div>' : ''}
+                                            <span class="status-badge">
                                                     <i class="fas fa-check-circle"></i>
                                                     Available
                                                 </span>
@@ -8500,14 +8491,15 @@
                                                             data-tat="${r.tat}"
                                                             data-method_code="${r.method_code || ''}"
                                                             data-price="${r.price}"
+                                                            data-rate-id="${r.rate_id || ''}"
                                                             data-rate='${rateData}'
-                                                            id="service_${index}"
+                                                            id="service_${idx}"
                                                             ${checked}>
-                                                        <label class="form-check-label small fw-semibold" for="service_${index}">
+                                                        <label class="form-check-label small fw-semibold" for="service_${idx}">
                                                             Select
                                                         </label>
                                                     </div>
-                                                    <button class="breakdown-toggle btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#breakdown-${index}" aria-expanded="false" aria-controls="breakdown-${index}">
+                                                    <button class="breakdown-toggle btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#breakdown-${idx}" aria-expanded="false" aria-controls="breakdown-${idx}">
                                                         <span>break price</span>
                                                         <i class="fas fa-chevron-down chevron ms-1"></i>
                                                     </button>
@@ -8516,7 +8508,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div id="breakdown-${index}" class="accordion-collapse collapse" data-bs-parent="#upsRateCardList">
+                                <div id="breakdown-${idx}" class="accordion-collapse collapse" data-bs-parent="#upsRateCardList">
                                     <div class="breakdown-section">
                                         <div class="breakdown-grid">
                                             <div class="breakdown-column">
@@ -8561,6 +8553,54 @@
                                 </div>
                             </div>
                         </div>`;
+                    }
+
+                    // Group rates by zone_no
+                    const zoneGroups = {};
+                    data.all_rates.forEach(function(r) {
+                        const zoneKey = r.zone_no ? String(r.zone_no) : 'general';
+                        if (!zoneGroups[zoneKey]) {
+                            zoneGroups[zoneKey] = [];
+                        }
+                        zoneGroups[zoneKey].push(r);
+                    });
+
+                    let globalIndex = 0;
+
+                    // Render zone-independent group first (if exists)
+                    if (zoneGroups['general']) {
+                        cardsHtml += `<div class="zone-group mb-4">
+                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
+                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
+                            </div>`;
+                        zoneGroups['general'].forEach(function(r) {
+                            const isChecked = globalIndex === 0;
+                            cardsHtml += renderRateCard(r, globalIndex, isChecked);
+                            globalIndex++;
+                        });
+                        cardsHtml += `</div>`;
+                    }
+
+                    // Render zone-specific groups
+                    const zoneKeys = Object.keys(zoneGroups).filter(k => k !== 'general');
+                    zoneKeys.forEach(function(zoneKey) {
+                        console.log('Rendering rates for zone:', zoneKey, 'with rates:', zoneGroups[zoneKey]);
+                        console.log(zoneGroups[zoneKey][0].zone_name);
+                        // Build zone header label using zone info from response
+                        let zoneLabel = 'Zone ' + zoneKey;
+                        if (data.zone && String(data.zone.zone_number) === zoneKey) {
+                            zoneLabel = 'Zone ' + zoneKey + ' - ' + data.zone.zone_name + ' (' + data.zone.zone_code + ')';
+                        }
+                        cardsHtml += `<div class="zone-group mb-4">
+                            <div class="zone-group-header" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
+                                <i class="fas fa-map-marker-alt me-2"></i> ${zoneGroups[zoneKey][0].zone_name}
+                            </div>`;
+                        zoneGroups[zoneKey].forEach(function(r) {
+                            const isChecked = globalIndex === 0;
+                            cardsHtml += renderRateCard(r, globalIndex, isChecked);
+                            globalIndex++;
+                        });
+                        cardsHtml += `</div>`;
                     });
                 } else {
                     cardsHtml = '<div class="text-center text-muted py-4">No rates found. Please check consignee state and package weights.</div>';
@@ -8942,6 +8982,10 @@
 // Submit form via AJAX - controller handles UPS payload + API call + DB storage
 const formData = new FormData(form);
 formData.append('service_id', serviceId);
+                // Append the selected rate's courier_rate ID as service_rate_id
+                if (rateRadio && rateRadio.dataset.rateId) {
+                    formData.append('service_rate_id', rateRadio.dataset.rateId);
+                }
 
 // Append fuel, GST, and total price from the selected rate card's data-rate JSON
 if (rateRadio && rateRadio.dataset.rate) {
