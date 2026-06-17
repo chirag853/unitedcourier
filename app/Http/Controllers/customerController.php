@@ -2645,7 +2645,7 @@ class customerController extends Controller
 
             // Get package dimensions (use first package)
             $firstPackage = $packages->first();
-            $packageWeightKg = $firstPackage ? (float)$firstPackage->actual_weight_kg : 0.5;
+            $packageWeightKg = $firstPackage ? (float)$firstPackage->actual_weight_kg * 1000 : 0.5;
             $packageLength = $firstPackage ? (float)$firstPackage->length_cm : 10;
             $packageBreadth = $firstPackage ? (float)$firstPackage->width_cm : 10;
             $packageHeight = $firstPackage ? (float)$firstPackage->height_cm : 10;
@@ -2744,6 +2744,7 @@ class customerController extends Controller
                 'seller_email' => $shipper->email ?? '',
                 'seller_company' => $shipper->company_name ?? '',
                 'seller_address' => $shipperAddress ?: 'Address not provided',
+                'seller_address_2' => $shipperAddress ?: 'Address not provided',
                 'seller_city' => $shipper->city ?? '',
                 'seller_postcode' => $shipper->pincode ?? '',
                 'seller_country_code' => 'IN',
@@ -2754,6 +2755,7 @@ class customerController extends Controller
                 'customer_shipping_email' => $consignee->email ?? '',
                 'customer_shipping_company' => $consignee->consignee_name ?? '',
                 'customer_shipping_address' => $consigneeAddress ?: 'Address not provided',
+                'customer_shipping_address_2' => $consigneeAddress ?: 'Address not provided',
                 'customer_shipping_city' => $consignee->city ?? '',
                 'customer_shipping_postcode' => $consignee->zip_code ?? '',
                 'customer_shipping_country_code' => $consigneeCountryCode,
@@ -2765,8 +2767,10 @@ class customerController extends Controller
                 // 'deliveryConfirmation' => '',
                 // 'retry' => false,
             ];
-            echo "<pre>"; print_r($payload); // Debug: print payload to console/log
+
+            // print_r($payload);
             // return;
+
             \Log::info('Ship Global order payload for shipper #' . $shipper->id . ': ' . json_encode($payload));
 
             // Step 2: Call the addOrder.php API with Bearer token
