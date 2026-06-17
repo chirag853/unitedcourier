@@ -182,6 +182,8 @@ class AdminController extends Controller
             // Fetch shipment with all related data
             $shipment = DB::table('shipment_invoice')
                 ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                // i want to join shipment_invoice_items
+                ->join('shipment_invoice_items', 'shipment_invoice.id', '=', 'shipment_invoice_items.invoice_id')
                 ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
                 ->leftJoin('package_dimension', 'shipper_info.id', '=', 'package_dimension.shipper_id')
                 ->where('shipment_invoice.id', $shipmentId)
@@ -216,7 +218,8 @@ class AdminController extends Controller
                     'package_dimension.actual_weight_kg',
                     'package_dimension.length_cm',
                     'package_dimension.width_cm as pkg_width',
-                    'package_dimension.height_cm as pkg_height'
+                    'package_dimension.height_cm as pkg_height',
+                    'shipment_invoice_items.description'
                 )
                 ->first();
 
@@ -247,16 +250,19 @@ class AdminController extends Controller
                     'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
                     'payment_mode' => $paymentMode,
                     'quantity' => 1,
+                    'weight' => $shipment->actual_weight_kg ?? 0,
                     'total_amount' => $shipment->invoice_amount ?? 0,
+                    'products_desc' => $shipment->description ?? '',
                     'cod_amount' => $paymentMode === 'COD' ? ($shipment->invoice_amount ?? 0) : 0,
                     'shipping_mode' => 'Surface',
                     'shipment_width' => $shipment->pkg_width ?? 0,
+                    'shipment_length' => $shipment->pkg_length ?? 0,
                     'shipment_height' => $shipment->pkg_height ?? 0,
                     'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
                 ]
             ];
 
-            
+            print_r($shipmentsData); // Debug: Check the shipments data being sent to Delhivery
 
             // Build pickup_location object - name must remain unchanged as specified
             $pickupLocation = [
