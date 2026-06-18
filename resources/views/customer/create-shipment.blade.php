@@ -3627,7 +3627,7 @@
                                                                 <label class="form-label">ZIP Code <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_zip_code" value="{{ old('consignee_zip_code') }}" placeholder="ZIP Code">
+                                                                    name="consignee_zip_code" id="consignee_zip_code" value="{{ old('consignee_zip_code') }}" placeholder="ZIP Code">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -3635,7 +3635,7 @@
                                                                 <label class="form-label">City <span
                                                                         class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
-                                                                    name="consignee_city" value="{{ old('consignee_city') }}" placeholder="City">
+                                                                    name="consignee_city" id="consignee_city" value="{{ old('consignee_city') }}" placeholder="City">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -9521,6 +9521,86 @@ if (rateRadio && rateRadio.dataset.rate) {
             });
             observer.observe(table, { childList: true, subtree: true });
         }
+    })();
+    </script>
+    <script>
+    // ============================================================
+    // ZIP CODE AUTO-FILL: City & State from Zippopotam API
+    // - When user enters a ZIP code, calls zippopotam.us API
+    // - Auto-fills City from "place name"
+    // - Auto-selects State matching "state abbreviation" against zone_code
+    // ============================================================
+    (function() {
+        const zipInput = document.getElementById('consignee_zip_code');
+        const cityInput = document.getElementById('consignee_city');
+        const stateSelect = document.querySelector('select[name="consignee_state"]');
+        const destSelect = document.querySelector('select[name="delivery_destination"]');
+
+        if (!zipInput) return;
+
+        // Extract country code from delivery_destination value (e.g., "US- United State of America" → "us")
+        function getCountryCode() {
+            if (!destSelect) return 'us'; // default to US
+            const val = destSelect.value || '';
+            const match = val.match(/^([A-Za-z]{2})/);
+            return match ? match[1].toLowerCase() : 'us';
+        }
+
+        // Debounce helper
+        let debounceTimer = null;
+        function debounce(fn, delay) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(fn, delay);
+        }
+
+        zipInput.addEventListener('input', function() {
+            const zip = zipInput.value.trim();
+            if (zip.length < 5) {
+                // Clear auto-filled fields if ZIP is too short
+                if (cityInput && cityInput.dataset.autofilled === 'true') {
+                    cityInput.value = '';
+                    cityInput.dataset.autofilled = 'false';
+                }
+                return;
+            }
+            debounce(function() {
+                const countryCode = getCountryCode();
+                const url = 'https://api.zippopotam.us/' + countryCode + '/' + zip;
+
+                fetch(url)
+                    .then(function(response) {
+                        if (!response.ok) throw new Error('ZIP lookup failed');
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        // Auto-fill City from "place name"
+                        if (data.places && data.places.length > 0 && cityInput) {
+                            cityInput.value = data.places[0]['place name'] || '';
+                            cityInput.dataset.autofilled = 'true';
+                            // Trigger change event for any listeners
+                            cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+
+                        // Auto-select State from "state abbreviation" matching zone_code
+                        if (data.places && data.places.length > 0 && stateSelect) {
+                            const stateAbbr = data.places[0]['state abbreviation'] || '';
+                            // Find the option whose value matches the state abbreviation
+                            const options = stateSelect.options;
+                            for (let i = 0; i < options.length; i++) {
+                                if (options[i].value === stateAbbr) {
+                                    stateSelect.value = stateAbbr;
+                                    stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                    break;
+                                }
+                            }
+                        }
+                    })
+                    .catch(function(err) {
+                        // Silently fail - user can still manually fill city/state
+                        console.log('ZIP auto-fill error:', err.message);
+                    });
+            }, 500);
+        });
     })();
     </script>
     <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"

@@ -1264,6 +1264,8 @@ class customerController extends Controller
         // - "OZS" → always OZS, service code from scode
         // - "OZS/LBS" → dynamic: convert KG→LBS, <1 LBS → OZS + code 92, ≥1 LBS → LBS + code 93
         $weightUnit = 'LBS';
+
+
         if ($serviceWeight === 'OZS') {
             $serviceCode = $service->scode;
             $weightUnit = 'OZS';
@@ -1347,7 +1349,7 @@ class customerController extends Controller
 
             $packages[] = $pkg;
         }
-
+        
         // Fallback: single default package if no valid packages
         if (empty($packages)) {
             // Fallback: ~5KG converted to appropriate weight unit
@@ -1443,7 +1445,7 @@ class customerController extends Controller
             ],
         ];
 
-        // print_r($payload);
+        // return;
         return $payload;
     }
 
