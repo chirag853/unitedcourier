@@ -78,6 +78,165 @@
                 }
             }
 
+            /* Tracking Results Section */
+            .tracking-results-section {
+                padding: 40px 0;
+                background: #f8fafc;
+            }
+
+            .tracking-results-card {
+                background: #fff;
+                border-radius: 16px;
+                box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+                padding: 30px;
+                margin-bottom: 20px;
+            }
+
+            .tracking-status-badge {
+                display: inline-block;
+                padding: 8px 18px;
+                border-radius: 999px;
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 15px;
+            }
+
+            .tracking-status-badge.status-draft { background: rgba(107,114,128,0.1); color: #6b7280; }
+            .tracking-status-badge.status-ready { background: rgba(59,130,246,0.1); color: #3b82f6; }
+            .tracking-status-badge.status-packed { background: rgba(249,115,22,0.1); color: #f97316; }
+            .tracking-status-badge.status-manifested { background: rgba(139,92,246,0.1); color: #8b5cf6; }
+            .tracking-status-badge.status-dispatched { background: rgba(6,182,212,0.1); color: #06b6d4; }
+            .tracking-status-badge.status-delivered { background: rgba(34,197,94,0.1); color: #16a34a; }
+            .tracking-status-badge.status-cancelled { background: rgba(239,68,68,0.1); color: #ef4444; }
+            .tracking-status-badge.status-disputed { background: rgba(245,158,11,0.1); color: #f59e0b; }
+            .tracking-status-badge.status-on_hold { background: rgba(234,179,8,0.1); color: #eab308; }
+            .tracking-status-badge.status-received { background: rgba(20,184,166,0.1); color: #14b8a6; }
+
+            .tracking-timeline {
+                position: relative;
+                padding-left: 30px;
+            }
+
+            .tracking-timeline::before {
+                content: '';
+                position: absolute;
+                left: 14px;
+                top: 0;
+                bottom: 0;
+                width: 2px;
+                background: linear-gradient(to bottom, #8b5cf6, #06b6d4, #16a34a);
+            }
+
+            .timeline-entry {
+                position: relative;
+                padding-bottom: 25px;
+                padding-left: 20px;
+            }
+
+            .timeline-entry:last-child {
+                padding-bottom: 0;
+            }
+
+            .timeline-dot {
+                position: absolute;
+                left: -22px;
+                top: 4px;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #8b5cf6;
+                border: 2px solid #fff;
+                box-shadow: 0 0 0 3px rgba(139,92,246,0.2);
+            }
+
+            .timeline-entry:last-child .timeline-dot {
+                background: #16a34a;
+                box-shadow: 0 0 0 3px rgba(34,197,94,0.2);
+            }
+
+            .timeline-entry.active-entry .timeline-dot {
+                background: #06b6d4;
+                box-shadow: 0 0 0 3px rgba(6,182,212,0.2);
+                width: 14px;
+                height: 14px;
+                left: -23px;
+                top: 3px;
+            }
+
+            .timeline-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: #0f172a;
+                margin-bottom: 4px;
+            }
+
+            .timeline-time {
+                font-size: 13px;
+                color: #64748b;
+            }
+
+            .detail-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 15px;
+            }
+
+            .detail-item {
+                padding: 12px;
+                background: #f1f5f9;
+                border-radius: 10px;
+            }
+
+            .detail-item .detail-label {
+                font-size: 12px;
+                color: #64748b;
+                font-weight: 500;
+                margin-bottom: 4px;
+            }
+
+            .detail-item .detail-value {
+                font-size: 14px;
+                color: #0f172a;
+                font-weight: 600;
+            }
+
+            .tracking-error-msg {
+                text-align: center;
+                padding: 30px;
+                color: #ef4444;
+                font-size: 16px;
+                font-weight: 500;
+            }
+
+            .tracking-loading {
+                text-align: center;
+                padding: 30px;
+                color: #64748b;
+            }
+
+            .tracking-loading .spinner {
+                display: inline-block;
+                width: 30px;
+                height: 30px;
+                border: 3px solid rgba(139,92,246,0.2);
+                border-top-color: #8b5cf6;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+            }
+
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+
+            @media (max-width: 768px) {
+                .detail-grid {
+                    grid-template-columns: 1fr 1fr;
+                }
+                .tracking-results-card {
+                    padding: 20px;
+                }
+            }
+
         </style>
 
 
@@ -113,18 +272,18 @@
             <!-- Right Image -->
             <div class="col-md-6">
                 <div class="form-shadow">
-                 <form action="#">
+                 <form id="trackingForm" onsubmit="return false;">
                     <div class="row g-3 mb-3">
                         <div class="col-md-12">
                             <label class="form-label">{!! $trackFormContent->title ?? 'AWB Number' !!}</label>
                             <div class="input-group-custom">
-                                <input type="number" class="form-control input-custom" placeholder="{{ $trackFormContent->description ?? 'Airway Bill Number' }}">
+                                <input type="text" id="awb_number_input" class="form-control input-custom" placeholder="{{ $trackFormContent->description ?? 'Airway Bill Number' }}" required>
                                 <i class="fa-solid fa-box"></i>
                             </div>
                         </div>
                         
                     </div>
-                    <button type="button" style="width: 240px;" class="btn moving-gradient-bg btn-primary-custom m-2">
+                    <button type="button" id="trackNowBtn" style="width: 240px;" class="btn moving-gradient-bg btn-primary-custom m-2" onclick="searchTracking()">
                         {{ $trackFormContent->button_text ?? 'Track Now' }}
                     </button>
                  </form>
@@ -134,8 +293,63 @@
     </div>
 </header>
 
+<!-- Tracking Results Section -->
+<section id="trackingResultsSection" class="tracking-results-section" style="display: none;">
+    <div class="container">
+        <!-- Loading State -->
+        <div id="trackingLoading" class="tracking-loading" style="display: none;">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px;">Searching for your shipment...</p>
+        </div>
 
+        <!-- Error State -->
+        <div id="trackingError" class="tracking-results-card" style="display: none;">
+            <div class="tracking-error-msg">
+                <i class="fa-solid fa-circle-exclamation" style="font-size: 40px; margin-bottom: 10px;"></i>
+                <p id="trackingErrorMsg">No tracking information found for this AWB number.</p>
+            </div>
+        </div>
 
+        <!-- Success State -->
+        <div id="trackingSuccess" style="display: none;">
+            <!-- Current Status Card -->
+            <div class="tracking-results-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h3 style="font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 5px;">
+                            AWB: <span id="resultAwbNumber" class="gradient-text"></span>
+                        </h3>
+                        <span id="resultStatusBadge" class="tracking-status-badge"></span>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="font-size: 13px; color: #64748b;">Current Status</p>
+                        <p id="resultCurrentTitle" style="font-size: 18px; font-weight: 600; color: #0f172a;"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shipment & Consignee Details Card -->
+            <div class="tracking-results-card">
+                <h4 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 20px;">
+                    <i class="fa-solid fa-file-lines" style="color: #8b5cf6;"></i> Shipment Details
+                </h4>
+                <div class="detail-grid" id="shipmentDetailsGrid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Tracking Timeline Card -->
+            <div class="tracking-results-card">
+                <h4 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 20px;">
+                    <i class="fa-solid fa-timeline" style="color: #06b6d4;"></i> Tracking History
+                </h4>
+                <div class="tracking-timeline" id="trackingTimeline">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
 
 
 <!-- Features cards section -->
@@ -498,6 +712,158 @@
         }, observerOptions);
 
         document.querySelectorAll('.timeline-item').forEach(item => observer.observe(item));
+    </script>
+
+    <!-- Tracking Search Script -->
+    <script>
+        function searchTracking() {
+            const awbInput = document.getElementById('awb_number_input');
+            const awbNumber = awbInput.value.trim();
+
+            if (!awbNumber) {
+                awbInput.focus();
+                return;
+            }
+
+            const resultsSection = document.getElementById('trackingResultsSection');
+            const loadingDiv = document.getElementById('trackingLoading');
+            const errorDiv = document.getElementById('trackingError');
+            const successDiv = document.getElementById('trackingSuccess');
+
+            // Show loading, hide others
+            resultsSection.style.display = 'block';
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            fetch('{{ route("tracking.search") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new URLSearchParams({
+                    awb_number: awbNumber,
+                    _token: document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                })
+            })
+            .then(response => {
+                console.log('Tracking search response status:', response);
+                if (!response.ok) {
+                    throw new Error('Server returned ' + response.status + ': ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                loadingDiv.style.display = 'none';
+
+                if (data.success) {
+                    errorDiv.style.display = 'none';
+                    successDiv.style.display = 'block';
+                    renderTrackingResults(data);
+                } else {
+                    successDiv.style.display = 'none';
+                    errorDiv.style.display = 'block';
+                    document.getElementById('trackingErrorMsg').textContent = data.message || 'No tracking information found for this AWB number.';
+                }
+            })
+            .catch(error => {
+                loadingDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                document.getElementById('trackingErrorMsg').textContent = 'An error occurred while searching. Please try again.';
+                console.error('Tracking search error:', error);
+            });
+        }
+
+        function renderTrackingResults(data) {
+            // AWB Number & Current Status
+            document.getElementById('resultAwbNumber').textContent = data.awb_number;
+            document.getElementById('resultCurrentTitle').textContent = data.current_title;
+
+            const statusBadge = document.getElementById('resultStatusBadge');
+            statusBadge.textContent = data.current_title;
+            statusBadge.className = 'tracking-status-badge status-' + data.current_status;
+
+            // Shipment Details
+            const detailsGrid = document.getElementById('shipmentDetailsGrid');
+            let detailsHtml = '';
+
+            if (data.shipment) {
+                const shipmentFields = [
+                    { label: 'AWB Number', value: data.shipment?.awb_number, icon: 'fa-solid fa-barcode' },
+                    { label: 'Shipping Method', value: data.shipment?.shipping_method, icon: 'fa-solid fa-truck' },
+                    { label: 'Shipper Name', value: data.shipment?.shipper_name, icon: 'fa-solid fa-user' },
+                    { label: 'Company', value: data.shipment?.shipper_company, icon: 'fa-solid fa-building' },
+                    { label: 'Origin City', value: data.shipment?.shipper_city, icon: 'fa-solid fa-city' },
+                    { label: 'Origin State', value: data.shipment?.shipper_state, icon: 'fa-solid fa-map' },
+                    { label: 'Phone', value: data.shipment?.shipper_phone, icon: 'fa-solid fa-phone' },
+                    { label: 'Email', value: data.shipment?.shipper_email, icon: 'fa-solid fa-envelope' },
+                ];
+
+                shipmentFields.forEach(field => {
+                    if (field.value) {
+                        detailsHtml += `<div class="detail-item">
+                            <div class="detail-label"><i class="${field.icon}" style="margin-right: 5px;"></i>${field.label}</div>
+                            <div class="detail-value">${field.value}</div>
+                        </div>`;
+                    }
+                });
+            }
+
+            if (data.consignee) {
+                const consigneeFields = [
+                    { label: 'Consignee Name', value: data.consignee?.consignee_name, icon: 'fa-solid fa-user-tag' },
+                    { label: 'Destination City', value: data.consignee?.consignee_city, icon: 'fa-solid fa-city' },
+                    { label: 'Destination State', value: data.consignee?.consignee_state, icon: 'fa-solid fa-map' },
+                    { label: 'Destination Country', value: data.consignee?.consignee_country, icon: 'fa-solid fa-globe' },
+                    { label: 'Consignee Phone', value: data.consignee?.consignee_phone, icon: 'fa-solid fa-phone' },
+                ];
+
+                consigneeFields.forEach(field => {
+                    if (field.value) {
+                        detailsHtml += `<div class="detail-item">
+                            <div class="detail-label"><i class="${field.icon}" style="margin-right: 5px;"></i>${field.label}</div>
+                            <div class="detail-value">${field.value}</div>
+                        </div>`;
+                    }
+                });
+            }
+
+            detailsGrid.innerHTML = detailsHtml || '<p style="color: #64748b;">No shipment details available.</p>';
+
+            // Tracking Timeline
+            const timelineDiv = document.getElementById('trackingTimeline');
+            let timelineHtml = '';
+
+            if (data.history && data.history.length > 0) {
+                data.history.forEach((entry, index) => {
+                    const isLast = index === data.history.length - 1;
+                    const isActive = entry.status === data.current_status;
+                    timelineHtml += `<div class="timeline-entry ${isActive ? 'active-entry' : ''}">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-title">${entry.title}</div>
+                        <div class="timeline-time">${entry.timestamp || 'Time not available'}</div>
+                    </div>`;
+                });
+            } else {
+                timelineHtml = '<p style="color: #64748b;">No tracking history available.</p>';
+            }
+
+            timelineDiv.innerHTML = timelineHtml;
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('awb_number_input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchTracking();
+            }
+        });
     </script>
 
 

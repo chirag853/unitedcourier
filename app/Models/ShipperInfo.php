@@ -86,4 +86,12 @@ class ShipperInfo extends Model
     {
         return $this->hasMany(ShipmentInvoice::class, 'shipper_id');
     }
+
+    /**
+     * Get the tracking records for this shipper.
+     */
+    public function trackingRecords()
+    {
+        return $this->hasMany(Tracking::class, 'shipper_id');
+    }
 }

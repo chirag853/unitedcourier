@@ -376,6 +376,79 @@ class WebsiteController extends Controller
         ));
     }
 
+    public function searchTracking(Request $request)
+    {
+        $request->validate([
+            'awb_number' => 'required|string|min:3',
+        ]);
+
+        $awbNumber = $request->input('awb_number');
+
+        $trackingRecords = \App\Models\Tracking::where('awb_number', $awbNumber)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        if ($trackingRecords->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tracking information found for this AWB number. Please check the number and try again.',
+            ]);
+        }
+
+        $shipper = $trackingRecords->first()->shipper;
+        $consignee = $shipper ? $shipper->consigneeInfo : null;
+        $shipment = $trackingRecords->first()->shipment;
+
+        $statusMap = \App\Models\Tracking::getStatusTitleMap();
+
+        $history = $trackingRecords->map(function ($record) use ($statusMap) {
+            return [
+                'status' => $record->status,
+                'title' => $record->title ?? ($statusMap[$record->status] ?? ucfirst(str_replace('_', ' ', $record->status))),
+                'timestamp' => $record->created_at ? $record->created_at->format('d M Y, h:i A') : null,
+                'uwc_id' => $record->uwc_id,
+            ];
+        });
+
+        $currentStatus = $trackingRecords->last()->status;
+        $currentTitle = $trackingRecords->last()->title ?? ($statusMap[$currentStatus] ?? ucfirst(str_replace('_', ' ', $currentStatus)));
+
+        $shipmentDetails = null;
+        if ($shipper) {
+            $shipmentDetails = [
+                'awb_number' => $shipper->awb_number,
+                'shipping_method' => $shipper->shipping_method,
+                'shipper_name' => $shipper->contact_person,
+                'shipper_company' => $shipper->company_name,
+                'shipper_city' => $shipper->city,
+                'shipper_state' => $shipper->state,
+                'shipper_phone' => $shipper->phone_number,
+                'shipper_email' => $shipper->email,
+            ];
+        }
+
+        $consigneeDetails = null;
+        if ($consignee) {
+            $consigneeDetails = [
+                'consignee_name' => $consignee->contact_person ?? $consignee->consignee_name,
+                'consignee_city' => $consignee->city,
+                'consignee_state' => $consignee->state,
+                'consignee_country' => $consignee->delivery_destination,
+                'consignee_phone' => $consignee->phone_number,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'awb_number' => $awbNumber,
+            'current_status' => $currentStatus,
+            'current_title' => $currentTitle,
+            'history' => $history,
+            'shipment' => $shipmentDetails,
+            'consignee' => $consigneeDetails,
+        ]);
+    }
+
     public function eBooks()
     {
         $ebooks = \App\Models\Ebook::whereNull('section')->active()->ordered()->get();

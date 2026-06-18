@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             '/customer/create-shipment',
+            '/tracking/search',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

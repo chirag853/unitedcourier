@@ -24,6 +24,7 @@ Route::get('/e-books', [WebsiteController::class, 'eBooks'])->name('e-books');
 Route::get('/blogs', [WebsiteController::class, 'blogs'])->name('blogs');
 Route::get('/blogdetails/{slug}', [WebsiteController::class, 'blogDetail'])->name('blog.detail');
 Route::get('/tracking', [WebsiteController::class, 'trackOrder'])->name('tracking');
+Route::post('/tracking/search', [WebsiteController::class, 'searchTracking'])->name('tracking.search');
 Route::get('/webinar', [WebsiteController::class, 'webinar'])->name('webinar');
 Route::get('/currency-calculator', [WebsiteController::class, 'currencyCalculator'])->name('currency-calculator');
 Route::get('/world-weather', [WebsiteController::class, 'worldWeather'])->name('world-weather');

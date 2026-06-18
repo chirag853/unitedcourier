@@ -19,6 +19,7 @@ use App\Models\ShipmentInvoiceItem;
 use App\Models\CsbForm;
 use App\Models\CreateShipment;
 use App\Models\ShipmentTracking;
+use App\Models\Tracking;
 use App\Models\CourierService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -769,6 +770,16 @@ class customerController extends Controller
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
                 'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
+                'status' => 'draft',
+            ]);
+
+            // Create initial tracking record for the shipment
+            Tracking::create([
+                'awb_number' => $awbNumber,
+                'shipper_id' => $shipper->id,
+                'shipping_id' => $createShipment->id,
+                'uwc_id' => $awbNumber,
+                'title' => Tracking::getTitleForStatus('draft'),
                 'status' => 'draft',
             ]);
 
@@ -1793,6 +1804,17 @@ class customerController extends Controller
                 $shipper->save();
             });
 
+            // Create tracking record for payment confirmed (ready status)
+            $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+            Tracking::create([
+                'awb_number' => $shipper->awb_number,
+                'shipper_id' => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus('ready'),
+                'status' => 'ready',
+            ]);
+
             // Refresh wallet to get new balance
             $wallet->refresh();
 
@@ -1863,6 +1885,17 @@ class customerController extends Controller
                 $invoice->update(['status' => 'cancelled']);
                 $shipper->update(['status' => 'cancelled']);
 
+                // Create tracking record for cancelled status
+                $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+                Tracking::create([
+                    'awb_number' => $shipper->awb_number,
+                    'shipper_id' => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('cancelled'),
+                    'status' => 'cancelled',
+                ]);
+
                 if ($wasPaid) {
                     // Calculate the amount that was paid (total from invoice items)
                     $refundAmount = $invoice->total_amount;
@@ -1928,6 +1961,17 @@ class customerController extends Controller
 
             $shipper->status = 'packed';
             $shipper->save();
+
+            // Create tracking record for packed status
+            $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+            Tracking::create([
+                'awb_number' => $shipper->awb_number,
+                'shipper_id' => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus('packed'),
+                'status' => 'packed',
+            ]);
 
             return response()->json(['success' => true, 'message' => 'Status updated to Packed.']);
         } catch (\Exception $e) {
@@ -2033,6 +2077,16 @@ class customerController extends Controller
                     $shipper->status = 'manifested';
                     $shipper->save();
 
+                    // Create tracking record for manifested status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus('manifested'),
+                        'status' => 'manifested',
+                    ]);
+
                     \Log::info('Shipment manifested via Ship Global: ' . ($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Ship Global manifest: ' . $e->getMessage());
@@ -2103,6 +2157,16 @@ class customerController extends Controller
                     // Update shipper status to manifested
                     $shipper->status = 'manifested';
                     $shipper->save();
+
+                    // Create tracking record for manifested status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus('manifested'),
+                        'status' => 'manifested',
+                    ]);
 
                     \Log::info('Shipment manifested via UPS: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
                 } catch (\Exception $e) {
@@ -2231,6 +2295,17 @@ class customerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
@@ -2291,6 +2366,16 @@ class customerController extends Controller
 
                         $shipper->status = 'manifested';
                         $shipper->save();
+
+                        // Create tracking record for manifested status
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
 
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
