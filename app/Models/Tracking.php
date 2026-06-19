@@ -51,16 +51,17 @@ class Tracking extends Model
     public static function getStatusTitleMap(): array
     {
         return [
-            'draft'      => 'Order Created',
-            'ready'      => 'Payment Confirmed',
-            'packed'     => 'Shipment Packed',
-            'manifested' => 'Shipment Manifested',
-            'dispatched' => 'Shipment Dispatched',
-            'delivered'  => 'Shipment Delivered',
-            'cancelled'  => 'Shipment Cancelled',
-            'disputed'   => 'Shipment Disputed',
-            'on_hold'    => 'Shipment On Hold',
-            'received'   => 'Shipment Received',
+            'draft'              => 'Order Created',
+            'ready'              => 'Payment Confirmed',
+            'assigned_for_pickup'=> 'Assigned for Pickup',
+            'packed'             => 'Shipment Packed',
+            'manifested'         => 'Shipment Manifested',
+            'dispatched'         => 'Shipment Dispatched',
+            'delivered'          => 'Shipment Delivered',
+            'cancelled'          => 'Shipment Cancelled',
+            'disputed'           => 'Shipment Disputed',
+            'on_hold'            => 'Shipment On Hold',
+            'received'           => 'Shipment Received',
         ];
     }
 

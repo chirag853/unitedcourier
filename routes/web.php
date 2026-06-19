@@ -76,6 +76,8 @@ Route::prefix('admin')->group(function () {
     Route::get('/contacts', [AdminController::class, 'contacts'])->name('admin.contacts');
     Route::get('/companies', [AdminController::class, 'companies'])->name('admin.companies');
     Route::post('/assign-delivery', [AdminController::class, 'assignDelivery'])->name('admin.assign-delivery');
+    Route::post('/receive-shipment', [AdminController::class, 'receiveShipment'])->name('admin.receive-shipment');
+    Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');

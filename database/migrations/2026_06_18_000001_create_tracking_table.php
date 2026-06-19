@@ -14,7 +14,7 @@ return new class extends Migration
     {
         Schema::create('tracking', function (Blueprint $table) {
             $table->unsignedBigInteger('id', true)->primary();
-            $table->unsignedBigInteger('shipping_id')->index('idx_shipping_id');
+            $table->unsignedBigInteger('shipping_id')->nullable()->index('idx_shipping_id');
             $table->string('uwc_id', 100)->index('idx_uwc_id');
             $table->string('title', 255);
             $table->string('status', 100);

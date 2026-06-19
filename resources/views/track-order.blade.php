@@ -103,6 +103,7 @@
 
             .tracking-status-badge.status-draft { background: rgba(107,114,128,0.1); color: #6b7280; }
             .tracking-status-badge.status-ready { background: rgba(59,130,246,0.1); color: #3b82f6; }
+            .tracking-status-badge.status-assigned_for_pickup { background: rgba(99,102,241,0.1); color: #6366f1; }
             .tracking-status-badge.status-packed { background: rgba(249,115,22,0.1); color: #f97316; }
             .tracking-status-badge.status-manifested { background: rgba(139,92,246,0.1); color: #8b5cf6; }
             .tracking-status-badge.status-dispatched { background: rgba(6,182,212,0.1); color: #06b6d4; }

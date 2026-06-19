@@ -74,6 +74,22 @@
             font-size: 12px;
             font-weight: 500;
         }
+        .status-assigned {
+            background-color: #e0e7ff;
+            color: #3730a3;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-dispatched {
+            background-color: #cffafe;
+            color: #0e7490;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
         .customer-name-link {
             color: #0d6efd;
             cursor: pointer;
@@ -99,6 +115,68 @@
         }
         .dataTables_wrapper .dataTables_paginate {
             margin-top: 8px;
+        }
+        /* Tab card styles */
+        .tab-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .tab-card .nav-tabs {
+            border-bottom: 2px solid #e5e7eb;
+            padding: 0 16px;
+            background: #f9fafb;
+        }
+        .tab-card .nav-tabs .nav-link {
+            border: none;
+            border-radius: 0;
+            padding: 14px 24px;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .tab-card .nav-tabs .nav-link:hover {
+            color: #374151;
+            background: transparent;
+        }
+        .tab-card .nav-tabs .nav-link.active {
+            color: #4f46e5;
+            background: transparent;
+            border-bottom: 3px solid #4f46e5;
+        }
+        .tab-card .nav-tabs .nav-link .badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 10px;
+            margin-left: 6px;
+        }
+        .tab-card .tab-content {
+            padding: 0;
+        }
+        .tab-card .tab-pane {
+            padding: 0;
+        }
+        .tab-card .card-body {
+            padding: 16px;
+        }
+        /* Print label button style */
+        .btn-print-label {
+            background-color: #0e7490;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-print-label:hover {
+            background-color: #155e75;
+            color: white;
         }
     </style>
 
@@ -144,7 +222,7 @@
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
-                        <h4 class="mb-1">View Customer List <span class="badge badge-soft-primary ms-2">{{ count($shipments) }}</span></h4>
+                        <h4 class="mb-1">View Customer List</h4>
                         <nav aria-label="breadcrumb">
                             <ol class="breadcrumb mb-0 p-0">
                                 <li class="breadcrumb-item"><a href="{{ url('/admin/dashboard') }}">Home</a></li>
@@ -172,97 +250,287 @@
                     </div>
                 @endif
 
-                <!-- Shipments DataTable -->
-                <div class="card border shadow">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table id="shipmentsTable" class="table table-bordered table-hover">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>#</th>
-                                        <th>AWB Number</th>
-                                        <th>Customer Name</th>
-                                        <th>Customer Email</th>
-                                        <th>Shipper Company</th>
-                                        <th>Consignee</th>
-                                        <th>Destination</th>
-                                        <th>Invoice No.</th>
-                                        <th>Amount</th>
-                                        <th>Currency</th>
-                                        <th>Status</th>
-                                        <th>Delivery</th>
-                                        <th>Created</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse($shipments as $index => $shipment)
-                                    <tr>
-                                        <td>{{ $index + 1 }}</td>
-                                        <td>
-                                            <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="customer-name-link" title="Click to view details">
-                                                {{ $shipment->first_name }} {{ $shipment->last_name }}
-                                            </span>
-                                        </td>
-                                        <td>{{ $shipment->customer_email ?? 'N/A' }}</td>
-                                        <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                        <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                        <td>
-                                            {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                            @if($shipment->consignee_state || $shipment->shipper_state)
-                                                , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                            @endif
-                                        </td>
-                                        <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
-                                        <td>
-                                            @if($shipment->invoice_amount)
-                                                {{ number_format($shipment->invoice_amount, 2) }}
-                                            @else
-                                                N/A
-                                            @endif
-                                        </td>
-                                        <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
-                                        <td>
-                                            @if($shipment->status === 'cancelled')
-                                                <span class="status-cancelled">Cancelled</span>
-                                            @else
-                                                <span class="status-active">Active</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if($shipment->delivery_type)
-                                                <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
-                                                @if($shipment->delivery_type === 'Self' && $shipment->delivery_person_name)
-                                                    <br><small class="text-muted">{{ $shipment->delivery_person_name }}</small>
-                                                @endif
-                                            @else
-                                                <span class="text-muted">Not assigned</span>
-                                            @endif
-                                        </td>
-                                        <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
-                                        <td class="table-actions">
-                                            <a href="javascript:void(0);" class="btn btn-sm btn-outline-warning btn-icon" title="Assign Delivery" onclick="openAssignDelivery({{ $shipment->id }}, '{{ $shipment->delivery_type ?? '' }}', {{ $shipment->assigned_delivery_person ?? 'null' }}, '{{ $shipment->awb_number ?? '' }}')">
-                                                <i class="ti ti-truck-delivery"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    @empty
-                                    <tr>
-                                        <td colspan="14" class="text-center text-muted py-4">
-                                            <i class="ti ti-package-off fs-24 d-block mb-2"></i>
-                                            No shipments found.
-                                        </td>
-                                    </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
+                <!-- Three-Tab Card: Manifested | Assigned for Pickup | Print Label -->
+                <div class="tab-card">
+                    <ul class="nav nav-tabs" id="shipmentTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="manifested-tab" data-bs-toggle="tab" data-bs-target="#manifestedPane" type="button" role="tab" aria-controls="manifestedPane" aria-selected="true">
+                                <i class="ti ti-package me-1"></i> Manifested
+                                <span class="badge bg-primary">{{ count($manifestedShipments) }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="assigned-tab" data-bs-toggle="tab" data-bs-target="#assignedPane" type="button" role="tab" aria-controls="assignedPane" aria-selected="false">
+                                <i class="ti ti-truck-delivery me-1"></i> Assigned for Pickup
+                                <span class="badge" style="background:#6366f1;color:#fff;">{{ count($assignedForPickupShipments) }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="printlabel-tab" data-bs-toggle="tab" data-bs-target="#printlabelPane" type="button" role="tab" aria-controls="printlabelPane" aria-selected="false">
+                                <i class="ti ti-printer me-1"></i> Print Label
+                                <span class="badge" style="background:#06b6d4;color:#fff;">{{ count($printLabelShipments) }}</span>
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="shipmentTabContent">
+
+                        <!-- ===== TAB 1: Manifested ===== -->
+                        <div class="tab-pane fade show active" id="manifestedPane" role="tabpanel" aria-labelledby="manifested-tab">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table id="manifestedTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB Number</th>
+                                                <th>Customer Name</th>
+                                                <th>Customer Email</th>
+                                                <th>Shipper Company</th>
+                                                <th>Consignee</th>
+                                                <th>Destination</th>
+                                                <th>Invoice No.</th>
+                                                <th>Amount</th>
+                                                <th>Currency</th>
+                                                <th>Status</th>
+                                                <th>Created</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @forelse($manifestedShipments as $index => $shipment)
+                                            <tr>
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="customer-name-link" title="Click to view details">
+                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ $shipment->customer_email ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
+                                                <td>
+                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
+                                                    @if($shipment->consignee_state || $shipment->shipper_state)
+                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->invoice_amount)
+                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->status === 'cancelled')
+                                                        <span class="status-cancelled">Cancelled</span>
+                                                    @else
+                                                        <span class="status-active">Manifested</span>
+                                                    @endif
+                                                </td>
+                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                                <td class="table-actions">
+                                                    <a href="javascript:void(0);" class="btn btn-sm btn-outline-warning btn-icon" title="Assign Pickup" onclick="openAssignDelivery({{ $shipment->id }}, '{{ $shipment->delivery_type ?? '' }}', {{ $shipment->assigned_delivery_person ?? 'null' }}, '{{ $shipment->awb_number ?? '' }}')">
+                                                        <i class="ti ti-truck-delivery"></i>
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            @empty
+                                            <tr>
+                                                <td colspan="13" class="text-center text-muted py-4">
+                                                    <i class="ti ti-package-off fs-24 d-block mb-2"></i>
+                                                    No manifested shipments found.
+                                                </td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- ===== TAB 2: Assigned for Pickup ===== -->
+                        <div class="tab-pane fade" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table id="assignedTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB Number</th>
+                                                <th>Customer Name</th>
+                                                <th>Customer Email</th>
+                                                <th>Shipper Company</th>
+                                                <th>Consignee</th>
+                                                <th>Destination</th>
+                                                <th>Invoice No.</th>
+                                                <th>Amount</th>
+                                                <th>Currency</th>
+                                                <th>Pickup Type</th>
+                                                <th>Pickup Person</th>
+                                                <th>Created</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @forelse($assignedForPickupShipments as $index => $shipment)
+                                            <tr>
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="customer-name-link" title="Click to view details">
+                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ $shipment->customer_email ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
+                                                <td>
+                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
+                                                    @if($shipment->consignee_state || $shipment->shipper_state)
+                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->invoice_amount)
+                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->delivery_type)
+                                                        <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
+                                                    @else
+                                                        <span class="text-muted">N/A</span>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if($shipment->delivery_type === 'Self' && $shipment->delivery_person_name)
+                                                        {{ $shipment->delivery_person_name }}
+                                                    @elseif($shipment->delivery_type === 'DDU')
+                                                        <span class="text-muted">Delhivery</span>
+                                                    @elseif($shipment->delivery_type === 'DDP')
+                                                        <span class="text-muted">Shiprocket</span>
+                                                    @else
+                                                        <span class="text-muted">N/A</span>
+                                                    @endif
+                                                </td>
+                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                                <td class="table-actions">
+                                                    <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment" onclick="openReceiveShipment({{ $shipment->id }}, '{{ $shipment->awb_number ?? '' }}')">
+                                                        <i class="ti ti-package"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            @empty
+                                            <tr>
+                                                <td colspan="14" class="text-center text-muted py-4">
+                                                    <i class="ti ti-truck-off fs-24 d-block mb-2"></i>
+                                                    No assigned for pickup shipments found.
+                                                </td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ===== TAB 3: Print Label ===== -->
+                        <div class="tab-pane fade" id="printlabelPane" role="tabpanel" aria-labelledby="printlabel-tab">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table id="printlabelTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB Number</th>
+                                                <th>Customer Name</th>
+                                                <th>Shipper Company</th>
+                                                <th>Consignee</th>
+                                                <th>Destination</th>
+                                                <th>Invoice No.</th>
+                                                <th>Amount</th>
+                                                <th>Currency</th>
+                                                <th>Pickup Type</th>
+                                                <th>Status</th>
+                                                <th>Created</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @forelse($printLabelShipments as $index => $shipment)
+                                            <tr>
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="customer-name-link" title="Click to view details">
+                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
+                                                <td>
+                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
+                                                    @if($shipment->consignee_state || $shipment->shipper_state)
+                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->invoice_amount)
+                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->delivery_type)
+                                                        <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
+                                                    @else
+                                                        <span class="text-muted">N/A</span>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    <span class="status-dispatched">Dispatched</span>
+                                                </td>
+                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                                <td class="table-actions">
+                                                    <button class="btn-print-label" onclick="printLabel({{ $shipment->id }})">
+                                                        <i class="ti ti-printer me-1"></i> Print
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            @empty
+                                            <tr>
+                                                <td colspan="13" class="text-center text-muted py-4">
+                                                    <i class="ti ti-printer-off fs-24 d-block mb-2"></i>
+                                                    No dispatched shipments available for label printing.
+                                                </td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
-                <!-- End Shipments DataTable -->
+                <!-- End Three-Tab Card -->
 
             </div>
             <!-- End Content -->
@@ -346,6 +614,93 @@
         </div>
     </div>
 
+    <!-- Print Label Modal -->
+    <div class="modal fade" id="printLabelModal" tabindex="-1" aria-labelledby="printLabelModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="printLabelModalLabel">
+                        <i class="ti ti-printer me-1"></i> Print Shipping Label
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="printLabelContent">
+                    <!-- Loading state -->
+                    <div id="printLabelLoading" class="text-center py-5 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Generating label PDF...</p>
+                    </div>
+                    <!-- Error state -->
+                    <div id="printLabelError" class="text-center py-4 d-none">
+                        <i class="ti ti-alert-circle fs-24 text-danger d-block mb-2"></i>
+                        <p class="text-danger" id="printLabelErrorMsg">Failed to generate label.</p>
+                    </div>
+                    <!-- PDF iframe -->
+                    <iframe id="printLabelPdfFrame" style="width:100%;height:500px;border:none;display:none;"></iframe>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary d-none" id="printLabelPrintBtn" onclick="triggerPdfPrint()">
+                        <i class="ti ti-printer me-1"></i> Print Label
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receive Shipment Modal -->
+    <div class="modal fade" id="receiveShipmentModal" tabindex="-1" aria-labelledby="receiveShipmentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="receiveShipmentModalLabel">
+                        <i class="ti ti-package me-1"></i> Receive Shipment
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="receiveShipmentForm">
+                    <input type="hidden" name="shipment_id" id="receive_shipment_id" value="">
+                    <div class="modal-body">
+                        <div id="receiveShipmentAlert" class="alert d-none"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">AWB Number</label>
+                            <p class="mb-0" id="receive_awb_display">-</p>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Has this shipment been received? <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-4 mt-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="received" id="receive_yes" value="yes">
+                                    <label class="form-check-label" for="receive_yes">
+                                        <strong>Yes</strong><br>
+                                        <small class="text-muted">Shipment has been received</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="received" id="receive_no" value="no">
+                                    <label class="form-check-label" for="receive_no">
+                                        <strong>No</strong><br>
+                                        <small class="text-muted">Shipment not received / On Hold</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="receiveShipmentBtn">
+                            <i class="ti ti-check me-1"></i> Submit
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- jQuery -->
     <script src="{{ asset('js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
 
@@ -382,12 +737,12 @@
 
     <script data-cfasync="false">
         $(document).ready(function() {
-            // Initialize DataTable
-            $('#shipmentsTable').DataTable({
+            // Initialize DataTables for each tab
+            $('#manifestedTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
                 language: {
-                    emptyTable: "No shipments found",
+                    emptyTable: "No manifested shipments found",
                     info: "Showing _START_ to _END_ of _TOTAL_ shipments",
                     infoEmpty: "Showing 0 to 0 of 0 shipments",
                     infoFiltered: "(filtered from _MAX_ total shipments)",
@@ -395,6 +750,44 @@
                     search: "Search:",
                     zeroRecords: "No matching shipments found"
                 }
+            });
+
+            $('#assignedTable').DataTable({
+                order: [[0, 'asc']],
+                pageLength: 25,
+                language: {
+                    emptyTable: "No assigned for pickup shipments found",
+                    info: "Showing _START_ to _END_ of _TOTAL_ shipments",
+                    infoEmpty: "Showing 0 to 0 of 0 shipments",
+                    infoFiltered: "(filtered from _MAX_ total shipments)",
+                    lengthMenu: "Show _MENU_ shipments",
+                    search: "Search:",
+                    zeroRecords: "No matching shipments found"
+                }
+            });
+
+            $('#printlabelTable').DataTable({
+                order: [[0, 'asc']],
+                pageLength: 25,
+                language: {
+                    emptyTable: "No dispatched shipments available for label printing",
+                    info: "Showing _START_ to _END_ of _TOTAL_ shipments",
+                    infoEmpty: "Showing 0 to 0 of 0 shipments",
+                    infoFiltered: "(filtered from _MAX_ total shipments)",
+                    lengthMenu: "Show _MENU_ shipments",
+                    search: "Search:",
+                    zeroRecords: "No matching shipments found"
+                }
+            });
+
+            // Reinitialize DataTable when switching tabs (to fix layout issues)
+            $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+                const targetId = $(e.target).attr('data-bs-target');
+                const tableId = targetId === '#manifestedPane' ? 'manifestedTable' 
+                              : targetId === '#assignedPane' ? 'assignedTable' 
+                              : 'printlabelTable';
+                const dt = $(`#${tableId}`).DataTable();
+                dt.columns.adjust().draw();
             });
 
             // ===== Assign Delivery Modal Logic =====
@@ -461,9 +854,6 @@
                                     else if (delhiveryData.packages && delhiveryData.packages.length > 0) {
                                         waybillInfo = '<br><strong>Delhivery Waybill: ' + (delhiveryData.packages[0].waybill || '') + '</strong>';
                                     }
-                                    // if (delhiveryData.packages && delhiveryData.packages.length > 0) {
-                                    //     waybillInfo += '<br>Ref: ' + (delhiveryData.packages[0].ref || '');
-                                    // }
                                     alertMsg += waybillInfo;
                                     showAssignDeliveryAlert(alertMsg, 'success');
                                 } else {
@@ -479,9 +869,9 @@
                             }
 
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
-                            // Reload page after a short delay to reflect changes
+                            // Reload page after a short delay to reflect changes (shipment moves to Assigned tab)
                             setTimeout(function() {
-                                // location.reload();
+                                location.reload();
                             }, 2500);
                         } else {
                             showAssignDeliveryAlert(response.message || 'Something went wrong.', 'danger');
@@ -514,12 +904,97 @@
                 $('#assignDeliveryBtn').prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
             });
 
+            // ===== Receive Shipment Modal Logic =====
+
+            /**
+             * Handle receive shipment form submission via AJAX
+             */
+            $('#receiveShipmentForm').on('submit', function(e) {
+                e.preventDefault();
+
+                const received = $('input[name="received"]:checked').val();
+                if (!received) {
+                    showReceiveShipmentAlert('Please select Yes or No.', 'danger');
+                    return;
+                }
+
+                const $btn = $('#receiveShipmentBtn');
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Submitting...');
+
+                $.ajax({
+                    url: '{{ route("admin.receive-shipment") }}',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            showReceiveShipmentAlert(response.message, 'success');
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
+                            // Reload page after a short delay to reflect changes
+                            setTimeout(function() {
+                                location.reload();
+                            }, 2500);
+                        } else {
+                            showReceiveShipmentAlert(response.message || 'Something went wrong.', 'danger');
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
+                        }
+                    },
+                    error: function(xhr) {
+                        let msg = 'An error occurred. Please try again.';
+                        if (xhr.responseJSON) {
+                            if (xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            } else if (xhr.responseJSON.errors) {
+                                msg = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+                            }
+                        }
+                        showReceiveShipmentAlert(msg, 'danger');
+                        $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
+                    }
+                });
+            });
+
+            /**
+             * Reset receive shipment modal when it is hidden
+             */
+            $('#receiveShipmentModal').on('hidden.bs.modal', function() {
+                $('#receiveShipmentAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');
+                $('input[name="received"]').prop('checked', false);
+                $('#receiveShipmentBtn').prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
+            });
+
+            /**
+             * Reset Print Label modal when it is hidden - revoke blob URL to free memory
+             */
+            $('#printLabelModal').on('hidden.bs.modal', function() {
+                // Revoke the blob URL to free memory
+                if (window._labelPdfBlobUrl) {
+                    URL.revokeObjectURL(window._labelPdfBlobUrl);
+                    window._labelPdfBlobUrl = null;
+                }
+                // Reset modal states
+                $('#printLabelLoading').addClass('d-none');
+                $('#printLabelError').addClass('d-none');
+                $('#printLabelPdfFrame').css('display', 'none').attr('src', '');
+                $('#printLabelPrintBtn').addClass('d-none');
+            });
+
             /**
              * Helper to show alerts inside the assign delivery modal
              */
             function showAssignDeliveryAlert(message, type) {
                 const $alert = $('#assignDeliveryAlert');
                 $alert.removeClass('d-none alert-success alert-danger alert-warning').addClass('alert-' + type).html(message);
+            }
+
+            /**
+             * Helper to show alerts inside the receive shipment modal
+             */
+            function showReceiveShipmentAlert(message, type) {
+                const $alert = $('#receiveShipmentAlert');
+                $alert.removeClass('d-none alert-success alert-danger').addClass('alert-' + type).html(message);
             }
 
         });
@@ -566,36 +1041,104 @@
         }
 
         /**
-         * View shipment details in modal.
+         * Open the Receive Shipment modal.
+         * @param {number} shipmentId
+         * @param {string} awbNumber - AWB number for display
          */
-        function viewShipment(shipmentId) {
-            // Since all data is already in the table, we can find it from the DOM
-            // For a full detail view, we show a summary in the modal
-            const table = $('#shipmentsTable').DataTable();
-            const rows = table.rows().data();
-            
-            // Find the row index with this ID (we'll use a data attribute approach)
-            // Simpler approach: redirect to a detail page or show basic info
-            const row = $(`#shipmentsTable tbody tr`).eq(shipmentId); // simplified
+        function openReceiveShipment(shipmentId, awbNumber) {
+            // Set shipment ID
+            $('#receive_shipment_id').val(shipmentId);
 
-            // Show modal with basic info from the row
-            let html = `
-                <div class="text-center py-3">
-                    <i class="ti ti-file-description fs-40 text-primary mb-2 d-block"></i>
-                    <h6>Shipment #${shipmentId}</h6>
-                    <p class="text-muted mb-0">Detailed view will be available in a future update.</p>
-                    <hr>
-                    <p class="mb-0">AWB: <strong>${$(row).find('td:eq(1)').text()}</strong></p>
-                    <p class="mb-0">Customer: <strong>${$(row).find('td:eq(2)').text()}</strong></p>
-                    <p class="mb-0">Invoice: <strong>${$(row).find('td:eq(7)').text()}</strong></p>
-                    <p class="mb-0">Amount: <strong>${$(row).find('td:eq(8)').text()} ${$(row).find('td:eq(9)').text()}</strong></p>
-                    <p class="mb-0">Status: <strong>${$(row).find('td:eq(10)').text()}</strong></p>
-                </div>
-            `;
+            // Display AWB number
+            $('#receive_awb_display').text(awbNumber || '-');
 
-            $('#shipmentDetailBody').html(html);
-            $('#shipmentDetailModalLabel').text(`Shipment Details - ${$(row).find('td:eq(1)').text()}`);
-            $('#shipmentDetailModal').modal('show');
+            // Reset radio buttons
+            $('input[name="received"]').prop('checked', false);
+
+            // Reset alert
+            $('#receiveShipmentAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');
+
+            // Open the modal
+            $('#receiveShipmentModal').modal('show');
+        }
+
+        /**
+         * Print shipping label - fetches base64 PDF from server and displays in modal.
+         * @param {number} shipmentId - The shipment_invoice ID
+         */
+        function printLabel(shipmentId) {
+            // Reset modal states
+            $('#printLabelLoading').removeClass('d-none');
+            $('#printLabelError').addClass('d-none');
+            $('#printLabelPdfFrame').css('display', 'none');
+            $('#printLabelPrintBtn').addClass('d-none');
+
+            // Open modal
+            $('#printLabelModal').modal('show');
+
+            // AJAX call to generate label PDF
+            $.ajax({
+                url: '/admin/generate-label',
+                type: 'POST',
+                data: { shipment_id: shipmentId },
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.success && response.pdf_base64) {
+                        // Convert base64 to PDF blob
+                        const binaryString = atob(response.pdf_base64);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+                        const blobUrl = URL.createObjectURL(pdfBlob);
+
+                        // Hide loading, show iframe with PDF
+                        $('#printLabelLoading').addClass('d-none');
+                        $('#printLabelPdfFrame').attr('src', blobUrl).css('display', 'block');
+                        $('#printLabelPrintBtn').removeClass('d-none');
+
+                        // Store blob URL for printing
+                        window._labelPdfBlobUrl = blobUrl;
+                    } else {
+                        // Show error
+                        $('#printLabelLoading').addClass('d-none');
+                        $('#printLabelError').removeClass('d-none');
+                        $('#printLabelErrorMsg').text(response.message || 'Failed to generate label.');
+                    }
+                },
+                error: function(xhr) {
+                    // Show error
+                    $('#printLabelLoading').addClass('d-none');
+                    $('#printLabelError').removeClass('d-none');
+                    let errorMsg = 'Failed to generate label. Please try again.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    $('#printLabelErrorMsg').text(errorMsg);
+                }
+            });
+        }
+
+        /**
+         * Trigger browser print for the PDF label.
+         * Opens the PDF blob URL in a new window and triggers print.
+         */
+        function triggerPdfPrint() {
+            if (window._labelPdfBlobUrl) {
+                const printWindow = window.open(window._labelPdfBlobUrl, '_blank');
+                if (printWindow) {
+                    printWindow.onload = function() {
+                        setTimeout(function() {
+                            printWindow.print();
+                        }, 500);
+                    };
+                } else {
+                    alert('Please allow popups to print the label.');
+                }
+            }
         }
     </script>
 

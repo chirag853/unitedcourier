@@ -60,44 +60,51 @@ class AdminController extends Controller
 
     public function companies()
     {
-        // Fetch ALL shipments across all customers with related data
-        $shipments = DB::table('shipment_invoice')
-            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
-            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
-            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
-            ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
-            ->where('shipper_info.status', 'manifested')
-            ->select(
-                'shipment_invoice.id',
-                'shipment_invoice.invoice_number',
-                'shipment_invoice.invoice_date',
-                'shipment_invoice.invoice_amount',
-                'shipment_invoice.incoterms',
-                'shipment_invoice.invoice_currency',
-                'shipment_invoice.reference_number',
-                'shipment_invoice.status',
-                'shipment_invoice.delivery_type',
-                'shipment_invoice.assigned_delivery_person',
-                'shipment_invoice.created_at',
-                'shipment_invoice.updated_at',
-                'shipper_info.id as shipper_id',
-                'shipper_info.company_name as shipper_company',
-                'shipper_info.contact_person as shipper_contact',
-                'shipper_info.city as shipper_city',
-                'shipper_info.state as shipper_state',
-                'shipper_info.awb_number',
-                'customers.id as customer_id',
-                'customers.first_name',
-                'customers.last_name',
-                'customers.email as customer_email',
-                'customers.phone_number as customer_phone',
-                'consignee_info.consignee_name',
-                'consignee_info.city as consignee_city',
-                'consignee_info.state as consignee_state',
-                'admin_user.name as delivery_person_name'
-            )
-            ->orderBy('shipment_invoice.created_at', 'desc')
-            ->get();
+        // Base query builder for shipments with all related data, filtered by shipper status
+        $baseQuery = function ($status) {
+            return DB::table('shipment_invoice')
+                ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+                ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+                ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
+                ->where('shipper_info.status', $status)
+                ->select(
+                    'shipment_invoice.id',
+                    'shipment_invoice.invoice_number',
+                    'shipment_invoice.invoice_date',
+                    'shipment_invoice.invoice_amount',
+                    'shipment_invoice.incoterms',
+                    'shipment_invoice.invoice_currency',
+                    'shipment_invoice.reference_number',
+                    'shipment_invoice.status',
+                    'shipment_invoice.delivery_type',
+                    'shipment_invoice.assigned_delivery_person',
+                    'shipment_invoice.created_at',
+                    'shipment_invoice.updated_at',
+                    'shipper_info.id as shipper_id',
+                    'shipper_info.company_name as shipper_company',
+                    'shipper_info.contact_person as shipper_contact',
+                    'shipper_info.city as shipper_city',
+                    'shipper_info.state as shipper_state',
+                    'shipper_info.awb_number',
+                    'customers.id as customer_id',
+                    'customers.first_name',
+                    'customers.last_name',
+                    'customers.email as customer_email',
+                    'customers.phone_number as customer_phone',
+                    'consignee_info.consignee_name',
+                    'consignee_info.city as consignee_city',
+                    'consignee_info.state as consignee_state',
+                    'admin_user.name as delivery_person_name'
+                )
+                ->orderBy('shipment_invoice.created_at', 'desc')
+                ->get();
+        };
+
+        // Fetch shipments by status for each tab
+        $manifestedShipments = $baseQuery('manifested');
+        $assignedForPickupShipments = $baseQuery('assigned_for_pickup');
+        $printLabelShipments = $baseQuery('dispatched');
 
         // Fetch delivery persons where type = 'Delivery_person'
         $deliveryPersons = Admin::where('type', 'Delivery_person')
@@ -105,7 +112,7 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('shipments', 'deliveryPersons'));
+        return view('admin.companies', compact('manifestedShipments', 'assignedForPickupShipments', 'printLabelShipments', 'deliveryPersons'));
     }
 
     /**
@@ -140,6 +147,26 @@ class AdminController extends Controller
 
             ShipmentInvoice::where('id', $request->shipment_id)->update($updateData);
 
+            // Create tracking record for pickup assignment and update shipper status
+            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
+            if ($shipmentInvoice && $shipmentInvoice->shipper_id) {
+                $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+                if ($shipper && $shipper->awb_number) {
+                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                    \App\Models\Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'status'     => 'assigned_for_pickup',
+                        'title'      => 'Assigned for Pickup',
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id'     => $shipper->awb_number,
+                    ]);
+                    // Update shipper status so it moves to "Assigned for Pickup" tab
+                    $shipper->status = 'assigned_for_pickup';
+                    $shipper->save();
+                }
+            }
+
             // If DDU (Delhivery) is selected, call the Delhivery API
             $delhiveryResponse = null;
             if ($request->delivery_type === 'DDU') {
@@ -162,6 +189,263 @@ class AdminController extends Controller
             }
 
             return response()->json($response);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Receive a shipment - mark as received in tracking table.
+     * When "Yes" is selected, creates a tracking record with status "received"
+     * and updates shipper status to "dispatched" (moves shipment to Print Label tab).
+     * When "No" is selected, creates a tracking record with status "on_hold"
+     * and updates shipper status to "on_hold".
+     */
+    public function receiveShipment(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+                'received'    => 'required|string|in:yes,no',
+            ]);
+
+            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
+            if (!$shipmentInvoice || !$shipmentInvoice->shipper_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or no shipper associated.'
+                ]);
+            }
+
+            $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+            if (!$shipper || !$shipper->awb_number) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipper info not found or AWB number missing.'
+                ]);
+            }
+
+            $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+
+            if ($request->received === 'yes') {
+                // Mark as received in tracking, but set shipper status to 'dispatched'
+                // so the shipment moves to the Print Label tab
+                \App\Models\Tracking::create([
+                    'awb_number'  => $shipper->awb_number,
+                    'status'      => 'received',
+                    'title'       => 'Shipment Received',
+                    'shipper_id'  => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id'      => $shipper->awb_number,
+                ]);
+                $shipper->status = 'dispatched';
+                $shipper->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment received successfully. It has been moved to Print Label tab.'
+                ]);
+            } else {
+                // Mark as on hold (not received)
+                \App\Models\Tracking::create([
+                    'awb_number'  => $shipper->awb_number,
+                    'status'      => 'on_hold',
+                    'title'       => 'Shipment On Hold',
+                    'shipper_id'  => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id'      => $shipper->awb_number,
+                ]);
+                $shipper->status = 'on_hold';
+                $shipper->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment marked as on hold (not received).'
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Generate a shipping label PDF as base64 string.
+     * Priority: Use shipment_tracking.raw_response for existing label data.
+     * - UPS (response_status_description = "success"): Extract GraphicImage base64 → PDF
+     * - Ship Global (response_status_description = "Ship Global order created"): Extract pdf_base64 → PDF
+     * Fallback: Generate label via Dompdf if no tracking record exists.
+     */
+    public function generateLabel(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+            ]);
+
+            // Get shipper_id from shipment_invoice
+            $shipperId = DB::table('shipment_invoice')
+                ->where('id', $request->shipment_id)
+                ->value('shipper_id');
+
+            if (!$shipperId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found.'
+                ]);
+            }
+
+            // Look up shipment_tracking record for this shipper
+            $trackingRecord = \App\Models\ShipmentTracking::where('shipper_id', $shipperId)->first();
+
+            // Try to extract label from shipment_tracking raw_response
+            if ($trackingRecord && $trackingRecord->raw_response) {
+                $rawResponse = $trackingRecord->raw_response;
+                $statusDescription = $trackingRecord->response_status_description;
+                $pdfBase64 = null;
+
+                // UPS case: response_status_description contains "success"
+                if (stripos($statusDescription, 'success') !== false) {
+                    // Extract GraphicImage from raw_response
+                    $packageResults = null;
+
+                    // Try ShipmentResults.PackageResults path in raw_response
+                    if (isset($rawResponse['ShipmentResults']['PackageResults'])) {
+                        $packageResults = $rawResponse['ShipmentResults']['PackageResults'];
+                    } elseif (isset($rawResponse['PackageResults'])) {
+                        $packageResults = $rawResponse['PackageResults'];
+                    } elseif ($trackingRecord->package_results) {
+                        $packageResults = $trackingRecord->package_results;
+                    }
+
+                    if ($packageResults) {
+                        $firstPkg = is_array($packageResults) && isset($packageResults[0]) ? $packageResults[0] : $packageResults;
+
+                        $graphicImage = null;
+                        $labelFormat = null;
+
+                        // Try ShippingLabel key (newer UPS Ship API format)
+                        if (isset($firstPkg['ShippingLabel'])) {
+                            $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                            $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+                        } elseif (isset($firstPkg['LabelImage'])) {
+                            // Older/different UPS response format
+                            $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                            $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+                        }
+
+                        if ($graphicImage) {
+                            if ($labelFormat === 'PDF') {
+                                // GraphicImage is already base64-encoded PDF — return directly
+                                $pdfBase64 = $graphicImage;
+                            } else {
+                                // GraphicImage is base64-encoded image (GIF/SPL/EPL etc.)
+                                // Convert to PDF by embedding the image in a Dompdf HTML template
+                                $mimeType = strtolower($labelFormat);
+                                // Map common UPS format codes to MIME types
+                                $mimeMap = [
+                                    'gif'  => 'image/gif',
+                                    'png'  => 'image/png',
+                                    'jpg'  => 'image/jpeg',
+                                    'jpeg' => 'image/jpeg',
+                                    'pdf'  => 'application/pdf',
+                                    'spl'  => 'application/pdf',
+                                    'epl'  => 'application/pdf',
+                                    'zpl'  => 'application/pdf',
+                                ];
+                                $mimeType = $mimeMap[$mimeType] ?? 'image/gif';
+
+                                $imageBase64Src = 'data:' . $mimeType . ';base64,' . $graphicImage;
+
+                                $html = '<html><body style="margin:0;padding:0;"><img src="' . $imageBase64Src . '" style="width:100%;height:auto;"></body></html>';
+                                $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
+                                $pdf->setPaper([0, 0, 400, 600], 'portrait');
+                                $pdfBase64 = base64_encode($pdf->output());
+                            }
+                        }
+                    }
+                }
+                // Ship Global case: response_status_description = "Ship Global order created"
+                elseif (stripos($statusDescription, 'Ship Global') !== false) {
+                    // Extract pdf_base64 from raw_response
+                    if (isset($rawResponse['data']['pdf_base64'])) {
+                        $pdfBase64 = $rawResponse['data']['pdf_base64'];
+                    } elseif (isset($rawResponse['pdf_base64'])) {
+                        $pdfBase64 = $rawResponse['pdf_base64'];
+                    }
+                }
+
+                // If we found a label from shipment_tracking, return it
+                if ($pdfBase64) {
+                    $awbNumber = DB::table('shipper_info')->where('id', $shipperId)->value('awb_number');
+                    return response()->json([
+                        'success'    => true,
+                        'pdf_base64' => $pdfBase64,
+                        'awb_number' => $awbNumber,
+                        'source'     => 'shipment_tracking',
+                    ]);
+                }
+            }
+
+            // Fallback: Generate label using Dompdf from label-pdf template
+            $shipment = DB::table('shipment_invoice')
+                ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+                ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+                ->where('shipment_invoice.id', $request->shipment_id)
+                ->select(
+                    'shipment_invoice.id',
+                    'shipment_invoice.invoice_number',
+                    'shipment_invoice.invoice_date',
+                    'shipment_invoice.invoice_amount',
+                    'shipment_invoice.invoice_currency',
+                    'shipper_info.awb_number',
+                    'shipper_info.company_name as shipper_company',
+                    'shipper_info.contact_person as shipper_contact',
+                    'shipper_info.address_line1 as shipper_address_line1',
+                    'shipper_info.address_line2 as shipper_address_line2',
+                    'shipper_info.address_line3 as shipper_address_line3',
+                    'shipper_info.pincode as shipper_pincode',
+                    'shipper_info.city as shipper_city',
+                    'shipper_info.state as shipper_state',
+                    'shipper_info.phone_number as shipper_phone',
+                    'customers.first_name',
+                    'customers.last_name',
+                    'consignee_info.consignee_name',
+                    'consignee_info.address_line1 as consignee_address_line1',
+                    'consignee_info.address_line2 as consignee_address_line2',
+                    'consignee_info.address_line3 as consignee_address_line3',
+                    'consignee_info.zip_code as consignee_zip_code',
+                    'consignee_info.city as consignee_city',
+                    'consignee_info.state as consignee_state',
+                    'consignee_info.phone_number as consignee_phone'
+                )
+                ->first();
+
+            if (!$shipment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found.'
+                ]);
+            }
+
+            $labelHtml = view('admin.label-pdf', compact('shipment'))->render();
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($labelHtml);
+            $pdf->setPaper([0, 0, 280, 400], 'portrait');
+            $pdfBase64 = base64_encode($pdf->output());
+
+            return response()->json([
+                'success'    => true,
+                'pdf_base64' => $pdfBase64,
+                'awb_number' => $shipment->awb_number,
+                'source'     => 'dompdf_fallback',
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
