@@ -53,6 +53,40 @@
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+    <style>
+        .chart-filter-btn {
+            padding: 6px 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            background: #fff;
+            color: #495057;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .chart-filter-btn:hover {
+            background: #f0f0f0;
+        }
+        .chart-filter-btn.active {
+            background: #5b5eff;
+            color: #fff;
+            border-color: #5b5eff;
+        }
+        .chart-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .chart-card h6 {
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+    </style>
 </head>
 
 <body>
@@ -749,10 +783,18 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1 text-dark">Shipments Booked</p>
-                                            <h2 class="mb-1 fs-16">7</h2>
+                                            <h2 class="mb-1 fs-16">{{ $totalBooked }}</h2>
+                                            @if($bookedChangePercent > 0)
                                             <p class="text-success mb-0 fs-13"> <i
-                                                    class="ti ti-arrow-bar-up me-1"></i>5.62%<span
+                                                    class="ti ti-arrow-bar-up me-1"></i>{{ $bookedChangePercent }}%<span
                                                     class="text-body ms-1">from last month</span></p>
+                                            @elseif($bookedChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i
+                                                    class="ti ti-arrow-bar-down me-1"></i>{{ abs($bookedChangePercent) }}%<span
+                                                    class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
@@ -776,10 +818,18 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1 text-dark">Pickup Pending</p>
-                                            <h2 class="mb-1 fs-16">4</h2>
+                                            <h2 class="mb-1 fs-16">{{ $pickupPending }}</h2>
+                                            @if($pickupPendingChangePercent > 0)
                                             <p class="text-success mb-0 fs-13"> <i
-                                                    class="ti ti-arrow-bar-up me-1"></i>12%<span
+                                                    class="ti ti-arrow-bar-up me-1"></i>{{ $pickupPendingChangePercent }}%<span
                                                     class="text-body ms-1">from last month</span></p>
+                                            @elseif($pickupPendingChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i
+                                                    class="ti ti-arrow-bar-down me-1"></i>{{ abs($pickupPendingChangePercent) }}%<span
+                                                    class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
@@ -803,10 +853,18 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1 text-dark">Out of Delivery</p>
-                                            <h2 class="mb-1 fs-16">3</h2>
+                                            <h2 class="mb-1 fs-16">{{ $outForDelivery }}</h2>
+                                            @if($outForDeliveryChangePercent > 0)
                                             <p class="text-success mb-0 fs-13"> <i
-                                                    class="ti ti-arrow-bar-up me-1"></i>6%<span
+                                                    class="ti ti-arrow-bar-up me-1"></i>{{ $outForDeliveryChangePercent }}%<span
                                                     class="text-body ms-1">from last month</span></p>
+                                            @elseif($outForDeliveryChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i
+                                                    class="ti ti-arrow-bar-down me-1"></i>{{ abs($outForDeliveryChangePercent) }}%<span
+                                                    class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
@@ -830,10 +888,18 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1 text-dark">Delivered</p>
-                                            <h2 class="mb-1 fs-16">15</h2>
+                                            <h2 class="mb-1 fs-16">{{ $delivered }}</h2>
+                                            @if($deliveredChangePercent > 0)
                                             <p class="text-success mb-0 fs-13"> <i
-                                                    class="ti ti-arrow-bar-up me-1"></i>16%<span
+                                                    class="ti ti-arrow-bar-up me-1"></i>{{ $deliveredChangePercent }}%<span
                                                     class="text-body ms-1">from last month</span></p>
+                                            @elseif($deliveredChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i
+                                                    class="ti ti-arrow-bar-down me-1"></i>{{ abs($deliveredChangePercent) }}%<span
+                                                    class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
@@ -852,7 +918,38 @@
                 </div>
                 <!-- end row -->
 
+                <!-- Shipment Analytics Section -->
+                <h6 class="mb-2 mt-4">Shipment Analytics</h6>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button class="chart-filter-btn active" data-filter="this_month" onclick="loadChartData('this_month', this)">This Month</button>
+                    <button class="chart-filter-btn" data-filter="today" onclick="loadChartData('today', this)">Today</button>
+                    <button class="chart-filter-btn" data-filter="yesterday" onclick="loadChartData('yesterday', this)">Yesterday</button>
+                    <button class="chart-filter-btn" data-filter="last_month" onclick="loadChartData('last_month', this)">Last Month</button>
+                    <button class="chart-filter-btn" data-filter="last_year" onclick="loadChartData('last_year', this)">Last Year</button>
+                </div>
 
+                <div class="row row-gap-3 mb-4">
+                    <!-- Status Breakdown Doughnut Chart -->
+                    <div class="col-xl-5 col-sm-12 d-flex">
+                        <div class="chart-card flex-fill">
+                            <h6>Status Breakdown</h6>
+                            <div style="position: relative; max-height: 320px;">
+                                <canvas id="statusChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Date-wise Shipment Trend Bar Chart -->
+                    <div class="col-xl-7 col-sm-12 d-flex">
+                        <div class="chart-card flex-fill">
+                            <h6>Shipment Trends</h6>
+                            <div style="position: relative; max-height: 320px;">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Shipment Analytics Section -->
 
                 <!-- start row -->
                 <h6 class="mb-2">Upgrade Your Service</h6>
@@ -898,9 +995,9 @@
                         <div>
                             <div class="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-3">
                                 <h5 class="d-flex align-items-center mb-0">Recent Orders<span
-                                        class="badge bg-soft-dark ms-2 text-dark fs-12">20 Orders</span></h5>
-                                <a href="add-invoices.html" class="btn btn-md btn-primary d-flex align-items-center"><i
-                                        class="ti ti-circle-plus me-2"></i>Export PDF</a>
+                                        class="badge bg-soft-dark ms-2 text-dark fs-12">{{ $recentShipments->count() }} Orders</span></h5>
+                                <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-md btn-primary d-flex align-items-center"><i
+                                        class="ti ti-eye me-2"></i>View All</a>
                             </div>
                             <div class="card-body p-0">
 
@@ -925,6 +1022,30 @@
                                             </tr>
                                         </thead>
                                         <tbody>
+                                            @foreach($recentShipments as $shipment)
+                                            @php
+                                                $consignee = $shipment->consigneeInfo;
+                                                $packages = $shipment->packageDimensions;
+                                                $pcs = $packages ? $packages->count() : 0;
+                                                $chgWeight = $packages ? $packages->max('chargeable_weight') : 0;
+                                                $statusBadgeClass = [
+                                                    'draft' => 'badge-soft-warning',
+                                                    'ready' => 'badge-soft-info',
+                                                    'assigned_for_pickup' => 'badge-soft-primary',
+                                                    'packed' => 'badge-soft-warning',
+                                                    'manifested' => 'badge-soft-purple',
+                                                    'dispatched' => 'badge-soft-info',
+                                                    'ready_to_dispatch' => 'badge-soft-warning',
+                                                    'delivered' => 'badge-soft-success',
+                                                    'cancelled' => 'badge-soft-danger',
+                                                    'disputed' => 'badge-soft-danger',
+                                                    'on_hold' => 'badge-soft-secondary',
+                                                    'received' => 'badge-soft-success',
+                                                ];
+                                                $badgeClass = $statusBadgeClass[$shipment->status] ?? 'badge-soft-secondary';
+                                                $statusTitleMap = \App\Models\Tracking::getStatusTitleMap();
+                                                $statusLabel = $statusTitleMap[$shipment->status] ?? ucfirst($shipment->status);
+                                            @endphp
                                             <tr>
                                                 <td>
                                                     <div class="form-check form-check-md"><input
@@ -932,245 +1053,34 @@
                                                 </td>
 
                                                 <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
+                                                    <a href="{{ route('customer.view-all-shipments') }}">{{ $shipment->awb_number ?? 'N/A' }}</a>
                                                 </td>
 
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
+                                                <td>{{ $shipment->created_at ? $shipment->created_at->format('d M Y') : '-' }}</td>
+                                                <td>{{ $consignee ? ($consignee->delivery_destination ?? $consignee->city ?? '-') : '-' }}</td>
+                                                <td>{{ $shipment->shipping_method ?? '-' }}</td>
+                                                <td>{{ $shipment->shipping_method ?? '-' }}</td>
+                                                <td>{{ $shipment->awb_number ?? '-' }}</td>
+                                                <td>{{ $pcs }}</td>
+                                                <td>{{ number_format($chgWeight, 3) }}</td>
                                                 <td>
                                                     <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
+                                                        <a href="{{ route('customer.view-all-shipments') }}"
                                                             class="btn btn-icon btn-sm btn-outline-white border-0"><i
                                                                 class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-success">
-                                                            Paid
+                                                        <span class="badge {{ $badgeClass }}">
+                                                            {{ $statusLabel }}
                                                         </span>
                                                     </div>
                                                 </td>
                                             </tr>
+                                            @endforeach
+
+                                            @if($recentShipments->count() === 0)
                                             <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-warning">
-                                                            Draft
-                                                        </span>
-                                                    </div>
-                                                </td>
+                                                <td colspan="10" class="text-center text-muted py-4">No shipments found. Create your first shipment to see data here.</td>
                                             </tr>
-                                            <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-success">
-                                                            Paid
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-danger">
-                                                            Overdue
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-primary">
-                                                            Pending
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-success">
-                                                            Paid
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <div class="form-check form-check-md"><input
-                                                            class="form-check-input" type="checkbox"></div>
-                                                </td>
-
-                                                <td>
-                                                    <a href="invoice-details.html">INV-1454</a>
-                                                </td>
-
-                                                <td>14 Jan 2024 </td>
-                                                <td>USA</td>
-                                                <td>PM</td>
-                                                <td>PM Self</td>
-                                                <td>238472348923</td>
-                                                <td>1</td>
-                                                <td>0.050</td>
-                                                <td>
-                                                    <div class="d-inline-flex align-items-center">
-                                                        <a href="invoice-details.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-eye"></i></a>
-                                                        <a href="edit-invoices.html"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                class="ti ti-edit"></i></a>
-                                                        <a href="#delete_modal"
-                                                            class="btn btn-icon btn-sm btn-outline-white border-0"
-                                                            data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                                class="ti ti-trash"></i></a>
-                                                        <span class="badge badge-soft-success">
-                                                            Paid
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-
+                                            @endif
                                         </tbody>
                                     </table>
                                 </div>
@@ -1195,7 +1105,7 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1 text-dark">Wallet Balance</p>
-                                            <h2 class="mb-1 fs-16">₹ 1,00,00</h2>
+                                            <h2 class="mb-1 fs-16">₹ {{ number_format($walletBalance, 2) }}</h2>
                                             <br>
                                             <a href="#"
                                                 style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Recharge
@@ -1251,7 +1161,7 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1">Value of product shipped</p>
-                                            <h2 class="mb-1 fs-16">₹ 0.00</h2>
+                                            <h2 class="mb-1 fs-16">₹ {{ number_format($totalShippedValue, 2) }}</h2>
                                             <br>
                                             <a href="#"
                                                 style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Download
@@ -1279,7 +1189,7 @@
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
                                             <p class="fs-14 mb-1">Shipped Cost</p>
-                                            <h2 class="mb-1 fs-16">₹ 0.00</h2>
+                                            <h2 class="mb-1 fs-16">₹ {{ number_format($totalShippedCost, 2) }}</h2>
                                             <br>
                                             <a href="#"
                                                 style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Download
@@ -1362,6 +1272,195 @@
 
     <!-- Main JS -->
     <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
+
+    <!-- Dashboard Charts Script -->
+    <script>
+        let statusChart = null;
+        let trendChart = null;
+
+        // Color palette for status chart
+        const statusColors = {
+            draft: '#6c757d',
+            ready: '#0d6efd',
+            assigned_for_pickup: '#198754',
+            packed: '#fd7e14',
+            manifested: '#6610f2',
+            dispatched: '#20c997',
+            ready_to_dispatch: '#ffc107',
+            delivered: '#0dcaf0',
+            cancelled: '#dc3545',
+            disputed: '#e83e8c',
+            on_hold: '#495057',
+            received: '#17a2b8'
+        };
+
+        function loadChartData(filter, btnElement) {
+            // Update active button
+            document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+
+            fetch('{{ route("customer.dashboard-chart-data") }}?filter=' + filter, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    renderStatusChart(data.statusCounts, data.statusMap);
+                    renderTrendChart(data.dateWiseCounts, data.filter);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching chart data:', error);
+            });
+        }
+
+        function renderStatusChart(statusCounts, statusMap) {
+            const labels = [];
+            const values = [];
+            const colors = [];
+
+            for (const [status, count] of Object.entries(statusCounts)) {
+                labels.push(statusMap[status] || status);
+                values.push(count);
+                colors.push(statusColors[status] || '#adb5bd');
+            }
+
+            if (statusChart) {
+                statusChart.destroy();
+            }
+
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 16,
+                                usePointStyle: true,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderTrendChart(dateWiseCounts, filter) {
+            const labels = Object.keys(dateWiseCounts);
+            const values = Object.values(dateWiseCounts);
+
+            // Format labels for display
+            const displayLabels = labels.map(label => {
+                if (filter === 'last_year') {
+                    // Format "2025-01" as "Jan 2025"
+                    const [year, month] = label.split('-');
+                    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    return monthNames[parseInt(month) - 1] + ' ' + year;
+                } else {
+                    // Format "2025-06-15" as "15 Jun"
+                    const parts = label.split('-');
+                    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    return parseInt(parts[2]) + ' ' + monthNames[parseInt(parts[1]) - 1];
+                }
+            });
+
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            trendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: displayLabels,
+                    datasets: [{
+                        label: 'Shipments Created',
+                        data: values,
+                        backgroundColor: 'rgba(91, 94, 255, 0.7)',
+                        borderColor: '#5b5eff',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 40
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Shipments: ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: { size: 11 }
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 11 },
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load default chart data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
+        });
+    </script>
 
     <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"
         data-cf-settings="5d3b6c488f778ded9171c76c-|49" defer></script>

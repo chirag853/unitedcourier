@@ -90,6 +90,28 @@
             font-size: 12px;
             font-weight: 500;
         }
+        .status-ready-to-dispatch {
+            background-color: #fef3c7;
+            color: #92400e;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .btn-ready-to-dispatch {
+            background-color: #f59e0b;
+            color: #fff;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .btn-ready-to-dispatch:hover {
+            background-color: #d97706;
+        }
         .customer-name-link {
             color: #0d6efd;
             cursor: pointer;
@@ -271,6 +293,12 @@
                                 <span class="badge" style="background:#06b6d4;color:#fff;">{{ count($printLabelShipments) }}</span>
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="readytodispatch-tab" data-bs-toggle="tab" data-bs-target="#readytodispatchPane" type="button" role="tab" aria-controls="readytodispatchPane" aria-selected="false">
+                                <i class="ti ti-truck me-1"></i> Ready to Dispatch
+                                <span class="badge" style="background:#f59e0b;color:#fff;">{{ count($readyToDispatchShipments) }}</span>
+                            </button>
+                        </li>
                     </ul>
                     <div class="tab-content" id="shipmentTabContent">
 
@@ -297,7 +325,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @forelse($manifestedShipments as $index => $shipment)
+                                            @foreach($manifestedShipments as $index => $shipment)
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
@@ -340,14 +368,7 @@
                                                     </a>
                                                 </td>
                                             </tr>
-                                            @empty
-                                            <tr>
-                                                <td colspan="13" class="text-center text-muted py-4">
-                                                    <i class="ti ti-package-off fs-24 d-block mb-2"></i>
-                                                    No manifested shipments found.
-                                                </td>
-                                            </tr>
-                                            @endforelse
+                                            @endforeach
                                         </tbody>
                                     </table>
                                 </div>
@@ -378,7 +399,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @forelse($assignedForPickupShipments as $index => $shipment)
+                                            @foreach($assignedForPickupShipments as $index => $shipment)
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
@@ -432,14 +453,7 @@
                                                     </button>
                                                 </td>
                                             </tr>
-                                            @empty
-                                            <tr>
-                                                <td colspan="14" class="text-center text-muted py-4">
-                                                    <i class="ti ti-truck-off fs-24 d-block mb-2"></i>
-                                                    No assigned for pickup shipments found.
-                                                </td>
-                                            </tr>
-                                            @endforelse
+                                            @endforeach
                                         </tbody>
                                     </table>
                                 </div>
@@ -469,7 +483,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @forelse($printLabelShipments as $index => $shipment)
+                                            @foreach($printLabelShipments as $index => $shipment)
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
@@ -512,18 +526,83 @@
                                                     <button class="btn-print-label" onclick="printLabel({{ $shipment->id }})">
                                                         <i class="ti ti-printer me-1"></i> Print
                                                     </button>
+                                                    <button class="btn-ready-to-dispatch ms-1" onclick="markReadyToDispatch({{ $shipment->id }})">
+                                                        <i class="ti ti-truck me-1"></i> Ready to Dispatch
+                                                    </button>
                                                 </td>
                                             </tr>
-                                            @empty
-                                            <tr>
-                                                <td colspan="13" class="text-center text-muted py-4">
-                                                    <i class="ti ti-printer-off fs-24 d-block mb-2"></i>
-                                                    No dispatched shipments available for label printing.
-                                                </td>
-                                            </tr>
-                                            @endforelse
+                                            @endforeach
                                         </tbody>
                                     </table>
+                                    <!-- ===== TAB 4: Ready to Dispatch ===== -->
+                                    <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
+                                        <div class="card-body">
+                                            <div class="table-responsive">
+                                                <table id="readytodispatchTable" class="table table-bordered table-hover">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>#</th>
+                                                            <th>AWB Number</th>
+                                                            <th>Customer Name</th>
+                                                            <th>Shipper Company</th>
+                                                            <th>Consignee</th>
+                                                            <th>Destination</th>
+                                                            <th>Invoice No.</th>
+                                                            <th>Amount</th>
+                                                            <th>Currency</th>
+                                                            <th>Pickup Type</th>
+                                                            <th>Status</th>
+                                                            <th>Created</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach($readyToDispatchShipments as $index => $shipment)
+                                                        <tr>
+                                                            <td>{{ $index + 1 }}</td>
+                                                            <td>
+                                                                <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
+                                                            </td>
+                                                            <td>
+                                                                <span class="customer-name-link" title="Click to view details">
+                                                                    {{ $shipment->first_name }} {{ $shipment->last_name }}
+                                                                </span>
+                                                            </td>
+                                                            <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
+                                                            <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
+                                                            <td>
+                                                                {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
+                                                                @if($shipment->consignee_state || $shipment->shipper_state)
+                                                                    , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
+                                                                @endif
+                                                            </td>
+                                                            <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
+                                                            <td>
+                                                                @if($shipment->invoice_amount)
+                                                                    {{ number_format($shipment->invoice_amount, 2) }}
+                                                                @else
+                                                                    N/A
+                                                                @endif
+                                                            </td>
+                                                            <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
+                                                            <td>
+                                                                @if($shipment->delivery_type)
+                                                                    <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
+                                                                @else
+                                                                    <span class="text-muted">N/A</span>
+                                                                @endif
+                                                            </td>
+                                                            <td>
+                                                                <span class="status-ready-to-dispatch">Ready to Dispatch</span>
+                                                            </td>
+                                                            <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                                        </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+            
                                 </div>
                             </div>
                         </div>
@@ -780,12 +859,27 @@
                 }
             });
 
+            $('#readytodispatchTable').DataTable({
+                order: [[0, 'asc']],
+                pageLength: 25,
+                language: {
+                    emptyTable: "No shipments ready to dispatch",
+                    info: "Showing _START_ to _END_ of _TOTAL_ shipments",
+                    infoEmpty: "Showing 0 to 0 of 0 shipments",
+                    infoFiltered: "(filtered from _MAX_ total shipments)",
+                    lengthMenu: "Show _MENU_ shipments",
+                    search: "Search:",
+                    zeroRecords: "No matching shipments found"
+                }
+            });
+
             // Reinitialize DataTable when switching tabs (to fix layout issues)
             $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
                 const targetId = $(e.target).attr('data-bs-target');
-                const tableId = targetId === '#manifestedPane' ? 'manifestedTable' 
-                              : targetId === '#assignedPane' ? 'assignedTable' 
-                              : 'printlabelTable';
+                const tableId = targetId === '#manifestedPane' ? 'manifestedTable'
+                              : targetId === '#assignedPane' ? 'assignedTable'
+                              : targetId === '#printlabelPane' ? 'printlabelTable'
+                              : 'readytodispatchTable';
                 const dt = $(`#${tableId}`).DataTable();
                 dt.columns.adjust().draw();
             });
@@ -862,6 +956,26 @@
                                     if (delhivery.message) {
                                         failMsg += '<br><small class="text-muted">Delhivery Error: ' + delhivery.message + '</small>';
                                     }
+                                    // Show per-package error details if available
+                                    const delhiveryData = delhivery.data || {};
+                                    if (delhiveryData.packages && delhiveryData.packages.length > 0) {
+                                        const pkg = delhiveryData.packages[0];
+                                        if (pkg.status === 'Fail') {
+                                            failMsg += '<br><small class="text-danger">Package Status: Failed</small>';
+                                        }
+                                        if (pkg.remarks && pkg.remarks.length > 0) {
+                                            const remarks = pkg.remarks.filter(r => r && r.trim() !== '');
+                                            if (remarks.length > 0) {
+                                                failMsg += '<br><small class="text-danger">Reason: ' + remarks.join(', ') + '</small>';
+                                            }
+                                        }
+                                    }
+                                    if (delhiveryData.rmk) {
+                                        const rmkText = Array.isArray(delhiveryData.rmk) ? delhiveryData.rmk.join(', ') : delhiveryData.rmk;
+                                        if (rmkText) {
+                                            failMsg += '<br><small class="text-muted">Delhivery Remark: ' + rmkText + '</small>';
+                                        }
+                                    }
                                     showAssignDeliveryAlert(failMsg, 'warning');
                                 }
                             } else {
@@ -871,7 +985,7 @@
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
                             // Reload page after a short delay to reflect changes (shipment moves to Assigned tab)
                             setTimeout(function() {
-                                location.reload();
+                                // location.reload();
                             }, 2500);
                         } else {
                             showAssignDeliveryAlert(response.message || 'Something went wrong.', 'danger');
@@ -1139,6 +1253,54 @@
                     alert('Please allow popups to print the label.');
                 }
             }
+        }
+
+        /**
+         * Mark a shipment as Ready to Dispatch.
+         * Creates a tracking record with status 'ready_to_dispatch' and moves
+         * the shipment from Print Label tab to Ready to Dispatch tab.
+         * @param {number} shipmentId - The shipment_invoice ID
+         */
+        function markReadyToDispatch(shipmentId) {
+            if (!confirm('Are you sure you want to mark this shipment as Ready to Dispatch?')) {
+                return;
+            }
+
+            const $btn = $(event.currentTarget);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+            $.ajax({
+                url: '{{ route("admin.ready-to-dispatch") }}',
+                type: 'POST',
+                data: { shipment_id: shipmentId },
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.message);
+                        // Reload page to reflect changes (shipment moves to Ready to Dispatch tab)
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        alert(response.message || 'Something went wrong.');
+                        $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i> Ready to Dispatch');
+                    }
+                },
+                error: function(xhr) {
+                    let msg = 'An error occurred. Please try again.';
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        } else if (xhr.responseJSON.errors) {
+                            msg = Object.values(xhr.responseJSON.errors).flat().join('\n');
+                        }
+                    }
+                    alert(msg);
+                    $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i> Ready to Dispatch');
+                }
+            });
         }
     </script>
 

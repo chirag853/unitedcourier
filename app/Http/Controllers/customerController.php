@@ -257,7 +257,160 @@ class customerController extends Controller
         }
 
         $customer = auth()->guard('customer')->user();
-        return view('customer.dashboard', compact('customer'));
+        $customerId = $customer->id;
+
+        // Get shipment counts by status for this customer
+        $statusCounts = ShipperInfo::where('customer_id', $customerId)
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        // Calculate totals for stat cards
+        $totalBooked = array_sum($statusCounts);
+        $pickupPending = $statusCounts['assigned_for_pickup'] ?? 0;
+        $outForDelivery = ($statusCounts['dispatched'] ?? 0) + ($statusCounts['ready_to_dispatch'] ?? 0);
+        $delivered = $statusCounts['delivered'] ?? 0;
+
+        // Month-over-month percentage changes for stat cards
+        $now = now();
+        $thisMonthStart = $now->copy()->startOfMonth();
+        $lastMonthStart = $now->copy()->subMonthNoOverflow()->startOfMonth();
+        $lastMonthEnd = $now->copy()->subMonthNoOverflow()->endOfMonth();
+
+        // This month's status counts
+        $thisMonthStatusCounts = ShipperInfo::where('customer_id', $customerId)
+            ->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+        $thisMonthBooked = array_sum($thisMonthStatusCounts);
+        $thisMonthPickupPending = $thisMonthStatusCounts['assigned_for_pickup'] ?? 0;
+        $thisMonthOutForDelivery = ($thisMonthStatusCounts['dispatched'] ?? 0) + ($thisMonthStatusCounts['ready_to_dispatch'] ?? 0);
+        $thisMonthDelivered = $thisMonthStatusCounts['delivered'] ?? 0;
+
+        // Last month's status counts
+        $lastMonthStatusCounts = ShipperInfo::where('customer_id', $customerId)
+            ->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+        $lastMonthBooked = array_sum($lastMonthStatusCounts);
+        $lastMonthPickupPending = $lastMonthStatusCounts['assigned_for_pickup'] ?? 0;
+        $lastMonthOutForDelivery = ($lastMonthStatusCounts['dispatched'] ?? 0) + ($lastMonthStatusCounts['ready_to_dispatch'] ?? 0);
+        $lastMonthDelivered = $lastMonthStatusCounts['delivered'] ?? 0;
+
+        // Calculate percentage changes (avoid division by zero)
+        $bookedChangePercent = $lastMonthBooked > 0 ? round(($thisMonthBooked - $lastMonthBooked) / $lastMonthBooked * 100, 1) : ($thisMonthBooked > 0 ? 100 : 0);
+        $pickupPendingChangePercent = $lastMonthPickupPending > 0 ? round(($thisMonthPickupPending - $lastMonthPickupPending) / $lastMonthPickupPending * 100, 1) : ($thisMonthPickupPending > 0 ? 100 : 0);
+        $outForDeliveryChangePercent = $lastMonthOutForDelivery > 0 ? round(($thisMonthOutForDelivery - $lastMonthOutForDelivery) / $lastMonthOutForDelivery * 100, 1) : ($thisMonthOutForDelivery > 0 ? 100 : 0);
+        $deliveredChangePercent = $lastMonthDelivered > 0 ? round(($thisMonthDelivered - $lastMonthDelivered) / $lastMonthDelivered * 100, 1) : ($thisMonthDelivered > 0 ? 100 : 0);
+
+        // Recent shipments for the orders table (latest 20)
+        $recentShipments = ShipperInfo::where('customer_id', $customerId)
+            ->with(['consigneeInfo', 'packageDimensions'])
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get();
+
+        // Wallet balance
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        $walletBalance = $wallet ? $wallet->balance : 0;
+
+        // Financials: total value of products shipped and total shipped cost
+        $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+        $totalShippedValue = ShipmentInvoice::whereIn('shipper_id', $shipperIds)->sum('invoice_amount');
+        $totalShippedCost = ShipmentInvoiceItem::whereIn('invoice_id', function($q) use ($shipperIds) {
+            $q->select('id')->from('shipment_invoice')->whereIn('shipper_id', $shipperIds);
+        })->sum('amount');
+
+        return view('customer.dashboard', compact(
+            'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
+            'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
+            'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent'
+        ));
+    }
+
+    /**
+     * Return chart data for the customer dashboard via AJAX.
+     * Supports date filters: today, yesterday, this_month, last_month, last_year
+     */
+    public function dashboardChartData(Request $request)
+    {
+        if (!auth()->guard('customer')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized']);
+        }
+
+        $customer = auth()->guard('customer')->user();
+        $customerId = $customer->id;
+        $filter = $request->input('filter', 'this_month');
+
+        // Determine date range based on filter
+        $now = now();
+        switch ($filter) {
+            case 'today':
+                $startDate = $now->copy()->startOfDay();
+                $endDate = $now->copy()->endOfDay();
+                break;
+            case 'yesterday':
+                $startDate = $now->copy()->subDay()->startOfDay();
+                $endDate = $now->copy()->subDay()->endOfDay();
+                break;
+            case 'this_month':
+                $startDate = $now->copy()->startOfMonth();
+                $endDate = $now->copy()->endOfMonth();
+                break;
+            case 'last_month':
+                $startDate = $now->copy()->subMonthNoOverflow()->startOfMonth();
+                $endDate = $now->copy()->subMonthNoOverflow()->endOfMonth();
+                break;
+            case 'last_year':
+                $startDate = $now->copy()->subYearNoOverflow()->startOfYear();
+                $endDate = $now->copy()->endOfYear();
+                break;
+            default:
+                $startDate = $now->copy()->startOfMonth();
+                $endDate = $now->copy()->endOfMonth();
+        }
+
+        // Status breakdown for the filtered period
+        $statusCounts = ShipperInfo::where('customer_id', $customerId)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        // Date-wise shipment counts (group by month for last_year, by day otherwise)
+        if ($filter === 'last_year') {
+            $dateWiseCounts = ShipperInfo::where('customer_id', $customerId)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m') as date"), DB::raw('count(*) as count'))
+                ->groupByRaw("DATE_FORMAT(created_at, '%Y-%m')")
+                ->orderByRaw("DATE_FORMAT(created_at, '%Y-%m')")
+                ->pluck('count', 'date')
+                ->toArray();
+        } else {
+            $dateWiseCounts = ShipperInfo::where('customer_id', $customerId)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
+                ->groupByRaw('DATE(created_at)')
+                ->orderByRaw('DATE(created_at)')
+                ->pluck('count', 'date')
+                ->toArray();
+        }
+
+        $statusMap = Tracking::getStatusTitleMap();
+
+        return response()->json([
+            'success' => true,
+            'statusCounts' => $statusCounts,
+            'statusMap' => $statusMap,
+            'dateWiseCounts' => $dateWiseCounts,
+            'filter' => $filter,
+        ]);
     }
 
     public function logout(Request $request)

@@ -78,6 +78,7 @@ Route::prefix('admin')->group(function () {
     Route::post('/assign-delivery', [AdminController::class, 'assignDelivery'])->name('admin.assign-delivery');
     Route::post('/receive-shipment', [AdminController::class, 'receiveShipment'])->name('admin.receive-shipment');
     Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
+    Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');
@@ -552,6 +553,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     // Route::get('/register', [customerController::class, 'register'])->name('register');
     Route::post('/register', [customerController::class, 'store'])->name('register.store');
     Route::get('/dashboard', [customerController::class, 'dashboard'])->name('dashboard');
+    Route::get('/dashboard-chart-data', [customerController::class, 'dashboardChartData'])->name('dashboard-chart-data');
     Route::post('/logout', [customerController::class, 'logout'])->name('logout');
     Route::get('/companies', [customerController::class, 'companies'])->name('companies');
     Route::get('/create-shipment', [customerController::class, 'createShipment'])->name('create-shipment');

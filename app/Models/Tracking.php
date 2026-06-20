@@ -62,6 +62,7 @@ class Tracking extends Model
             'disputed'           => 'Shipment Disputed',
             'on_hold'            => 'Shipment On Hold',
             'received'           => 'Shipment Received',
+            'ready_to_dispatch'  => 'Ready to Dispatch',
         ];
     }
 

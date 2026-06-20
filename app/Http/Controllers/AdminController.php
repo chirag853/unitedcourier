@@ -105,6 +105,7 @@ class AdminController extends Controller
         $manifestedShipments = $baseQuery('manifested');
         $assignedForPickupShipments = $baseQuery('assigned_for_pickup');
         $printLabelShipments = $baseQuery('dispatched');
+        $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
 
         // Fetch delivery persons where type = 'Delivery_person'
         $deliveryPersons = Admin::where('type', 'Delivery_person')
@@ -112,7 +113,7 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('manifestedShipments', 'assignedForPickupShipments', 'printLabelShipments', 'deliveryPersons'));
+        return view('admin.companies', compact('manifestedShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons'));
     }
 
     /**
@@ -266,6 +267,62 @@ class AdminController extends Controller
                     'message' => 'Shipment marked as on hold (not received).'
                 ]);
             }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Mark a shipment as Ready to Dispatch.
+     * Creates a tracking record with status 'ready_to_dispatch' and updates
+     * the shipper status so the shipment moves to the Ready to Dispatch tab.
+     */
+    public function readyToDispatch(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+            ]);
+
+            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
+            if (!$shipmentInvoice || !$shipmentInvoice->shipper_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or no shipper associated.'
+                ]);
+            }
+
+            $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+            if (!$shipper || !$shipper->awb_number) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipper info not found or AWB number missing.'
+                ]);
+            }
+
+            $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+
+            // Create tracking record for ready to dispatch
+            \App\Models\Tracking::create([
+                'awb_number'  => $shipper->awb_number,
+                'status'      => 'ready_to_dispatch',
+                'title'       => 'Ready to Dispatch',
+                'shipper_id'  => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id'      => $shipper->awb_number,
+            ]);
+
+            // Update shipper status so it moves to "Ready to Dispatch" tab
+            $shipper->status = 'ready_to_dispatch';
+            $shipper->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipment marked as Ready to Dispatch successfully. It has been moved to the Ready to Dispatch tab.'
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -546,8 +603,6 @@ class AdminController extends Controller
                 ]
             ];
 
-            print_r($shipmentsData); // Debug: Check the shipments data being sent to Delhivery
-
             // Build pickup_location object - name must remain unchanged as specified
             $pickupLocation = [
                 'name' => 'ac549e-UNITEDWORLDWIDECOURI-do',
@@ -572,11 +627,43 @@ class AdminController extends Controller
 
             if ($response->successful()) {
                 $apiResponse = $response->json();
-                return [
-                    'success' => true,
-                    'message' => 'Delhivery pickup created successfully.',
-                    'data' => $apiResponse,
-                ];
+
+                // Check the inner data.success field — Delhivery can return HTTP 200
+                // but with data.success = false (e.g. "Duplicate order id")
+                $innerSuccess = true;
+                if (isset($apiResponse['success']) && $apiResponse['success'] === false) {
+                    $innerSuccess = false;
+                }
+
+                if ($innerSuccess) {
+                    return [
+                        'success' => true,
+                        'message' => 'Delhivery pickup created successfully.',
+                        'data' => $apiResponse,
+                    ];
+                } else {
+                    // Extract error details from the Delhivery response
+                    $errorMessage = 'Delhivery pickup creation failed.';
+                    if (isset($apiResponse['rmk']) && !empty($apiResponse['rmk'])) {
+                        $errorMessage = is_array($apiResponse['rmk']) ? implode(', ', $apiResponse['rmk']) : $apiResponse['rmk'];
+                    }
+                    // Also check packages for per-package error remarks
+                    if (isset($apiResponse['packages']) && is_array($apiResponse['packages'])) {
+                        foreach ($apiResponse['packages'] as $pkg) {
+                            if (isset($pkg['remarks']) && is_array($pkg['remarks']) && !empty($pkg['remarks'])) {
+                                $errorMessage .= ' - ' . implode(', ', $pkg['remarks']);
+                            }
+                            if (isset($pkg['status']) && $pkg['status'] === 'Fail') {
+                                $errorMessage .= ' (Status: Fail)';
+                            }
+                        }
+                    }
+                    return [
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'data' => $apiResponse,
+                    ];
+                }
             } else {
                 $apiResponse = $response->json();
                 $errorMessage = 'Delhivery API returned error.';
