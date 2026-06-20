@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Http;
 use App\Models\Admin;
 use App\Models\NetworkOffice;
 use App\Models\ShipmentInvoice;
+use App\Models\Customer;
+use App\Models\KycDetail;
+use App\Models\ShipperInfo;
+use App\Models\Tracking;
 
 class AdminController extends Controller
 {
@@ -18,8 +22,197 @@ class AdminController extends Controller
         if (!Auth::guard('admin')->check()) {
             return redirect()->route('admin.login')->with('error', 'Please login first');
         }
-        
-        return view('admin.dashboard');
+
+        // Customer Summary
+        $totalRegistrations = Customer::count();
+        $kycPending = KycDetail::where('kyc_status', 'pending')->count();
+        $onboardedCustomers = KycDetail::where('kyc_status', 'approved')->count();
+        $csb5Enabled = Customer::where('csb_status', 2)->count();
+
+        // Shipment Summary (all statuses)
+        $shipmentStatusCounts = ShipperInfo::select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        // Delivery/Network Summary - group by shipping_method
+        $networkCounts = ShipperInfo::select('shipping_method', DB::raw('count(*) as count'))
+            ->whereNotNull('shipping_method')
+            ->where('shipping_method', '!=', '')
+            ->groupBy('shipping_method')
+            ->pluck('count', 'shipping_method')
+            ->toArray();
+
+        // Categorize networks: ShipRocket, Self/Delhivery/UPS/etc
+        $shipRocketCount = 0;
+        $selfCount = 0;
+        $otherNetworkCount = 0;
+        foreach ($networkCounts as $method => $count) {
+            $methodLower = strtolower($method);
+            if (str_contains($methodLower, 'shiprocket') || str_contains($methodLower, 'ship_rocket')) {
+                $shipRocketCount += $count;
+            } elseif (str_contains($methodLower, 'self') || str_contains($methodLower, 'own')) {
+                $selfCount += $count;
+            } else {
+                $otherNetworkCount += $count;
+            }
+        }
+        // Delivered shipments count
+        $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
+
+        // Month-over-month changes for stat cards
+        $now = now();
+        $thisMonthStart = $now->copy()->startOfMonth();
+        $lastMonthStart = $now->copy()->subMonthNoOverflow()->startOfMonth();
+        $lastMonthEnd = $now->copy()->subMonthNoOverflow()->endOfMonth();
+
+        $thisMonthRegistrations = Customer::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthRegistrations = Customer::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $registrationsChangePercent = $lastMonthRegistrations > 0 ? round(($thisMonthRegistrations - $lastMonthRegistrations) / $lastMonthRegistrations * 100, 1) : ($thisMonthRegistrations > 0 ? 100 : 0);
+
+        $thisMonthKycPending = KycDetail::where('kyc_status', 'pending')->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthKycPending = KycDetail::where('kyc_status', 'pending')->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $kycPendingChangePercent = $lastMonthKycPending > 0 ? round(($thisMonthKycPending - $lastMonthKycPending) / $lastMonthKycPending * 100, 1) : ($thisMonthKycPending > 0 ? 100 : 0);
+
+        $thisMonthOnboarded = KycDetail::where('kyc_status', 'approved')->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthOnboarded = KycDetail::where('kyc_status', 'approved')->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $onboardedChangePercent = $lastMonthOnboarded > 0 ? round(($thisMonthOnboarded - $lastMonthOnboarded) / $lastMonthOnboarded * 100, 1) : ($thisMonthOnboarded > 0 ? 100 : 0);
+
+        $thisMonthCsb5 = Customer::where('csb_status', 2)->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthCsb5 = Customer::where('csb_status', 2)->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $csb5ChangePercent = $lastMonthCsb5 > 0 ? round(($thisMonthCsb5 - $lastMonthCsb5) / $lastMonthCsb5 * 100, 1) : ($thisMonthCsb5 > 0 ? 100 : 0);
+
+        // KYC Pending list for the dashboard table
+        $kycPendingList = KycDetail::with('customer')
+            ->where('kyc_status', 'pending')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('admin.dashboard', compact(
+            'totalRegistrations', 'kycPending', 'onboardedCustomers', 'csb5Enabled',
+            'shipmentStatusCounts', 'shipRocketCount', 'selfCount', 'otherNetworkCount', 'deliveredCount',
+            'networkCounts',
+            'registrationsChangePercent', 'kycPendingChangePercent', 'onboardedChangePercent', 'csb5ChangePercent',
+            'kycPendingList'
+        ));
+    }
+
+    /**
+     * Return chart data for the admin dashboard via AJAX.
+     * Supports date filters: today, yesterday, this_month, last_month, last_year
+     */
+    public function dashboardChartData(Request $request)
+    {
+        if (!Auth::guard('admin')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized']);
+        }
+
+        $filter = $request->input('filter', 'this_month');
+        $now = now();
+
+        // Determine date range based on filter
+        switch ($filter) {
+            case 'today':
+                $startDate = $now->copy()->startOfDay();
+                $endDate = $now->copy()->endOfDay();
+                break;
+            case 'yesterday':
+                $startDate = $now->copy()->subDay()->startOfDay();
+                $endDate = $now->copy()->subDay()->endOfDay();
+                break;
+            case 'this_month':
+                $startDate = $now->copy()->startOfMonth();
+                $endDate = $now->copy()->endOfMonth();
+                break;
+            case 'last_month':
+                $startDate = $now->copy()->subMonthNoOverflow()->startOfMonth();
+                $endDate = $now->copy()->subMonthNoOverflow()->endOfMonth();
+                break;
+            case 'last_year':
+                $startDate = $now->copy()->subYearNoOverflow()->startOfYear();
+                $endDate = $now->copy()->endOfYear();
+                break;
+            default:
+                $startDate = $now->copy()->startOfMonth();
+                $endDate = $now->copy()->endOfMonth();
+        }
+
+        // Customer Summary — cumulative (all-time), not date-filtered
+        // These metrics represent total counts regardless of date period
+        $totalRegistrations = Customer::count();
+        $kycPending = KycDetail::where('kyc_status', 'pending')->count();
+        $onboardedCustomers = KycDetail::where('kyc_status', 'approved')->count();
+        $csb5Enabled = Customer::where('csb_status', 2)->count();
+
+        // Shipment Summary for filtered period
+        $shipmentStatusCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        // Network/Delivery Summary for filtered period
+        $networkCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+            ->whereNotNull('shipping_method')
+            ->where('shipping_method', '!=', '')
+            ->select('shipping_method', DB::raw('count(*) as count'))
+            ->groupBy('shipping_method')
+            ->pluck('count', 'shipping_method')
+            ->toArray();
+
+        $shipRocketCount = 0;
+        $selfCount = 0;
+        $otherNetworks = [];
+        foreach ($networkCounts as $method => $count) {
+            $methodLower = strtolower($method);
+            if (str_contains($methodLower, 'shiprocket') || str_contains($methodLower, 'ship_rocket')) {
+                $shipRocketCount += $count;
+            } elseif (str_contains($methodLower, 'self') || str_contains($methodLower, 'own')) {
+                $selfCount += $count;
+            } else {
+                $otherNetworks[$method] = $count;
+            }
+        }
+        $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
+
+        // Date-wise shipment counts for trend chart
+        if ($filter === 'last_year') {
+            $dateWiseCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+                ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m') as period"), DB::raw('count(*) as count'))
+                ->groupBy('period')
+                ->orderBy('period')
+                ->pluck('count', 'period')
+                ->toArray();
+        } else {
+            $dateWiseCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+                ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m-%d') as period"), DB::raw('count(*) as count'))
+                ->groupBy('period')
+                ->orderBy('period')
+                ->pluck('count', 'period')
+                ->toArray();
+        }
+
+        $statusMap = Tracking::getStatusTitleMap();
+
+        return response()->json([
+            'success' => true,
+            'filter' => $filter,
+            'customerSummary' => [
+                'totalRegistrations' => $totalRegistrations,
+                'kycPending' => $kycPending,
+                'onboardedCustomers' => $onboardedCustomers,
+                'csb5Enabled' => $csb5Enabled,
+            ],
+            'shipmentStatusCounts' => $shipmentStatusCounts,
+            'statusMap' => $statusMap,
+            'deliverySummary' => [
+                'delivered' => $deliveredCount,
+                'shipRocket' => $shipRocketCount,
+                'self' => $selfCount,
+                'otherNetworks' => $otherNetworks,
+            ],
+            'dateWiseCounts' => $dateWiseCounts,
+        ]);
     }
 
     public function login()

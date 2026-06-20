@@ -69,6 +69,7 @@ Route::prefix('admin')->group(function () {
         
         // Dashboard Routes
         Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
+        Route::get('/dashboard-chart-data', [AdminController::class, 'dashboardChartData'])->name('admin.dashboard-chart-data');
         Route::get('/leads-dashboard', [AdminController::class, 'leadsDashboard'])->name('admin.leads-dashboard');
         Route::get('/project-dashboard', [AdminController::class, 'projectDashboard'])->name('admin.project-dashboard');
         

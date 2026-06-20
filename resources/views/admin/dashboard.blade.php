@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 
-
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:23 GMT -->
 <head>
 	<!-- Meta Tags -->
     <meta charset="utf-8">
@@ -46,6 +44,33 @@
 
     <!-- Main CSS -->
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+    <style>
+        .chart-filter-btn {
+            padding: 4px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: #fff;
+            color: #495057;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chart-filter-btn:hover {
+            background: #e9ecef;
+        }
+        .chart-filter-btn.active {
+            background: #5b5eff;
+            color: #fff;
+            border-color: #5b5eff;
+        }
+        .chart-card {
+            min-height: 300px;
+        }
+    </style>
 </head>
 
 <body>
@@ -87,42 +112,31 @@
                         <h4 class="mb-1">Dashboard</h4>
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
-                        <div id="reportrange" class="reportrange-picker d-flex align-items-center shadow">
-                            <i class="ti ti-calendar-due text-dark fs-14 me-1"></i><span class="reportrange-picker-field">9 Jun 25 - 9 Jun 25</span>
-                        </div>
-                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh"><i class="ti ti-refresh"></i></a>
-                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Collapse" data-bs-original-title="Collapse" id="collapse-header"><i class="ti ti-transition-top"></i></a>
+                        <a href="{{ route('admin.companies') }}" class="btn btn-primary btn-sm">Companies</a>
+                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload()"><i class="ti ti-refresh"></i></a>
                     </div>
-                </div>                
+                </div>				
 				<!-- End Page Header -->
 
-                <!-- Start Welcome Wrap -->
-				<div class="welcome-wrap mb-4">
-					<div class=" d-flex align-items-center justify-content-between flex-wrap gap-3 bg-dark rounded p-4">
-						<div>
-							<h2 class="mb-1 text-white fs-24">Welcome Back, Adrian</h2>
-							<p class="text-light fs-14 mb-0">14 New Companies Subscribed Today !!!</p>
-						</div>
-						<div class="d-flex align-items-center flex-wrap gap-2">
-							<a href="{{ route('admin.companies') }}" class="btn btn-danger btn-sm">Companies</a>
-							<a href="{{ route('admin.packages') }}" class="btn btn-light btn-sm">All Packages</a>
-						</div>
-					</div>
-				</div>	
-				<!-- Endc Welcome Wrap -->
-
-                <!-- start row -->
+                <!-- start row - Customer Summary Stat Cards -->
+                <h6 class="mb-2">Customer Summary</h6>
                 <div class="row row-gap-3 mb-4">
-					<!-- Total Companies -->
+					<!-- Total Registrations -->
 					<div class="col-xl-3 col-sm-6 d-flex">
 						<div class="card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
                                 <div class="d-flex align-items-start justify-content-between">
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
-                                            <p class="fs-14 mb-1">Total Companies</p>
-                                            <h2 class="mb-1 fs-16">5468</h2>
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>5.62%<span class="text-body ms-1">from last month</span></p>
+                                            <p class="fs-14 mb-1 text-dark">Total Registrations</p>
+                                            <h2 class="mb-1 fs-16">{{ $totalRegistrations }}</h2>
+                                            @if($registrationsChangePercent > 0)
+                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $registrationsChangePercent }}%<span class="text-body ms-1">from last month</span></p>
+                                            @elseif($registrationsChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($registrationsChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
@@ -132,497 +146,357 @@
                                     </div>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 Start-0">
+                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
-					<!-- /Total Companies -->
+					<!-- /Total Registrations -->
 
-                    <!-- Total Companies -->
+                    <!-- KYC Pending -->
 					<div class="col-xl-3 col-sm-6 d-flex">
 						<div class="card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
                                 <div class="d-flex align-items-start justify-content-between">
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
-                                            <p class="fs-14 mb-1">Active Companies</p>
-                                            <h2 class="mb-1 fs-16">4598</h2>
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>12%<span class="text-body ms-1">from last month</span></p>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-success border border-success">
-                                            <i class="ti ti-carousel-vertical fs-16 text-success"></i>
-                                        </span>
-                                    </div>
-                                </div>
-							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 Start-0">
-						</div>
-					</div>
-					<!-- /Total Companies -->
-
-                    <!-- Total Companies -->
-					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card flex-fill mb-0 position-relative overflow-hidden">
-							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1">Total Subscribers</p>
-                                            <h2 class="mb-1 fs-16">5468</h2>
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>6%<span class="text-body ms-1">from last month</span></p>
+                                            <p class="fs-14 mb-1 text-dark">KYC Pending</p>
+                                            <h2 class="mb-1 fs-16">{{ $kycPending }}</h2>
+                                            @if($kycPendingChangePercent > 0)
+                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $kycPendingChangePercent }}%<span class="text-body ms-1">from last month</span></p>
+                                            @elseif($kycPendingChangePercent < 0)
+                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($kycPendingChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
                                         <span class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                            <i class="ti ti-chalkboard-off fs-16 text-warning"></i>
+                                            <i class="ti ti-clock fs-16 text-warning"></i>
                                         </span>
                                     </div>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 Start-0">
+                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
-					<!-- /Total Companies -->
+					<!-- /KYC Pending -->
 
-                    <!-- Total Companies -->
+                    <!-- Onboarded Customers -->
 					<div class="col-xl-3 col-sm-6 d-flex">
 						<div class="card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
                                 <div class="d-flex align-items-start justify-content-between">
                                     <div class="d-flex align-items-start justify-content-between">
                                         <div>
-                                            <p class="fs-14 mb-1">Total Earnings</p>
-                                            <h2 class="mb-1 fs-16">$89,878,58</h2>
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>16%<span class="text-body ms-1">from last month</span></p>
+                                            <p class="fs-14 mb-1 text-dark">Onboarded Customers</p>
+                                            <h2 class="mb-1 fs-16">{{ $onboardedCustomers }}</h2>
+                                            @if($onboardedChangePercent > 0)
+                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $onboardedChangePercent }}%<span class="text-body ms-1">from last month</span></p>
+                                            @elseif($onboardedChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($onboardedChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-danger border border-danger mb-3">
-                                            <i class="ti ti-businessplan fs-16 text-primary"></i>
+                                        <span class="avatar avatar-md rounded-circle bg-soft-success border border-success">
+                                            <i class="ti ti-user-check fs-16 text-success"></i>
                                         </span>
                                     </div>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 Start-0">
+                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
-					<!-- /Total Companies -->
+					<!-- /Onboarded Customers -->
+
+                    <!-- CSB5 Enabled -->
+					<div class="col-xl-3 col-sm-6 d-flex">
+						<div class="card flex-fill mb-0 position-relative overflow-hidden">
+							<div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div>
+                                            <p class="fs-14 mb-1 text-dark">CSB5 Enabled</p>
+                                            <h2 class="mb-1 fs-16">{{ $csb5Enabled }}</h2>
+                                            @if($csb5ChangePercent > 0)
+                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $csb5ChangePercent }}%<span class="text-body ms-1">from last month</span></p>
+                                            @elseif($csb5ChangePercent < 0)
+                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($csb5ChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
+                                            @else
+                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="avatar avatar-md rounded-circle bg-soft-info border border-info">
+                                            <i class="ti ti-file-check fs-16 text-info"></i>
+                                        </span>
+                                    </div>
+                                </div>
+							</div>
+                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
+						</div>
+					</div>
+					<!-- /CSB5 Enabled -->
 
 				</div>
                 <!-- end row -->
 
-                <!-- start row -->
-                <div class="row">
-					<!-- Companies -->
-					<div class="col-xxl-3 col-lg-6 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h6 class="mb-0">Companies</h6>
-								<div class="dropdown">
-								    <a class="dropdown-toggle btn btn-outline-light shadow p-2" data-bs-toggle="dropdown" href="javascript:void(0);">
-									    <i class="ti ti-calendar me-1"></i>This Week
-									</a>
-									<div class="dropdown-menu dropdown-menu-end">
-									    <a href="javascript:void(0);" class="dropdown-item">
-										    This Month
-										</a>
-										<a href="javascript:void(0);" class="dropdown-item">
-										    This Week
-										</a>
-                                        <a href="javascript:void(0);" class="dropdown-item">
-										   Today
-										</a>
-									</div>
-								</div>							
-							</div>
-							<div class="card-body">
-								<div id="company-chart"></div>
-                                <p class="text-success mb-0 fs-13 text-center"> <i class="ti ti-arrow-bar-up me-1"></i>12.5%<span class="text-body ms-1">from last month</span></p>
-							</div>
-						</div>
-					</div>
-					<!-- /Companies -->
-					
-					<!-- Revenue -->
-					<div class="col-lg-6 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h6 class="mb-0">Revenue</h6>
-								<div class="dropdown">
-								    <a class="dropdown-toggle btn btn-outline-light shadow p-2" data-bs-toggle="dropdown" href="javascript:void(0);">
-									    <i class="ti ti-calendar me-1"></i>2025
-									</a>
-									<div class="dropdown-menu dropdown-menu-end">
-									    <a href="javascript:void(0);" class="dropdown-item">
-										    2025
-										</a>
-										<a href="javascript:void(0);" class="dropdown-item">
-										    2024
-										</a>
-                                        <a href="javascript:void(0);" class="dropdown-item">
-										   2023
-										</a>
-									</div>
-								</div>							
-							</div>
-							<div class="card-body pb-0">
-								<div class="d-flex align-items-center justify-content-between flex-wrap mb-3">
-									<div class="mb-1">
-                                        <h5 class="mb-2 fs-16 fw-bold">$89,878,58</h5>
-                                        <p class="mb-0 fs-13"><span class="text-success fw-normal me-1"><i class="ti ti-arrow-bar-up me-1"></i>40%</span>increased from last year</p>
-									</div>
-                                    <p class="fs-14 text-dark d-flex align-items-center mb-1"><i class="ti ti-circle-filled me-1 fs-6 text-teal"></i>Revenue</p>
-								</div>
-								<div id="revenue-income"></div>
-							</div>
-						</div>
-					</div>
-					<!-- /Revenue -->
+                <!-- KYC Pending List -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex align-items-center justify-content-between">
+                                <h6 class="mb-0">KYC Pending Customers</h6>
+                                <a href="{{ url('/admin/kyc-pending') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                            </div>
+                            <div class="card-body">
+                                @if($kycPendingList->count() > 0)
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Customer Name</th>
+                                                <th>Email</th>
+                                                <th>Phone</th>
+                                                <th>Organization</th>
+                                                <th>GST Number</th>
+                                                <th>Submitted At</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($kycPendingList as $key => $kyc)
+                                            <tr>
+                                                <td>{{ $key + 1 }}</td>
+                                                <td><strong>{{ $kyc->customer->first_name ?? '' }} {{ $kyc->customer->last_name ?? '' }}</strong></td>
+                                                <td><a href="mailto:{{ $kyc->customer->email ?? '' }}">{{ $kyc->customer->email ?? '—' }}</a></td>
+                                                <td>{{ $kyc->customer->phone_number ?? '—' }}</td>
+                                                <td>{{ $kyc->organization_name ?? '—' }}</td>
+                                                <td>{{ $kyc->gst_number ?? '—' }}</td>
+                                                <td><span class="badge bg-warning text-dark">{{ $kyc->created_at->format('d M Y, h:i A') }}</span></td>
+                                                <td>
+                                                    <form action="{{ route('admin.kyc-pending.approve', $kyc->id) }}" method="POST" class="d-inline kyc-approve-form">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-sm btn-success" title="Approve KYC">
+                                                            <i class="ti ti-circle-check me-1"></i>Approve
+                                                        </button>
+                                                    </form>
+                                                    <form action="{{ route('admin.kyc-pending.reject', $kyc->id) }}" method="POST" class="d-inline kyc-reject-form">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-sm btn-danger" title="Reject KYC">
+                                                            <i class="ti ti-circle-x me-1"></i>Reject
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @else
+                                <div class="text-center py-3">
+                                    <i class="ti ti-circle-check fs-24 text-success"></i>
+                                    <p class="text-muted mb-0">No pending KYC submissions</p>
+                                </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- /KYC Pending List -->
 
-					<!-- Top Plans -->
-					<div class="col-xxl-3 col-xl-12 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h6 class="mb-0">Top Plans</h6>
-								<div class="dropdown">
-								    <a class="dropdown-toggle btn btn-outline-light shadow p-2" data-bs-toggle="dropdown" href="javascript:void(0);">
-									    <i class="ti ti-calendar me-1"></i>Last 30 Days
-									</a>
-									<div class="dropdown-menu dropdown-menu-end">
-									    <a href="javascript:void(0);" class="dropdown-item">
-										    Last 30 Days
-										</a>
-										<a href="javascript:void(0);" class="dropdown-item">
-										    Last 10  Days
-										</a>
-                                        <a href="javascript:void(0);" class="dropdown-item">
-										   Today
-										</a>
-									</div>
-								</div>							
-							</div>
-							<div class="card-body">
-								<div id="plan-overview"></div>
-								<div class="d-flex align-items-center justify-content-between mb-3">
-									<p class="f-14 fw-medium text-dark mb-0"><i class="ti ti-circle-filled text-info me-1"></i>Basic </p>
-									<p class="f-14 fw-medium text-dark mb-0">60%</p>
-								</div>
-								<div class="d-flex align-items-center justify-content-between mb-3">
-									<p class="f-14 fw-medium text-dark mb-0"><i class="ti ti-circle-filled text-warning me-1"></i>Premium</p>
-									<p class="f-14 fw-medium text-dark mb-0">20%</p>
-								</div>
-								<div class="d-flex align-items-center justify-content-between mb-0">
-									<p class="f-14 fw-medium text-dark mb-0"><i class="ti ti-circle-filled text-primary me-1"></i>Enterprise</p>
-									<p class="f-14 fw-medium text-dark mb-0">20%</p>
-								</div>
-							</div>
-						</div>
-					</div>
-					<!-- /Top Plans -->
-				</div>
+                <!-- Shipment Analytics Section with Date Filters -->
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h6 class="mb-0">Shipment Analytics</h6>
+                    <div class="d-flex gap-2">
+                        <button class="chart-filter-btn" data-filter="today" onclick="loadChartData('today', this)">Today</button>
+                        <button class="chart-filter-btn" data-filter="yesterday" onclick="loadChartData('yesterday', this)">Yesterday</button>
+                        <button class="chart-filter-btn active" data-filter="this_month" onclick="loadChartData('this_month', this)">This Month</button>
+                        <button class="chart-filter-btn" data-filter="last_month" onclick="loadChartData('last_month', this)">Last Month</button>
+                        <button class="chart-filter-btn" data-filter="last_year" onclick="loadChartData('last_year', this)">Last Year</button>
+                    </div>
+                </div>
+
+                <!-- start row - Customer Summary Charts (Pie + Bar) -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- Customer Summary Pie/Doughnut -->
+                    <div class="col-xl-5 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Customer Summary</h6>
+                            </div>
+                            <div class="card-body d-flex align-items-center justify-content-center">
+                                <canvas id="customerSummaryChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Customer Summary Bar Chart -->
+                    <div class="col-xl-7 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Customer Summary — Bar View</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="customerSummaryBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <!-- end row -->
-                
-                <!-- start row -->
-                <div class="row">
-					<!-- Recent Transactions -->
-					<div class="col-xxl-4 col-xl-12 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h5 class="mb-0 fs-16 fw-bold">Recent Transactions</h5>
-								<a href="{{ route('admin.purchase-transaction') }}" class="btn btn-primary btn-xs">View All</a>
-							</div>
-							<div class="card-body pb-2">
-                                <!-- Item-1 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-01.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">NovaWave LLC</a></h6>
-                                            <p class="fs-13 mb-0">14 Sep 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14">+$245</h6>
-                                        <p class="fs-13 mb-0">Basic (Monthly)</p>
-                                    </div>
-                                </div>
 
-                                <!-- Item-2 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-02.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">BlueSky</a></h6>
-                                            <p class="fs-13 mb-0">20 Mar 2025</p>
+                <!-- start row - Shipment & Delivery Stat Tiles -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- Total Shipments -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div>
+                                            <p class="fs-14 mb-1 text-dark">Total Shipments</p>
+                                            <h2 class="mb-1 fs-16" id="statTotalShipments">{{ array_sum($shipmentStatusCounts) }}</h2>
+                                            <p class="text-muted mb-0 fs-13" id="statTotalShipmentsSub">for selected period</p>
                                         </div>
                                     </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14">+$395</h6>
-                                        <p class="fs-13 mb-0">Enterprise (Yearly)</p>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="avatar avatar-md rounded-circle bg-soft-primary border border-primary">
+                                            <i class="ti ti-package fs-16 text-primary"></i>
+                                        </span>
                                     </div>
                                 </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Total Shipments -->
 
-                                <!-- Item-3 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-03.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Silver Hawk</a></h6>
-                                            <p class="fs-13 mb-0">26 Mar 2025</p>
+                    <!-- Delivered -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div>
+                                            <p class="fs-14 mb-1 text-dark">Delivered</p>
+                                            <h2 class="mb-1 fs-16" id="statDelivered">{{ $deliveredCount }}</h2>
+                                            <p class="text-muted mb-0 fs-13" id="statDeliveredSub">for selected period</p>
                                         </div>
                                     </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14">+$145</h6>
-                                        <p class="fs-13 mb-0">Advanced (Monthly)</p>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="avatar avatar-md rounded-circle bg-soft-success border border-success">
+                                            <i class="ti ti-truck-delivery fs-16 text-success"></i>
+                                        </span>
                                     </div>
                                 </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Delivered -->
 
-                                <!-- Item-4 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-04.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Summit  Peak</a></h6>
-                                            <p class="fs-13 mb-0">10 Feb 2025</p>
+                    <!-- ShipRocket -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div>
+                                            <p class="fs-14 mb-1 text-dark">ShipRocket</p>
+                                            <h2 class="mb-1 fs-16" id="statShipRocket">{{ $shipRocketCount }}</h2>
+                                            <p class="text-muted mb-0 fs-13" id="statShipRocketSub">for selected period</p>
                                         </div>
                                     </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14">+$758</h6>
-                                        <p class="fs-13 mb-0">Enterprise (Monthly)</p>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="avatar avatar-md rounded-circle bg-soft-info border border-info">
+                                            <i class="ti ti-rocket fs-16 text-info"></i>
+                                        </span>
                                     </div>
                                 </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /ShipRocket -->
 
-                                <!-- Item-5 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-0">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-05.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">RiverStone Ltd</a></h6>
-                                            <p class="fs-13 mb-0">10 Jan 2025</p>
+                    <!-- Self/Own Network -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div>
+                                            <p class="fs-14 mb-1 text-dark">Self/Own Network</p>
+                                            <h2 class="mb-1 fs-16" id="statSelfNetwork">{{ $selfCount }}</h2>
+                                            <p class="text-muted mb-0 fs-13" id="statSelfNetworkSub">for selected period</p>
                                         </div>
                                     </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14">+$977</h6>
-                                        <p class="fs-13 mb-0">Premium (Yearly)</p>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
+                                            <i class="ti ti-world fs-16 text-warning"></i>
+                                        </span>
                                     </div>
                                 </div>
-							</div>
-						</div>
-					</div>
-					<!-- /Recent Transactions -->
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Self/Own Network -->
 
-					<!-- Recently Registered -->
-					<div class="col-xxl-4 col-xl-12 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h5 class="mb-0 fs-16 fw-bold">Recently Registered</h5>
-								<a href="{{ route('admin.purchase-transaction') }}" class="btn btn-primary btn-xs">View All</a>
-							</div>
-							<div class="card-body pb-2">
-                                <!-- Item-1 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-07.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Bright Bridge Grp</a></h6>
-                                            <p class="fs-13 mb-0">Basic (Monthly)</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <p class="fs-14 mb-0">150 Users</p>
-                                        <h6 class="fw-normal text-truncate mb-0 fs-14"><a href="https://crms.dreamstechnologies.com/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4e2c2c290e2b362f233e222b602d2123">[email&#160;protected]</a></h6>
-                                    </div>
-                                </div>
+                </div>
+                <!-- end row - Shipment & Delivery Stat Tiles -->
 
-                                <!-- Item-2 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-08.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">CoastalStar Co.</a></h6>
-                                            <p class="fs-13 mb-0">2Enterprise (Yearly)</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <p class="fs-14 mb-0">200 Users</p>
-                                        <h6 class="fw-normal text-truncate mb-0 fs-14"><a href="https://crms.dreamstechnologies.com/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="ceadbdad8eabb6afa3bea2abe0ada1a3">[email&#160;protected]</a></h6>
-                                    </div>
-                                </div>
-
-                                <!-- Item-3 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-09.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">HarborView</a></h6>
-                                            <p class="fs-13 mb-0">Advanced (Monthly)</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <p class="fs-14 mb-0">129 Users</p>
-                                        <h6 class="fw-normal text-truncate mb-0 fs-14"><a href="https://crms.dreamstechnologies.com/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="f19987b19489909c819d94df929e9c">[email&#160;protected]</a></h6>
-                                    </div>
-                                </div>
-
-                                <!-- Item-4 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-10.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Golden Gate Ltd</a></h6>
-                                            <p class="fs-13 mb-0">Enterprise (Monthly)</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <p class="fs-14 mb-0">103 Users</p>
-                                        <h6 class="fw-normal text-truncate mb-0 fs-14"><a href="https://crms.dreamstechnologies.com/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="b4d3d3d8f4d1ccd5d9c4d8d19ad7dbd9">[email&#160;protected]</a></h6>
-                                    </div>
-                                </div>
-
-                                <!-- Item-5 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-0">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-11.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Redwood Inc</a></h6>
-                                            <p class="fs-13 mb-0">Premium (Yearly)</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <p class="fs-14 mb-0">109 Users</p>
-                                        <h6 class="fw-normal text-truncate mb-0 fs-14"><a href="https://crms.dreamstechnologies.com/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="592b2e193c21383429353c773a3634">[email&#160;protected]</a></h6>
-                                    </div>
-                                </div>
-							</div>
-						</div>
-					</div>
-					<!-- /Recent Registered -->
-
-					<!-- Recent Plan Expired -->
-					<div class="col-xxl-4 col-xl-12 d-flex">
-						<div class="card flex-fill">
-							<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-								<h5 class="mb-0 fs-16 fw-bold">Recently Plan Expired</h5>
-								<a href="{{ route('admin.purchase-transaction') }}" class="btn btn-primary btn-xs">View All</a>
-							</div>
-							<div class="card-body pb-2">
-                                <!-- Item-1 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-12.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">VK Pvt Ltd </a></h6>
-                                            <p class="fs-13 mb-0">14 Sep 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javascript:void(0);" class="text-decoration-underline text-info">Send Reminder</a></h6>
-                                        <p class="fs-13 mb-0">Basic (Monthly)</p>
-                                    </div>
-                                </div>
-
-                                <!-- Item-2 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-13.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">RiverStone Ltd</a></h6>
-                                            <p class="fs-13 mb-0">20 Mar 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javascript:void(0);" class="text-decoration-underline text-info">Send Reminder</a></h6>
-                                        <p class="fs-13 mb-0">Enterprise (Yearly)</p>
-                                    </div>
-                                </div>
-
-                                <!-- Item-3 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-14.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Summit  Peak</a></h6>
-                                            <p class="fs-13 mb-0">26 Mar 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javascript:void(0);" class="text-decoration-underline text-info">Send Reminder</a></h6>
-                                        <p class="fs-13 mb-0">Advanced (Monthly)</p>
-                                    </div>
-                                </div>
-
-                                <!-- Item-4 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-4">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-15.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">Redwood Inc</a></h6>
-                                            <p class="fs-13 mb-0">10 Feb 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javascript:void(0);" class="text-decoration-underline text-info">Send Reminder</a></h6>
-                                        <p class="fs-13 mb-0">Enterprise (Monthly)</p>
-                                    </div>
-                                </div>
-
-                                <!-- Item-5 -->
-								<div class="d-sm-flex justify-content-between flex-wrap mb-0">
-                                    <div class="d-flex align-items-center">                                         
-                                        <a href="javscript:void(0);" class="avatar avatar-md border rounded-circle flex-shrink-0">
-                                            <img src="{{ asset('assets/img/icons/company-icon-16.svg') }}" class="img-fluid w-auto h-auto" alt="img">
-                                        </a>
-                                        <div class="ms-2 flex-fill">
-                                            <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javscript:void(0);">NovaWave LLC</a></h6>
-                                            <p class="fs-13 mb-0">10 Jan 2025</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm-end mb-0">
-                                        <h6 class="fw-medium text-truncate mb-1 fs-14"><a href="javascript:void(0);" class="text-decoration-underline text-info">Send Reminder</a></h6>
-                                        <p class="fs-13 mb-0">Premium (Yearly)</p>
-                                    </div>
-                                </div>
-							</div>
-						</div>
-					</div>
-					<!-- /Recent Plan Expired -->
-				</div>
+                <!-- start row - Shipment & Delivery Summary Charts (Pie + Bar) -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- Shipment & Delivery Merged Doughnut -->
+                    <div class="col-xl-5 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Shipment & Delivery Summary</h6>
+                            </div>
+                            <div class="card-body d-flex align-items-center justify-content-center">
+                                <canvas id="shipmentDeliverySummaryChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Shipment & Delivery Merged Bar Chart -->
+                    <div class="col-xl-7 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Shipment & Delivery Summary — Bar View</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="shipmentDeliveryBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <!-- end row -->
+
+                <!-- start row - Shipment Trend Bar Chart -->
+                <div class="row mb-4">
+                    <div class="col-xl-12 d-flex">
+                        <div class="card flex-fill">
+                            <div class="card-header">
+                                <h6 class="mb-0">Shipment Creation Trend</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="shipmentTrendChart" style="max-height: 300px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row -->
+
             </div>
             <!-- End Content -->            
 
             <!-- Start Footer -->
             <footer class="footer d-block d-md-flex justify-content-between text-md-start text-center">
-               <p class="mb-md-0 mb-1">Copyright &copy; <script data-cfasync="false" src="../../cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="18629d5768be2989b1211a1d-text/javascript">document.write(new Date().getFullYear())</script> <a href="javascript:void(0);" class="link-primary text-decoration-underline">CRMS</a></p>
+               <p class="mb-md-0 mb-1">Copyright &copy; <script type="text/javascript">document.write(new Date().getFullYear())</script> <a href="javascript:void(0);" class="link-primary text-decoration-underline">United Courier</a></p>
                <div class="d-flex align-items-center gap-2 footer-links justify-content-center justify-content-md-end">
                   <a href="javascript:void(0);">About</a>
                   <a href="javascript:void(0);">Terms</a>
@@ -651,14 +525,6 @@
 	<script src="{{ asset('js/moment.min.js') }}" type="text/javascript"></script>
 	<script src="{{ asset('assets/plugins/daterangepicker/daterangepicker.js') }}" type="text/javascript"></script>
 
-    <!-- Apexchart JS -->
-	<script src="{{ asset('assets/plugins/apexchart/apexcharts.min.js') }}" type="text/javascript"></script>
-	<script src="{{ asset('assets/plugins/apexchart/chart-data.js') }}" type="text/javascript"></script>
-
-	<!-- Chart JS -->
-	<script src="{{ asset('assets/plugins/peity/jquery.peity.min.js') }}" type="text/javascript"></script>
-	<script src="{{ asset('assets/plugins/peity/chart-data.js') }}" type="text/javascript"></script>
-    
 	<!-- Simplebar JS -->
 	<script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}" type="text/javascript"></script>
 
@@ -671,8 +537,497 @@
     <!-- Main JS -->
     <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
 
-<script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js" data-cf-settings="18629d5768be2989b1211a1d-|49" defer></script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"967b31774d0e54b0","version":"2025.7.0","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"token":"3ca157e612a14eccbb30cf6db6691c29","b":1}' crossorigin="anonymous"></script>
+    <!-- Admin Dashboard Charts Script -->
+    <script>
+        let customerSummaryChart = null;
+        let shipmentDeliverySummaryChart = null;
+        let shipmentTrendChart = null;
+        let customerSummaryBarChart = null;
+        let shipmentDeliveryBarChart = null;
+
+        // Color palette for charts
+        const customerColors = {
+            totalRegistrations: '#5b5eff',
+            kycPending: '#fd7e14',
+            onboardedCustomers: '#198754',
+            csb5Enabled: '#0dcaf0'
+        };
+
+        const statusColors = {
+            draft: '#6c757d',
+            ready: '#0d6efd',
+            assigned_for_pickup: '#198754',
+            packed: '#fd7e14',
+            manifested: '#6610f2',
+            dispatched: '#20c997',
+            ready_to_dispatch: '#ffc107',
+            delivered: '#0dcaf0',
+            cancelled: '#dc3545',
+            disputed: '#e83e8c',
+            on_hold: '#495057',
+            received: '#17a2b8'
+        };
+
+        const deliveryColors = {
+            delivered: '#198754',
+            shipRocket: '#5b5eff',
+            self: '#fd7e14',
+            other: '#6c757d'
+        };
+
+        function loadChartData(filter, btnElement) {
+            // Update active button
+            document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+
+            fetch('{{ route("admin.dashboard-chart-data") }}?filter=' + filter, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    renderCustomerSummaryChart(data.customerSummary);
+                    renderCustomerSummaryBarChart(data.customerSummary);
+                    renderShipmentDeliverySummaryChart(data.shipmentStatusCounts, data.statusMap, data.deliverySummary);
+                    renderShipmentDeliveryBarChart(data.shipmentStatusCounts, data.statusMap, data.deliverySummary);
+                    renderShipmentTrendChart(data.dateWiseCounts, data.filter);
+                    updateShipmentDeliveryStatTiles(data.shipmentStatusCounts, data.deliverySummary, data.filter);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching chart data:', error);
+            });
+        }
+
+        function updateShipmentDeliveryStatTiles(statusCounts, deliverySummary, filter) {
+            // Calculate total shipments from all status counts
+            const totalShipments = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+            const delivered = statusCounts['delivered'] || 0;
+            const shipRocket = deliverySummary.shipRocket || 0;
+            const selfNetwork = deliverySummary.self || 0;
+
+            // Filter label for sub-text
+            const filterLabels = {
+                today: 'today',
+                yesterday: 'yesterday',
+                this_month: 'this month',
+                last_month: 'last month',
+                last_year: 'last year'
+            };
+            const periodLabel = filterLabels[filter] || 'selected period';
+
+            document.getElementById('statTotalShipments').textContent = totalShipments;
+            document.getElementById('statTotalShipmentsSub').textContent = 'for ' + periodLabel;
+
+            document.getElementById('statDelivered').textContent = delivered;
+            document.getElementById('statDeliveredSub').textContent = 'for ' + periodLabel;
+
+            document.getElementById('statShipRocket').textContent = shipRocket;
+            document.getElementById('statShipRocketSub').textContent = 'for ' + periodLabel;
+
+            document.getElementById('statSelfNetwork').textContent = selfNetwork;
+            document.getElementById('statSelfNetworkSub').textContent = 'for ' + periodLabel;
+        }
+
+        function renderCustomerSummaryChart(customerSummary) {
+            const labels = ['Registrations', 'KYC Pending', 'Onboarded', 'CSB5 Enabled'];
+            const values = [
+                customerSummary.totalRegistrations,
+                customerSummary.kycPending,
+                customerSummary.onboardedCustomers,
+                customerSummary.csb5Enabled
+            ];
+            const colors = [
+                customerColors.totalRegistrations,
+                customerColors.kycPending,
+                customerColors.onboardedCustomers,
+                customerColors.csb5Enabled
+            ];
+
+            if (customerSummaryChart) {
+                customerSummaryChart.destroy();
+            }
+
+            const ctx = document.getElementById('customerSummaryChart').getContext('2d');
+            customerSummaryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 16,
+                                usePointStyle: true,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderShipmentDeliverySummaryChart(statusCounts, statusMap, deliverySummary) {
+            // Build merged labels, values, and colors — shipment statuses + delivery metrics
+            const labels = [];
+            const values = [];
+            const colors = [];
+
+            // Shipment status entries
+            for (const [status, count] of Object.entries(statusCounts)) {
+                labels.push(statusMap[status] || status);
+                values.push(count);
+                colors.push(statusColors[status] || '#adb5bd');
+            }
+
+            // Delivery/network entries
+            labels.push('Delivered');
+            values.push(deliverySummary.delivered);
+            colors.push(deliveryColors.delivered);
+
+            labels.push('ShipRocket');
+            values.push(deliverySummary.shipRocket);
+            colors.push(deliveryColors.shipRocket);
+
+            labels.push('Self/Own Network');
+            values.push(deliverySummary.self);
+            colors.push(deliveryColors.self);
+
+            // Other networks
+            if (deliverySummary.otherNetworks) {
+                for (const [network, count] of Object.entries(deliverySummary.otherNetworks)) {
+                    labels.push(network);
+                    values.push(count);
+                    colors.push(deliveryColors.other);
+                }
+            }
+
+            if (shipmentDeliverySummaryChart) {
+                shipmentDeliverySummaryChart.destroy();
+            }
+
+            const ctx = document.getElementById('shipmentDeliverySummaryChart').getContext('2d');
+            shipmentDeliverySummaryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 12,
+                                usePointStyle: true,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderShipmentTrendChart(dateWiseCounts, filter) {
+            const labels = Object.keys(dateWiseCounts);
+            const values = Object.values(dateWiseCounts);
+
+            // Format labels for display
+            const displayLabels = labels.map(label => {
+                if (filter === 'last_year') {
+                    // Format "2025-01" as "Jan 2025"
+                    const [year, month] = label.split('-');
+                    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    return monthNames[parseInt(month) - 1] + ' ' + year;
+                } else {
+                    // Format "2025-06-15" as "15 Jun"
+                    const parts = label.split('-');
+                    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    return parseInt(parts[2]) + ' ' + monthNames[parseInt(parts[1]) - 1];
+                }
+            });
+
+            if (shipmentTrendChart) {
+                shipmentTrendChart.destroy();
+            }
+
+            const ctx = document.getElementById('shipmentTrendChart').getContext('2d');
+            shipmentTrendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: displayLabels,
+                    datasets: [{
+                        label: 'Shipments Created',
+                        data: values,
+                        backgroundColor: 'rgba(91, 94, 255, 0.7)',
+                        borderColor: '#5b5eff',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 40
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Shipments: ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: { size: 11 }
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 11 },
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderCustomerSummaryBarChart(customerSummary) {
+            const labels = ['Registrations', 'KYC Pending', 'Onboarded', 'CSB5 Enabled'];
+            const values = [
+                customerSummary.totalRegistrations,
+                customerSummary.kycPending,
+                customerSummary.onboardedCustomers,
+                customerSummary.csb5Enabled
+            ];
+            const colors = [
+                customerColors.totalRegistrations,
+                customerColors.kycPending,
+                customerColors.onboardedCustomers,
+                customerColors.csb5Enabled
+            ];
+
+            if (customerSummaryBarChart) {
+                customerSummaryBarChart.destroy();
+            }
+
+            const ctx = document.getElementById('customerSummaryBarChart').getContext('2d');
+            customerSummaryBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Customer Summary',
+                        data: values,
+                        backgroundColor: colors.map(c => c + 'cc'),
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: { size: 11 }
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 12 }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderShipmentDeliveryBarChart(statusCounts, statusMap, deliverySummary) {
+            // Build all labels, values, and colors in one flat array — like Customer Summary Bar View
+            const allLabels = [];
+            const allValues = [];
+            const allColors = [];
+
+            // Shipment status entries
+            for (const [status, count] of Object.entries(statusCounts)) {
+                allLabels.push(statusMap[status] || status);
+                allValues.push(count);
+                allColors.push(statusColors[status] || '#adb5bd');
+            }
+
+            // Delivery/network entries
+            allLabels.push('Delivered');
+            allValues.push(deliverySummary.delivered);
+            allColors.push(deliveryColors.delivered);
+
+            allLabels.push('ShipRocket');
+            allValues.push(deliverySummary.shipRocket);
+            allColors.push(deliveryColors.shipRocket);
+
+            allLabels.push('Self/Own Network');
+            allValues.push(deliverySummary.self);
+            allColors.push(deliveryColors.self);
+
+            // Other networks
+            if (deliverySummary.otherNetworks) {
+                for (const [network, count] of Object.entries(deliverySummary.otherNetworks)) {
+                    allLabels.push(network);
+                    allValues.push(count);
+                    allColors.push(deliveryColors.other);
+                }
+            }
+
+            if (shipmentDeliveryBarChart) {
+                shipmentDeliveryBarChart.destroy();
+            }
+
+            const ctx = document.getElementById('shipmentDeliveryBarChart').getContext('2d');
+            shipmentDeliveryBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: allLabels,
+                    datasets: [{
+                        label: 'Shipment & Delivery',
+                        data: allValues,
+                        backgroundColor: allColors.map(c => c + 'cc'),
+                        borderColor: allColors,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: { size: 11 }
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 11 },
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load default chart data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
+        });
+    </script>
+
 </body>
 
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:26 GMT -->
 </html>
