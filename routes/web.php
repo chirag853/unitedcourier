@@ -396,6 +396,7 @@ Route::prefix('admin')->group(function () {
     Route::get('/get-quote', [AdminController::class, 'getQuote'])->name('admin.get-quote');
     Route::get('/track-shipment', [AdminController::class, 'trackShipment'])->name('admin.track-shipment');
     Route::get('/my-profile', [AdminController::class, 'myProfile'])->name('admin.my-profile');
+    Route::post('/update-profile', [AdminController::class, 'updateProfile'])->name('admin.update-profile');
     Route::get('/logout', [AdminController::class, 'logout'])->name('admin.logout');
     
     // Custom Form Routes

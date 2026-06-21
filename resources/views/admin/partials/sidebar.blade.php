@@ -238,10 +238,10 @@
                             <a href="#"><i class="ti ti-user-up"></i><span>Get Quote</span></a>
                         </li>
                         <li>
-                            <a href="#"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
+                            <a href="{{ url('/tracking') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                         </li>
                         <li>
-                            <a href="#"><i class="ti ti-medal"></i><span>My Profile</span></a>
+                            <a href="{{ route('admin.my-profile') }}" class="{{ request()->is('admin/my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                         </li>
                         <li>
                             <a href="#"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>

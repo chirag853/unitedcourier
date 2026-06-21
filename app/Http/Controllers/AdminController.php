@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use App\Models\Admin;
 use App\Models\NetworkOffice;
@@ -5572,6 +5573,53 @@ class AdminController extends Controller
         $rate->save();
 
         return response()->json(['success' => true, 'message' => 'Customer rate updated successfully.']);
+    }
+
+    public function myProfile()
+    {
+        $admin = Auth::guard('admin')->user();
+        return view('admin.my-profile', compact('admin'));
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:admin_user,email,' . $admin->id,
+            'mobile' => 'nullable|string|max:20',
+            'designation' => 'nullable|string|max:255',
+            'state' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:255',
+        ];
+
+        // If user is trying to change password, add password validation rules
+        if ($request->filled('new_password')) {
+            $rules['current_password'] = 'required|string';
+            $rules['new_password'] = 'required|string|min:6|confirmed';
+        }
+
+        $validated = $request->validate($rules);
+
+        // Check current password if changing password
+        if ($request->filled('new_password')) {
+            if (!Hash::check($request->current_password, $admin->password)) {
+                return redirect()->back()->withErrors(['current_password' => 'Current password is incorrect.'])->withInput();
+            }
+            $admin->password = $request->new_password;
+        }
+
+        // Update profile fields
+        $admin->name = $validated['name'];
+        $admin->email = $validated['email'];
+        $admin->mobile = $validated['mobile'];
+        $admin->designation = $validated['designation'];
+        $admin->state = $validated['state'];
+        $admin->city = $validated['city'];
+        $admin->save();
+
+        return redirect()->route('admin.my-profile')->with('success', 'Profile updated successfully.');
     }
 
 }

@@ -330,13 +330,13 @@
                         <img src="{{ asset('assets/img/profiles/avatar-19.jpg') }}" class="rounded-circle" width="42"
                             height="42" alt="Img">
                         <div class="ms-2">
-                            <p class="fw-medium text-dark mb-0">Katherine Brooks</p>
-                            <span class="d-block fs-13">Installer</span>
+                            <p class="fw-medium text-dark mb-0">{{ Auth::guard('admin')->user()->name ?? 'Admin' }}</p>
+                            <span class="d-block fs-13">{{ Auth::guard('admin')->user()->designation ?? 'Admin' }}</span>
                         </div>
                     </div>
 
                     <!-- Item-->
-                    <a href="profile-settings.html" class="dropdown-item">
+                    <a href="{{ route('admin.my-profile') }}" class="dropdown-item">
                         <i class="ti ti-user-circle me-1 align-middle"></i>
                         <span class="align-middle">Profile Settings</span>
                     </a>
@@ -355,7 +355,7 @@
                     </a>
 
                     <!-- Item-->
-                    <a href="profile-settings.html" class="dropdown-item">
+                    <a href="{{ route('admin.my-profile') }}" class="dropdown-item">
                         <i class="ti ti-settings me-1 align-middle"></i>
                         <span class="align-middle">Settings</span>
                     </a>
