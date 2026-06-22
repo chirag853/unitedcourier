@@ -13,7 +13,7 @@
                 <!-- Logo Normal -->
                 <span class="logo-light">
                     <span class="logo-lg"><img src="{{ asset('assets/img/logo.svg') }}" alt="logo"></span>
-                    <span class="logo-sm"><img src="{{ asset('assets/img/logo-small.svg') }}" alt="small logo"></span>
+                    <span class="logo-sm"><img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="small logo"></span>
                 </span>
 
                 <!-- Logo Dark -->

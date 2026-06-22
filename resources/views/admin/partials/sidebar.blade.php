@@ -15,13 +15,12 @@
         <div>
             <!-- Logo Normal -->
             <a href="{{ url('index-2.html') }}" class="logo logo-normal">
-                <img src="{{ asset('assets/img/logo.png') }}" alt="Logo">
+                <img src="{{ asset('assets/img/logo.png') }}" alt="Logo" style = "width: 90%">
             </a>
 
             <!-- Logo Small -->
             <a href="{{ url('index-2.html') }}" class="logo-small">
-                {{ asset('assets/img/logo-small.svg') }}
-                <img src="{{ asset('assets/img/logo-small.svg') }}" alt="Logo">
+                <img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="Logo" style = "width: 100%">
             </a>
 
             <!-- Logo Dark -->

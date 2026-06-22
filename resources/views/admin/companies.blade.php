@@ -534,75 +534,75 @@
                                             @endforeach
                                         </tbody>
                                     </table>
-                                    <!-- ===== TAB 4: Ready to Dispatch ===== -->
-                                    <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
-                                        <div class="card-body">
-                                            <div class="table-responsive">
-                                                <table id="readytodispatchTable" class="table table-bordered table-hover">
-                                                    <thead class="table-light">
-                                                        <tr>
-                                                            <th>#</th>
-                                                            <th>AWB Number</th>
-                                                            <th>Customer Name</th>
-                                                            <th>Shipper Company</th>
-                                                            <th>Consignee</th>
-                                                            <th>Destination</th>
-                                                            <th>Invoice No.</th>
-                                                            <th>Amount</th>
-                                                            <th>Currency</th>
-                                                            <th>Pickup Type</th>
-                                                            <th>Status</th>
-                                                            <th>Created</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        @foreach($readyToDispatchShipments as $index => $shipment)
-                                                        <tr>
-                                                            <td>{{ $index + 1 }}</td>
-                                                            <td>
-                                                                <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
-                                                            </td>
-                                                            <td>
-                                                                <span class="customer-name-link" title="Click to view details">
-                                                                    {{ $shipment->first_name }} {{ $shipment->last_name }}
-                                                                </span>
-                                                            </td>
-                                                            <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                            <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                                            <td>
-                                                                {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                                                @if($shipment->consignee_state || $shipment->shipper_state)
-                                                                    , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                                                @endif
-                                                            </td>
-                                                            <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
-                                                            <td>
-                                                                @if($shipment->invoice_amount)
-                                                                    {{ number_format($shipment->invoice_amount, 2) }}
-                                                                @else
-                                                                    N/A
-                                                                @endif
-                                                            </td>
-                                                            <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
-                                                            <td>
-                                                                @if($shipment->delivery_type)
-                                                                    <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
-                                                                @else
-                                                                    <span class="text-muted">N/A</span>
-                                                                @endif
-                                                            </td>
-                                                            <td>
-                                                                <span class="status-ready-to-dispatch">Ready to Dispatch</span>
-                                                            </td>
-                                                            <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
-                                                        </tr>
-                                                        @endforeach
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </div>
-            
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ===== TAB 4: Ready to Dispatch ===== -->
+                        <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table id="readytodispatchTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB Number</th>
+                                                <th>Customer Name</th>
+                                                <th>Shipper Company</th>
+                                                <th>Consignee</th>
+                                                <th>Destination</th>
+                                                <th>Invoice No.</th>
+                                                <th>Amount</th>
+                                                <th>Currency</th>
+                                                <th>Pickup Type</th>
+                                                <th>Status</th>
+                                                <th>Created</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($readyToDispatchShipments as $index => $shipment)
+                                            <tr>
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="customer-name-link" title="Click to view details">
+                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
+                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
+                                                <td>
+                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
+                                                    @if($shipment->consignee_state || $shipment->shipper_state)
+                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->invoice_amount)
+                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
+                                                <td>
+                                                    @if($shipment->delivery_type)
+                                                        <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
+                                                    @else
+                                                        <span class="text-muted">N/A</span>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    <span class="status-ready-to-dispatch">Ready to Dispatch</span>
+                                                </td>
+                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

@@ -329,8 +329,13 @@
                             <div class="card-header">
                                 <h6 class="mb-0">Customer Summary</h6>
                             </div>
-                            <div class="card-body d-flex align-items-center justify-content-center">
-                                <canvas id="customerSummaryChart"></canvas>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-center flex-wrap gap-4">
+                                    <div style="position: relative; width: 210px; height: 210px;">
+                                        <canvas id="customerSummaryChart"></canvas>
+                                    </div>
+                                    <div id="customerSummaryLegend" class="flex-fill" style="min-width: 210px;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -548,10 +553,25 @@
         // Color palette for charts
         const customerColors = {
             totalRegistrations: '#5b5eff',
-            kycPending: '#fd7e14',
-            onboardedCustomers: '#198754',
-            csb5Enabled: '#0dcaf0'
+            kycPending: '#ff9f43',
+            onboardedCustomers: '#ff4d4f',
+            csb5Enabled: '#7367f0'
         };
+
+        const shipmentStatusOrder = [
+            'draft',
+            'ready',
+            'assigned_for_pickup',
+            'packed',
+            'manifested',
+            'dispatched',
+            'ready_to_dispatch',
+            'delivered',
+            'cancelled',
+            'disputed',
+            'on_hold',
+            'received'
+        ];
 
         const statusColors = {
             draft: '#6c757d',
@@ -659,22 +679,19 @@
                     datasets: [{
                         data: values,
                         backgroundColor: colors,
-                        borderWidth: 2,
+                        borderWidth: 4,
                         borderColor: '#fff',
+                        borderRadius: 8,
+                        spacing: 4,
                         hoverOffset: 8
                     }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 16,
-                                usePointStyle: true,
-                                font: { size: 12 }
-                            }
+                            display: false
                         },
                         tooltip: {
                             callbacks: {
@@ -686,45 +703,62 @@
                             }
                         }
                     },
-                    cutout: '55%'
+                    cutout: '72%'
                 }
             });
+
+            renderCustomerSummaryLegend(labels, values, colors);
         }
 
-        function renderShipmentDeliverySummaryChart(statusCounts, statusMap, deliverySummary) {
-            // Build merged labels, values, and colors — shipment statuses + delivery metrics
+        function renderCustomerSummaryLegend(labels, values, colors) {
+            const legend = document.getElementById('customerSummaryLegend');
+            if (!legend) return;
+
+            const total = values.reduce((a, b) => a + b, 0);
+            legend.innerHTML = labels.map((label, index) => {
+                const value = values[index] || 0;
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+
+                return `
+                    <div class="d-flex align-items-center justify-content-between rounded-3 px-3 py-2 mb-2" style="background: ${colors[index]}14;">
+                        <div class="d-flex align-items-center gap-2">
+                            <span style="width: 12px; height: 12px; border-radius: 50%; background: ${colors[index]}; display: inline-block;"></span>
+                            <span class="text-muted fs-13">${label}</span>
+                        </div>
+                        <div class="text-end">
+                            <span class="fw-semibold text-dark">${value}</span>
+                            <span class="text-muted fs-12 ms-1">${percentage}%</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function buildShipmentDeliveryData(statusCounts, statusMap, deliverySummary) {
             const labels = [];
             const values = [];
             const colors = [];
+            const knownStatuses = new Set(shipmentStatusOrder);
 
-            // Shipment status entries
-            for (const [status, count] of Object.entries(statusCounts)) {
-                labels.push(statusMap[status] || status);
-                values.push(count);
+            shipmentStatusOrder.forEach(status => {
+                labels.push(statusMap[status] || status.replace(/_/g, ' '));
+                values.push(statusCounts[status] || 0);
                 colors.push(statusColors[status] || '#adb5bd');
-            }
+            });
 
-            // Delivery/network entries
-            labels.push('Delivered');
-            values.push(deliverySummary.delivered);
-            colors.push(deliveryColors.delivered);
-
-            labels.push('ShipRocket');
-            values.push(deliverySummary.shipRocket);
-            colors.push(deliveryColors.shipRocket);
-
-            labels.push('Self/Own Network');
-            values.push(deliverySummary.self);
-            colors.push(deliveryColors.self);
-
-            // Other networks
-            if (deliverySummary.otherNetworks) {
-                for (const [network, count] of Object.entries(deliverySummary.otherNetworks)) {
-                    labels.push(network);
-                    values.push(count);
-                    colors.push(deliveryColors.other);
+            Object.entries(statusCounts).forEach(([status, count]) => {
+                if (!knownStatuses.has(status)) {
+                    labels.push(statusMap[status] || status.replace(/_/g, ' '));
+                    values.push(count || 0);
+                    colors.push(statusColors[status] || '#adb5bd');
                 }
-            }
+            });
+
+            return { labels, values, colors };
+        }
+
+        function renderShipmentDeliverySummaryChart(statusCounts, statusMap, deliverySummary) {
+            const { labels, values, colors } = buildShipmentDeliveryData(statusCounts, statusMap, deliverySummary);
 
             if (shipmentDeliverySummaryChart) {
                 shipmentDeliverySummaryChart.destroy();
@@ -794,23 +828,36 @@
             }
 
             const ctx = document.getElementById('shipmentTrendChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+            gradient.addColorStop(0, 'rgba(255, 159, 67, 0.35)');
+            gradient.addColorStop(1, 'rgba(255, 159, 67, 0.02)');
+
             shipmentTrendChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: displayLabels,
                     datasets: [{
                         label: 'Shipments Created',
                         data: values,
-                        backgroundColor: 'rgba(91, 94, 255, 0.7)',
-                        borderColor: '#5b5eff',
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        maxBarThickness: 40
+                        backgroundColor: gradient,
+                        borderColor: '#ff9f43',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#ff9f43',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6,
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.42
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             display: true,
@@ -881,7 +928,7 @@
                     datasets: [{
                         label: 'Customer Summary',
                         data: values,
-                        backgroundColor: colors.map(c => c + 'cc'),
+                        backgroundColor: colors,
                         borderColor: colors,
                         borderWidth: 1,
                         borderRadius: 6,
@@ -928,39 +975,7 @@
         }
 
         function renderShipmentDeliveryBarChart(statusCounts, statusMap, deliverySummary) {
-            // Build all labels, values, and colors in one flat array — like Customer Summary Bar View
-            const allLabels = [];
-            const allValues = [];
-            const allColors = [];
-
-            // Shipment status entries
-            for (const [status, count] of Object.entries(statusCounts)) {
-                allLabels.push(statusMap[status] || status);
-                allValues.push(count);
-                allColors.push(statusColors[status] || '#adb5bd');
-            }
-
-            // Delivery/network entries
-            allLabels.push('Delivered');
-            allValues.push(deliverySummary.delivered);
-            allColors.push(deliveryColors.delivered);
-
-            allLabels.push('ShipRocket');
-            allValues.push(deliverySummary.shipRocket);
-            allColors.push(deliveryColors.shipRocket);
-
-            allLabels.push('Self/Own Network');
-            allValues.push(deliverySummary.self);
-            allColors.push(deliveryColors.self);
-
-            // Other networks
-            if (deliverySummary.otherNetworks) {
-                for (const [network, count] of Object.entries(deliverySummary.otherNetworks)) {
-                    allLabels.push(network);
-                    allValues.push(count);
-                    allColors.push(deliveryColors.other);
-                }
-            }
+            const { labels: allLabels, values: allValues, colors: allColors } = buildShipmentDeliveryData(statusCounts, statusMap, deliverySummary);
 
             if (shipmentDeliveryBarChart) {
                 shipmentDeliveryBarChart.destroy();

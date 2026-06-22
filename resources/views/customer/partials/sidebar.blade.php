@@ -3,22 +3,21 @@
             <!-- Start Logo -->
             <div class="sidebar-logo">
                 <div>
-                    <!-- Logo Normal -->
-                    <a href="{{ url('index-2.html') }}" class="logo logo-normal">
-                        <img src="{{ asset('assets/img/logo.png') }}" alt="Logo">
-                    </a>
+            <!-- Logo Normal -->
+            <a href="{{ url('index-2.html') }}" class="logo logo-normal">
+                <img src="{{ asset('assets/img/logo.png') }}" alt="Logo" style = "width: 90%">
+            </a>
 
-                    <!-- Logo Small -->
-                    <a href="{{ url('index-2.html') }}" class="logo-small">
-                        {{ asset('assets/img/logo-small.svg') }}
-                        <img src="{{ asset('assets/img/logo-small.svg') }}" alt="Logo">
-                    </a>
+            <!-- Logo Small -->
+            <a href="{{ url('index-2.html') }}" class="logo-small">
+                <img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="Logo" style = "width: 100%">
+            </a>
 
-                    <!-- Logo Dark -->
-                    <a href="{{ url('index-2.html') }}" class="dark-logo">
-                        <img src="{{ asset('assets/img/logo-white.svg') }}" alt="Logo">
-                    </a>
-                </div>
+            <!-- Logo Dark -->
+            <a href="{{ url('index-2.html') }}" class="dark-logo">
+                <img src="{{ asset('assets/img/logo-white.svg') }}" alt="Logo">
+            </a>
+        </div>
                 <button class="sidenav-toggle-btn btn border-0 p-0 active" id="toggle_btn">
                     <i class="ti ti-arrow-bar-to-left"></i>
                 </button>

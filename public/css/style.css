@@ -13278,6 +13278,24 @@ textarea.form-control-lg {
   border-radius: 50rem;
   color: var(--crms-menu-item-heading);
 }
+@media (min-width: 992px) {
+  body.sidebar-click-collapsed.mini-sidebar .sidebar {
+    margin-left: 0 !important;
+    transform: translateX(-100%) !important;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  body.sidebar-click-collapsed.mini-sidebar .page-wrapper,
+  body.sidebar-click-collapsed.mini-sidebar .navbar-header {
+    margin-left: 0 !important;
+  }
+  body.sidebar-click-collapsed.mini-sidebar .navbar-header #toggle_btn2 {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+}
 .navbar-header .dropdown-menu .dropdown-item.form-switch {
   padding: var(--crms-dropdown-item-padding-y) var(--crms-dropdown-item-padding-x);
 }
