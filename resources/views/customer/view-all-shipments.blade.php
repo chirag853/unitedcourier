@@ -1023,7 +1023,7 @@
                 order: [[1, 'asc']],
                 pageLength: 25,
                 columnDefs: [
-                    { targets: [0, 8, 9, 10], visible: false }
+                    { targets: [0, 8, 9, 10, 12], visible: false }
                 ],
                 language: {
                     search: "Search shipments:",
@@ -1046,12 +1046,13 @@
                 const dt = $('#shipmentsTable').DataTable();
                 $.fn.dataTable.ext.search = []; // Clear previous custom filters
 
-                // Column visibility: Checkbox=0, Print Label=8, Pay Now=9, Manifest=10
+                // Column visibility: Checkbox=0, Print Label=8, Pay Now=9, Manifest=10, Cancel=12
                 if (filter === 'all') {
                     dt.column(0).visible(false);  // Hide Checkbox
                     dt.column(8).visible(false);  // Hide Print Label
                     dt.column(9).visible(false);  // Hide Pay Now
                     dt.column(10).visible(false); // Hide Manifest
+                    dt.column(12).visible(false); // Hide Cancel
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
                     $('#bulkManifestBtn').hide();
                     dt.draw();
