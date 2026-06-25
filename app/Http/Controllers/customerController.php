@@ -435,7 +435,7 @@ class customerController extends Controller
     {
         // Check if customer is logged in using auth guard
         if (!auth()->guard('customer')->check()) {
-            return redirect()->route('customer.login');
+            return redirect()->route('login');
         }
 
         return view('customer.companies');
@@ -505,7 +505,7 @@ class customerController extends Controller
     {
         // Check if customer is logged in using auth guard
         if (!auth()->guard('customer')->check()) {
-            return redirect()->route('customer.login');
+            return redirect()->route('login');
         }
 
         return view('customer.csb5-form');
@@ -1755,7 +1755,7 @@ class customerController extends Controller
     {
         // Check if customer is logged in
         if (!auth()->guard('customer')->check()) {
-            return redirect()->route('customer.login');
+            return redirect()->route('login');
         }
 
         $customerId = auth()->guard('customer')->id();
