@@ -1711,14 +1711,14 @@ class customerController extends Controller
     private function getCountryCodeFromDestination($dest)
     {
         $map = [
-            'US- United State of America' => 'US',
+            'US- United State of America' => 'UK',
             'India' => 'IN',
             'UK - United Kingdom' => 'GB',
             'China' => 'CN',
             'Russia' => 'RU',
             'Srilanka' => 'LK',
         ];
-        return $map[$dest] ?? 'US';
+        return $map[$dest] ?? 'UK';
     }
 
     /**
@@ -2166,7 +2166,74 @@ class customerController extends Controller
             \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '"');
 
             // Route to appropriate API based on network
-            if ($network === 'ship global' || $network === 'shipglobal') {
+            // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
+            if ($this->isPostShippingMethod($shippingMethod)) {
+                // Call PostShipping API
+                $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+                if (!$postShippingResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'PostShipping API Failed: ' . ($postShippingResult['message'] ?? 'Unknown error'),
+                        'postshipping_response' => $postShippingResult['data'] ?? null,
+                    ], 500);
+                }
+
+                // PostShipping succeeded - store tracking data
+                $apiResponse = $postShippingResult['data'] ?? [];
+                $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+                $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'PostShipping shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to manifested
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    // Create tracking record for manifested status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus('manifested'),
+                        'status' => 'manifested',
+                    ]);
+
+                    \Log::info('Shipment manifested via PostShipping: ' . ($trackingNumber ?? 'N/A'));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking for PostShipping manifest: ' . $e->getMessage());
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via PostShipping!',
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'network' => 'PostShipping',
+                    'postshipping_response' => $apiResponse,
+                ]);
+            } elseif ($network === 'ship global' || $network === 'shipglobal') {
                 // Call Ship Global API
                 $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
                 if (!$shipGlobalResult['success']) {
@@ -2386,7 +2453,67 @@ class customerController extends Controller
 
                     \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '"');
 
-                    if ($network === 'ship global' || $network === 'shipglobal') {
+                    // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
+                    if ($this->isPostShippingMethod($shippingMethod)) {
+                        // Call PostShipping API
+                        $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+
+                        if (!$postShippingResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'PostShipping API error: ' . ($postShippingResult['message'] ?? 'Unknown'),
+                            ];
+                            continue;
+                        }
+
+                        $apiResponse = $postShippingResult['data'] ?? [];
+                        $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $customerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'PostShipping shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'network' => 'PostShipping',
+                        ];
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via PostShipping.');
+
+                    } elseif ($network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
                         $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
 
@@ -3088,6 +3215,637 @@ class customerController extends Controller
                 'message' => 'Ship Global API call failed: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Determine if a shipping method should be routed to the PostShipping API.
+     * Triggered for DDP variants of UNITED AIR PREMIUM and UNITED PRIOR POST.
+     *
+     * @param string|null $shippingMethod
+     * @return bool
+     */
+    private function isPostShippingMethod($shippingMethod)
+    {
+        if (empty($shippingMethod)) {
+            return false;
+        }
+
+        $methodUpper = strtoupper(trim($shippingMethod));
+
+        // PostShipping API is called only for UNITED AIR PREMIUM DDP shipments.
+        $isDdp = str_contains($methodUpper, 'DDP');
+        $isAirPremium = str_contains($methodUpper, 'UNITED AIR PREMIUM');
+
+        return $isDdp && $isAirPremium;
+    }
+
+    /**
+     * Determine the PostShipping ServiceTypeName based on weight, parcel count,
+     * and destination. Precedence:
+     *   1. Offshore (Northern Ireland, Scottish Highlands & Islands) → DPD111
+     *   2. Multiple Parcels (>1)                                   → MDPD112
+     *   3. 0-5 Kg (single parcel)                                  → DPDUKEPND
+     *   4. 5-30 Kg (single parcel)                                 → DPD112
+     *
+     * @param string $shippingMethod
+     * @param \App\Models\CourierService|null $courierService
+     * @param float $totalWeight  Total shipment weight in Kg
+     * @param int $noOfItems       Number of parcels
+     * @param \App\Models\ConsigneeInfo|null $consignee
+     * @return string
+     */
+    private function getPostShippingServiceTypeName($shippingMethod, $courierService, $totalWeight = 0, $noOfItems = 1, $consignee = null)
+    {
+        // Priority 1: Offshore deliveries → DPD111 (DPD OFFSHORE- TWO DAY)
+        if ($this->isPostShippingOffshoreDestination($consignee)) {
+            \Log::info('getPostShippingServiceTypeName: Offshore destination → DPD111');
+            return 'DPD111';
+        }
+
+        // Priority 2: Multiple parcels → MDPD112 (Multi DPD UK MAINLAND- NEXT DAY)
+        if ((int) $noOfItems > 1) {
+            \Log::info('getPostShippingServiceTypeName: Multiple parcels (' . $noOfItems . ') → MDPD112');
+            return 'MDPD112';
+        }
+
+        // Priority 3 & 4: Weight-based for single parcel
+        if ($totalWeight <= 5) {
+            \Log::info('getPostShippingServiceTypeName: Weight ' . $totalWeight . 'kg (≤5) → DPDUKEPND');
+            return 'DPDUKEPND'; // DPD UK Mainland Express PAK
+        }
+
+        \Log::info('getPostShippingServiceTypeName: Weight ' . $totalWeight . 'kg (>5) → DPD112');
+        return 'DPD112'; // DPD UK Mainland Next Day
+    }
+
+    /**
+     * Check if a consignee destination is an offshore area requiring DPD111 service.
+     * Offshore = Northern Ireland (BT postcodes) + Scottish Highlands & Islands
+     * (IV, HS, KA, KW, PA, PH, ZE postcodes) + Isle of Man (IM) + Channel Islands (JE, GY).
+     *
+     * @param \App\Models\ConsigneeInfo|null $consignee
+     * @return bool
+     */
+    private function isPostShippingOffshoreDestination($consignee)
+    {
+        if (!$consignee) {
+            return false;
+        }
+
+        $postcode = strtoupper(preg_replace('/\s+/', '', (string) ($consignee->zip_code ?? '')));
+        $city = strtoupper(trim((string) ($consignee->city ?? '')));
+        $state = strtoupper(trim((string) ($consignee->state ?? '')));
+
+        // Northern Ireland: postcodes start with BT
+        if ($postcode !== '' && str_starts_with($postcode, 'BT')) {
+            return true;
+        }
+
+        // Scottish Highlands & Islands + other UK offshore postcode prefixes
+        $offshorePrefixes = ['IV', 'HS', 'KA', 'KW', 'PA', 'PH', 'ZE', 'IM', 'JE', 'GY'];
+        if ($postcode !== '') {
+            foreach ($offshorePrefixes as $prefix) {
+                if (str_starts_with($postcode, $prefix)) {
+                    return true;
+                }
+            }
+        }
+
+        // Fallback: keyword matching on city/state for cases where postcode is missing
+        $offshoreKeywords = [
+            'NORTHERN IRELAND', 'HIGHLAND', 'ISLAND', 'ISLE OF',
+            'ORKNEY', 'SHETLAND', 'HEBRIDES', 'SKYE', 'ISLE OF MAN',
+            'CHANNEL ISLANDS', 'JERSEY', 'GUERNSEY',
+        ];
+        foreach ($offshoreKeywords as $keyword) {
+            if (str_contains($city, $keyword) || str_contains($state, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the ThirdPartyToken for PostShipping.
+     * A single fixed token is used for all UNITED AIR PREMIUM DDP shipments.
+     *
+     * @param float $totalWeight  Total shipment weight in Kg (kept for signature compatibility)
+     * @return string
+     */
+    private function getPostShippingThirdPartyToken($totalWeight)
+    {
+        $token = config('services.postshipping.third_party_token');
+        \Log::info('getPostShippingThirdPartyToken: Using fixed token for UNITED AIR PREMIUM DDP');
+        return $token;
+    }
+
+    /**
+     * Build the PostShipping API payload from database records.
+     * Payload structure mirrors the documented https://api.postshipping.com/api2/shipments format.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildPostShippingPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (!$consignee) {
+            \Log::warning('buildPostShippingPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildPostShippingPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+        // Resolve shipping method + courier service
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+
+        // Consignee country code from delivery_destination
+        $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+        // Currency code (default INR to match example payload)
+        $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+
+        // Total weight & package count (computed first so ServiceTypeName + ThirdPartyToken
+        // can be selected based on weight/parcel-count/destination).
+        $totalWeight = 0;
+        $noOfItems = 0;
+        foreach ($packages as $pkg) {
+            $w = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($w <= 0) {
+                $w = 0.5;
+            }
+            $totalWeight += $w;
+            $noOfItems++;
+        }
+        if ($totalWeight <= 0) {
+            $totalWeight = 0.5;
+        }
+        if ($noOfItems <= 0) {
+            $noOfItems = 1;
+        }
+
+        // ServiceTypeName is weight/parcel-count/destination-dependent:
+        //   Offshore → DPD111 | Multiple parcels → MDPD112 | ≤5kg → DPDUKEPND | >5kg → DPD112
+        $serviceTypeName = $this->getPostShippingServiceTypeName($shippingMethod, $courierService, $totalWeight, $noOfItems, $consignee);
+
+        // ThirdPartyToken is weight-dependent:
+        //   1-10kg → DPDNW token | 10.1-30kg → DPD112 token
+        $thirdPartyToken = $this->getPostShippingThirdPartyToken($totalWeight);
+
+        // First package dimensions for top-level PackageDetails
+        $firstPackage = $packages->first();
+        $cubicL = (float) ($firstPackage->length_cm ?? 0) ?: 10;
+        $cubicW = (float) ($firstPackage->width_cm ?? 0) ?: 10;
+        $cubicH = (float) ($firstPackage->height_cm ?? 0) ?: 10;
+
+        // Goods description: prefer first invoice item description, else invoice reference, else default
+        $goodsDescription = 'General Merchandise';
+        $invoiceItems = collect();
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+            $firstItem = $invoiceItems->first();
+            if ($firstItem && !empty($firstItem->description)) {
+                $goodsDescription = $firstItem->description;
+            }
+        }
+
+        // Custom value: invoice amount (default 30.00 to match example floor)
+        $customValue = $invoice ? (float) ($invoice->invoice_amount ?? 0) : 0;
+        if ($customValue <= 0) {
+            $customValue = 30.00;
+        }
+
+        // Incoterms
+        $incoterms = $invoice ? ($invoice->incoterms ?? 'CIF') : 'CIF';
+        $orderNumber = $invoice ? ($invoice->invoice_number ?? '') : ($shipper->awb_number ?? '');
+
+        // Build ShipmentResponseItem array — one entry per package, with Pieces from invoice items.
+        $shipmentResponseItems = [];
+        $packageIndex = 0;
+        foreach ($packages as $pkg) {
+            $packageIndex++;
+            $pkgWeight = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($pkgWeight <= 0) {
+                $pkgWeight = 0.5;
+            }
+            $pkgL = (float) ($pkg->length_cm ?? 0) ?: 10;
+            $pkgW = (float) ($pkg->width_cm ?? 0) ?: 10;
+            $pkgH = (float) ($pkg->height_cm ?? 0) ?: 10;
+
+            // Find invoice items mapped to this package via box_no (1-based)
+            $boxItems = $invoiceItems->filter(function ($item) use ($packageIndex) {
+                return ((int) ($item->box_no ?? 0)) === $packageIndex;
+            });
+
+            // If no items mapped to this box, use all items for the first package
+            if ($boxItems->isEmpty() && $packageIndex === 1) {
+                $boxItems = $invoiceItems;
+            }
+
+            $pieces = [];
+            if ($boxItems->isNotEmpty()) {
+                foreach ($boxItems as $item) {
+                    $itemQty = (float) ($item->qty ?? 1);
+                    if ($itemQty <= 0) {
+                        $itemQty = 1;
+                    }
+                    $itemValue = (float) ($item->amount ?? 0);
+                    if ($itemValue <= 0) {
+                        $itemValue = $customValue;
+                    }
+                    $pieces[] = [
+                        'HarmonisedCode'        => (string) ($item->hs_code ?? $item->hts_code ?? ''),
+                        'GoodsDescription'      => $item->description ?? $goodsDescription,
+                        'Content'               => $item->description ?? $goodsDescription,
+                        'Quantity'              => $itemQty,
+                        'Weight'                => $pkgWeight,
+                        'ManufactureCountryCode' => 'IN',
+                        'OriginCountryCode'     => 'IN',
+                        'CurrencyCode'          => $currencyCode,
+                        'CustomsValue'          => $itemValue,
+                    ];
+                }
+            } else {
+                // Fallback single piece when no invoice items exist
+                $pieces[] = [
+                    'HarmonisedCode'        => '',
+                    'GoodsDescription'      => $goodsDescription,
+                    'Content'               => $goodsDescription,
+                    'Quantity'              => 1,
+                    'Weight'                => $pkgWeight,
+                    'ManufactureCountryCode' => 'IN',
+                    'OriginCountryCode'     => 'IN',
+                    'CurrencyCode'          => $currencyCode,
+                    'CustomsValue'          => $customValue,
+                ];
+            }
+
+            $shipmentResponseItems[] = [
+                'ItemNoOfPcs'            => 1,
+                'ItemCubicL'             => $pkgL,
+                'ItemCubicW'             => $pkgW,
+                'ItemCubicH'             => $pkgH,
+                'ItemWeight'             => $pkgWeight,
+                'ItemDescription'        => $goodsDescription,
+                'ItemCustomValue'        => $customValue,
+                'ItemCustomCurrencyCode' => $currencyCode,
+                'Notes'                  => 'Commercial shipment',
+                'Pieces'                 => $pieces,
+            ];
+        }
+
+        // Pickup times — ReadyTime = now + 2h, CloseTime = now + 5h (format Y/m/d H:i:s)
+        $readyTime = now()->addHours(2)->format('Y/m/d H:i:s');
+        $closeTime = now()->addHours(5)->format('Y/m/d H:i:s');
+
+        // Build the single shipment object (API expects an array of these)
+        $shipmentObject = [
+            'ThirdPartyToken' => $thirdPartyToken,
+            'SenderDetails' => [
+                // 'SenderName'                 => $shipper->contact_person ?? ($shipper->company_name ?? 'Ved'),
+                // 'SenderCompanyName'          => $shipper->company_name ?? 'United Worldwide Couriers Pvt Ltd',
+                // 'SenderCountryCode'          => 'IN',
+                // 'SenderAdd1'                 => $shipper->address_line1 ?? '',
+                // 'SenderAdd2'                 => $shipper->address_line2 ?? '',
+                // 'SenderAdd3'                 => $shipper->address_line3 ?? '',
+                // 'SenderAddCity'              => strtoupper($shipper->city ?? 'NEW DELHI'),
+                // 'SenderAddState'             => strtoupper($shipper->state ?? 'DELHI'),
+                // 'SenderAddPostcode'          => $shipper->pincode ?? '110037',
+                // 'SenderPhone'                => $shipper->phone_number ?? '01146122222',
+                // 'SenderEmail'                => $shipper->email ?? 'abc@abc.com',
+                // 'SenderFax'                  => '',
+                // 'SenderKycType'              => $shipper->kyc_type ?? 'Passport',
+                // 'SenderKycNumber'            => $shipper->kyc_number ?? '',
+                // 'SenderReceivingCountryTaxID' => '',
+                'SenderName' => "Ved",
+                'SenderCompanyName' => "United Worldwide Couriers Pvt Ltd",
+                'SenderCountryCode' => "IN",
+                'SenderAdd1' => "BUILDING NO 1 BYPASS ROAD",
+                'SenderAdd2' => "MAHIPALPUR",
+                'SenderAdd3' => "",
+                'SenderAddCity' => "NEW DELHI",
+                'SenderAddState' => "DELHI",
+                'SenderAddPostcode' => "110037",
+                'SenderPhone' => "01146122222",
+                'SenderEmail' => "abc@abc.com",
+                'SenderFax' => "",
+                'SenderKycType' => "Passport",
+                'SenderKycNumber' => "P00001",
+                'SenderReceivingCountryTaxID' => ""
+            ],
+            'ReceiverDetails' => [
+                'ReceiverName'          => $consignee->consignee_name ?? ($consignee->contact_person ?? 'Consignee'),
+                'ReceiverCompanyName'   => $consignee->consignee_name ?? ($consignee->contact_person ?? ''),
+                // 'ReceiverCountryCode'   => $consigneeCountryCode,
+                'ReceiverCountryCode'   => "GB",
+                'ReceiverAdd1'          => $consignee->address_line1 ?? '',
+                'ReceiverAdd2'          => $consignee->address_line2 ?? '',
+                'ReceiverAdd3'          => $consignee->address_line3 ?? '',
+                'ReceiverAddCity'       => $consignee->city ?? '',
+                'ReceiverAddState'      => $consignee->state ?? '',
+                'ReceiverAddPostcode'   => $consignee->zip_code ?? '',
+                'ReceiverMobile'        => $consignee->phone_number ?? '',
+                'ReceiverPhone'         => $consignee->phone_number ?? '',
+                'ReceiverEmail'         => $consignee->email ?? 'abc@abc.com',
+                'ReceiverAddResidential' => 'N',
+                'ReceiverFax'           => '',
+                'ReceiverKycType'       => 'Passport',
+                'ReceiverKycNumber'     => '',
+            ],
+            'PackageDetails' => [
+                'GoodsDescription'      => $goodsDescription,
+                'CustomValue'           => (float) $customValue,
+                'CustomCurrencyCode'    => $currencyCode,
+                'InsuranceValue'        => 0.00,
+                'InsuranceCurrencyCode' => $currencyCode,
+                'ShipmentTerm'          => '',
+                'GoodsOriginCountryCode' => 'IN',
+                'Weight'                => (float) $totalWeight,
+                'WeightMeasurement'     => 'KG',
+                'NoOfItems'             => (int) $noOfItems,
+                'CubicL'                => (float) $cubicL,
+                'CubicW'                => (float) $cubicW,
+                'CubicH'                => (float) $cubicH,
+                'CubicWeight'           => 0,
+                'ServiceTypeName'       => $serviceTypeName,
+                'BookPickUP'            => false,
+                'SenderRef1'            => $shipper->awb_number ?? ('TEST-SHIPMENT-' . $shipper->id),
+                'BusinessType'          => 'B2B',
+                'ShipmentResponseItem'  => $shipmentResponseItems,
+                'CODAmount'             => 0,
+                'CODCurrencyCode'       => $currencyCode,
+                'DeadWeight'            => (float) $totalWeight,
+                'ReasonExport'          => 'Sale',
+                'OrderNumber'           => $orderNumber,
+                'Incoterms'             => $incoterms,
+            ],
+            'PickupDetails' => [
+                'ReadyTime'             => $readyTime,
+                'CloseTime'             => $closeTime,
+                'SpecialInstructions'   => 'Call before pickup',
+                'Address1'              => $shipper->address_line1 ?? '',
+                'Address2'              => $shipper->address_line2 ?? '',
+                'Address3'              => $shipper->address_line3 ?? '',
+                'AddressCity'           => strtoupper($shipper->city ?? 'NEW DELHI'),
+                'AddressState'          => strtoupper($shipper->state ?? 'DELHI'),
+                'AddressPostalCode'     => $shipper->pincode ?? '110037',
+                'AddressCountryCode'    => 'IN',
+            ],
+        ];
+
+        // PostShipping expects an array of shipment objects.
+        // The fixed ThirdPartyToken is also returned so the caller can
+        // send it as the API-Key request header.
+        return [
+            'success'           => true,
+            'payload'           => [$shipmentObject],
+            'third_party_token' => $thirdPartyToken,
+        ];
+    }
+
+    /**
+     * Call the PostShipping API to create a shipment.
+     * Endpoint: https://api.postshipping.com/api2/shipments
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+    private function callPostShippingApiFromDb($shipper)
+    {
+        try {
+            $payloadResult = $this->buildPostShippingPayloadFromDb($shipper);
+            if (!$payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build PostShipping payload.',
+                ];
+            }
+
+            $payload = $payloadResult['payload'];
+            // The ThirdPartyToken is sent inside the request body.
+            // A SEPARATE api_token is sent as the "token" request header for authentication.
+            $apiToken = config('services.postshipping.api_token');
+            $baseUrl = rtrim(config('services.postshipping.base_url'), '/');
+            $endpoint = config('services.postshipping.endpoint', '/api2/shipments');
+            $url = $baseUrl . $endpoint;
+            $timeout = (int) config('services.postshipping.timeout', 60);
+
+            \Log::info('PostShipping payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+                'Connection'   => 'keep-alive',
+            ];
+            if (!empty($apiToken)) {
+                $headers['token'] = $apiToken;
+            }
+
+            $response = Http::withHeaders($headers)
+                ->withOptions(['verify' => false])
+                ->timeout($timeout)
+                ->post($url, $payload);
+
+            $apiResponse = $response->json();
+
+            if (!$response->successful()) {
+                $errorMessage = 'PostShipping API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
+                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('PostShipping API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                return [
+                    'success'     => false,
+                    'message'      => $errorMessage,
+                    'data'         => $apiResponse,
+                    'status_code'  => $response->status(),
+                ];
+            }
+
+            \Log::info('PostShipping response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
+
+            return [
+                'success' => true,
+                'message' => 'PostShipping shipment created successfully.',
+                'data'     => $apiResponse,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('PostShipping API call failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'PostShipping API call failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Extract a tracking/reference number from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing: ShipmentNumber, AlternateRef, LabelURL, ErrMessage, AcccountCode.
+     * We also keep fallbacks for other possible shapes (top-level, nested under
+     * "data", or wrapped under "Shipments") for resilience.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingTrackingNumber($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the documented PostShipping response format.
+        $priorityKeys = ['ShipmentNumber', 'shipment_number', 'AlternateRef', 'alternate_ref'];
+        $fallbackKeys = [
+            'tracking_number', 'TrackingNumber', 'waybill_number', 'WaybillNumber',
+            'awb_number', 'AwbNumber', 'consignment_number', 'ConsignmentNumber',
+            'order_number', 'OrderNumber', 'waybill', 'Waybill',
+            'reference', 'Reference', 'shipment_id', 'ShipmentId',
+        ];
+        $candidateKeys = array_merge($priorityKeys, $fallbackKeys);
+
+        // Case A: The response itself is a list of shipment objects
+        // (documented format: [{ ShipmentNumber, LabelURL, ... }])
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($candidateKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys (single shipment object returned directly)
+        foreach ($candidateKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            // data is a list of shipments
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($candidateKeys as $key) {
+                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            // data is a single shipment object
+            foreach ($candidateKeys as $key) {
+                if (isset($data[$key]) && !empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Shipment" / "shipment"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the LabelURL from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing a LabelURL field with the shipping label download link.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingLabelUrl($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        $labelKeys = ['LabelURL', 'label_url', 'LabelUrl', 'labelurl', 'Label', 'label'];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($labelKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($labelKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($labelKeys as $key) {
+                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($labelKeys as $key) {
+                if (isset($data[$key]) && !empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

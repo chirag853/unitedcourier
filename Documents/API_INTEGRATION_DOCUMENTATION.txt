@@ -1,0 +1,1319 @@
+UNITED COURIER - API INTEGRATION DOCUMENTATION
+Generated on: 2026-06-25
+
+Purpose:
+Is document me project me integrated third-party aur internal API flows ki detail hai:
+UPS, Ship Global, Delhivery, AuthKey SMS OTP, internal rate API, HSN search API, label generation, manifest flow, and credentials/reference-only services.
+
+Security note:
+Credentials/secrets ko is document me intentionally mask kiya gaya hai. Actual values existing source files/.env/Documents/credentials.txt me present ho sakti hain. Best practice: secrets ko code ya docs me hardcode na rakhein, .env me move karein.
+
+
+============================================================
+1. PROJECT API MAP
+============================================================
+
+Framework:
+- Laravel/PHP application.
+- HTTP client usage:
+  - Illuminate\Support\Facades\Http for many API calls.
+  - cURL for UPS Ship and AuthKey SMS.
+
+Important files:
+- routes/web.php
+- app/Http/Controllers/customerController.php
+- app/Http/Controllers/AdminController.php
+- config/services.php
+- app/Models/ShipmentTracking.php
+- app/Models/CourierService.php
+- app/Models/CourierRate.php
+- resources/views/customer/create-shipment.blade.php
+- resources/views/customer/view-all-shipments.blade.php
+- resources/views/admin/companies.blade.php
+- Documents/UPS_api's.md
+- Documents/credentials.txt
+
+Active external APIs found in code:
+- AuthKey SMS OTP API
+- UPS OAuth token API
+- UPS Ship API
+- Ship Global customer/token API
+- Ship Global add order API
+- Delhivery CMU create shipment/pickup API
+
+Internal app AJAX/API routes:
+- POST /customer/check-phone
+- POST /customer/verify-otp
+- POST /customer/create-shipment
+- POST /customer/ups-rate
+- POST /customer/ups-ship
+- POST /customer/pay-now
+- POST /customer/cancel-shipment/{id}
+- POST /customer/mark-packed
+- POST /customer/manifest
+- POST /customer/bulk-manifest
+- GET  /customer/search-hs-codes
+- POST /admin/assign-delivery
+- POST /admin/generate-label
+
+
+============================================================
+2. AUTHKEY SMS OTP API
+============================================================
+
+Status:
+- Active.
+
+Purpose:
+- Customer login ke time mobile number par OTP send karna.
+
+Code location:
+- app/Http/Controllers/customerController.php
+- Function: sendOtpViaSms($mobile, $otp)
+- Called from: checkPhone(Request $request)
+
+Route flow:
+1. Frontend/customer login sends phone number to:
+   POST /customer/check-phone
+2. Backend customer ko phone_number se search karta hai.
+3. 6 digit OTP generate hota hai.
+4. OTP session me store hota hai:
+   - login_otp
+   - login_phone
+   - login_otp_expires_at
+5. AuthKey SMS API call hoti hai.
+6. Customer OTP verify karta hai:
+   POST /customer/verify-otp
+
+External endpoint:
+- GET https://api.authkey.io/request
+
+Query parameters used:
+- authkey: config('services.sms.authkey')
+- mobile: customer phone number
+- country_code: config('services.sms.country_code')
+- sid: config('services.sms.sender_id')
+- otp: generated OTP
+
+Config source:
+- config/services.php
+  - services.sms.authkey -> env('SMS_AUTHKEY')
+  - services.sms.sender_id -> env('SMS_SENDER_ID', default '28102')
+  - services.sms.country_code -> env('SMS_COUNTRY_CODE', default '91')
+
+.env keys:
+- SMS_AUTHKEY
+- SMS_SENDER_ID
+- SMS_COUNTRY_CODE
+
+Request method:
+- cURL GET request.
+
+Timeout:
+- 30 seconds.
+
+Response handling:
+- Code logs HTTP code and body.
+- Function returns true unless cURL error occurs.
+- Current code does not validate provider success response deeply.
+
+Error handling:
+- cURL error is logged as "SMS cURL error".
+- If SMS sending fails, OTP is logged as warning for development/testing.
+
+Security/production note:
+- OTP log fallback should not be used in production logs.
+- Auth key should remain in .env only.
+
+
+============================================================
+3. UPS INTEGRATION - OVERVIEW
+============================================================
+
+Status:
+- Active for shipment creation/manifest.
+- There is also a function named getUpsRate, but current implementation does NOT call UPS live rate API. It calculates rates from local DB tables.
+
+Main code locations:
+- app/Http/Controllers/customerController.php
+- Existing UPS reference doc: Documents/UPS_api's.md
+
+External UPS endpoints:
+1. OAuth token:
+   POST https://onlinetools.ups.com/security/v1/oauth/token
+2. Ship API:
+   POST https://onlinetools.ups.com/api/shipments/v2403/ship
+
+Important customer routes:
+- POST /customer/ups-ship
+- POST /customer/manifest
+- POST /customer/bulk-manifest
+
+Important functions:
+- getUpsAccessToken()
+- getUpsRate()
+- getUpsShipAccessToken()
+- createUpsShipment(Request $request)
+- buildUpsShipPayload($validatedData, $service)
+- callUpsShipApiInternal($payload)
+- buildUpsShipPayloadFromDb($shipper)
+- findCourierService($shippingMethod, $shipperId)
+- resolveShippingMethod($shipper)
+
+
+============================================================
+4. UPS OAUTH TOKEN API
+============================================================
+
+Purpose:
+- UPS API ke liye Bearer access token generate karna.
+
+Endpoint:
+- POST https://onlinetools.ups.com/security/v1/oauth/token
+
+Auth:
+- HTTP Basic Auth:
+  - username/client_id
+  - password/client_secret
+
+Body:
+- Form encoded:
+  grant_type=client_credentials
+
+Headers:
+- Laravel Http::withBasicAuth() sets Authorization Basic header.
+- asForm() sets form body.
+
+Token functions:
+1. getUpsAccessToken()
+   - Uses env:
+     - UPS_CLIENT_ID
+     - UPS_CLIENT_SECRET
+   - Cache key: ups_access_token
+   - Intended for UPS rate/token use, but getUpsRate currently does local DB rates.
+
+2. getUpsShipAccessToken()
+   - Uses hardcoded credentials in controller.
+   - Cache key: ups_ship_access_token
+   - Used by UPS Ship API calls.
+
+Token caching:
+- expires_in response field is used.
+- TTL = expires_in - 60 seconds.
+- Minimum TTL = 60 seconds.
+
+Expected successful token response fields:
+- token_type
+- issued_at
+- client_id
+- access_token
+- expires_in
+- status
+
+Error handling:
+- If token HTTP response fails, logs UPS token response body.
+- If access_token missing, logs full body.
+- Throws exception; caller returns error response.
+
+Security note:
+- getUpsShipAccessToken() currently has UPS credentials hardcoded in code.
+- Recommended: move to .env keys like UPS_SHIP_CLIENT_ID, UPS_SHIP_CLIENT_SECRET, UPS_SHIPPER_NUMBER.
+
+
+============================================================
+5. UPS SHIP API - DIRECT PROXY ROUTE
+============================================================
+
+Status:
+- Active route exists.
+
+Route:
+- POST /customer/ups-ship
+- Route name: customer.ups.ship
+
+Controller function:
+- createUpsShipment(Request $request)
+
+Purpose:
+- Frontend/full UPS payload ko backend proxy ke through UPS Ship API par send karna.
+
+External endpoint:
+- POST https://onlinetools.ups.com/api/shipments/v2403/ship
+
+Request input:
+- Backend request ka full payload directly UPS ko forward karta hai:
+  $payload = $request->all()
+
+Headers sent to UPS:
+- Content-Type: application/json
+- Accept: application/json
+- Authorization: Bearer {UPS token}
+- transId: unique id generated by uniqid('ship_', true)
+- transactionSrc: unitedcourier
+
+cURL settings:
+- CURLOPT_RETURNTRANSFER: true
+- CURLOPT_POST: true
+- CURLOPT_POSTFIELDS: json_encode($payload)
+- CURLOPT_TIMEOUT: 60
+- CURLOPT_SSL_VERIFYPEER: false
+
+Successful response condition:
+- HTTP status 2xx
+- JSON response contains ShipmentResponse
+
+Success JSON returned to frontend:
+- success: true
+- shipmentResponse: UPS ShipmentResponse object
+
+Error extraction checks:
+- decoded.response.errors[0].message
+- decoded.ShipmentResponse.Response.Error[0].ErrorDescription
+- decoded.Fault.detail.Errors.ErrorDetail.PrimaryErrorCode.ErrorDescription
+
+Failure JSON returned:
+- success: false
+- message: extracted or generic error
+- rawResponse: decoded UPS response
+
+Logging:
+- Request payload logged, truncated to first 2000 chars.
+- UPS response logged, truncated to first 2000 chars.
+- Non-JSON responses logged separately.
+
+
+============================================================
+6. UPS SHIP API - MANIFEST FLOW
+============================================================
+
+Status:
+- Active.
+
+Trigger:
+- Customer view-all-shipments page.
+- Single manifest route:
+  POST /customer/manifest
+- Bulk manifest route:
+  POST /customer/bulk-manifest
+
+Precondition:
+- Shipment must be in "packed" status.
+
+Workflow:
+1. Customer creates shipment:
+   POST /customer/create-shipment
+   Status starts as draft.
+2. Customer pays:
+   POST /customer/pay-now
+   Status becomes ready.
+3. Print label/pack action:
+   POST /customer/mark-packed
+   Status becomes packed.
+4. Manifest:
+   POST /customer/manifest
+   Backend checks selected courier service network.
+5. If network is not Ship Global, UPS flow is used by default.
+
+Network routing logic:
+- shipping_method resolved via resolveShippingMethod($shipper)
+- courier service found via findCourierService($shippingMethod, $shipperId)
+- network = strtolower(trim($courierService->network))
+- if network is "ship global" or "shipglobal": Ship Global API
+- else: UPS API
+
+UPS payload builder:
+- buildUpsShipPayloadFromDb($shipper)
+- Reads:
+  - shipper_info
+  - consignee_info
+  - package_dimension
+  - create_shipment fallback
+  - courier_services
+- Delegates to:
+  - buildUpsShipPayload($validatedData, $service)
+
+Shipping method fallback order:
+1. shipper_info.shipping_method
+2. create_shipment.shipping_method
+3. package_dimension.shipping_method
+4. first row in courier_services table
+
+Courier service matching tiers:
+1. Exact method match
+2. Case-insensitive method match
+3. str_contains partial match
+4. Word-by-word normalized match, including abbreviation support
+5. Collapsed-string match
+
+UPS hardcoded shipper details in payload:
+- Name: SANDEEP KAPUR
+- AttentionName: United
+- CompanyDisplayableName: UWC
+- Phone: masked in this doc
+- Address:
+  - 218 WEST 37 STREET 6TH FLOOR
+  - NEW YORK
+  - NY
+  - 10018
+  - US
+
+UPS shipper number selection:
+- If courier_services.weight contains OZS or OZS/LBS saver logic:
+  - Saver services use shipper number X19700
+- LBS services use shipper number 1255AK
+
+PaymentInformation:
+- ShipmentCharge.Type: 01
+- BillShipper.AccountNumber: selected shipper number
+
+Service code:
+- Default from courier_services.scode.
+- For weight = OZS/LBS:
+  - If max package weight converted to lbs is > 0 and < 1:
+    service code = 92
+    weight unit = OZS
+    description = Ground Saver Less than 1 lb
+  - If max package weight >= 1 lb:
+    service code = 93
+    weight unit = LBS
+    description = Ground Saver 1 lbs or grater
+
+Weight conversion:
+- OZS: kg * 35.274
+- LBS: kg * 2.20462
+
+Package payload:
+- Description: Documents
+- Packaging.Code: 02
+- ReferenceNumber:
+  - Code: 9S
+  - Value: ORDER12345
+- PackageWeight.UnitOfMeasurement.Code: OZS or LBS
+- PackageWeight.Weight: converted weight
+- Dimensions.UnitOfMeasurement.Code: IN
+- Dimensions Length/Width/Height:
+  - Uses package_dimension values.
+  - If missing, fallback: 10 x 8 x 4.
+
+Important note:
+- DB fields are named length_cm/width_cm/height_cm, but UPS payload sends them as IN. Current code does not convert cm to inch.
+
+Label format:
+- LabelSpecification.LabelImageFormat.Code: PDF
+
+UPS response storage:
+- Model: App\Models\ShipmentTracking
+- Table: shipment_tracking
+- Stored fields:
+  - customer_id
+  - shipper_id
+  - create_shipment_id
+  - response_status_code
+  - response_status_description
+  - transaction_identifier
+  - customer_context
+  - shipment_identification_number
+  - transportation_charges_currency
+  - transportation_charges_amount
+  - service_options_charges_currency
+  - service_options_charges_amount
+  - total_charges_currency
+  - total_charges_amount
+  - billing_weight_uom
+  - billing_weight
+  - package_results
+  - raw_response
+  - status
+
+Tracking number extraction:
+- ShipmentResults.PackageResults.TrackingNumber
+- fallback: ShipmentResults.ShipmentIdentificationNumber
+
+After success:
+- shipment_tracking is updateOrCreate by shipper_id.
+- shipper_info.status becomes manifested.
+- tracking table gets a manifested status row.
+
+
+============================================================
+7. UPS SERVICE DESCRIPTION MAPPING
+============================================================
+
+Function:
+- getServiceDescriptionFromMethod($method)
+
+Mapping:
+- UNITED MY DELIVERY -> Ground
+- UNITED AIR PREMIUM -> Next Day Air
+- UNITED GRD PREMIUM -> 2nd Day Air
+- UNITED AIR EXPRESS -> Worldwide Express
+- UNITED PRIOR POST -> Standard
+- UNITED ECO POST -> Saver
+- UNITED MY PICKUP -> Ground
+- DDP AIREXPRESS -> Worldwide Express
+- DDU AIREXPRESS -> Worldwide Express
+- fallback -> Ground
+
+
+============================================================
+8. INTERNAL RATE API - /customer/ups-rate
+============================================================
+
+Status:
+- Active internal endpoint.
+- Despite route/function name, current implementation does not call UPS external rate API.
+- It calculates rate cards from local database tables.
+
+Route:
+- POST /customer/ups-rate
+- Route name: customer.ups.rate
+
+Controller:
+- customerController@getUpsRate
+
+Frontend location:
+- resources/views/customer/create-shipment.blade.php
+- Rate Calculate button triggers fetch('/customer/ups-rate')
+
+Inputs:
+- service_id
+  - Empty means "all services mode"
+  - Non-empty means single-service mode
+- total_weight
+- consignee_state
+
+Auth:
+- Requires logged-in customer guard.
+- If not logged in returns 401.
+
+Tables/models used:
+- courier_services
+- courier_rates
+- zones
+- customers
+
+Zone lookup:
+- Zone::where('zone_code', consignee_state)->first()
+
+All-services mode:
+- Triggered when service_id is empty.
+- Loops all courier_services ordered by network, method.
+- Fetches customer-specific courier_rates first:
+  - customer_id = logged in customer id
+  - service_id = current service id
+- If no customer-specific rates:
+  - fallback customer_id = 0 default rates
+- Filters by:
+  - total_weight between wt_range_start and wt_range_end
+  - zone_no null/0 OR zone_no equals selected zone id
+
+Single-service mode:
+- Finds CourierService by service_id.
+- Fetches customer-specific rates, fallback default rates.
+- Same weight and zone filtering.
+
+Response fields:
+- success
+- customer_exists
+- customer_name
+- selected_zone
+- all_rates
+- matched_rate for single service
+- service metadata for single service
+
+Each rate includes:
+- rate_id
+- service_id
+- method
+- method_display
+- network
+- method_code
+- tat
+- delivery_days
+- scode
+- price
+- zone_no
+- zone_name
+- zone_code
+- fuel_charge
+- fuel_percentage
+- gst_percentage
+- gst_amount
+
+Frontend behavior:
+- Builds selectable rate comparison cards.
+- User selects service via radio.
+- Selected service_id, service_rate_id, fuel, GST, total price are appended to create-shipment FormData.
+
+Important note:
+- If live UPS rates are required later, this endpoint name may be confusing. It currently means "local courier rate calculator".
+
+
+============================================================
+9. SHIP GLOBAL API
+============================================================
+
+Status:
+- Active.
+
+Purpose:
+- Manifest shipment by creating Ship Global order.
+
+Trigger:
+- POST /customer/manifest
+- POST /customer/bulk-manifest
+- Only when courier_services.network is "Ship Global" or "shipglobal".
+
+Controller function:
+- callShipGlobalApiFromDb($shipper)
+
+External endpoints:
+1. Token/customer auth:
+   POST https://labels.shipglobal.in/api/v1/customers.php
+2. Add order:
+   POST https://labels.shipglobal.in/api/v1/addOrder.php
+
+Auth step:
+- POST customers.php
+- JSON body:
+  - email
+  - password
+- Current code has email/password hardcoded.
+- Response token extraction checks:
+  - token
+  - data.token
+  - access_token
+  - data.access_token
+
+Add order auth:
+- Header:
+  Authorization: Bearer {token}
+- Header:
+  Content-Type: application/json
+
+Data sources:
+- shipper_info
+- consignee_info
+- package_dimension
+- shipment_invoice
+- shipment_invoice_items
+- customers.csb_status
+- courier_services service_code/scode
+
+Payload fields sent to Ship Global:
+- invoice_no
+- invoice_date
+- order_reference
+- service
+- package_weight
+- package_length
+- package_breadth
+- package_height
+- currency_code
+- csb5_status
+- seller_nickname
+- seller_firstname
+- seller_lastname
+- seller_mobile
+- seller_email
+- seller_company
+- seller_address
+- seller_address_2
+- seller_city
+- seller_postcode
+- seller_country_code
+- seller_state
+- customer_shipping_firstname
+- customer_shipping_lastname
+- customer_shipping_mobile
+- customer_shipping_email
+- customer_shipping_company
+- customer_shipping_address
+- customer_shipping_address_2
+- customer_shipping_city
+- customer_shipping_postcode
+- customer_shipping_country_code
+- customer_shipping_state
+- vendor_order_items
+- tracking
+
+seller_nickname:
+- UnitedW
+
+seller_country_code:
+- IN
+
+Package weight logic:
+- Uses first package only.
+- package_weight = actual_weight_kg * 1000
+- If no package, fallback 0.5.
+- This likely means grams are expected by Ship Global, but the variable name is packageWeightKg.
+
+Package dimension logic:
+- Uses first package length_cm, width_cm, height_cm.
+- Fallback: 10 x 10 x 10.
+
+Country code mapping:
+- US- United State of America -> US
+- India -> IN
+- UK - United Kingdom -> GB
+- China -> CN
+- Russia -> RU
+- Srilanka -> LK
+- fallback -> US
+
+Name split logic:
+- Shipper contact_person/company_name is split into firstname and lastname.
+- If lastname missing, lastname repeats firstname.
+- Consignee name/contact_person same logic.
+
+Invoice item mapping:
+- vendor_order_item_name -> item.description
+- vendor_order_item_sku -> item.hs_code or item.hts_code
+- vendor_order_item_quantity -> item.qty
+- vendor_order_item_unit_price -> item.unit_rate
+- vendor_order_item_hsn -> item.hs_code
+- vendor_order_item_tax_rate -> item.igst_percentage
+
+Default item:
+- If invoice items missing:
+  - name: General Merchandise
+  - quantity: 1
+  - unit_price: invoice amount or 0
+  - tax_rate: 0
+
+Success logic:
+- Ship Global may return HTTP 200 with success false but order_number exists.
+- Current code treats response as success if HTTP successful and order_number found.
+- order_number extraction:
+  - data.order_number
+  - order_number
+
+Tracking/reference extraction after success:
+- data.waybill_number
+- waybill_number
+- tracking_number
+- data.tracking_number
+- awb_number
+- data.awb_number
+- waybill
+- data.waybill
+- data.order_number
+- order_number
+
+Ship Global response storage:
+- shipment_tracking.response_status_code = 1
+- response_status_description = Ship Global order created
+- shipment_identification_number = extracted tracking/order number
+- total_charges_currency = INR
+- billing_weight_uom = KGS
+- package_results = null
+- raw_response = full Ship Global API response
+- status = created
+
+After success:
+- shipper_info.status becomes manifested.
+- tracking table gets manifested status.
+
+Label handling:
+- Admin label generation checks shipment_tracking.raw_response for:
+  - data.pdf_base64
+  - pdf_base64
+- If not present, app falls back to Dompdf label generation.
+
+Security note:
+- Ship Global email/password are hardcoded in controller.
+- Move to .env:
+  - SHIPGLOBAL_EMAIL
+  - SHIPGLOBAL_PASSWORD
+  - SHIPGLOBAL_SELLER_NICKNAME
+
+
+============================================================
+10. DELHIVERY API
+============================================================
+
+Status:
+- Active in admin delivery assignment flow.
+
+Purpose:
+- When admin assigns delivery type DDU, Delhivery pickup/shipment is created.
+
+Route:
+- POST /admin/assign-delivery
+- Route name: admin.assign-delivery
+
+Controller functions:
+- AdminController@assignDelivery
+- AdminController@callDelhiveryApi($shipmentId)
+
+Frontend:
+- resources/views/admin/companies.blade.php
+- Admin selects delivery type.
+- If DDU selected, UI shows Delhivery response/waybill info.
+
+External endpoint:
+- POST https://track.delhivery.com/api/cmu/create.json
+
+Auth:
+- Header:
+  Authorization: Token {masked}
+- Token is hardcoded in AdminController.
+
+Headers:
+- Accept: application/json
+- Authorization: Token ...
+
+Body format:
+- application/x-www-form-urlencoded
+- fields:
+  - format=json
+  - data={JSON encoded payload}
+
+Payload structure:
+- shipments: array
+- pickup_location: object
+
+Shipments payload fields:
+- name
+- add
+- pin
+- city
+- state
+- country
+- phone
+- order
+- payment_mode
+- quantity
+- weight
+- total_amount
+- products_desc
+- cod_amount
+- shipping_mode
+- shipment_width
+- shipment_length
+- shipment_height
+- end_date
+
+pickup_location:
+- name: ac549e-UNITEDWORLDWIDECOURI-do
+
+Data sources:
+- shipment_invoice
+- shipper_info
+- shipment_invoice_items
+- consignee_info
+- package_dimension
+
+Current payload direction note:
+- Function comment says pickup/shipment.
+- Payload uses shipper/company details as shipment receiver-like fields (name/add/pin/city/state/phone).
+- Review Delhivery expected fields before production scale.
+
+Payment mode:
+- Hardcoded to prepaid.
+- cod_amount = 0 unless payment_mode is COD.
+
+Shipping mode:
+- Surface.
+
+End date:
+- now() + 7 days, format Y-m-d H:i:s.
+
+Success handling:
+- If HTTP successful, response JSON parsed.
+- Inner success false is treated as failure.
+- success false checks:
+  - apiResponse.success === false
+  - rmk field
+  - packages[].remarks
+  - packages[].status == Fail
+
+Failure handling:
+- If HTTP status not successful, extracts:
+  - error
+  - message
+  - rmk
+  - status_code
+
+After assignDelivery:
+- shipment_invoice.delivery_type is updated.
+- If Self, assigned_delivery_person is required and saved.
+- Tracking row created with assigned_for_pickup.
+- shipper_info.status becomes assigned_for_pickup.
+- If DDU, Delhivery response is included in JSON response.
+
+Security note:
+- Delhivery token is hardcoded.
+- Move to .env:
+  - DELHIVERY_TOKEN
+  - DELHIVERY_PICKUP_LOCATION
+  - DELHIVERY_BASE_URL
+
+
+============================================================
+11. LABEL GENERATION API
+============================================================
+
+Status:
+- Active.
+
+Route:
+- POST /admin/generate-label
+- Route name: admin.generate-label
+
+Controller:
+- AdminController@generateLabel
+
+Purpose:
+- Return PDF label as base64.
+- Priority:
+  1. Use shipment_tracking.raw_response label from UPS/Ship Global.
+  2. Fallback to locally generated Dompdf label.
+
+Request:
+- shipment_id: shipment_invoice.id
+
+UPS label extraction:
+- Checks response_status_description contains "success".
+- Looks in:
+  - raw_response.ShipmentResults.PackageResults
+  - raw_response.PackageResults
+  - trackingRecord.package_results
+- Supports:
+  - ShippingLabel.ImageFormat.Code
+  - ShippingLabel.GraphicImage
+  - LabelImage.LabelImageFormat.Code
+  - LabelImage.GraphicImage
+
+If label format is PDF:
+- GraphicImage is returned directly as PDF base64.
+
+If label format is GIF/PNG/JPG/etc:
+- Creates data URI image.
+- Embeds in simple HTML.
+- Dompdf converts to PDF.
+- Paper: [0, 0, 400, 600]
+
+Ship Global label extraction:
+- Checks response_status_description contains "Ship Global".
+- Looks for:
+  - raw_response.data.pdf_base64
+  - raw_response.pdf_base64
+
+Fallback label:
+- Queries shipment_invoice, shipper_info, customers, consignee_info.
+- Renders resources/views/admin/label-pdf.blade.php.
+- Dompdf paper: [0, 0, 280, 400]
+
+Response:
+- success
+- pdf_base64
+- awb_number
+- source:
+  - shipment_tracking
+  - dompdf_fallback
+
+
+============================================================
+12. SHIPMENT STATUS AND TRACKING FLOW
+============================================================
+
+Tables involved:
+- shipper_info
+- create_shipment
+- shipment_invoice
+- shipment_tracking
+- tracking
+
+AWB generation:
+- Function: generateAwbNumber()
+- Format: UWC + YYMMDD + 5 digit serial
+- Example: UWC26060200001
+- Serial resets daily based on awb_number prefix.
+
+Status flow:
+1. draft
+   - Created by POST /customer/create-shipment
+2. ready
+   - After POST /customer/pay-now
+3. packed
+   - After POST /customer/mark-packed
+4. manifested
+   - After UPS/Ship Global manifest success
+5. assigned_for_pickup
+   - Admin assign delivery
+6. dispatched / ready_to_dispatch / delivered / cancelled
+   - Managed in admin/customer flows
+
+Tracking table:
+- Used for visible status timeline.
+- Common fields:
+  - awb_number
+  - shipper_id
+  - shipping_id
+  - uwc_id
+  - title
+  - status
+
+shipment_tracking table:
+- Used for carrier API response and label/charges.
+
+
+============================================================
+13. COUNTRY CODE MAPPING
+============================================================
+
+Function:
+- getCountryCodeFromDestination($dest)
+
+Current mapping:
+- US- United State of America => US
+- India => IN
+- UK - United Kingdom => GB
+- China => CN
+- Russia => RU
+- Srilanka => LK
+- default => US
+
+Used by:
+- UPS payload builder
+- Ship Global payload builder
+
+Risk:
+- Any destination string not exactly matching these keys becomes US.
+- Better approach: store ISO country code directly in DB/dropdown.
+
+
+============================================================
+14. HSN/HTS SEARCH INTERNAL API
+============================================================
+
+Status:
+- Active internal API.
+
+Route:
+- GET /customer/search-hs-codes
+
+Controller:
+- customerController@searchHsCodes
+
+Purpose:
+- Invoice item description/HS code search autocomplete.
+
+Input:
+- q
+- Minimum length: 2 characters.
+
+Model/table:
+- App\Models\HsHtsCode
+
+Query:
+- where items LIKE %q%
+- limit 20
+
+Returned fields:
+- id
+- items
+- hs_code
+- hts_code
+
+External API:
+- None. DB lookup only.
+
+
+============================================================
+15. SERVICES/CREDENTIALS FOUND BUT NOT FULLY ACTIVE IN CODE
+============================================================
+
+Source:
+- Documents/credentials.txt
+- Some options appear in UI labels.
+- No full active API request found in app code for these during scan, except Delhivery.
+
+Reference-only / credentials-only services found:
+
+1. Parcll
+- Token present in Documents/credentials.txt.
+- No active API call found in app code.
+
+2. USPS
+- AuthToken, ClientCode, UserCode present in Documents/credentials.txt.
+- UI mentions USPS in shipping method text.
+- No active USPS API call found in app code.
+
+3. UNI-UNI / Flying Tigers
+- Login credentials present in Documents/credentials.txt.
+- No active API call found in app code.
+
+4. DPD
+- Login credentials/entity/token IDs present in Documents/credentials.txt.
+- UI mentions UPS/DPD in shipping method text.
+- DPD service codes/rules documented in credentials file.
+- No active DPD API call found in app code.
+
+5. UPS website/login credentials
+- Present in Documents/credentials.txt.
+- API credentials are used separately.
+
+Important:
+- These credentials should not remain in tracked documents.
+- Move all secrets to .env or secure vault.
+
+
+============================================================
+16. DATABASE MODELS RELEVANT TO API INTEGRATIONS
+============================================================
+
+ShipmentTracking:
+- File: app/Models/ShipmentTracking.php
+- Table: shipment_tracking
+- Stores carrier response and label data.
+- Casts:
+  - package_results as array
+  - raw_response as array
+  - charges as decimals
+
+CourierService:
+- File: app/Models/CourierService.php
+- Table: courier_services
+- Fields:
+  - shipper_code
+  - method_code
+  - network
+  - service_code
+  - scode
+  - type
+  - method
+  - tat
+  - description
+  - weight
+  - real_name
+- Used to decide:
+  - UPS vs Ship Global network
+  - service code/scode
+  - weight unit logic
+  - displayed rate card service details
+
+CourierRate:
+- File: app/Models/CourierRate.php
+- Table: courier_rates
+- Fields:
+  - customer_id
+  - service_id
+  - wt_range_start
+  - wt_range_end
+  - zone_no
+  - price
+  - fuel_charge
+  - fuel_percentage
+  - gst_percentage
+  - gst_amount
+- Used by /customer/ups-rate internal rate calculator.
+
+
+============================================================
+17. FRONTEND TOUCHPOINTS
+============================================================
+
+Customer create shipment:
+- File: resources/views/customer/create-shipment.blade.php
+- Rate button:
+  - id: rateCalculateBtn
+  - fetches /customer/ups-rate
+- Rate selection:
+  - input name: rate_select
+  - data-service-id/value: service id
+  - data-rate-id: courier rate id
+  - data-rate: base/fuel/gst/total JSON
+- Submit:
+  - Appends service_id
+  - Appends service_rate_id
+  - Appends fuel_charge, fuel_percentage, gst_amount, gst_percentage, total_price
+  - POST /customer/create-shipment
+
+Customer view all shipments:
+- File: resources/views/customer/view-all-shipments.blade.php
+- Shows:
+  - tracking number
+  - charges
+  - packages
+  - items
+  - label link if available
+- Manifest buttons:
+  - POST /customer/manifest
+  - POST /customer/bulk-manifest
+- Confirmation text says API will be UPS or Ship Global based on shipment network.
+
+Admin companies:
+- File: resources/views/admin/companies.blade.php
+- Delivery assignment:
+  - POST /admin/assign-delivery
+  - If DDU, Delhivery API response shown.
+
+
+============================================================
+18. KNOWN RISKS / BUGS / IMPROVEMENTS
+============================================================
+
+1. Hardcoded secrets:
+- UPS ship credentials hardcoded.
+- Ship Global email/password hardcoded.
+- Delhivery token hardcoded.
+- Existing Documents/credentials.txt contains sensitive values.
+- Move all to .env and rotate leaked credentials.
+
+2. SSL verification disabled for UPS cURL:
+- CURLOPT_SSL_VERIFYPEER => false
+- Should be true in production.
+
+3. UPS dimensions:
+- DB columns are cm but UPS payload says IN.
+- Convert cm to inches or rename fields/ensure UI collects inches.
+
+4. Ship Global package_weight:
+- Variable says kg, payload sends actual_weight_kg * 1000.
+- Confirm provider expects grams.
+
+5. Country mapping:
+- Unknown destination defaults to US.
+- This can create wrong international shipments.
+
+6. /customer/ups-rate naming:
+- It is local DB rating, not UPS live rating.
+- Rename route/function later or document in UI/code comments.
+
+7. AuthKey SMS success:
+- Code returns true even if provider body says failure.
+- Should parse response and fail when provider indicates error.
+
+8. OTP logs:
+- OTP warning log fallback should be disabled in production.
+
+9. Delhivery payload:
+- pickup/shipment field mapping should be verified with Delhivery docs.
+- pkg_length appears referenced but not selected in query; code selects length_cm but payload uses pkg_length, so shipment_length may be 0.
+
+10. Label handling:
+- UPS GIF/image labels are converted via Dompdf.
+- For thermal labels, native ZPL/EPL should be handled differently if needed.
+
+11. Manual Ship Global label:
+- If Ship Global returns order_number but no pdf_base64, app manifests successfully but label may fall back to local Dompdf.
+
+
+============================================================
+19. QUICK DEBUG CHECKLIST
+============================================================
+
+UPS token issue:
+- Check UPS credentials.
+- Check logs for "UPS Ship token error".
+- Check cache key ups_ship_access_token.
+
+UPS shipment issue:
+- Check logs for "UPS Ship payload".
+- Check logs for "UPS Ship response HTTP".
+- Verify shipper number selected correctly.
+- Verify service code and weight unit.
+- Verify destination country/state/postal.
+
+Ship Global issue:
+- Check "Ship Global token generation failed".
+- Check "Ship Global order payload".
+- Check service code from courier_services.service_code/scode.
+- Check invoice items and package values.
+- Check if response has order_number but label manual.
+
+Delhivery issue:
+- Check /admin/assign-delivery response.
+- Check Delhivery rmk/packages remarks.
+- Verify pickup_location name.
+- Verify token.
+- Verify shipment_length bug.
+
+Rate issue:
+- Check courier_rates for customer_id.
+- Check fallback customer_id=0 rates.
+- Check zone_code matches consignee_state.
+- Check package total_weight range.
+
+Label issue:
+- Check shipment_tracking.raw_response.
+- For UPS: check ShippingLabel.GraphicImage.
+- For Ship Global: check data.pdf_base64.
+- If missing, fallback Dompdf source will be used.
+
+
+============================================================
+20. RECOMMENDED ENV KEYS
+============================================================
+
+Already present/used:
+- SMS_AUTHKEY
+- SMS_SENDER_ID
+- SMS_COUNTRY_CODE
+- UPS_CLIENT_ID
+- UPS_CLIENT_SECRET
+- UPS_SHIPPER_NUMBER
+
+Recommended to add:
+- UPS_SHIP_CLIENT_ID
+- UPS_SHIP_CLIENT_SECRET
+- UPS_GROUND_SAVER_SHIPPER_NUMBER
+- UPS_DEFAULT_SHIPPER_NUMBER
+- SHIPGLOBAL_BASE_URL
+- SHIPGLOBAL_EMAIL
+- SHIPGLOBAL_PASSWORD
+- SHIPGLOBAL_SELLER_NICKNAME
+- DELHIVERY_BASE_URL
+- DELHIVERY_TOKEN
+- DELHIVERY_PICKUP_LOCATION
+
+
+============================================================
+21. END-TO-END FLOW SUMMARY
+============================================================
+
+Customer creates shipment:
+1. Customer fills create-shipment form.
+2. Rate cards are loaded from /customer/ups-rate using local DB.
+3. Customer selects a rate/service.
+4. Form posts to /customer/create-shipment.
+5. App creates:
+   - shipper_info
+   - consignee_info
+   - package_dimension
+   - csb_information
+   - shipment_invoice
+   - shipment_invoice_items
+   - create_shipment
+   - tracking draft row
+
+Customer pays and prepares shipment:
+1. /customer/pay-now deducts wallet and sets ready.
+2. /customer/mark-packed sets packed.
+
+Manifest:
+1. /customer/manifest or /customer/bulk-manifest.
+2. App resolves courier service network.
+3. If Ship Global:
+   - token API
+   - addOrder API
+   - store order/tracking
+4. Else UPS:
+   - UPS OAuth token
+   - UPS Ship API
+   - store charges/label/tracking
+5. App sets status to manifested.
+
+Admin delivery:
+1. Admin assigns delivery.
+2. If DDU:
+   - Delhivery CMU API called.
+3. App sets assigned_for_pickup tracking/status.
+
+Label:
+1. Admin generate-label tries carrier label from shipment_tracking.
+2. If missing, Dompdf fallback label is generated.
+
