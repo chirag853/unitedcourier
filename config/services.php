@@ -69,4 +69,28 @@ return [
         'timeout' => (int) env('POSTSHIPPING_TIMEOUT', 60),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Flying Tigers API
+    |--------------------------------------------------------------------------
+    | Used for shipments created with the method:
+    |   - UNITED ECO POST
+    | Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+    |
+    | Authentication is performed via request headers:
+    |   - ClientCode  (e.g. C10009)
+    |   - UserCode    (e.g. C10009)
+    |   - AuthToken   (e.g. VsDgjDfKqxRZHhrCt392iZ1RjCvYCMcZMH5AHWIZRDBAOZqJht)
+    |
+    */
+
+    'flyingtigers' => [
+        'base_url' => env('FLYINGTIGERS_BASE_URL', 'https://app.flyingtigers.in'),
+        'endpoint' => env('FLYINGTIGERS_ENDPOINT', '/api/Shipment/CustomerBookingAPI'),
+        'client_code' => env('FLYINGTIGERS_CLIENT_CODE', 'C10009'),
+        'user_code' => env('FLYINGTIGERS_USER_CODE', 'C10009'),
+        'auth_token' => env('FLYINGTIGERS_AUTH_TOKEN', 'VsDgjDfKqxRZHhrCt392iZ1RjCvYCMcZMH5AHWIZRDBAOZqJht'),
+        'timeout' => (int) env('FLYINGTIGERS_TIMEOUT', 60),
+    ],
+
 ];

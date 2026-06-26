@@ -1036,6 +1036,7 @@ class customerController extends Controller
             $serviceId = $request->service_id;
             $totalWeight = floatval($request->total_weight ?? 0);
             $consigneeState = $request->consignee_state;
+            $deliveryDestination = $request->delivery_destination;
 
             // Get the currently logged-in customer
             $customer = auth()->guard('customer')->user();
@@ -1054,6 +1055,10 @@ class customerController extends Controller
                 $zone = \App\Models\Zone::where('zone_code', $consigneeState)->first();
             }
 
+            // DPD (PostShipping) rates are only available for UK destinations.
+            // For any non-UK destination (e.g. US), DPD rates are hidden.
+            $isUkDestination = ($deliveryDestination === 'UK - United Kingdom');
+
             // ALL-SERVICES MODE: When service_id is empty, return best matching rate for every service
             if (empty($serviceId)) {
                 $allServices = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
@@ -1061,6 +1066,17 @@ class customerController extends Controller
                 $customerRatesExist = false;
 
                 foreach ($allServices as $service) {
+                    // Destination-based DPD filtering:
+                    // - UK destination  → show ONLY DPD (PostShipping) services, hide all others.
+                    // - Non-UK destination → hide DPD services, show all others.
+                    $isDpd = $this->isPostShippingMethod($service->method);
+                    if ($isUkDestination && !$isDpd) {
+                        continue; // UK: skip non-DPD services
+                    }
+                    if (!$isUkDestination && $isDpd) {
+                        continue; // Non-UK: skip DPD services
+                    }
+
                     // Fetch ALL rates for this service (both zone-independent and zone-dependent)
                     // Priority: customer-specific rates first, then default rates as fallback
                     $rates = collect();
@@ -1148,6 +1164,23 @@ class customerController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'No matching service found for ID: ' . $serviceId
+                ], 404);
+            }
+
+            // Destination-based DPD filtering (mirrors ALL-SERVICES MODE):
+            // - UK destination  → ONLY DPD (PostShipping) services are allowed; reject all others.
+            // - Non-UK destination → DPD services are not allowed; reject them.
+            $isDpdService = $this->isPostShippingMethod($service->method);
+            if ($isUkDestination && !$isDpdService) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only DPD services are available for UK destinations.'
+                ], 404);
+            }
+            if (!$isUkDestination && $isDpdService) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'DPD service is only available for UK destinations.'
                 ], 404);
             }
 
@@ -1718,7 +1751,7 @@ class customerController extends Controller
             'Russia' => 'RU',
             'Srilanka' => 'LK',
         ];
-        return $map[$dest] ?? 'UK';
+        return $map[$dest] ?? 'US';
     }
 
     /**
@@ -2233,6 +2266,72 @@ class customerController extends Controller
                     'network' => 'PostShipping',
                     'postshipping_response' => $apiResponse,
                 ]);
+            } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
+                // Call Flying Tigers API (UNITED ECO POST)
+                $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
+                if (!$flyingTigersResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Flying Tigers API Failed: ' . ($flyingTigersResult['message'] ?? 'Unknown error'),
+                        'flyingtigers_response' => $flyingTigersResult['data'] ?? null,
+                    ], 500);
+                }
+
+                // Flying Tigers succeeded - store tracking data
+                $apiResponse = $flyingTigersResult['data'] ?? [];
+                $trackingNumber = $this->extractFlyingTigersTrackingNumber($apiResponse);
+                $labelUrl = $this->extractFlyingTigersLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Flying Tigers shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to manifested
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    // Create tracking record for manifested status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus('manifested'),
+                        'status' => 'manifested',
+                    ]);
+
+                    \Log::info('Shipment manifested via Flying Tigers: ' . ($trackingNumber ?? 'N/A'));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking for Flying Tigers manifest: ' . $e->getMessage());
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Flying Tigers!',
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'network' => 'Flying Tigers',
+                    'flyingtigers_response' => $apiResponse,
+                ]);
             } elseif ($network === 'ship global' || $network === 'shipglobal') {
                 // Call Ship Global API
                 $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
@@ -2512,6 +2611,65 @@ class customerController extends Controller
                         ];
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via PostShipping.');
+
+                    } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
+                        // Call Flying Tigers API (UNITED ECO POST)
+                        $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
+
+                        if (!$flyingTigersResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Flying Tigers API error: ' . ($flyingTigersResult['message'] ?? 'Unknown'),
+                            ];
+                            continue;
+                        }
+
+                        $apiResponse = $flyingTigersResult['data'] ?? [];
+                        $trackingNumber = $this->extractFlyingTigersTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractFlyingTigersLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $customerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Flying Tigers shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'network' => 'Flying Tigers',
+                        ];
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Flying Tigers.');
 
                     } elseif ($network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
@@ -3830,6 +3988,420 @@ class customerController extends Controller
 
         // Case D: Nested under "Shipments" / "shipments"
         foreach (['Shipments', 'shipments', 'Shipment', 'shipment'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Flying Tigers API (UNITED ECO POST)
+    |--------------------------------------------------------------------------
+    | Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+    | Auth headers: ClientCode, UserCode, AuthToken
+    |
+    */
+
+    /**
+     * Determine if a shipping method should be routed to the Flying Tigers API.
+     * Triggered for UNITED ECO POST shipments.
+     *
+     * @param string|null $shippingMethod
+     * @return bool
+     */
+    private function isFlyingTigersMethod($shippingMethod)
+    {
+        if (empty($shippingMethod)) {
+            return false;
+        }
+
+        $methodUpper = strtoupper(trim($shippingMethod));
+
+        // Flying Tigers API is called for UNITED ECO POST shipments.
+        return str_contains($methodUpper, 'UNITED ECO POST');
+    }
+
+    /**
+     * Build the Flying Tigers API payload from database records.
+     * Payload structure mirrors the documented CustomerBookingAPI format.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildFlyingTigersPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (!$consignee) {
+            \Log::warning('buildFlyingTigersPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildFlyingTigersPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+        // Consignee country code from delivery_destination (e.g. "US", "UK")
+        $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+        // Currency code (default INR to match example payload)
+        $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+
+        // Booking date in "d-M-Y" format (e.g. "25-May-2026")
+        $bookingDate = now()->format('d-M-Y');
+
+        // Reference number: prefer invoice reference, else AWB number
+        $refNo = $invoice ? ($invoice->reference_number ?? '') : '';
+        if (empty($refNo)) {
+            $refNo = $shipper->awb_number ?? ('FT-' . $shipper->id);
+        }
+
+        // Consignee name: prefer consignee_name, else contact_person
+        $consigneeName = $consignee->consignee_name ?? '';
+        if (empty(trim($consigneeName))) {
+            $consigneeName = $consignee->contact_person ?? '';
+        }
+
+        // Consignee phone
+        $consigneePhone = $consignee->phone_number ?? '';
+
+        // Consignee address (combine line1 + line2 + line3 if line1 is short)
+        $consigneeAddress1 = trim($consignee->address_line1 ?? '');
+        if (empty($consigneeAddress1)) {
+            $consigneeAddress1 = trim(($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? ''));
+        }
+
+        // Invoice number & date for packet details
+        $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+        if (empty($invoiceNo)) {
+            $invoiceNo = $shipper->awb_number ?? ('INV-' . $shipper->id);
+        }
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? \Carbon\Carbon::parse($invoice->invoice_date)->format('d-M-Y')
+            : now()->format('d-M-Y');
+
+        // Build addPacketDetailList — one entry per package, with boxInvoiceDetails from invoice items.
+        $addPacketDetailList = [];
+        $invoiceItems = collect();
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+        }
+
+        $packageIndex = 0;
+        foreach ($packages as $pkg) {
+            $packageIndex++;
+
+            $pkgWeight = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($pkgWeight <= 0) {
+                $pkgWeight = 0.5;
+            }
+            $pkgL = (float) ($pkg->length_cm ?? 0) ?: 1;
+            $pkgW = (float) ($pkg->width_cm ?? 0) ?: 1;
+            $pkgH = (float) ($pkg->height_cm ?? 0) ?: 1;
+
+            // Find invoice items mapped to this package via box_no (1-based)
+            $boxItems = $invoiceItems->filter(function ($item) use ($packageIndex) {
+                return ((int) ($item->box_no ?? 0)) === $packageIndex;
+            });
+
+            // If no items mapped to this box, use all items for the first package
+            if ($boxItems->isEmpty() && $packageIndex === 1) {
+                $boxItems = $invoiceItems;
+            }
+
+            $boxInvoiceDetails = [];
+            if ($boxItems->isNotEmpty()) {
+                foreach ($boxItems as $item) {
+                    $itemQty = (float) ($item->qty ?? 1);
+                    if ($itemQty <= 0) {
+                        $itemQty = 1;
+                    }
+                    $itemUnitPrice = (float) ($item->unit_rate ?? 0);
+                    if ($itemUnitPrice <= 0) {
+                        $itemUnitPrice = (float) ($item->amount ?? 0) / $itemQty;
+                    }
+                    if ($itemUnitPrice <= 0) {
+                        $itemUnitPrice = 5.00;
+                    }
+                    $boxInvoiceDetails[] = [
+                        'ProductName' => (string) ($item->description ?? 'General Merchandise'),
+                        'UnitPrice'   => number_format($itemUnitPrice, 2, '.', ''),
+                        'Quantity'    => (string) (int) $itemQty,
+                    ];
+                }
+            } else {
+                // Fallback single item when no invoice items exist
+                $boxInvoiceDetails[] = [
+                    'ProductName' => 'General Merchandise',
+                    'UnitPrice'   => '5.00',
+                    'Quantity'    => '1',
+                ];
+            }
+
+            $addPacketDetailList[] = [
+                'BoxWeight'         => number_format($pkgWeight, 3, '.', ''),
+                'BoxLength'         => number_format($pkgL, 2, '.', ''),
+                'BoxWidth'          => number_format($pkgW, 2, '.', ''),
+                'BoxHeight'         => number_format($pkgH, 2, '.', ''),
+                'InvoiceNo'         => (string) $invoiceNo,
+                'InvoiceDate'       => (string) $invoiceDate,
+                'boxInvoiceDetails' => $boxInvoiceDetails,
+            ];
+        }
+
+        
+        $payload = [
+            'shipmentType'      => 'Forward',
+            // 'consigneeCountry'  => (string) ($consignee->delivery_destination ?? $consigneeCountryCode ?? 'US'),
+            'consigneeCountry'  => (string) ('US'),
+            'RefNo'             => (string) $refNo,
+            'BookingDate'       => (string) $bookingDate,
+            'Consignee'         => (string) $consigneeName,
+            'ConsigneePhoneNo'  => (string) $consigneePhone,
+            'ConsigneeAddress1' => (string) $consigneeAddress1,
+            'ConsigneePinCode'  => (string) ($consignee->zip_code ?? ''),
+            'ConsigneeState'    => (string) ($consignee->state ?? ''),
+            'ConsigneeCity'     => (string) ($consignee->city ?? ''),
+            'BusinessType'      => 'B2C',
+            'Vendor'            => 'USPS Work',
+            'Service'           => 'Uniuni',
+            'PickupPoint'       => '2',
+            'addPacketDetailList' => $addPacketDetailList,
+            'PackageType'       => 'NONDOC',
+            'currencyCode'      => (string) $currencyCode,
+        ];
+        
+        print_r($payload); // Debugging line to inspect the payload structure
+        
+
+        return [
+            'success' => true,
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * Call the Flying Tigers API to create a shipment.
+     * Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+    private function callFlyingTigersApiFromDb($shipper)
+    {
+        try {
+            $payloadResult = $this->buildFlyingTigersPayloadFromDb($shipper);
+            if (!$payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build Flying Tigers payload.',
+                ];
+            }
+
+            $payload = $payloadResult['payload'];
+
+            $clientCode = config('services.flyingtigers.client_code');
+            $userCode = config('services.flyingtigers.user_code');
+            $authToken = config('services.flyingtigers.auth_token');
+            $baseUrl = rtrim(config('services.flyingtigers.base_url'), '/');
+            $endpoint = config('services.flyingtigers.endpoint', '/api/Shipment/CustomerBookingAPI');
+            $url = $baseUrl . $endpoint;
+            $timeout = (int) config('services.flyingtigers.timeout', 60);
+
+            \Log::info('Flying Tigers payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+                'ClientCode'   => $clientCode,
+                'UserCode'     => $userCode,
+                'AuthToken'    => $authToken,
+            ];
+
+            $response = Http::withHeaders($headers)
+                ->withOptions(['verify' => false])
+                ->timeout($timeout)
+                ->post($url, $payload);
+
+            $apiResponse = $response->json();
+
+            if (!$response->successful()) {
+                $errorMessage = 'Flying Tigers API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
+                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Flying Tigers API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                return [
+                    'success'     => false,
+                    'message'      => $errorMessage,
+                    'data'         => $apiResponse,
+                    'status_code'  => $response->status(),
+                ];
+            }
+
+            \Log::info('Flying Tigers response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
+
+            return [
+                'success' => true,
+                'message' => 'Flying Tigers shipment created successfully.',
+                'data'     => $apiResponse,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Flying Tigers API call failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Flying Tigers API call failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Extract a tracking/reference number from a Flying Tigers API response.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractFlyingTigersTrackingNumber($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        $candidateKeys = [
+            'TrackingNumber', 'tracking_number', 'WaybillNumber', 'waybill_number',
+            'AwbNumber', 'awb_number', 'ConsignmentNumber', 'consignment_number',
+            'OrderNumber', 'order_number', 'ShipmentNumber', 'shipment_number',
+            'ReferenceNo', 'reference_no', 'RefNo', 'BookingId', 'booking_id',
+            'Waybill', 'waybill', 'Reference', 'reference', 'ShipmentId', 'shipment_id',
+        ];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($candidateKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($candidateKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($candidateKeys as $key) {
+                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($candidateKeys as $key) {
+                if (isset($data[$key]) && !empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Shipment" / "shipment"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the LabelURL from a Flying Tigers API response.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractFlyingTigersLabelUrl($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        $labelKeys = ['LabelURL', 'label_url', 'LabelUrl', 'labelurl', 'Label', 'label', 'PdfUrl', 'pdf_url', 'LabelLink', 'label_link'];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($labelKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($labelKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($labelKeys as $key) {
+                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($labelKeys as $key) {
+                if (isset($data[$key]) && !empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Result" / "result"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result'] as $wrapKey) {
             if (isset($apiResponse[$wrapKey])) {
                 $wrap = $apiResponse[$wrapKey];
                 if (is_array($wrap)) {

@@ -8363,6 +8363,7 @@
         if (customerInfo) customerInfo.style.display = 'none';
 
         const consigneeState = getVal('select[name="consignee_state"]');
+        const deliveryDestination = getVal('select[name="delivery_destination"]');
 
         // Calculate total weight from all package rows
         let totalWeight = 0;
@@ -8385,7 +8386,8 @@
             body: JSON.stringify({
                 service_id: '',
                 total_weight: totalWeight,
-                consignee_state: consigneeState
+                consignee_state: consigneeState,
+                delivery_destination: deliveryDestination
             })
         })
         .then(res => res.json())
@@ -9525,10 +9527,9 @@ if (rateRadio && rateRadio.dataset.rate) {
     </script>
     <script>
     // ============================================================
-    // ZIP CODE AUTO-FILL: City & State from Zippopotam API
-    // - When user enters a ZIP code, calls zippopotam.us API
-    // - Auto-fills City from "place name"
-    // - Auto-selects State matching "state abbreviation" against zone_code
+    // ZIP / POSTCODE AUTO-FILL: City & State
+    // - UK destination  → postcodes.io API (city = admin_district, state = region)
+    // - Other countries → zippopotam.us API (city = place name, state = state abbreviation)
     // ============================================================
     (function() {
         const zipInput = document.getElementById('consignee_zip_code');
@@ -9537,6 +9538,12 @@ if (rateRadio && rateRadio.dataset.rate) {
         const destSelect = document.querySelector('select[name="delivery_destination"]');
 
         if (!zipInput) return;
+
+        // Returns true when the selected delivery destination is UK
+        function isUkDestination() {
+            if (!destSelect) return false;
+            return destSelect.value === 'UK - United Kingdom';
+        }
 
         // Extract country code from delivery_destination value (e.g., "US- United State of America" → "us")
         function getCountryCode() {
@@ -9553,9 +9560,98 @@ if (rateRadio && rateRadio.dataset.rate) {
             debounceTimer = setTimeout(fn, delay);
         }
 
+        // ---- UK lookup via postcodes.io ----
+        function lookupUkPostcode(postcode) {
+            // postcodes.io accepts the postcode with or without spaces.
+            const url = 'https://api.postcodes.io/postcodes/' + encodeURIComponent(postcode);
+
+            fetch(url)
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Postcode lookup failed');
+                    return response.json();
+                })
+                .then(function(data) {
+                    if (!data || data.status !== 200 || !data.result) {
+                        throw new Error('Postcode not found');
+                    }
+                    const result = data.result;
+                    // City = admin_district, State = region
+                    const city = result.admin_district || result.nuts || '';
+                    const region = result.region || result.country || '';
+
+                    if (cityInput) {
+                        cityInput.value = city;
+                        cityInput.dataset.autofilled = 'true';
+                        cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    if (stateSelect) {
+                        // Try to match the region against an existing zone option;
+                        // if none matches, leave the dropdown unchanged so the user can pick.
+                        const options = stateSelect.options;
+                        let matched = false;
+                        for (let i = 0; i < options.length; i++) {
+                            if (options[i].text && options[i].text.toLowerCase().indexOf(region.toLowerCase()) !== -1) {
+                                stateSelect.selectedIndex = i;
+                                stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (!matched) {
+                            stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    console.log('UK postcode auto-fill error:', err.message);
+                });
+        }
+
+        // ---- Non-UK lookup via zippopotam.us ----
+        function lookupZippopotam(zip) {
+            const countryCode = getCountryCode();
+            const url = 'https://api.zippopotam.us/' + countryCode + '/' + zip;
+
+            fetch(url)
+                .then(function(response) {
+                    if (!response.ok) throw new Error('ZIP lookup failed');
+                    return response.json();
+                })
+                .then(function(data) {
+                    // Auto-fill City from "place name"
+                    if (data.places && data.places.length > 0 && cityInput) {
+                        cityInput.value = data.places[0]['place name'] || '';
+                        cityInput.dataset.autofilled = 'true';
+                        // Trigger change event for any listeners
+                        cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+
+                    // Auto-select State from "state abbreviation" matching zone_code
+                    if (data.places && data.places.length > 0 && stateSelect) {
+                        const stateAbbr = data.places[0]['state abbreviation'] || '';
+                        // Find the option whose value matches the state abbreviation
+                        const options = stateSelect.options;
+                        for (let i = 0; i < options.length; i++) {
+                            if (options[i].value === stateAbbr) {
+                                stateSelect.value = stateAbbr;
+                                stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                break;
+                            }
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    // Silently fail - user can still manually fill city/state
+                    console.log('ZIP auto-fill error:', err.message);
+                });
+        }
+
         zipInput.addEventListener('input', function() {
             const zip = zipInput.value.trim();
-            if (zip.length < 5) {
+            const uk = isUkDestination();
+            // UK postcodes can be short (e.g. "M1") up to 8 chars with space.
+            const minLen = uk ? 2 : 5;
+            if (zip.length < minLen) {
                 // Clear auto-filled fields if ZIP is too short
                 if (cityInput && cityInput.dataset.autofilled === 'true') {
                     cityInput.value = '';
@@ -9564,43 +9660,26 @@ if (rateRadio && rateRadio.dataset.rate) {
                 return;
             }
             debounce(function() {
-                const countryCode = getCountryCode();
-                const url = 'https://api.zippopotam.us/' + countryCode + '/' + zip;
-
-                fetch(url)
-                    .then(function(response) {
-                        if (!response.ok) throw new Error('ZIP lookup failed');
-                        return response.json();
-                    })
-                    .then(function(data) {
-                        // Auto-fill City from "place name"
-                        if (data.places && data.places.length > 0 && cityInput) {
-                            cityInput.value = data.places[0]['place name'] || '';
-                            cityInput.dataset.autofilled = 'true';
-                            // Trigger change event for any listeners
-                            cityInput.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-
-                        // Auto-select State from "state abbreviation" matching zone_code
-                        if (data.places && data.places.length > 0 && stateSelect) {
-                            const stateAbbr = data.places[0]['state abbreviation'] || '';
-                            // Find the option whose value matches the state abbreviation
-                            const options = stateSelect.options;
-                            for (let i = 0; i < options.length; i++) {
-                                if (options[i].value === stateAbbr) {
-                                    stateSelect.value = stateAbbr;
-                                    stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                                    break;
-                                }
-                            }
-                        }
-                    })
-                    .catch(function(err) {
-                        // Silently fail - user can still manually fill city/state
-                        console.log('ZIP auto-fill error:', err.message);
-                    });
+                if (uk) {
+                    lookupUkPostcode(zip);
+                } else {
+                    lookupZippopotam(zip);
+                }
             }, 500);
         });
+
+        // Re-run lookup when destination changes (so UK↔non-UK switches API)
+        if (destSelect) {
+            destSelect.addEventListener('change', function() {
+                const zip = zipInput.value.trim();
+                if (zip.length === 0) return;
+                if (isUkDestination() && zip.length >= 2) {
+                    lookupUkPostcode(zip);
+                } else if (!isUkDestination() && zip.length >= 5) {
+                    lookupZippopotam(zip);
+                }
+            });
+        }
     })();
     </script>
     <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"
