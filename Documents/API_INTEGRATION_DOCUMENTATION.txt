@@ -1317,3 +1317,23 @@ Label:
 1. Admin generate-label tries carrier label from shipment_tracking.
 2. If missing, Dompdf fallback label is generated.
 
+
+
+
+
+
+----------------------------------------------------------BULK upload----------------------------------------------------------------------------
+
+and Bluk upload m mai ChgWeight weight se rate calculate honge , and jitne consignee honge utne invoices create honge
+
+
+
+
+
+
+
+
+
+
+
+

@@ -8377,11 +8377,11 @@
         if (totalWeight <= 0) totalWeight = 1; // default 1kg
 
         // Always send empty service_id to get rates for ALL services
-        fetch('/customer/ups-rate', {
+        fetch('{{ route("customer.ups.rate") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]')?.value || ''
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
             },
             body: JSON.stringify({
                 service_id: '',
@@ -9006,7 +9006,8 @@ if (rateRadio && rateRadio.dataset.rate) {
                     body: formData,
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
                     }
                 })
                 .then(response => response.json().then(data => ({
