@@ -563,6 +563,9 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/csb5-form', [customerController::class, 'storeCsb5Form'])->name('csb5-form.store');
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/create-shipment', [customerController::class, 'storeShipment'])->name('create-shipment.store');
+    Route::get('/bulk-upload', [customerController::class, 'bulkUpload'])->name('bulk-upload');
+    Route::post('/bulk-upload', [customerController::class, 'processBulkUpload'])->name('bulk-upload.process');
+    Route::post('/bulk-upload/preview', [customerController::class, 'previewBulkUpload'])->name('bulk-upload.preview');
     Route::post('/ups-rate', [customerController::class, 'getUpsRate'])->name('ups.rate');
     Route::post('/ups-ship', [customerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [customerController::class, 'viewAllShipments'])->name('view-all-shipments');

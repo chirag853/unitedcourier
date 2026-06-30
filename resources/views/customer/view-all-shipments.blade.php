@@ -225,57 +225,70 @@
                 <div id="alertContainer"></div>
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-body p-4">
+                        @php
+                            // Compute status counts from the invoices collection (no extra DB query)
+                            $statusCounts = ['all' => $invoices->count(), 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'received' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
+                            foreach ($invoices as $inv) {
+                                $st = $inv->status === 'cancelled' ? 'cancelled' : ($inv->shipperInfo && $inv->shipperInfo->status ? $inv->shipperInfo->status : 'draft');
+                                if (isset($statusCounts[$st])) {
+                                    $statusCounts[$st]++;
+                                }
+                            }
+                        @endphp
                         <div class="d-flex flex-wrap gap-3">
 
                             <button class="btn btn-primary rounded-pill px-4 py-2 status-filter-btn" data-filter="all">
-                                All Orders
+                                All Orders <span class="badge bg-light text-dark ms-1">{{ $statusCounts['all'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="draft">
-                                Drafts
+                                Drafts <span class="badge bg-secondary ms-1">{{ $statusCounts['draft'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="ready">
-                                Ready
+                                Ready <span class="badge bg-secondary ms-1">{{ $statusCounts['ready'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="packed">
-                                Packed
+                                Packed <span class="badge bg-secondary ms-1">{{ $statusCounts['packed'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="manifested">
-                                Manifested
+                                Manifested <span class="badge bg-secondary ms-1">{{ $statusCounts['manifested'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="received">
-                                Received
+                                Received <span class="badge bg-secondary ms-1">{{ $statusCounts['received'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="dispatched">
-                                Dispatched
+                                Dispatched <span class="badge bg-secondary ms-1">{{ $statusCounts['dispatched'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="cancelled">
-                                Cancelled
+                                Cancelled <span class="badge bg-secondary ms-1">{{ $statusCounts['cancelled'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="delivered">
-                                Delivered
+                                Delivered <span class="badge bg-secondary ms-1">{{ $statusCounts['delivered'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="disputed">
-                                Disputed
+                                Disputed <span class="badge bg-secondary ms-1">{{ $statusCounts['disputed'] }}</span>
                             </button>
 
                             <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="on_hold">
-                                On Hold
+                                On Hold <span class="badge bg-secondary ms-1">{{ $statusCounts['on_hold'] }}</span>
                             </button>
 
                         </div>
                     </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold mb-0" id="statusFilterHeading">All Orders</h5>
+                    <div>
+                        <h5 class="fw-bold mb-0" id="statusFilterHeading">All Orders</h5>
+                        <small class="text-muted" id="shipmentCountInfo">Showing {{ $statusCounts['all'] }} of {{ $statusCounts['all'] }} shipments</small>
+                    </div>
                     <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
                         <i class="ti ti-package-export me-1"></i> Bulk Manifest
                     </button>
@@ -1056,6 +1069,7 @@
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
                     $('#bulkManifestBtn').hide();
                     dt.draw();
+                    $('#shipmentCountInfo').text('Showing {{ $statusCounts["all"] }} of {{ $statusCounts["all"] }} shipments');
                     return;
                 } else if (filter === 'draft') {
                     dt.column(0).visible(false);  // Hide Checkbox
@@ -1100,6 +1114,25 @@
                     return $(tr).data('status') === filter;
                 });
                 dt.draw();
+
+                // Update the "Showing X of Y" indicator with the filtered count
+                @php
+                    $filterCountMap = [
+                        'draft' => $statusCounts['draft'],
+                        'ready' => $statusCounts['ready'],
+                        'packed' => $statusCounts['packed'],
+                        'manifested' => $statusCounts['manifested'],
+                        'received' => $statusCounts['received'],
+                        'dispatched' => $statusCounts['dispatched'],
+                        'cancelled' => $statusCounts['cancelled'],
+                        'delivered' => $statusCounts['delivered'],
+                        'disputed' => $statusCounts['disputed'],
+                        'on_hold' => $statusCounts['on_hold'],
+                    ];
+                @endphp
+                const filterCounts = @json($filterCountMap);
+                const filteredCount = filterCounts[filter] !== undefined ? filterCounts[filter] : 0;
+                $('#shipmentCountInfo').text('Showing ' + filteredCount + ' of {{ $statusCounts["all"] }} shipments');
             });
 
             // Print Label button click handler (delegated)
