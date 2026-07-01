@@ -575,5 +575,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/mark-packed', [customerController::class, 'markPacked'])->name('mark-packed');
     Route::post('/manifest', [customerController::class, 'manifestShipment'])->name('manifest');
     Route::post('/bulk-manifest', [customerController::class, 'bulkManifestShipments'])->name('bulk-manifest');
+    Route::post('/manifest-ship-global-fallback', [customerController::class, 'manifestWithShipGlobalFallback'])->name('manifest-ship-global-fallback');
+    Route::post('/cancel-shipment-by-shipper', [customerController::class, 'cancelShipmentByShipperId'])->name('cancel-shipment-by-shipper');
     Route::get('/search-hs-codes', [customerController::class, 'searchHsCodes'])->name('search-hs-codes');
 });

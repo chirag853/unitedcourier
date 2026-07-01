@@ -63,8 +63,8 @@
                                     <ul>
                                         <!-- <li><a href="/customer/companies" class="active">View Customer List</a></li> -->
                                         <li><a href="{{ url('/customer/create-shipment') }}" class="active">Add Shipment</a></li>
-                                        <li><a href="{{ url('/customer/view-all-shipments') }}">View All Shipment</a></li>
                                         <li><a href="{{ url('/customer/bulk-upload') }}">Bulk Upload</a></li>
+                                        <li><a href="{{ url('/customer/view-all-shipments') }}">View All Shipment</a></li>
                                     </ul>
                                 </li>
                                 <li class="submenu">

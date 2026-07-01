@@ -20,6 +20,7 @@ use App\Models\CsbForm;
 use App\Models\CreateShipment;
 use App\Models\ShipmentTracking;
 use App\Models\Tracking;
+use App\Models\ShipmentLog;
 use App\Models\CourierService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -936,6 +937,17 @@ class customerController extends Controller
                 'status' => 'draft',
             ]);
 
+            // Log the draft status change
+            ShipmentLog::logStatus(
+                $shipper->id,
+                $awbNumber,
+                'draft',
+                null,
+                'Shipment created (draft)',
+                auth()->guard('customer')->id(),
+                'customer'
+            );
+
             if (!$request->expectsJson()) {
                 return back()->with('success', 'Shipment created successfully!');
             }
@@ -1361,6 +1373,17 @@ class customerController extends Controller
                         'status' => 'draft',
                     ]);
 
+                    // ---- Log the draft status change ----
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $newAwbNumber,
+                        'draft',
+                        null,
+                        'Shipment created via bulk upload (draft)',
+                        $customerId,
+                        'customer'
+                    );
+
                     // ---- Generate PDF invoice for this consignee ----
                     $pdfPath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalChgWeight);
 
@@ -1502,8 +1525,8 @@ class customerController extends Controller
                 }
 
                 // Destination-based service filtering:
-                // UK destination  → only show UNITED PRIOR POST DDP (nothing else)
-                // Non-UK destination → exclude UNITED PRIOR POST DDP (show all others)
+                // UK destination  → only show UNITED AIR PREMIUM DDP (nothing else)
+                // Non-UK destination → exclude UNITED AIR PREMIUM DDP (show all others)
                 // The Excel "Destination" column may contain short codes (UK, USA) or
                 // full names (United Kingdom, United States of America), so match flexibly.
                 $destUpper = strtoupper(trim($destination ?? ''));
@@ -1521,12 +1544,12 @@ class customerController extends Controller
 
                 foreach ($allServices as $service) {
                     $methodUpper = strtoupper(trim($service->method ?? ''));
-                    $isPriorPost = str_contains($methodUpper, 'UNITED PRIOR POST');
-                    if ($isUkDestination && !$isPriorPost) {
-                        continue; // UK: only UNITED PRIOR POST DDP is shown
+                    $isAirPremium = str_contains($methodUpper, 'UNITED AIR PREMIUM');
+                    if ($isUkDestination && !$isAirPremium) {
+                        continue; // UK: only UNITED AIR PREMIUM DDP is shown
                     }
-                    if (!$isUkDestination && $isPriorPost) {
-                        continue; // Non-UK: UNITED PRIOR POST DDP is hidden
+                    if (!$isUkDestination && $isAirPremium) {
+                        continue; // Non-UK: UNITED AIR PREMIUM DDP is hidden
                     }
 
                     // Fetch rates: customer-specific first, then default fallback
@@ -2428,7 +2451,7 @@ class customerController extends Controller
         ];
 
         // return;
-        // print_r($payload);
+        print_r($payload);
 
         return $payload;
     }
@@ -2788,6 +2811,17 @@ class customerController extends Controller
                 'status' => 'ready',
             ]);
 
+            // Log the ready status change (payment confirmed)
+            ShipmentLog::logStatus(
+                $shipper->id,
+                $shipper->awb_number,
+                'ready',
+                'draft',
+                'Payment confirmed. Amount ₹' . number_format($amount, 2) . ' deducted from wallet.',
+                $customerId,
+                'customer'
+            );
+
             // Refresh wallet to get new balance
             $wallet->refresh();
 
@@ -2851,10 +2885,11 @@ class customerController extends Controller
 
             // Determine if the shipment was paid (shipper status is ready/packed/manifested)
             $wasPaid = in_array($shipper->status, ['ready', 'packed', 'manifested']);
+            $previousStatus = $shipper->status;
             $refundAmount = 0;
 
             // Update status to cancelled and refund wallet if paid
-            DB::transaction(function () use ($invoice, $shipper, $wasPaid, $customerId, &$refundAmount) {
+            DB::transaction(function () use ($invoice, $shipper, $wasPaid, $previousStatus, $customerId, &$refundAmount) {
                 $invoice->update(['status' => 'cancelled']);
                 $shipper->update(['status' => 'cancelled']);
 
@@ -2868,6 +2903,17 @@ class customerController extends Controller
                     'title' => Tracking::getTitleForStatus('cancelled'),
                     'status' => 'cancelled',
                 ]);
+
+                // Log the cancelled status change
+                ShipmentLog::logStatus(
+                    $shipper->id,
+                    $shipper->awb_number,
+                    'cancelled',
+                    $previousStatus,
+                    $wasPaid ? 'Shipment cancelled. Refund ₹' . number_format($invoice->total_amount, 2) . ' to wallet.' : 'Shipment cancelled.',
+                    $customerId,
+                    'customer'
+                );
 
                 if ($wasPaid) {
                     // Calculate the amount that was paid (total from invoice items)
@@ -2946,6 +2992,17 @@ class customerController extends Controller
                 'status' => 'packed',
             ]);
 
+            // Log the packed status change
+            ShipmentLog::logStatus(
+                $shipper->id,
+                $shipper->awb_number,
+                'packed',
+                'ready',
+                'Shipment marked as packed.',
+                $customerId,
+                'customer'
+            );
+
             return response()->json(['success' => true, 'message' => 'Status updated to Packed.']);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
@@ -2995,6 +3052,7 @@ class customerController extends Controller
                         'success' => false,
                         'message' => 'PostShipping API Failed: ' . ($postShippingResult['message'] ?? 'Unknown error'),
                         'postshipping_response' => $postShippingResult['data'] ?? null,
+                        'request_payload' => $postShippingResult['request_payload'] ?? null,
                     ], 500);
                 }
 
@@ -3043,6 +3101,7 @@ class customerController extends Controller
                     \Log::error('Failed to store shipment tracking for PostShipping manifest: ' . $e->getMessage());
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
                 }
+                
 
                 return response()->json([
                     'success' => true,
@@ -3052,11 +3111,29 @@ class customerController extends Controller
                     'shipper_id' => $shipperId,
                     'network' => 'PostShipping',
                     'postshipping_response' => $apiResponse,
+                    'request_payload' => $postShippingResult['request_payload'] ?? null,
                 ]);
             } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
                 // Call Flying Tigers API (UNITED ECO POST)
                 $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
                 if (!$flyingTigersResult['success']) {
+                    // Check if this is an address error → return fallback info for dropdown option
+                    if (!empty($flyingTigersResult['is_address_error'])) {
+                        $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
+                        return response()->json([
+                            'success'          => false,
+                            'message'          => 'The address provided appears to be incorrect or incomplete for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                            'is_address_error' => true,
+                            'shipper_id'       => $shipperId,
+                            'classic_rate'     => $fallbackInfo['classic_rate'] ?? null,
+                            'paid_amount'      => $fallbackInfo['paid_amount'] ?? null,
+                            'difference'       => $fallbackInfo['difference'] ?? null,
+                            'wallet_action'    => $fallbackInfo['wallet_action'] ?? 'none',
+                            'wallet_amount'    => $fallbackInfo['wallet_amount'] ?? 0,
+                            'wallet_balance'   => $fallbackInfo['wallet_balance'] ?? 0,
+                            'total_weight'     => $fallbackInfo['total_weight'] ?? 0,
+                        ], 422);
+                    }
                     return response()->json([
                         'success' => false,
                         'message' => 'Flying Tigers API Failed: ' . ($flyingTigersResult['message'] ?? 'Unknown error'),
@@ -3274,6 +3351,17 @@ class customerController extends Controller
                         'status' => 'manifested',
                     ]);
 
+                    // Log the manifested status change
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        'manifested',
+                        'packed',
+                        'Shipment manifested via UPS. Tracking: ' . ($trackingNumber ?? 'N/A'),
+                        $customerId,
+                        'customer'
+                    );
+
                     \Log::info('Shipment manifested via UPS: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for manifest: ' . $e->getMessage());
@@ -3348,6 +3436,8 @@ class customerController extends Controller
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'PostShipping API error: ' . ($postShippingResult['message'] ?? 'Unknown'),
+                                'request_payload' => $postShippingResult['request_payload'] ?? null,
+                                'postshipping_response' => $postShippingResult['data'] ?? null,
                             ];
                             continue;
                         }
@@ -3395,15 +3485,36 @@ class customerController extends Controller
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
                             'network' => 'PostShipping',
+                            'request_payload' => $postShippingResult['request_payload'] ?? null,
                         ];
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via PostShipping.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via PostShipping (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
                         // Call Flying Tigers API (UNITED ECO POST)
                         $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
 
                         if (!$flyingTigersResult['success']) {
+                            // Check if this is an address error → return fallback info for dropdown option
+                            if (!empty($flyingTigersResult['is_address_error'])) {
+                                $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
+                                $results['address_errors'][] = [
+                                    'shipper_id'       => $shipperId,
+                                    'message'           => 'Address is incorrect for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                                    'is_address_error' => true,
+                                    'classic_rate'      => $fallbackInfo['classic_rate'] ?? null,
+                                    'paid_amount'       => $fallbackInfo['paid_amount'] ?? null,
+                                    'difference'        => $fallbackInfo['difference'] ?? null,
+                                    'wallet_action'    => $fallbackInfo['wallet_action'] ?? 'none',
+                                    'wallet_amount'    => $fallbackInfo['wallet_amount'] ?? 0,
+                                    'wallet_balance'   => $fallbackInfo['wallet_balance'] ?? 0,
+                                    'total_weight'     => $fallbackInfo['total_weight'] ?? 0,
+                                ];
+                                \Log::info('Bulk manifest: shipment ' . $shipperId . ' address error — awaiting customer decision for UNITED CLASSIC fallback.');
+                                continue;
+                            }
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'Flying Tigers API error: ' . ($flyingTigersResult['message'] ?? 'Unknown'),
@@ -3457,6 +3568,8 @@ class customerController extends Controller
                         ];
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Flying Tigers.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Flying Tigers (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
@@ -3539,6 +3652,8 @@ class customerController extends Controller
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Ship Global.');
 
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+
                     } else {
                         // Default: Call UPS Ship API
                         $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
@@ -3609,6 +3724,8 @@ class customerController extends Controller
                         ];
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via UPS.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via UPS (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
                     }
 
                 } catch (\Exception $e) {
@@ -4224,6 +4341,30 @@ class customerController extends Controller
     }
 
     /**
+     * Map a PostShipping ServiceTypeName to the DPD UK NetworkCode.
+     *
+     * The DPD UK API validates consignment.networkCode (error 1021 "Service Denied"
+     * when missing). NetworkCode identifies the delivery service network:
+     *   - DPD111 (Offshore - Two Day)        → "7"
+     *   - DPDUKEPND / DPD112 / MDPD112       → "1" (Next Day mainland)
+     *
+     * @param string $serviceTypeName
+     * @return string
+     */
+    private function getPostShippingNetworkCode($serviceTypeName)
+    {
+        $code = strtoupper(trim((string) $serviceTypeName));
+
+        // Offshore (DPD OFFSHORE - TWO DAY) uses network code "7"
+        if ($code === 'DPD111') {
+            return '7';
+        }
+
+        // All mainland next-day services (DPDUKEPND, DPD112, MDPD112) use network code "1"
+        return '1';
+    }
+
+    /**
      * Check if a consignee destination is an offshore area requiring DPD111 service.
      * Offshore = Northern Ireland (BT postcodes) + Scottish Highlands & Islands
      * (IV, HS, KA, KW, PA, PH, ZE postcodes) + Isle of Man (IM) + Channel Islands (JE, GY).
@@ -4521,6 +4662,7 @@ class customerController extends Controller
                 'CubicH'                => (float) $cubicH,
                 'CubicWeight'           => 0,
                 'ServiceTypeName'       => $serviceTypeName,
+                'NetworkCode'           => $this->getPostShippingNetworkCode($serviceTypeName),
                 'BookPickUP'            => false,
                 'SenderRef1'            => $shipper->awb_number ?? ('TEST-SHIPMENT-' . $shipper->id),
                 'BusinessType'          => 'B2B',
@@ -4617,19 +4759,37 @@ class customerController extends Controller
                 }
                 \Log::error('PostShipping API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
                 return [
-                    'success'     => false,
-                    'message'      => $errorMessage,
-                    'data'         => $apiResponse,
-                    'status_code'  => $response->status(),
+                    'success'         => false,
+                    'message'         => $errorMessage,
+                    'data'            => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code'     => $response->status(),
                 ];
             }
 
             \Log::info('PostShipping response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
 
+            // The DPD/PostShipping API may return HTTP 200 but still reject the
+            // shipment by embedding an error inside the "ErrMessage" field of
+            // each consignment object (e.g. "Service Denied (1021) - ...").
+            // Detect this so the caller treats it as a failure instead of success.
+            $errMessage = $this->extractPostShippingErrorMessage($apiResponse);
+            if ($errMessage !== null) {
+                \Log::error('PostShipping API rejected shipment (ErrMessage): ' . $errMessage . ' | Body: ' . $response->body());
+                return [
+                    'success'         => false,
+                    'message'         => 'PostShipping API rejected shipment: ' . $errMessage,
+                    'data'            => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code'     => $response->status(),
+                ];
+            }
+
             return [
-                'success' => true,
-                'message' => 'PostShipping shipment created successfully.',
-                'data'     => $apiResponse,
+                'success'         => true,
+                'message'          => 'PostShipping shipment created successfully.',
+                'data'             => $apiResponse,
+                'request_payload'  => $payload,
             ];
         } catch (\Exception $e) {
             \Log::error('PostShipping API call failed: ' . $e->getMessage());
@@ -4638,6 +4798,73 @@ class customerController extends Controller
                 'message' => 'PostShipping API call failed: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Detect an embedded error in a PostShipping API response.
+     *
+     * The DPD/PostShipping API sometimes returns HTTP 200 but rejects the
+     * shipment by placing an "ErrMessage" string inside each consignment
+     * object of the response array. This method scans the response for any
+     * non-empty ErrMessage and returns the first one found (trimmed), or
+     * null when the response is genuinely successful.
+     *
+     * Supported response shapes:
+     *   - Indexed array of consignments: [ {ErrMessage: "..."}, ... ]
+     *   - Single object: {ErrMessage: "..."}
+     *   - Nested under a "data" / "shipments" key
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingErrorMessage($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        // Candidate containers that may hold consignment objects.
+        $containers = [];
+
+        // Top-level indexed array of consignments.
+        $hasStringKeys = false;
+        foreach (array_keys($apiResponse) as $k) {
+            if (is_string($k)) {
+                $hasStringKeys = true;
+                break;
+            }
+        }
+        if (!$hasStringKeys) {
+            $containers[] = $apiResponse;
+        }
+
+        // Common nested keys.
+        foreach (['data', 'shipments', 'Shipment', 'Shipments', 'consignment', 'consignments'] as $key) {
+            if (isset($apiResponse[$key]) && is_array($apiResponse[$key])) {
+                $containers[] = $apiResponse[$key];
+            }
+        }
+
+        // If the response itself looks like a single consignment object.
+        if (isset($apiResponse['ErrMessage'])) {
+            $containers[] = [$apiResponse];
+        }
+
+        foreach ($containers as $container) {
+            foreach ($container as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (!empty($item['ErrMessage']) && is_string($item['ErrMessage'])) {
+                    $msg = trim($item['ErrMessage']);
+                    if ($msg !== '') {
+                        return $msg;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -4974,9 +5201,7 @@ class customerController extends Controller
             'currencyCode'      => (string) $currencyCode,
         ];
         
-        print_r($payload); // Debugging line to inspect the payload structure
         
-
         return [
             'success' => true,
             'payload' => $payload,
@@ -5043,15 +5268,52 @@ class customerController extends Controller
                     }
                 }
                 \Log::error('Flying Tigers API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+
+                // Check if this is an address-related error (for auto-fallback to UNITED CLASSIC)
+                $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
+
                 return [
-                    'success'     => false,
-                    'message'      => $errorMessage,
-                    'data'         => $apiResponse,
-                    'status_code'  => $response->status(),
+                    'success'          => false,
+                    'message'          => $errorMessage,
+                    'data'             => $apiResponse,
+                    'status_code'      => $response->status(),
+                    'is_address_error' => $isAddressError,
                 ];
             }
 
             \Log::info('Flying Tigers response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
+
+            // Some APIs return 200 OK but with an error in the body — check for address error
+            $isAddressError = $this->isFlyingTigersAddressError(null, $apiResponse, $response->body());
+            if ($isAddressError) {
+                \Log::warning('Flying Tigers API returned address error in success response for shipper #' . $shipper->id . ': ' . $response->body());
+                return [
+                    'success'          => false,
+                    'message'          => 'Cannot create order: Provided address appears to be incorrect or incomplete.',
+                    'data'             => $apiResponse,
+                    'is_address_error' => true,
+                ];
+            }
+
+            // Check if the API returned an error status in the body (HTTP 200 but status=ERROR)
+            // e.g. {"status": "ERROR", "message": "Ref no already exists."}
+            if (is_array($apiResponse)) {
+                $responseStatus = $apiResponse['status'] ?? null;
+                if ($responseStatus !== null && strtoupper((string) $responseStatus) === 'ERROR') {
+                    $errorMessage = $apiResponse['message'] ?? 'Flying Tigers API returned an error status.';
+                    \Log::error('Flying Tigers API returned ERROR in body for shipper #' . $shipper->id . ': ' . $errorMessage . ' | Body: ' . $response->body());
+
+                    // Check if this is also an address error (for fallback to UNITED CLASSIC)
+                    $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
+
+                    return [
+                        'success'          => false,
+                        'message'          => $errorMessage,
+                        'data'             => $apiResponse,
+                        'is_address_error' => $isAddressError,
+                    ];
+                }
+            }
 
             return [
                 'success' => true,
@@ -5205,6 +5467,515 @@ class customerController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Check if a Flying Tigers API response/error indicates an address-related error.
+     * Used to trigger auto-fallback to UNITED CLASSIC (Ship Global).
+     *
+     * @param string|null $errorMessage
+     * @param mixed $apiResponse
+     * @param string|null $rawBody
+     * @return bool
+     */
+    private function isFlyingTigersAddressError($errorMessage, $apiResponse, $rawBody = null)
+    {
+        $addressErrorPatterns = [
+            'address appears to be incorrect',
+            'address appears to be incomplete',
+            'address is incorrect',
+            'address is incomplete',
+            'incorrect or incomplete address',
+            'address incorrect or incomplete',
+            'provided address appears to be incorrect',
+            'provided address appears to be incomplete',
+        ];
+
+        // Combine all text sources to search
+        $searchText = '';
+        if (!empty($errorMessage)) {
+            $searchText .= ' ' . strtolower((string) $errorMessage);
+        }
+        if (is_array($apiResponse)) {
+            $searchText .= ' ' . strtolower(json_encode($apiResponse));
+        }
+        if (!empty($rawBody)) {
+            $searchText .= ' ' . strtolower((string) $rawBody);
+        }
+
+        if (empty(trim($searchText))) {
+            return false;
+        }
+
+        foreach ($addressErrorPatterns as $pattern) {
+            if (str_contains($searchText, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Calculate UNITED CLASSIC (Ship Global) fallback info for a Flying Tigers address error.
+     * Does NOT modify any data — only calculates the rate, paid amount, difference,
+     * and wallet impact so the frontend can present a dropdown option to the customer.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @param int $customerId
+     * @return array
+     */
+    private function getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId)
+    {
+        // 1. Find the UNITED CLASSIC courier service
+        $classicService = \App\Models\CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (!$classicService) {
+            \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+            return [
+                'success'          => false,
+                'message'           => 'Address is incorrect for UNITED ECO POST. Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error'  => true,
+            ];
+        }
+
+        // 2. Calculate the total chargeable weight from packages
+        $packages = $shipper->packageDimensions;
+        $totalWeight = 0;
+        foreach ($packages as $pkg) {
+            $totalWeight += floatval($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+        }
+
+        // 3. Get consignee state for zone lookup
+        $consignee = $shipper->consigneeInfo;
+        $consigneeState = $consignee ? ($consignee->state ?? '') : '';
+
+        // 4. Calculate the UNITED CLASSIC rate
+        $classicRate = $this->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicTotal = floatval($classicRate['total'] ?? 0);
+
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
+
+        // 5. Get the amount already paid (from invoice)
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+        $paidAmount = $invoice ? floatval($invoice->total_amount ?? 0) : 0;
+
+        // 6. Calculate the difference
+        $difference = $classicTotal - $paidAmount;
+
+        // 7. Determine wallet impact (preview only — no actual deduction yet)
+        $walletAction = 'none';
+        $walletAmount = 0;
+        $walletBalance = 0;
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if ($wallet) {
+            $walletBalance = (float) $wallet->balance;
+            if ($difference > 0.01) {
+                $walletAction = 'deduct';
+                $walletAmount = $difference;
+            } elseif ($difference < -0.01) {
+                $walletAction = 'refund';
+                $walletAmount = abs($difference);
+            }
+        }
+
+        return [
+            'success'           => true,
+            'is_address_error'  => true,
+            'shipper_id'        => $shipper->id,
+            'classic_service'   => $classicService->method,
+            'classic_rate'      => $classicTotal,
+            'paid_amount'       => $paidAmount,
+            'difference'        => $difference,
+            'wallet_action'     => $walletAction,
+            'wallet_amount'     => $walletAmount,
+            'wallet_balance'    => $walletBalance,
+            'total_weight'      => $totalWeight,
+        ];
+    }
+
+    /**
+     * Execute the Ship Global (UNITED CLASSIC) fallback for a Flying Tigers address error.
+     * Called when the customer confirms the dropdown option in the frontend.
+     * Performs: update shipping method, call Ship Global API, store tracking,
+     * wallet deduction/refund, update invoice.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @param int $customerId
+     * @return array
+     */
+    private function executeShipGlobalFallback($shipper, $customerId)
+    {
+        // 1. Find the UNITED CLASSIC courier service
+        $classicService = \App\Models\CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (!$classicService) {
+            \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+            return [
+                'success'          => false,
+                'message'           => 'Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error'  => true,
+            ];
+        }
+
+        // 2. Calculate the total chargeable weight from packages
+        $packages = $shipper->packageDimensions;
+        $totalWeight = 0;
+        foreach ($packages as $pkg) {
+            $totalWeight += floatval($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+        }
+
+        // 3. Get consignee state for zone lookup
+        $consignee = $shipper->consigneeInfo;
+        $consigneeState = $consignee ? ($consignee->state ?? '') : '';
+
+        // 4. Calculate the UNITED CLASSIC rate
+        $classicRate = $this->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicTotal = floatval($classicRate['total'] ?? 0);
+
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
+
+        // 5. Get the amount already paid (from invoice)
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+        $paidAmount = $invoice ? floatval($invoice->total_amount ?? 0) : 0;
+
+        // 6. Calculate the difference
+        $difference = $classicTotal - $paidAmount;
+
+        // 7. Update the shipper's shipping method to UNITED CLASSIC
+        $shipper->shipping_method = $classicService->method;
+        $shipper->save();
+
+        // Also update package dimensions shipping method
+        PackageDimension::where('shipper_id', $shipper->id)->update(['shipping_method' => $classicService->method]);
+
+        // 8. Call Ship Global API to create the shipment
+        $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+        if (!$shipGlobalResult['success']) {
+            \Log::error('Flying Tigers address fallback: Ship Global API failed: ' . ($shipGlobalResult['message'] ?? 'Unknown'));
+            return [
+                'success'          => false,
+                'message'           => 'Fallback to UNITED CLASSIC failed: ' . ($shipGlobalResult['message'] ?? 'Unknown error'),
+                'is_address_error'  => true,
+                'classic_rate'       => $classicTotal,
+                'paid_amount'        => $paidAmount,
+            ];
+        }
+
+        // 9. Extract tracking number from Ship Global response
+        $apiResponse = $shipGlobalResult['data'] ?? [];
+        $trackingNumber = null;
+        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+            $trackingNumber = $apiResponse['data']['waybill_number'];
+        } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+            $trackingNumber = $apiResponse['waybill_number'];
+        } elseif (isset($apiResponse['tracking_number'])) {
+            $trackingNumber = $apiResponse['tracking_number'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+            $trackingNumber = $apiResponse['data']['tracking_number'];
+        } elseif (isset($apiResponse['awb_number'])) {
+            $trackingNumber = $apiResponse['awb_number'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+            $trackingNumber = $apiResponse['data']['awb_number'];
+        } elseif (isset($apiResponse['waybill'])) {
+            $trackingNumber = $apiResponse['waybill'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+            $trackingNumber = $apiResponse['data']['waybill'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+            $trackingNumber = $apiResponse['data']['order_number'];
+        } elseif (isset($apiResponse['order_number'])) {
+            $trackingNumber = $apiResponse['order_number'];
+        }
+
+        // 10. Store tracking data
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+        try {
+            ShipmentTracking::updateOrCreate(
+                ['shipper_id' => $shipper->id],
+                [
+                    'customer_id'                    => $customerId,
+                    'create_shipment_id'             => $createShipment ? $createShipment->id : null,
+                    'response_status_code'           => '1',
+                    'response_status_description'    => 'Ship Global shipment created (fallback from Flying Tigers address error)',
+                    'shipment_identification_number' => $trackingNumber,
+                    'total_charges_currency'         => 'INR',
+                    'total_charges_amount'           => $classicTotal,
+                    'billing_weight_uom'             => 'KGS',
+                    'billing_weight'                 => $totalWeight,
+                    'package_results'                 => null,
+                    'raw_response'                    => $apiResponse,
+                    'status'                         => 'created',
+                ]
+            );
+
+            // Update shipper status to manifested
+            $shipper->status = 'manifested';
+            $shipper->save();
+
+            // Create tracking record for manifested status
+            Tracking::create([
+                'awb_number'  => $shipper->awb_number,
+                'shipper_id'   => $shipper->id,
+                'shipping_id'  => $createShipment ? $createShipment->id : null,
+                'uwc_id'       => $shipper->awb_number,
+                'title'        => Tracking::getTitleForStatus('manifested'),
+                'status'       => 'manifested',
+            ]);
+
+            // Log the manifested status change (Ship Global fallback from Flying Tigers address error)
+            ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (UNITED CLASSIC fallback from Flying Tigers address error). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+        } catch (\Exception $e) {
+            \Log::error('Flying Tigers address fallback: Failed to store tracking data: ' . $e->getMessage());
+            return [
+                'success'          => false,
+                'message'           => 'Fallback to UNITED CLASSIC succeeded but failed to store tracking: ' . $e->getMessage(),
+                'is_address_error'  => true,
+                'classic_rate'       => $classicTotal,
+                'paid_amount'        => $paidAmount,
+            ];
+        }
+
+        // 11. Handle wallet deduction/refund
+        $walletAction = 'none';
+        $walletAmount = 0;
+        $newBalance = 0;
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if ($wallet) {
+            if ($difference > 0.01) {
+                // UNITED CLASSIC is more expensive → deduct difference from wallet
+                $wallet->decrement('balance', $difference);
+                $wallet->refresh();
+                $walletAction = 'deducted';
+                $walletAmount = $difference;
+                $newBalance = (float) $wallet->balance;
+                \Log::info('Flying Tigers address fallback: Deducted ₹' . $difference . ' from wallet (CLASSIC rate ₹' . $classicTotal . ' > paid ₹' . $paidAmount . ')');
+            } elseif ($difference < -0.01) {
+                // UNITED CLASSIC is cheaper → refund difference to wallet
+                $refundAmount = abs($difference);
+                $wallet->increment('balance', $refundAmount);
+                $wallet->refresh();
+                $walletAction = 'refunded';
+                $walletAmount = $refundAmount;
+                $newBalance = (float) $wallet->balance;
+                \Log::info('Flying Tigers address fallback: Refunded ₹' . $refundAmount . ' to wallet (CLASSIC rate ₹' . $classicTotal . ' < paid ₹' . $paidAmount . ')');
+            } else {
+                $newBalance = (float) $wallet->balance;
+            }
+        }
+
+        // 12. Update the invoice total to reflect the new rate
+        if ($invoice && $classicTotal > 0) {
+            $invoice->update(['total_amount' => $classicTotal]);
+        }
+
+        // Build the user-facing message
+        $message = 'Shipment manifested successfully via UNITED CLASSIC (Ship Global).';
+        if ($walletAction === 'deducted') {
+            $message .= ' ₹' . number_format($walletAmount, 2) . ' has been deducted from your wallet (rate difference).';
+        } elseif ($walletAction === 'refunded') {
+            $message .= ' ₹' . number_format($walletAmount, 2) . ' has been refunded to your wallet (rate difference).';
+        }
+
+        return [
+            'success'              => true,
+            'message'              => $message,
+            'tracking_number'      => $trackingNumber,
+            'shipper_id'           => $shipper->id,
+            'network'              => 'Ship Global (Fallback)',
+            'is_address_error'     => true,
+            'classic_rate'         => $classicTotal,
+            'paid_amount'          => $paidAmount,
+            'wallet_action'        => $walletAction,
+            'wallet_amount'        => $walletAmount,
+            'new_balance'          => $newBalance,
+            'ship_global_response' => $apiResponse,
+        ];
+    }
+
+    /**
+     * Manifest a shipment via Ship Global (UNITED CLASSIC) fallback.
+     * Called when the customer confirms the dropdown option after a Flying Tigers address error.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function manifestWithShipGlobalFallback(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $validated = $request->validate([
+                'shipper_id' => 'required|integer',
+            ]);
+
+            $customerId = auth()->guard('customer')->id();
+            $shipperId = $validated['shipper_id'];
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or does not belong to your account.',
+                ], 404);
+            }
+
+            if ($shipper->status === 'manifested') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This shipment has already been manifested.',
+                ], 400);
+            }
+
+            $result = $this->executeShipGlobalFallback($shipper, $customerId);
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 500);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Ship Global fallback manifest error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancel a shipment by shipper_id (called from address error fallback modal "Cancel" option).
+     * Sets the shipment status to cancelled and refunds the paid amount to the customer's wallet.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function cancelShipmentByShipperId(Request $request)
+    {
+        try {
+            if (!auth()->guard('customer')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $validated = $request->validate([
+                'shipper_id' => 'required|integer',
+            ]);
+
+            $customerId = auth()->guard('customer')->id();
+            $shipperId = $validated['shipper_id'];
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('customer_id', $customerId)
+                ->first();
+
+            if (!$shipper) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or does not belong to your account.',
+                ], 404);
+            }
+
+            // Check if already cancelled
+            if ($shipper->status === 'cancelled') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This shipment is already cancelled.',
+                ], 400);
+            }
+
+            // Check if already manifested — cannot cancel a manifested shipment
+            if ($shipper->status === 'manifested') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot cancel a shipment that has already been manifested.',
+                ], 400);
+            }
+
+            // Determine if the shipment was paid (shipper status is ready/packed)
+            $wasPaid = in_array($shipper->status, ['ready', 'packed']);
+            $previousStatus = $shipper->status;
+            $refundAmount = 0;
+
+            // Find the invoice for this shipper
+            $invoice = ShipmentInvoice::where('shipper_id', $shipperId)->first();
+
+            DB::transaction(function () use ($shipper, $invoice, $wasPaid, $previousStatus, $customerId, &$refundAmount) {
+                // Update shipper status to cancelled
+                $shipper->update(['status' => 'cancelled']);
+
+                // Update invoice status to cancelled
+                if ($invoice) {
+                    $invoice->update(['status' => 'cancelled']);
+                }
+
+                // Create tracking record for cancelled status
+                $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+                Tracking::create([
+                    'awb_number' => $shipper->awb_number,
+                    'shipper_id' => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('cancelled'),
+                    'status' => 'cancelled',
+                ]);
+
+                // Log the cancelled status change
+                ShipmentLog::logStatus(
+                    $shipper->id,
+                    $shipper->awb_number,
+                    'cancelled',
+                    $previousStatus,
+                    $wasPaid ? 'Shipment cancelled. Refund ₹' . number_format($invoice->total_amount ?? 0, 2) . ' to wallet.' : 'Shipment cancelled.',
+                    $customerId,
+                    'customer'
+                );
+
+                // Refund the paid amount to wallet
+                if ($wasPaid && $invoice) {
+                    $refundAmount = (float) ($invoice->total_amount ?? 0);
+
+                    if ($refundAmount > 0) {
+                        $wallet = Wallet::where('customer_id', $customerId)->first();
+                        if ($wallet) {
+                            $wallet->increment('balance', $refundAmount);
+                        }
+                    }
+                }
+            });
+
+            // Refresh wallet to get new balance
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+            $newBalance = $wallet ? (float) $wallet->balance : 0;
+
+            $message = 'Shipment cancelled successfully.';
+            if ($refundAmount > 0) {
+                $message = 'Shipment cancelled successfully. ₹' . number_format($refundAmount, 2) . ' has been refunded to your wallet.';
+            }
+
+            return response()->json([
+                'success'       => true,
+                'message'       => $message,
+                'refund_amount' => $refundAmount,
+                'new_balance'   => $newBalance,
+                'shipper_id'    => $shipperId,
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Cancel shipment by shipper_id error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

@@ -747,6 +747,74 @@
         </div>
     </div>
 
+    <!-- Address Error Fallback Modal (UNITED ECO POST → UNITED CLASSIC) -->
+    <div class="modal fade" id="addressErrorFallbackModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title text-danger">
+                        <i class="ti ti-alert-triangle me-2"></i>Incorrect Address
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3">
+                    <div class="alert alert-warning mb-3" role="alert">
+                        <i class="ti ti-alert-circle me-1"></i>
+                        The address provided appears to be <strong>incorrect or incomplete</strong> for <strong>UNITED ECO POST</strong>.
+                        You can choose to ship this shipment via <strong>UNITED CLASSIC (Ship Global)</strong> instead.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Select Shipping Option</label>
+                        <select class="form-select" id="addressErrorFallbackSelect">
+                            <option value="">-- Select an option --</option>
+                            <option value="ship_global">Ship via UNITED CLASSIC</option>
+                            <option value="cancel">Cancel & correct the address</option>
+                        </select>
+                    </div>
+
+                    <div id="fallbackRateInfo" style="display:none;">
+                        <div class="card bg-light border-0 p-3 mb-0">
+                            <h6 class="fw-bold mb-2 text-primary">
+                                <i class="ti ti-truck-delivery me-1"></i>UNITED CLASSIC (Ship Global) Rate Details
+                            </h6>
+                            <div class="detail-row">
+                                <span class="label">Total Weight:</span>
+                                <span class="value" id="fbTotalWeight">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">UNITED CLASSIC Rate:</span>
+                                <span class="value fw-bold text-success" id="fbClassicRate">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Amount Already Paid:</span>
+                                <span class="value" id="fbPaidAmount">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Rate Difference:</span>
+                                <span class="value" id="fbDifference">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Wallet Balance:</span>
+                                <span class="value" id="fbWalletBalance">-</span>
+                            </div>
+                            <div class="detail-row" id="fbWalletActionRow" style="display:none;">
+                                <span class="label">Wallet Impact:</span>
+                                <span class="value fw-bold" id="fbWalletAction">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="confirmShipGlobalFallbackBtn" disabled>
+                        <i class="ti ti-check me-1"></i>Confirm & Manifest
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Print Label Modal -->
     <div class="modal fade" id="printLabelModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -1504,6 +1572,12 @@
                         }
                     },
                     error: function (xhr) {
+                        // Check if this is an address error that can fall back to Ship Global
+                        if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
+                            showAddressErrorFallbackModal(xhr.responseJSON);
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                            return;
+                        }
                         let msg = 'Error manifesting shipment.';
                         if (xhr.responseJSON && xhr.responseJSON.message) {
                             msg = xhr.responseJSON.message;
@@ -1563,7 +1637,20 @@
                             $('#selectAllCheckbox, .bulk-manifest-checkbox').prop('checked', false);
 
                             const failedCount = results.failed ? results.failed.length : 0;
-                            if (failedCount > 0) {
+                            const addressErrorCount = results.address_errors ? results.address_errors.length : 0;
+
+                            if (addressErrorCount > 0) {
+                                // Set up the queue and show the modal for the first address error
+                                addressErrorQueue = results.address_errors;
+                                addressErrorQueueIndex = 0;
+                                showAddressErrorFallbackModal(addressErrorQueue[0]);
+
+                                var summaryMsg = addressErrorCount + ' shipment(s) have address errors for UNITED ECO POST. Please review each and choose to ship via UNITED CLASSIC (Ship Global) or correct the address.';
+                                if (failedCount > 0) {
+                                    summaryMsg += '<br><br>Additionally, ' + failedCount + ' shipment(s) failed for other reasons.';
+                                }
+                                showAlert('warning', summaryMsg);
+                            } else if (failedCount > 0) {
                                 let failMsg = 'Some shipments failed to manifest:\n';
                                 results.failed.forEach(function (f) {
                                     failMsg += '- Shipment #' + f.shipper_id + ': ' + f.message + '\n';
@@ -1588,6 +1675,200 @@
                         $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
                     }
                 });
+            });
+
+            // =============================================
+            // ADDRESS ERROR FALLBACK: Ship via UNITED CLASSIC (Ship Global)
+            // Shows a modal with a dropdown when UNITED ECO POST returns an address error.
+            // The customer can choose to ship via Ship Global or cancel & correct the address.
+            // =============================================
+
+            // Queue for bulk address errors (processed one at a time)
+            var addressErrorQueue = [];
+            var addressErrorQueueIndex = 0;
+
+            // Populate and show the address error fallback modal
+            function showAddressErrorFallbackModal(data) {
+                // Store the shipper ID for the confirm handler
+                $('#confirmShipGlobalFallbackBtn').data('shipper-id', data.shipper_id);
+
+                // Populate rate details
+                $('#fbTotalWeight').text((data.total_weight || 0) + ' kg');
+                $('#fbClassicRate').text('\u20B9' + Number(data.classic_rate || 0).toFixed(2));
+                $('#fbPaidAmount').text('\u20B9' + Number(data.paid_amount || 0).toFixed(2));
+
+                // Format the difference
+                var diff = Number(data.difference || 0);
+                var diffText;
+                if (diff > 0.01) {
+                    diffText = '+ \u20B9' + diff.toFixed(2) + ' (extra to pay)';
+                } else if (diff < -0.01) {
+                    diffText = '- \u20B9' + Math.abs(diff).toFixed(2) + ' (to be refunded)';
+                } else {
+                    diffText = '\u20B90.00 (no difference)';
+                }
+                $('#fbDifference').text(diffText);
+                $('#fbWalletBalance').text('\u20B9' + Number(data.wallet_balance || 0).toFixed(2));
+
+                // Show wallet impact
+                if (data.wallet_action && data.wallet_action !== 'none') {
+                    var actionText = '';
+                    if (data.wallet_action === 'deduct') {
+                        actionText = '\u20B9' + Number(data.wallet_amount || 0).toFixed(2) + ' will be deducted from wallet';
+                        $('#fbWalletAction').removeClass('text-success').addClass('text-danger');
+                    } else if (data.wallet_action === 'refund') {
+                        actionText = '\u20B9' + Number(data.wallet_amount || 0).toFixed(2) + ' will be refunded to wallet';
+                        $('#fbWalletAction').removeClass('text-danger').addClass('text-success');
+                    }
+                    $('#fbWalletAction').text(actionText);
+                    $('#fbWalletActionRow').show();
+                } else {
+                    $('#fbWalletActionRow').hide();
+                }
+
+                // Reset dropdown and hide rate info
+                $('#addressErrorFallbackSelect').val('');
+                $('#fallbackRateInfo').hide();
+                $('#confirmShipGlobalFallbackBtn').prop('disabled', true);
+
+                // Show the modal
+                var modalEl = document.getElementById('addressErrorFallbackModal');
+                var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+
+            // Dropdown change handler — show/hide rate info and enable/disable confirm button
+            $('#addressErrorFallbackSelect').on('change', function () {
+                var val = $(this).val();
+                if (val === 'ship_global') {
+                    $('#fallbackRateInfo').slideDown();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', false);
+                } else if (val === 'cancel') {
+                    $('#fallbackRateInfo').hide();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', false);
+                } else {
+                    $('#fallbackRateInfo').hide();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', true);
+                }
+            });
+
+            // Confirm button click handler — call Ship Global fallback API or cancel
+            $('#confirmShipGlobalFallbackBtn').on('click', function () {
+                var $btn = $(this);
+                var shipperId = $btn.data('shipper-id');
+                var selectedOption = $('#addressErrorFallbackSelect').val();
+
+                if (!shipperId) return;
+
+                // If user chose "Cancel & correct the address" — cancel shipment and refund wallet
+                if (selectedOption === 'cancel') {
+                    if (!confirm('Are you sure you want to cancel this shipment? The paid amount will be refunded to your wallet.')) {
+                        return;
+                    }
+                    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Cancelling...');
+
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment-by-shipper") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: shipperId
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                // Hide modal
+                                var modalEl = document.getElementById('addressErrorFallbackModal');
+                                var modal = bootstrap.Modal.getInstance(modalEl);
+                                if (modal) modal.hide();
+
+                                // Update the row in the table to show cancelled status
+                                var $row = $('tr[data-shipper-id="' + shipperId + '"]');
+                                if ($row.length) {
+                                    $row.attr('data-status', 'cancelled');
+                                    var $badge = $row.find('td:eq(7) span');
+                                    $badge.removeClass().addClass('badge bg-danger').text('Cancelled');
+                                    var $manifestCol = $row.find('.manifest-col');
+                                    $manifestCol.html('<span class="badge bg-danger" style="font-size:11px;">Cancelled</span>');
+                                    var $payCol = $row.find('td:eq(9)');
+                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Refunded</span>');
+                                }
+
+                                showAlert('success', response.message || 'Shipment cancelled and payment refunded to wallet.');
+                            } else {
+                                showAlert('danger', response.message || 'Failed to cancel shipment.');
+                                $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                            }
+                        },
+                        error: function (xhr) {
+                            var msg = 'Error cancelling shipment.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            }
+                            showAlert('danger', msg);
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                        }
+                    });
+                    return;
+                }
+
+                if (selectedOption !== 'ship_global') return;
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest-ship-global-fallback") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_id: shipperId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            // Update the row in the table
+                            var $row = $('tr[data-shipper-id="' + shipperId + '"]');
+                            if ($row.length) {
+                                $row.attr('data-status', 'manifested');
+                                var $badge = $row.find('td:eq(7) span');
+                                $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                                var $manifestCol = $row.find('.manifest-col');
+                                $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                                var $payCol = $row.find('td:eq(9)');
+                                $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                            }
+                            // Hide modal
+                            var modalEl = document.getElementById('addressErrorFallbackModal');
+                            var modal = bootstrap.Modal.getInstance(modalEl);
+                            if (modal) modal.hide();
+                            showAlert('success', response.message || 'Shipment manifested via UNITED CLASSIC (Ship Global)! Tracking: ' + (response.tracking_number || 'N/A'));
+                        } else {
+                            showAlert('danger', response.message || 'Failed to manifest via Ship Global.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = 'Error manifesting via Ship Global.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                    }
+                });
+            });
+
+            // When modal is hidden, process next address error in the queue (bulk manifest)
+            var addressErrorModalEl = document.getElementById('addressErrorFallbackModal');
+            addressErrorModalEl.addEventListener('hidden.bs.modal', function () {
+                if (addressErrorQueue.length > 0 && (addressErrorQueueIndex + 1) < addressErrorQueue.length) {
+                    addressErrorQueueIndex++;
+                    setTimeout(function () {
+                        showAddressErrorFallbackModal(addressErrorQueue[addressErrorQueueIndex]);
+                    }, 300);
+                } else {
+                    // All address errors processed — reset queue
+                    addressErrorQueue = [];
+                    addressErrorQueueIndex = 0;
+                }
             });
 
             // =============================================

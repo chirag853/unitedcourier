@@ -126,29 +126,6 @@
                             </div>
                         </div>
 
-                        <!-- Aadhar Row with OTP integration -->
-                        <div class="mb-4">
-                            <label class="form-label-custom">Aadhar Number</label>
-                            <div class="input-group-custom">
-                                <input type="text" name="aadhar_number" id="aadharInput" class="form-control input-custom"
-                                    placeholder="12-Digit Number" maxlength="12" required>
-                                <i class="fas fa-id-card"></i>
-                                <button type="button" class="btn-otp" onclick="sendOTP()">Get Aadhar OTP</button>
-                            </div>
-                            <div id="otpStatus" class="otp-sent-text"><i class="fas fa-check-circle"></i> OTP sent to
-                                registered mobile number</div>
-                        </div>
-
-                        <!-- OTP Input (Conditional) -->
-                        <div class="mb-4 animate__animated animate__fadeIn" id="otpContainer" style="display: none;">
-                            <label class="form-label-custom">Enter OTP</label>
-                            <div class="input-group-custom">
-                                <input type="text" name="otp" class="form-control input-custom" placeholder="6-Digit Code"
-                                    maxlength="6">
-                                <i class="fas fa-key"></i>
-                            </div>
-                        </div>
-
                         <!-- Business Category -->
                         <div class="mb-3">
                             <div class="input-group-custom">
@@ -202,21 +179,6 @@ function raf(time) {
     requestAnimationFrame(raf);
 }
 requestAnimationFrame(raf);
-
-// OTP Simulation tied to Aadhar Field
-function sendOTP() {
-    const status = document.getElementById('otpStatus');
-    const container = document.getElementById('otpContainer');
-    const btn = document.querySelector('.btn-otp');
-
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
-
-    setTimeout(() => {
-        status.style.display = 'block';
-        container.style.display = 'block';
-        btn.innerHTML = 'Resend';
-    }, 800);
-}
 
 // Form Submission
 document.getElementById('registrationForm').addEventListener('submit', function(e) {
