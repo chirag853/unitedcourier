@@ -22,6 +22,7 @@ class CourierRate extends Model
         'fuel_percentage',
         'gst_percentage',
         'gst_amount',
+        'is_default',
     ];
 
     protected $casts = [
@@ -32,6 +33,7 @@ class CourierRate extends Model
         'fuel_percentage' => 'decimal:2',
         'gst_percentage' => 'decimal:2',
         'gst_amount' => 'decimal:2',
+        'is_default' => 'boolean',
     ];
 
     /**

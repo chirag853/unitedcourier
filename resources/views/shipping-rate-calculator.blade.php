@@ -259,10 +259,10 @@
                 <select class="form-control input-custom">
                     <option selected disabled>Select a country</option>
                     <option>United States</option>
-                    <option>Canada</option>
-                    <option>Australia</option>
+                    <!-- <option>Canada</option> -->
+                    <!-- <option>Australia</option> -->
                     <option>United Kingdom</option>
-                    <option>Germany</option>
+                    <!-- <option>Germany</option> -->
                 </select>
 
                 <i class="fa-solid fa-chevron-down"></i>
@@ -281,7 +281,7 @@
             </label>
 
             <div class="input-group-custom">
-                <input type="number" class="form-control input-custom" placeholder="Enter weight in kg">
+                <input type="number" id="shipmentWeight" class="form-control input-custom" placeholder="Enter weight in kg">
 
                 <span style="padding: 14px 20px; border-left:1px solid #ddd;">
                     kg
@@ -290,13 +290,13 @@
 
             <!-- Weight Chips -->
             <div class="mt-3 d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-outline-secondary rounded-pill">0.1 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">0.25 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">0.5 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">1 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">2 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">5 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill">10 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.1">0.1 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.25">0.25 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.5">0.5 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="1">1 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="2">2 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="5">5 kg</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="10">10 kg</button>
             </div>
 
         </div>
@@ -307,7 +307,7 @@
     <!-- Buttons -->
     <div class="d-flex flex-wrap gap-3 mt-4">
 
-        <button type="button"
+        <button type="button" id="getRateBtn"
             style="width: 320px;"
             class="btn moving-gradient-bg btn-primary-custom">
             <i class="fa-solid fa-arrow-right me-2"></i>
@@ -357,6 +357,91 @@
 
 
 
+
+<!-- Default Rates Table (weight-wise) -->
+<section class="py-5 d-none" id="defaultRatesSection" style="background: #f8fafc;">
+    <div class="container">
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8 text-center">
+                <h2 class="about-title">Default <span class="gradient-text">Shipping Rates</span></h2>
+                <p class="about-desc text-center" id="ratesSubtitle">
+                    Transparent pricing based on shipment weight and destination zone. These are our standard default rates.
+                </p>
+            </div>
+        </div>
+
+        @if($defaultRates->isNotEmpty())
+            @foreach($defaultRates as $serviceId => $rates)
+                @php
+                    $service = $rates->first()->service;
+                    $serviceName = $service ? ($service->real_name ?? $service->method ?? $service->network ?? 'Service #' . $serviceId) : 'Service #' . $serviceId;
+                    $zones = $rates->pluck('zone_no')->unique()->sort()->values();
+                @endphp
+
+                <div class="card mb-4 shadow-sm border-0" style="border-radius: 16px; overflow: hidden;">
+                    <!-- <div class="card-header py-3" style="background: linear-gradient(135deg, #1e293b, #334155); color: #fff; border: none;"> -->
+                    <div class="card-header py-3" style="background: linear-gradient(to right, #2563eb, #9333ea); color: #fff; border: none;">
+                        <h5 class="mb-0 fw-bold">
+                            <i class="fa-solid fa-truck-fast me-2"></i>{{ $serviceName }}
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead style="background: #f1f5f9;">
+                                    <tr>
+                                        <th style="min-width: 180px;">Weight Range (kg)</th>
+                                        @foreach($zones as $zone)
+                                            <th class="text-center">Zone {{ $zone }}</th>
+                                        @endforeach
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @php
+                                        $weightRanges = $rates->groupBy(function($r) {
+                                            return $r->wt_range_start . '-' . $r->wt_range_end;
+                                        })->sortKeys();
+                                    @endphp
+                                    @foreach($weightRanges as $rangeKey => $rangeRates)
+                                        @php
+                                            $start = $rangeRates->first()->wt_range_start;
+                                            $end = $rangeRates->first()->wt_range_end;
+                                            $zoneMap = $rangeRates->keyBy('zone_no');
+                                        @endphp
+                                        <tr data-wt-start="{{ $start }}" data-wt-end="{{ $end }}">
+                                            <td class="fw-semibold">
+                                                {{ number_format((float)$start, 3) }} — {{ number_format((float)$end, 3) }}
+                                            </td>
+                                            @foreach($zones as $zone)
+                                                <td class="text-center">
+                                                    @if(isset($zoneMap[$zone]))
+                                                        <span class="fw-bold text-dark">₹ {{ number_format((float)$zoneMap[$zone]->price, 2) }}</span>
+                                                    @else
+                                                        <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                            @endforeach
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        @else
+            <div class="text-center py-5">
+                <i class="fa-solid fa-box-open fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No default rates available at the moment. Please check back later.</p>
+            </div>
+        @endif
+
+        <div class="text-center py-5 d-none" id="noRateMatch">
+            <i class="fa-solid fa-magnifying-glass fa-3x text-muted mb-3"></i>
+            <p class="text-muted">No rates found for the entered weight. Please try a different weight.</p>
+        </div>
+    </div>
+</section>
 
 <!-- Features cards section -->
 
@@ -741,6 +826,98 @@
 
 
   <!-- MOUSE HOVER GREDIENT EFFECT ON MISSION AND VISSION SCRIPS -->
+
+    <script>
+        // ============================================================
+        // Shipping Rate Calculator — show default rates by weight
+        // ============================================================
+        (function () {
+            const getRateBtn = document.getElementById('getRateBtn');
+            const weightInput = document.getElementById('shipmentWeight');
+            const ratesSection = document.getElementById('defaultRatesSection');
+            const subtitle = document.getElementById('ratesSubtitle');
+            const noMatchBox = document.getElementById('noRateMatch');
+            const weightChips = document.querySelectorAll('.weight-chip');
+
+            // Weight chips fill the input
+            weightChips.forEach(function (chip) {
+                chip.addEventListener('click', function () {
+                    weightInput.value = chip.getAttribute('data-weight');
+                    weightChips.forEach(function (c) { c.classList.remove('active', 'btn-secondary'); });
+                    chip.classList.add('active', 'btn-secondary');
+                });
+            });
+
+            function filterRatesByWeight() {
+                const weight = parseFloat(weightInput.value);
+
+                if (isNaN(weight) || weight <= 0) {
+                    alert('Please enter a valid shipment weight.');
+                    weightInput.focus();
+                    return;
+                }
+
+                // Show the section
+                ratesSection.classList.remove('d-none');
+
+                let matchedAny = false;
+                const cards = ratesSection.querySelectorAll('.card');
+
+                cards.forEach(function (card) {
+                    const rows = card.querySelectorAll('tbody tr');
+                    let matchedInCard = false;
+
+                    rows.forEach(function (row) {
+                        const start = parseFloat(row.getAttribute('data-wt-start'));
+                        const end = parseFloat(row.getAttribute('data-wt-end'));
+
+                        // A weight matches a range if start <= weight <= end
+                        const isMatch = weight >= start && weight <= end;
+                        row.style.display = isMatch ? '' : 'none';
+                        if (isMatch) {
+                            matchedInCard = true;
+                            matchedAny = true;
+                        }
+                    });
+
+                    // Hide the entire card if no row matched in it
+                    card.style.display = matchedInCard ? '' : 'none';
+                });
+
+                // Show / hide the "no match" message
+                if (matchedAny) {
+                    noMatchBox.classList.add('d-none');
+                    if (subtitle) {
+                        subtitle.textContent =
+                            'Showing default rates for shipment weight ' + weight + ' kg.';
+                    }
+                } else {
+                    noMatchBox.classList.remove('d-none');
+                    if (subtitle) {
+                        subtitle.textContent =
+                            'No default rate found for ' + weight + ' kg. Please try a different weight.';
+                    }
+                }
+
+                // Smooth scroll to the rates section
+                ratesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            if (getRateBtn) {
+                getRateBtn.addEventListener('click', filterRatesByWeight);
+            }
+
+            // Allow pressing Enter in the weight field to trigger the search
+            if (weightInput) {
+                weightInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        filterRatesByWeight();
+                    }
+                });
+            }
+        })();
+    </script>
 
     <script>
             // Track mouse position for card glow effect

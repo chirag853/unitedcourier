@@ -5560,16 +5560,44 @@ class AdminController extends Controller
     public function updateRate(Request $request, $id)
     {
         $rate = \App\Models\CourierRate::findOrFail($id);
+
+        // Only default rates (is_default = 1) can be changed from the admin panel
+        if (!$rate->is_default) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This rate is marked as non-default and cannot be edited from the admin panel.',
+            ], 403);
+        }
+
         $rate->price = $request->price;
         $rate->save();
 
-        return response()->json(['success' => true, 'message' => 'Rate updated successfully.']);
+        // Propagate the default rate change to all customers who still use the default rate (is_default = 1).
+        // Customer-specific rates that have been customized (is_default = 0) are left untouched.
+        $updatedCustomers = \App\Models\CourierRate::where('customer_id', '!=', 0)
+            ->where('is_default', 1)
+            ->where('service_id', $rate->service_id)
+            ->where('wt_range_start', $rate->wt_range_start)
+            ->where('wt_range_end', $rate->wt_range_end)
+            ->where('zone_no', $rate->zone_no)
+            ->update(['price' => $request->price]);
+
+        $message = 'Rate updated successfully.';
+        if ($updatedCustomers > 0) {
+            $message .= ' The same rate was also updated for ' . $updatedCustomers . ' customer(s) using the default rate.';
+        }
+
+        return response()->json(['success' => true, 'message' => $message]);
     }
 
     public function updateCustomerRate(Request $request, $id)
     {
         $rate = \App\Models\CourierRate::findOrFail($id);
+
         $rate->price = $request->price;
+        // Once a customer rate is customized, mark it as non-default so it is no longer
+        // overwritten when the corresponding default rate is changed from the Default Rates table.
+        $rate->is_default = false;
         $rate->save();
 
         return response()->json(['success' => true, 'message' => 'Customer rate updated successfully.']);

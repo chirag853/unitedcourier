@@ -121,16 +121,16 @@
                         <li>
                             <ul>
                                 <li>
-                                    <a href="{{ url('#') }}"><i class="ti ti-user-up"></i><span>Get Quote</span></a>
+                                    <a href="{{ url('shipping-rate-calculator') }}" target="_blank"><i class="ti ti-user-up"></i><span>Get Quote</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ url('#') }}"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
+                                    <a href="{{ url('track-shipment') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                                 </li>
                                 <li>
                                     <a href="{{ route('customer.my-profile') }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ url('#') }}"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
+                                    <a href="{{ url('logout') }}"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
                                 </li>
                             </ul>
                         </li>

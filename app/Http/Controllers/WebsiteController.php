@@ -541,6 +541,15 @@ class WebsiteController extends Controller
         $faqs = Faq::byPage('shipping-rate-calculator')->active()->ordered()->get();
         $faqContactSidebar = ShippingRateCalculatorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
 
+        // Fetch default rates (customer_id = 0) grouped by service, ordered by weight range and zone
+        $defaultRates = \App\Models\CourierRate::with('service')
+            ->where('customer_id', 0)
+            ->orderBy('service_id')
+            ->orderBy('wt_range_start')
+            ->orderBy('zone_no')
+            ->get()
+            ->groupBy('service_id');
+
         return view('shipping-rate-calculator', compact(
             'heroContent',
             'featuresHeading',
@@ -550,7 +559,8 @@ class WebsiteController extends Controller
             'testimonials',
             'faqHeader',
             'faqs',
-            'faqContactSidebar'
+            'faqContactSidebar',
+            'defaultRates'
         ));
     }
 

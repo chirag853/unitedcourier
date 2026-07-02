@@ -153,6 +153,7 @@
                                                         <th>Weight End (gm)</th>
                                                         <th>Zone No</th>
                                                         <th>Price (₹)</th>
+                                                        <th>Default</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -168,11 +169,23 @@
                                                         <td>{{ $rate->wt_range_end }}</td>
                                                         <td>{{ $rate->zone_no }}</td>
                                                         <td>
-                                                            <span class="rate-display" id="rate-display-{{ $rate->id }}">₹ {{ number_format($rate->price, 2) }}</span>
-                                                            <input type="number" step="0.01" min="0" class="rate-input d-none" id="rate-input-{{ $rate->id }}" value="{{ $rate->price }}" data-rate-id="{{ $rate->id }}" data-original="{{ $rate->price }}">
-                                                            <i class="ti ti-edit edit-icon" id="edit-icon-{{ $rate->id }}" onclick="editRate({{ $rate->id }})"></i>
-                                                            <i class="ti ti-device-floppy save-icon d-none" id="save-icon-{{ $rate->id }}" onclick="saveRate({{ $rate->id }})"></i>
-                                                            <i class="ti ti-x cancel-icon d-none" id="cancel-icon-{{ $rate->id }}" onclick="cancelEdit({{ $rate->id }})"></i>
+                                                            @if($rate->is_default)
+                                                                <span class="rate-display" id="rate-display-{{ $rate->id }}">₹ {{ number_format($rate->price, 2) }}</span>
+                                                                <input type="number" step="0.01" min="0" class="rate-input d-none" id="rate-input-{{ $rate->id }}" value="{{ $rate->price }}" data-rate-id="{{ $rate->id }}" data-original="{{ $rate->price }}">
+                                                                <i class="ti ti-edit edit-icon" id="edit-icon-{{ $rate->id }}" onclick="editRate({{ $rate->id }})"></i>
+                                                                <i class="ti ti-device-floppy save-icon d-none" id="save-icon-{{ $rate->id }}" onclick="saveRate({{ $rate->id }})"></i>
+                                                                <i class="ti ti-x cancel-icon d-none" id="cancel-icon-{{ $rate->id }}" onclick="cancelEdit({{ $rate->id }})"></i>
+                                                            @else
+                                                                <span class="rate-display text-muted">₹ {{ number_format($rate->price, 2) }}</span>
+                                                                <i class="ti ti-lock text-muted ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Non-default rate — cannot be edited"></i>
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            @if($rate->is_default)
+                                                                <span class="badge bg-success">Yes</span>
+                                                            @else
+                                                                <span class="badge bg-secondary">No</span>
+                                                            @endif
                                                         </td>
                                                     </tr>
                                                     @endforeach
@@ -208,6 +221,7 @@
                                                         <th>Weight End (gm)</th>
                                                         <th>Zone No</th>
                                                         <th>Price (₹)</th>
+                                                        <th>Default</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="customerRatesBody">
@@ -290,7 +304,8 @@
                     { title: 'Weight Start (gm)' },
                     { title: 'Weight End (gm)' },
                     { title: 'Zone No' },
-                    { title: 'Price (₹)', orderable: false }
+                    { title: 'Price (₹)', orderable: false },
+                    { title: 'Default', orderable: false }
                 ]
             });
 
@@ -351,8 +366,16 @@
                     $('#save-icon-' + rateId).addClass('d-none');
                     $('#cancel-icon-' + rateId).addClass('d-none');
                 },
-                error: function() {
-                    alert('Failed to update rate. Please try again.');
+                error: function(xhr) {
+                    if (xhr.status === 403) {
+                        var msg = xhr.responseJSON && xhr.responseJSON.message
+                            ? xhr.responseJSON.message
+                            : 'This rate cannot be edited.';
+                        alert(msg);
+                        cancelEdit(rateId);
+                    } else {
+                        alert('Failed to update rate. Please try again.');
+                    }
                 }
             });
         }
@@ -368,6 +391,19 @@
 
                     if (response.rates.length > 0) {
                         $.each(response.rates, function(index, rate) {
+                            var isDefault = rate.is_default ? true : false;
+                            var defaultBadge = isDefault
+                                ? '<span class="badge bg-success">Yes</span>'
+                                : '<span class="badge bg-secondary">No</span>';
+
+                            // All customer rates (default and non-default) are editable
+                            var priceCell =
+                                '<span class="rate-display" id="cust-rate-display-' + rate.id + '">₹ ' + parseFloat(rate.price).toFixed(2) + '</span>' +
+                                '<input type="number" step="0.01" min="0" class="rate-input d-none" id="cust-rate-input-' + rate.id + '" value="' + rate.price + '" data-rate-id="' + rate.id + '" data-original="' + rate.price + '">' +
+                                '<i class="ti ti-edit edit-icon" id="cust-edit-icon-' + rate.id + '" onclick="editCustomerRate(' + rate.id + ')"></i>' +
+                                '<i class="ti ti-device-floppy save-icon d-none" id="cust-save-icon-' + rate.id + '" onclick="saveCustomerRate(' + rate.id + ')"></i>' +
+                                '<i class="ti ti-x cancel-icon d-none" id="cust-cancel-icon-' + rate.id + '" onclick="cancelCustomerEdit(' + rate.id + ')"></i>';
+
                             rows.push([
                                 index + 1,
                                 rate.service ? rate.service.network : '—',
@@ -378,11 +414,8 @@
                                 rate.wt_range_start,
                                 rate.wt_range_end,
                                 rate.zone_no,
-                                '<span class="rate-display" id="cust-rate-display-' + rate.id + '">₹ ' + parseFloat(rate.price).toFixed(2) + '</span>' +
-                                '<input type="number" step="0.01" min="0" class="rate-input d-none" id="cust-rate-input-' + rate.id + '" value="' + rate.price + '" data-rate-id="' + rate.id + '" data-original="' + rate.price + '">' +
-                                '<i class="ti ti-edit edit-icon" id="cust-edit-icon-' + rate.id + '" onclick="editCustomerRate(' + rate.id + ')"></i>' +
-                                '<i class="ti ti-device-floppy save-icon d-none" id="cust-save-icon-' + rate.id + '" onclick="saveCustomerRate(' + rate.id + ')"></i>' +
-                                '<i class="ti ti-x cancel-icon d-none" id="cust-cancel-icon-' + rate.id + '" onclick="cancelCustomerEdit(' + rate.id + ')"></i>'
+                                priceCell,
+                                defaultBadge
                             ]);
                         });
                     }
@@ -440,8 +473,16 @@
                     $('#cust-save-icon-' + rateId).addClass('d-none');
                     $('#cust-cancel-icon-' + rateId).addClass('d-none');
                 },
-                error: function() {
-                    alert('Failed to update customer rate. Please try again.');
+                error: function(xhr) {
+                    if (xhr.status === 403) {
+                        var msg = xhr.responseJSON && xhr.responseJSON.message
+                            ? xhr.responseJSON.message
+                            : 'This rate cannot be edited.';
+                        alert(msg);
+                        cancelCustomerEdit(rateId);
+                    } else {
+                        alert('Failed to update customer rate. Please try again.');
+                    }
                 }
             });
         }
