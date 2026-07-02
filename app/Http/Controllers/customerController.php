@@ -3098,10 +3098,18 @@ class customerController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // Filter out unpaid invoices — only show paid and cancelled records
+        $invoices = $invoices->filter(function ($inv) {
+            if ($inv->status === 'cancelled') {
+                return true;
+            }
+            // Paid if shipper status exists and is not 'draft'
+            return ($inv->shipperInfo && $inv->shipperInfo->status && $inv->shipperInfo->status !== 'draft');
+        })->values();
+
         // Compute payment summary
         $totalAmount = 0;
         $paidAmount = 0;
-        $unpaidAmount = 0;
         $cancelledAmount = 0;
 
         foreach ($invoices as $inv) {
@@ -3110,11 +3118,9 @@ class customerController extends Controller
 
             if ($inv->status === 'cancelled') {
                 $cancelledAmount += $amount;
-            } elseif ($inv->shipperInfo && $inv->shipperInfo->status && $inv->shipperInfo->status !== 'draft') {
+            } else {
                 // Paid (status is ready, packed, manifested, dispatched, delivered, etc.)
                 $paidAmount += $amount;
-            } else {
-                $unpaidAmount += $amount;
             }
         }
 
@@ -3126,7 +3132,6 @@ class customerController extends Controller
             'invoices',
             'totalAmount',
             'paidAmount',
-            'unpaidAmount',
             'cancelledAmount',
             'walletBalance'
         ));
@@ -3173,6 +3178,86 @@ class customerController extends Controller
             'totalRefunds',
             'totalCharges',
             'walletBalance'
+        ));
+    }
+
+    /**
+     * Show the customer's full profile page.
+     *
+     * Displays every detail of the logged-in customer including personal
+     * info, Aadhar, GST, business/organization details, KYC status and
+     * wallet balance.
+     */
+    public function myProfile()
+    {
+        // Check if customer is logged in
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customer = auth()->guard('customer')->user();
+
+        // Fetch KYC details (GST, organization, aadhar, etc.)
+        $kyc = KycDetail::where('customer_id', $customer->id)->latest()->first();
+
+        // Fetch wallet balance
+        $wallet = Wallet::where('customer_id', $customer->id)->first();
+        $walletBalance = $wallet ? (float) $wallet->balance : 0;
+
+        // Fetch business category name
+        $businessCategory = null;
+        if ($customer->business_category_id) {
+            $businessCategory = BusinessCategory::find($customer->business_category_id);
+        }
+
+        // Mask the Aadhar number for display (show only last 4 digits)
+        $maskedAadhar = null;
+        $aadharSource = null;
+        if (!empty($customer->aadhar_number)) {
+            $maskedAadhar = 'XXXX-XXXX-' . substr($customer->aadhar_number, -4);
+            $aadharSource = 'customer';
+        } elseif ($kyc && !empty($kyc->aadhar_number)) {
+            $maskedAadhar = 'XXXX-XXXX-' . substr($kyc->aadhar_number, -4);
+            $aadharSource = 'kyc';
+        }
+
+        // Determine Aadhar verification status
+        $aadharVerified = (bool) ($customer->aadhar_verified || ($kyc && $kyc->aadhar_verified));
+
+        // Determine GST verification status
+        $gstVerified = $kyc ? (bool) $kyc->gst_verified : false;
+
+        // Determine KYC status label & badge class
+        $kycStatus = $kyc->kyc_status ?? 'pending';
+        $kycStatusMap = [
+            'pending'       => ['label' => 'Pending', 'class' => 'bg-warning'],
+            'under_review'  => ['label' => 'Under Review', 'class' => 'bg-info'],
+            'approved'      => ['label' => 'Approved', 'class' => 'bg-success'],
+            'rejected'      => ['label' => 'Rejected', 'class' => 'bg-danger'],
+        ];
+        $kycStatusInfo = $kycStatusMap[$kycStatus] ?? ['label' => ucfirst($kycStatus), 'class' => 'bg-secondary'];
+
+        // CSB status label
+        $csbStatusMap = [
+            0 => ['label' => 'Not Submitted', 'class' => 'bg-secondary'],
+            1 => ['label' => 'Pending', 'class' => 'bg-warning'],
+            2 => ['label' => 'Approved', 'class' => 'bg-success'],
+            3 => ['label' => 'Rejected', 'class' => 'bg-danger'],
+        ];
+        $csbStatusVal = $customer->csb_status ?? 0;
+        $csbStatusInfo = $csbStatusMap[$csbStatusVal] ?? ['label' => 'Unknown', 'class' => 'bg-secondary'];
+
+        return view('customer.my-profile', compact(
+            'customer',
+            'kyc',
+            'walletBalance',
+            'businessCategory',
+            'maskedAadhar',
+            'aadharSource',
+            'aadharVerified',
+            'gstVerified',
+            'kycStatusInfo',
+            'csbStatusInfo'
         ));
     }
 

@@ -190,7 +190,7 @@
                 <!-- Summary Cards -->
                 <div class="row g-3 mb-4">
                     <!-- Wallet Balance -->
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-3">
                         <div class="wallet-balance-box h-100 d-flex flex-column justify-content-between">
                             <div>
                                 <div class="wallet-label"><i class="ti ti-wallet me-1"></i> Wallet Balance</div>
@@ -205,7 +205,7 @@
                     </div>
 
                     <!-- Total Recharges -->
-                    <div class="col-12 col-sm-6 col-lg-2">
+                    <div class="col-12 col-sm-6 col-lg-3">
                         <div class="card summary-card shadow-sm h-100">
                             <div class="card-body p-3 d-flex align-items-center gap-3">
                                 <div class="summary-icon" style="background:#dcfce7;color:#16a34a;">
@@ -220,7 +220,7 @@
                     </div>
 
                     <!-- Total Refunds -->
-                    <div class="col-12 col-sm-6 col-lg-2">
+                    <div class="col-12 col-sm-6 col-lg-3">
                         <div class="card summary-card shadow-sm h-100">
                             <div class="card-body p-3 d-flex align-items-center gap-3">
                                 <div class="summary-icon" style="background:#e0f2fe;color:#0284c7;">
@@ -235,7 +235,7 @@
                     </div>
 
                     <!-- Total Transactions Count -->
-                    <div class="col-12 col-sm-6 col-lg-2">
+                    <div class="col-12 col-sm-6 col-lg-3">
                         <div class="card summary-card shadow-sm h-100">
                             <div class="card-body p-3 d-flex align-items-center gap-3">
                                 <div class="summary-icon" style="background:#eef2ff;color:#4f46e5;">

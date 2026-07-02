@@ -575,6 +575,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/view-all-shipments', [customerController::class, 'viewAllShipments'])->name('view-all-shipments');
     Route::get('/transaction-history', [customerController::class, 'transactionHistory'])->name('transaction-history');
     Route::get('/wallet-history', [customerController::class, 'walletHistory'])->name('wallet-history');
+    Route::get('/my-profile', [customerController::class, 'myProfile'])->name('my-profile');
     Route::post('/pay-now', [customerController::class, 'payNow'])->name('pay-now');
     Route::post('/wallet-recharge', [customerController::class, 'walletRecharge'])->name('wallet-recharge');
     Route::post('/cancel-shipment/{id}', [customerController::class, 'cancelShipment'])->name('cancel-shipment');

@@ -757,7 +757,7 @@
                                 <!-- Step 4 Content -->
                                 <div id="step4-content" class="step-content">
                                     <h3 class="kyc-card-title">Agreement <span class="gradient-text">Signing</span></h3>
-                                    <div class="p-4 bg-light rounded-4 mb-4" style="height: 200px; overflow-y: auto; font-size: 13px; border: 1px solid #eef2f7; color: var(--text-muted); line-height: 1.6;">
+                                    <div class="p-4 bg-light rounded-4 mb-4" style="height: 50%; overflow-y: auto; font-size: 13px; border: 1px solid #eef2f7; color: var(--text-muted); line-height: 1.6;">
                                         <h6 class="text-dark fw-bold">Terms of Service</h6>
                                          <div class="document-wrapper">
     

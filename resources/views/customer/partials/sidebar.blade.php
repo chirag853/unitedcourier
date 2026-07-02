@@ -84,10 +84,10 @@
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <ul>
-                                        <li><a href="{{ url('#') }}">Create Manifest</a></li>
-                                        <li><a href="{{ url('#') }}">Edit Manifest</a></li>
+                                        <!-- <li><a href="{{ url('#') }}">Create Manifest</a></li> -->
+                                        <!-- <li><a href="{{ url('#') }}">Edit Manifest</a></li> -->
                                         <li><a href="{{ url('#') }}">Dispatch Manifest</a></li>
-                                        <li><a href="{{ url('#') }}">Manifest Report</a></li>
+                                        <li><a href="{{ url('#') }}">Manifests Report</a></li>
                                     </ul>
                                 </li>
                                 <li class="submenu">
@@ -96,9 +96,9 @@
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <ul>
-                                        <li><a href="{{ url('#') }}">Wallet Recharge</a></li>
-                                        <li><a href="{{ url('#') }}">Account Ledger</a></li>
-                                        <li><a href="{{ url('#') }}">Sale Report</a></li>
+                                        <!-- <li><a href="{{ url('#') }}">Wallet Recharge</a></li> -->
+                                        <!-- <li><a href="{{ url('#') }}">Account Ledger</a></li> -->
+                                        <!-- <li><a href="{{ url('#') }}">Sale Report</a></li> -->
                                         <li><a href="{{ route('customer.transaction-history') }}">Transaction History</a></li>
                                         <li><a href="{{ route('customer.wallet-history') }}">Wallet History</a></li>
                                     </ul>
@@ -127,7 +127,7 @@
                                     <a href="{{ url('#') }}"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ url('#') }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
+                                    <a href="{{ route('customer.my-profile') }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
                                 <li>
                                     <a href="{{ url('#') }}"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
