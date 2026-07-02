@@ -21,6 +21,7 @@ use App\Models\CreateShipment;
 use App\Models\ShipmentTracking;
 use App\Models\Tracking;
 use App\Models\ShipmentLog;
+use App\Models\WalletTransaction;
 use App\Models\CourierService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -3074,6 +3075,108 @@ class customerController extends Controller
     }
 
     /**
+     * Show the Transaction History page for the logged-in customer.
+     *
+     * Lists all shipment invoices for the customer with payment status
+     * (Paid / Unpaid / Cancelled), amounts, dates, and wallet balance summary.
+     */
+    public function transactionHistory()
+    {
+        // Check if customer is logged in
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        // Get all shipper IDs for this customer
+        $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+
+        // Get all invoices for those shippers, with shipper info & consignee
+        $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
+            ->with(['invoiceItems', 'shipperInfo.consigneeInfo'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Compute payment summary
+        $totalAmount = 0;
+        $paidAmount = 0;
+        $unpaidAmount = 0;
+        $cancelledAmount = 0;
+
+        foreach ($invoices as $inv) {
+            $amount = (float) ($inv->total_amount ?? 0);
+            $totalAmount += $amount;
+
+            if ($inv->status === 'cancelled') {
+                $cancelledAmount += $amount;
+            } elseif ($inv->shipperInfo && $inv->shipperInfo->status && $inv->shipperInfo->status !== 'draft') {
+                // Paid (status is ready, packed, manifested, dispatched, delivered, etc.)
+                $paidAmount += $amount;
+            } else {
+                $unpaidAmount += $amount;
+            }
+        }
+
+        // Get wallet balance
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        $walletBalance = $wallet ? (float) $wallet->balance : 0;
+
+        return view('customer.transaction-history', compact(
+            'invoices',
+            'totalAmount',
+            'paidAmount',
+            'unpaidAmount',
+            'cancelledAmount',
+            'walletBalance'
+        ));
+    }
+
+    /**
+     * Show the Wallet History page for the logged-in customer.
+     *
+     * Lists all wallet transactions (recharges, refunds, shipment charges)
+     * for the customer with a date filter and summary cards.
+     */
+    public function walletHistory()
+    {
+        // Check if customer is logged in
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        // Get all wallet transactions for this customer, newest first
+        $transactions = WalletTransaction::where('customer_id', $customerId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Compute summary
+        $totalRecharges = $transactions->where('reason', 'recharge')->sum(function ($t) {
+            return (float) $t->amount;
+        });
+        $totalRefunds = $transactions->where('reason', 'refund')->sum(function ($t) {
+            return (float) $t->amount;
+        });
+        $totalCharges = $transactions->where('type', 'debit')->sum(function ($t) {
+            return (float) $t->amount;
+        });
+
+        // Get current wallet balance
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        $walletBalance = $wallet ? (float) $wallet->balance : 0;
+
+        return view('customer.wallet-history', compact(
+            'transactions',
+            'totalRecharges',
+            'totalRefunds',
+            'totalCharges',
+            'walletBalance'
+        ));
+    }
+
+    /**
      * Pay for a shipment - deduct from wallet and set status to ready.
      */
     public function payNow(Request $request)
@@ -3139,10 +3242,22 @@ class customerController extends Controller
             }
 
             // Deduct amount from wallet and update shipper status in a transaction
-            DB::transaction(function () use ($wallet, $amount, $shipper) {
+            DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
                 $wallet->decrement('balance', $amount);
+                $wallet->refresh();
                 $shipper->status = 'ready';
                 $shipper->save();
+
+                // Log the wallet debit (shipment charge)
+                WalletTransaction::create([
+                    'customer_id'   => $customerId,
+                    'type'          => 'debit',
+                    'reason'        => 'shipment_charge',
+                    'amount'        => $amount,
+                    'balance_after' => $wallet->balance,
+                    'reference'     => $shipper->awb_number,
+                    'description'   => 'Payment of ₹' . number_format($amount, 2) . ' for shipment ' . ($shipper->awb_number ?: '#' . $shipper->id),
+                ]);
             });
 
             // Create tracking record for payment confirmed (ready status)
@@ -6287,6 +6402,18 @@ class customerController extends Controller
                         $wallet = Wallet::where('customer_id', $customerId)->first();
                         if ($wallet) {
                             $wallet->increment('balance', $refundAmount);
+                            $wallet->refresh();
+
+                            // Log the refund transaction
+                            WalletTransaction::create([
+                                'customer_id'   => $customerId,
+                                'type'          => 'credit',
+                                'reason'        => 'refund',
+                                'amount'        => $refundAmount,
+                                'balance_after' => $wallet->balance,
+                                'reference'     => $shipper->awb_number,
+                                'description'   => 'Refund of ₹' . number_format($refundAmount, 2) . ' for cancelled shipment ' . ($shipper->awb_number ?: '#' . $shipper->id),
+                            ]);
                         }
                     }
                 }
@@ -6346,8 +6473,35 @@ class customerController extends Controller
                 return response()->json(['success' => false, 'message' => 'Wallet not found. Please contact support.']);
             }
 
-            DB::transaction(function () use ($wallet, $amount) {
+            // Server-side idempotency guard: reject duplicate recharge if an
+            // identical recharge was logged for this customer within 10 seconds.
+            // This prevents double entries from rapid double-clicks or AJAX retries.
+            $recentDuplicate = WalletTransaction::where('customer_id', $customerId)
+                ->where('reason', 'recharge')
+                ->where('amount', $amount)
+                ->where('created_at', '>=', now()->subSeconds(10))
+                ->exists();
+
+            if ($recentDuplicate) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A recharge of this amount was just processed. Please wait a moment before trying again.',
+                ]);
+            }
+
+            DB::transaction(function () use ($wallet, $amount, $customerId) {
                 $wallet->increment('balance', $amount);
+                $wallet->refresh();
+
+                // Log the wallet transaction
+                WalletTransaction::create([
+                    'customer_id'   => $customerId,
+                    'type'          => 'credit',
+                    'reason'        => 'recharge',
+                    'amount'        => $amount,
+                    'balance_after' => $wallet->balance,
+                    'description'   => 'Wallet recharge of ₹' . number_format($amount, 2),
+                ]);
             });
 
             $wallet->refresh();

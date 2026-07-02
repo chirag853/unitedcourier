@@ -99,7 +99,8 @@
                                         <li><a href="{{ url('#') }}">Wallet Recharge</a></li>
                                         <li><a href="{{ url('#') }}">Account Ledger</a></li>
                                         <li><a href="{{ url('#') }}">Sale Report</a></li>
-                                        <li><a href="{{ url('#') }}">Payment Report</a></li>
+                                        <li><a href="{{ route('customer.transaction-history') }}">Transaction History</a></li>
+                                        <li><a href="{{ route('customer.wallet-history') }}">Wallet History</a></li>
                                     </ul>
                                 </li>
 
