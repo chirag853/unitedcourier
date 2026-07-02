@@ -250,6 +250,135 @@ class customerController extends Controller
         }
     }
 
+    /**
+     * Send OTP for registration (does NOT require an existing customer).
+     * Prevents duplicate registrations by checking if the phone is already in use.
+     */
+    public function sendRegistrationOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone_number' => 'required|string|max:20'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Phone number is required'
+            ], 422);
+        }
+
+        try {
+            // Prevent duplicate registration: if the phone is already registered, block OTP send
+            $existingCustomer = Customer::where('phone_number', $request->phone_number)->first();
+            if ($existingCustomer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This phone number is already registered. Please login instead.'
+                ], 409);
+            }
+
+            // Generate 6-digit OTP
+            $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            // Store OTP in session with a registration-specific prefix (5 min expiry)
+            session([
+                'registration_otp' => $otp,
+                'registration_phone' => $request->phone_number,
+                'registration_otp_expires_at' => now()->addMinutes(5)->timestamp,
+                'registration_phone_verified' => false,
+            ]);
+
+            // Send OTP via SMS
+            $smsSent = $this->sendOtpViaSms($request->phone_number, $otp);
+
+            if (!$smsSent) {
+                \Log::warning('Registration SMS sending failed. OTP for ' . $request->phone_number . ': ' . $otp);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP sent successfully to your mobile number.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('sendRegistrationOtp error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify OTP for registration (does NOT log the user in).
+     * Marks the phone number as verified in session so store() can proceed.
+     */
+    public function verifyRegistrationOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone_number' => 'required|string|max:20',
+            'otp' => 'required|string|size:6'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid OTP format'
+            ], 422);
+        }
+
+        try {
+            $sessionOtp = session('registration_otp');
+            $sessionPhone = session('registration_phone');
+            $expiresAt = session('registration_otp_expires_at');
+
+            if (!$sessionOtp || !$sessionPhone) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No OTP was requested. Please click "Get OTP" first.'
+                ], 400);
+            }
+
+            if (now()->timestamp > $expiresAt) {
+                session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP has expired. Please request a new OTP.'
+                ], 400);
+            }
+
+            if ($sessionPhone !== $request->phone_number) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phone number mismatch. Please request a new OTP.'
+                ], 400);
+            }
+
+            if ((string) $sessionOtp !== $request->otp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid OTP. Please try again.'
+                ], 400);
+            }
+
+            // OTP verified — mark phone as verified, clear OTP value but keep the verified flag
+            session()->forget(['registration_otp', 'registration_otp_expires_at']);
+            session(['registration_phone_verified' => true]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Phone number verified successfully! You can now complete your registration.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('verifyRegistrationOtp error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Verification failed. Please try again.'
+            ], 500);
+        }
+    }
+
     public function dashboard()
     {
         // Check if customer is logged in using auth guard
@@ -460,14 +589,19 @@ class customerController extends Controller
         try {
             // Validate the request
             $validated = $request->validate([
-                'gst_number' => 'nullable|string|max:20',
+                'gst_number' => 'nullable|string|size:15|regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
                 'gst_verified' => 'boolean',
                 'otp_verified' => 'boolean',
+                'aadhar_number' => 'nullable|string|max:20',
+                'aadhar_verified' => 'boolean',
                 'organization_name' => 'nullable|string|max:255',
                 'authorized_signatory' => 'nullable|string|max:255',
                 'terms_accepted' => 'boolean',
                 'terms_accepted_at' => 'nullable|date',
-            ],);
+            ], [
+                'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
+                'gst_number.size' => 'The GST number must be exactly 15 characters.',
+            ]);
 
             // Get current customer
             $customer = auth()->guard('customer')->user();
@@ -478,6 +612,8 @@ class customerController extends Controller
                 'gst_number' => $request->gst_number,
                 'gst_verified' => $request->gst_verified ?? false,
                 'otp_verified' => $request->otp_verified ?? false,
+                'aadhar_number' => $request->aadhar_number,
+                'aadhar_verified' => $request->aadhar_verified ?? false,
                 'organization_name' => $request->organization_name,
                 'authorized_signatory' => $request->authorized_signatory,
                 'terms_accepted' => $request->terms_accepted ?? false,
@@ -494,10 +630,204 @@ class customerController extends Controller
                 'kyc_id' => $kyc->id
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Log::error('KYC submit error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Error submitting KYC application: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify GST number during KYC.
+     * Validates the GSTIN format:
+     *   - 2-digit state code (01-38)
+     *   - 10-character PAN (5 letters + 4 digits + 1 letter)
+     *   - 1-char entity code (1-9, A-Z)
+     *   - 1 char (default 'Z')
+     *   - 1-char checksum (alphanumeric)
+     * Example: 22AAAAA0000A1Z5
+     */
+    public function verifyGst(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'gst_number' => 'required|string|size:15',
+            ]);
+
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to verify your GST number.'
+                ], 401);
+            }
+
+            $gst = strtoupper(trim($request->gst_number));
+
+            // GSTIN format validation:
+            // [0-3][0-9]  -> state code 01-38
+            // [A-Z]{5}    -> first 5 letters of PAN
+            // [0-9]{4}    -> 4 digits of PAN
+            // [A-Z]       -> last letter of PAN
+            // [1-9A-Z]    -> entity code
+            // Z           -> default 'Z'
+            // [0-9A-Z]    -> checksum (alphanumeric)
+            if (!preg_match('/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', $gst)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid GST number format. A valid GSTIN is 15 characters: 2-digit state code, 10-char PAN, entity code, Z, and checksum (e.g. 22AAAAA0000A1Z5).'
+                ], 422);
+            }
+
+            // Validate state code is within 01-38
+            $stateCode = substr($gst, 0, 2);
+            if ((int) $stateCode < 1 || (int) $stateCode > 38) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid state code in GST number. State code must be between 01 and 38.'
+                ], 422);
+            }
+
+            // Validate checksum digit using the official GSTIN checksum algorithm
+            $gstWithoutChecksum = substr($gst, 0, 14);
+            $actualChecksum = substr($gst, 14, 1);
+            $computedChecksum = $this->computeGstChecksum($gstWithoutChecksum);
+            
+            if ($computedChecksum !== $actualChecksum) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid GST number. The checksum digit does not match. Please verify your GSTIN.'
+                ], 422);
+            }
+
+            session([
+                'kyc_gst_number' => $gst,
+                'kyc_gst_verified' => true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GST number verified successfully!',
+                'gst_number' => $gst,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('GST verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'GST verification failed. Please try again.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Compute the GSTIN checksum digit using the official algorithm.
+     * Based on the GSTN checksum formula.
+     *
+     * @param string $gst14  The first 14 characters of the GSTIN
+     * @return string         The computed checksum character (0-9 or A-Z)
+     */
+    private function computeGstChecksum(string $gst14): string
+    {
+        // Official GSTIN checksum (Luhn mod 36):
+        //  - Iterate RIGHT-TO-LEFT over the 14 characters
+        //  - Factor starts at 2 for the rightmost char, alternating 2,1,2,1,...
+        //  - Each char value: 0-9 = 0-9, A-Z = 10-35
+        //  - product = value * factor; reduce via base-36 digit sum: floor(product/36) + (product%36)
+        //  - checksum = (36 - (sum % 36)) % 36
+        $sum = 0;
+        $factor = 2;
+
+        for ($i = 13; $i >= 0; $i--) {
+            $char = $gst14[$i];
+            // Convert character to its numeric value (0-35): 0-9 = 0-9, A-Z = 10-35
+            $ascii = ord($char);
+            $value = ($ascii >= 48 && $ascii <= 57) ? ($ascii - 48) : ($ascii - 55);
+
+            $product = $value * $factor;
+            // Base-36 digit reduction (NOT decimal digit-summing)
+            $sum += intdiv($product, 36) + ($product % 36);
+
+            // Alternate factor: 2,1,2,1,...
+            $factor = ($factor === 2) ? 1 : 2;
+        }
+
+        $remainder = $sum % 36;
+        $checksumValue = (36 - $remainder) % 36;
+
+        // Convert back to character: 0-9 = '0'-'9', 10-35 = 'A'-'Z'
+        return ($checksumValue < 10)
+            ? (string) $checksumValue
+            : chr($checksumValue + 55);
+    }
+
+    /**
+     * Verify Aadhar number during KYC.
+     * Accepts an Aadhar number, validates the format, and marks it as verified.
+     */
+    public function verifyAadhar(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'aadhar_number' => 'required|string|size:12',
+            ]);
+
+            // Get current customer
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to verify your Aadhar.'
+                ], 401);
+            }
+
+            // Basic Aadhar format validation: 12 digits, not starting with 0 or 1
+            $aadhar = preg_replace('/\s+/', '', $request->aadhar_number);
+            if (!preg_match('/^[2-9][0-9]{11}$/', $aadhar)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid Aadhar number. It must be 12 digits and cannot start with 0 or 1.'
+                ], 422);
+            }
+
+            // Store Aadhar verification in session so it can be included when KYC is submitted
+            session([
+                'kyc_aadhar_number' => $aadhar,
+                'kyc_aadhar_verified' => true,
+            ]);
+
+            // Also update the customer record if an aadhar_number column exists
+            if (\Schema::hasColumn('customers', 'aadhar_number')) {
+                $customer->aadhar_number = $aadhar;
+                $customer->aadhar_verified = true;
+                $customer->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Aadhar number verified successfully!',
+                'aadhar_number' => $aadhar,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('Aadhar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Aadhar verification failed. Please try again.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -597,6 +927,17 @@ class customerController extends Controller
             ], 422);
         }
 
+        // Require OTP verification: the phone number must have been verified via OTP
+        $phoneVerified = session('registration_phone_verified', false);
+        $verifiedPhone = session('registration_phone');
+
+        if (!$phoneVerified || $verifiedPhone !== $request->phone_number) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your phone number via OTP before registering.'
+            ], 403);
+        }
+
         try {
             $customer = Customer::create([
                 'first_name' => $request->first_name,
@@ -606,19 +947,23 @@ class customerController extends Controller
                 'alternate_phone_number' => $request->alternate_phone_number,
                 'password_hash' => Hash::make($request->password),
                 'aadhar_number' => $request->aadhar_number,
-                'business_category_id' => $request->business_category,
+                'business_category_id' => $request->filled('business_category') ? (int) $request->business_category : null,
                 'is_terms_accepted' => $request->has('termsCheck'),
                 'email_verified' => false,
                 'aadhar_verified' => false
             ]);
 
+            // Clear registration OTP session data after successful registration
+            session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Registration successful! Please check your email for verification.',
-                'redirect' => route('customer.login')
+                'redirect' => route('login')
             ], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Log::error('Registration store error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Registration failed. Please try again.',

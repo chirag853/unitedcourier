@@ -11,6 +11,8 @@ class KycDetail extends Model
         'gst_number',
         'gst_verified',
         'otp_verified',
+        'aadhar_number',
+        'aadhar_verified',
         'organization_name',
         'authorized_signatory',
         'terms_accepted',
@@ -21,6 +23,7 @@ class KycDetail extends Model
     protected $casts = [
         'gst_verified' => 'boolean',
         'otp_verified' => 'boolean',
+        'aadhar_verified' => 'boolean',
         'terms_accepted' => 'boolean',
         'terms_accepted_at' => 'datetime',
     ];

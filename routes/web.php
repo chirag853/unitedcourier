@@ -552,6 +552,8 @@ Route::prefix('customer')->name('customer.')->group(function () {
     // Route::get('/', [customerController::class, 'login'])->name('login');
     Route::post('/check-phone', [customerController::class, 'checkPhone'])->name('check.phone');
     Route::post('/verify-otp', [customerController::class, 'verifyOtp'])->name('verify.otp');
+    Route::post('/send-registration-otp', [customerController::class, 'sendRegistrationOtp'])->name('send.registration.otp');
+    Route::post('/verify-registration-otp', [customerController::class, 'verifyRegistrationOtp'])->name('verify.registration.otp');
     // Route::get('/register', [customerController::class, 'register'])->name('register');
     Route::post('/register', [customerController::class, 'store'])->name('register.store');
     Route::get('/dashboard', [customerController::class, 'dashboard'])->name('dashboard');
@@ -562,6 +564,8 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/csb5-form', [customerController::class, 'csb5Form'])->name('csb5-form');
     Route::post('/csb5-form', [customerController::class, 'storeCsb5Form'])->name('csb5-form.store');
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
+    Route::post('/verify-gst', [customerController::class, 'verifyGst'])->name('verify.gst');
+    Route::post('/verify-aadhar', [customerController::class, 'verifyAadhar'])->name('verify.aadhar');
     Route::post('/create-shipment', [customerController::class, 'storeShipment'])->name('create-shipment.store');
     Route::get('/bulk-upload', [customerController::class, 'bulkUpload'])->name('bulk-upload');
     Route::post('/bulk-upload', [customerController::class, 'processBulkUpload'])->name('bulk-upload.process');
