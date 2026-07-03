@@ -234,8 +234,18 @@ class AdminController extends Controller
             'password' => 'required',
         ]);
 
-        // Attempt to login with admin guard
-        if (Auth::guard('admin')->attempt(['email' => $request->email, 'password' => $request->password], $request->has('remember'))) {
+        // Look up the admin by email first (so we can give a clear inactive message)
+        $admin = Admin::where('email', $request->email)->first();
+
+        // Block login for deactivated users
+        if ($admin && $admin->status != 1) {
+            return redirect()->route('admin.login')
+                ->with('error', 'Your account has been deactivated. Please contact the Super Admin.')
+                ->withInput($request->only('email'));
+        }
+
+        // Attempt to login with admin guard (also enforce status at credential level)
+        if (Auth::guard('admin')->attempt(['email' => $request->email, 'password' => $request->password, 'status' => 1], $request->has('remember'))) {
             return redirect()->route('admin.dashboard')->with('success', 'Login successful!');
         }
 
@@ -985,6 +995,165 @@ class AdminController extends Controller
             return redirect()->route('admin.delivery-persons')
                 ->with('error', 'Error: ' . $e->getMessage())
                 ->withInput();
+        }
+    }
+
+    /**
+     * Display the Create User management page.
+     * Lists all admin users (except Super Admin) with their module access.
+     */
+    public function createUser()
+    {
+        $users = Admin::where('type', '!=', 'Delivery_person')
+            ->orderByDesc('id')
+            ->get();
+
+        $modules = Admin::getModules();
+
+        return view('admin.create-user', compact('users', 'modules'));
+    }
+
+    /**
+     * Store a newly created admin user with module-wise access.
+     */
+    public function storeUser(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:admin_user,email',
+                'mobile' => 'nullable|string|max:20',
+                'password' => 'required|string|min:6',
+                'designation' => 'nullable|string|max:100',
+                'state' => 'nullable|string|max:100',
+                'city' => 'nullable|string|max:100',
+                'status' => 'nullable|in:0,1',
+                'type' => 'required|in:Admin,Super Admin',
+                'module_access' => 'nullable|array',
+                'module_access.*' => 'string|in:' . implode(',', Admin::getModuleKeys()),
+            ]);
+
+            // Super Admin gets all modules; Admin gets only selected ones
+            $moduleAccess = $validated['type'] === 'Super Admin'
+                ? Admin::getModuleKeys()
+                : ($validated['module_access'] ?? []);
+
+            Admin::create([
+                'type' => $validated['type'],
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'mobile' => $validated['mobile'] ?? null,
+                'password' => bcrypt($validated['password']),
+                'designation' => $validated['designation'] ?? null,
+                'state' => $validated['state'] ?? null,
+                'city' => $validated['city'] ?? null,
+                'status' => $validated['status'] ?? 1,
+                'module_access' => $moduleAccess,
+            ]);
+
+            return redirect()->route('admin.create-user')
+                ->with('success', 'User created successfully with module access!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('admin.create-user')
+                ->with('error', 'Validation failed: ' . $e->getMessage())
+                ->withInput();
+        } catch (\Exception $e) {
+            return redirect()->route('admin.create-user')
+                ->with('error', 'Error: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
+     * Update an existing admin user and their module access.
+     */
+    public function updateUser(Request $request, $id)
+    {
+        try {
+            $user = Admin::where('type', '!=', 'Delivery_person')->findOrFail($id);
+
+            // Prevent editing a Super Admin account
+            if ($user->isSuperAdmin()) {
+                return redirect()->route('admin.create-user')
+                    ->with('error', 'Super Admin account cannot be modified.');
+            }
+
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:admin_user,email,' . $id,
+                'mobile' => 'nullable|string|max:20',
+                'password' => 'nullable|string|min:6',
+                'designation' => 'nullable|string|max:100',
+                'state' => 'nullable|string|max:100',
+                'city' => 'nullable|string|max:100',
+                'status' => 'nullable|in:0,1',
+                'type' => 'required|in:Admin,Super Admin',
+                'module_access' => 'nullable|array',
+                'module_access.*' => 'string|in:' . implode(',', Admin::getModuleKeys()),
+            ]);
+
+            // Super Admin gets all modules; Admin gets only selected ones
+            $moduleAccess = $validated['type'] === 'Super Admin'
+                ? Admin::getModuleKeys()
+                : ($validated['module_access'] ?? []);
+
+            $updateData = [
+                'type' => $validated['type'],
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'mobile' => $validated['mobile'] ?? null,
+                'designation' => $validated['designation'] ?? null,
+                'state' => $validated['state'] ?? null,
+                'city' => $validated['city'] ?? null,
+                'status' => $validated['status'] ?? 1,
+                'module_access' => $moduleAccess,
+            ];
+
+            if (!empty($validated['password'])) {
+                $updateData['password'] = bcrypt($validated['password']);
+            }
+
+            $user->update($updateData);
+
+            return redirect()->route('admin.create-user')
+                ->with('success', 'User updated successfully!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('admin.create-user')
+                ->with('error', 'Validation failed: ' . $e->getMessage())
+                ->withInput();
+        } catch (\Exception $e) {
+            return redirect()->route('admin.create-user')
+                ->with('error', 'Error: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
+     * Delete an admin user.
+     */
+    public function deleteUser($id)
+    {
+        try {
+            $user = Admin::where('type', '!=', 'Delivery_person')->findOrFail($id);
+
+            if ($user->isSuperAdmin()) {
+                return redirect()->route('admin.create-user')
+                    ->with('error', 'Super Admin account cannot be deleted.');
+            }
+
+            // Prevent self-deletion
+            if (Auth::guard('admin')->check() && Auth::guard('admin')->id() == $id) {
+                return redirect()->route('admin.create-user')
+                    ->with('error', 'You cannot delete your own account.');
+            }
+
+            $user->delete();
+
+            return redirect()->route('admin.create-user')
+                ->with('success', 'User deleted successfully!');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.create-user')
+                ->with('error', 'Error: ' . $e->getMessage());
         }
     }
 

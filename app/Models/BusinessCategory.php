@@ -9,6 +9,7 @@ class BusinessCategory extends Model
     protected $fillable = [
         'category_name',
         'category_slug',
+        'parent_group',
         'description',
         'status',
         'display_order'

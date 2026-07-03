@@ -37,7 +37,15 @@ class customerController extends Controller
     public function register()
     {
         $businessCategories = BusinessCategory::active()->ordered()->get();
-        return view('customer.register', compact('businessCategories'));
+
+        // Group categories by parent_group so the registration form can
+        // render them inside <optgroup> elements. Categories without a
+        // parent_group fall back to an "Others" group.
+        $groupedBusinessCategories = $businessCategories->groupBy(function ($category) {
+            return $category->parent_group ?: 'Others';
+        });
+
+        return view('customer.register', compact('groupedBusinessCategories'));
     }
     
     // public function index()
@@ -2256,6 +2264,7 @@ class customerController extends Controller
                     // Find rates matching the current weight AND the selected zone
                     // Show zone-independent rates (zone_no=null/0) AND zone-matched rates only
                     $matchedRates = $rates->filter(function ($r) use ($totalWeight, $zone) {
+                        // print_r("Checking rate ID {$r->id}: weight range {$r->wt_range_start}-{$r->wt_range_end}, zone_no={$r->zone_no}\n");
                         if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
                             return false;
                         }

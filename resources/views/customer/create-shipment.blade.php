@@ -7226,12 +7226,12 @@
                                                             </div>
                                                             <div class="col-md-6">
                                                                 <div class="mb-3">
-                                                                    <label class="form-label">Incoterms<span
+                                                                    <label class="form-label">Terms of trade<span
                                                                             class="text-danger ms-1">*</span></label>
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="incoterms">
                                                                         <option value="">Select</option>
-                                                                        <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
+                                                                        <!-- <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option> -->
                                                                         <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
                                                                         <!-- <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option> -->
                                                                     </select>

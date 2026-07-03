@@ -83,6 +83,12 @@ Route::prefix('admin')->group(function () {
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');
+
+    // Create User (Admin Management) Routes
+    Route::get('/create-user', [AdminController::class, 'createUser'])->name('admin.create-user');
+    Route::post('/create-user', [AdminController::class, 'storeUser'])->name('admin.create-user.store');
+    Route::put('/create-user/{id}', [AdminController::class, 'updateUser'])->name('admin.create-user.update');
+    Route::get('/create-user/{id}/delete', [AdminController::class, 'deleteUser'])->name('admin.create-user.delete');
     Route::get('/deals', [AdminController::class, 'deals'])->name('admin.deals');
     Route::get('/leads', [AdminController::class, 'leads'])->name('admin.leads');
     Route::get('/pipeline', [AdminController::class, 'pipeline'])->name('admin.pipeline');

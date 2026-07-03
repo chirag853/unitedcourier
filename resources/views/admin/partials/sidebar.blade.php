@@ -14,17 +14,17 @@
     <div class="sidebar-logo">
         <div>
             <!-- Logo Normal -->
-            <a href="{{ url('index-2.html') }}" class="logo logo-normal">
+            <a href="{{ url('/admin/dashboard') }}" class="logo logo-normal">
                 <img src="{{ asset('assets/img/logo.png') }}" alt="Logo" style = "width: 90%">
             </a>
 
             <!-- Logo Small -->
-            <a href="{{ url('index-2.html') }}" class="logo-small">
+            <a href="{{ url('/admin/dashboard') }}" class="logo-small">
                 <img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="Logo" style = "width: 100%">
             </a>
 
             <!-- Logo Dark -->
-            <a href="{{ url('index-2.html') }}" class="dark-logo">
+            <a href="{{ url('/admin/dashboard') }}" class="dark-logo">
                 <img src="{{ asset('assets/img/logo-white.svg') }}" alt="Logo">
             </a>
         </div>
@@ -46,12 +46,16 @@
                 <li class="menu-title"><span>Main Menu</span></li>
                 <li>
                     <ul>
+                        @php $authAdmin = auth()->guard('admin')->user(); @endphp
+                        @if($authAdmin && $authAdmin->hasModuleAccess('dashboard'))
                         <li>
                             <a href="{{ url('/admin/dashboard') }}" class="{{ request()->is('admin/dashboard') ? 'active' : '' }}">
                                 <i class="ti ti-dashboard"></i>
                                 <span>Dashboard</span>
                             </a>
                         </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('website'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/change-*') ? 'active subdrop' : '' }}">
@@ -143,6 +147,8 @@
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
                             </ul>
                         </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') ? 'active subdrop' : '' }}">
@@ -208,6 +214,8 @@
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
                             </ul>
                         </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('manage_rate'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/manage-rate*') ? 'active subdrop' : '' }}">
@@ -218,16 +226,21 @@
                                         class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
                             </ul>
                         </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('admin_management'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
-                                class="{{ request()->is('admin/delivery-persons*') ? 'active subdrop' : '' }}">
+                                class="{{ request()->is('admin/delivery-persons*') || request()->is('admin/create-user*') ? 'active subdrop' : '' }}">
                                 <i class="ti ti-user-cog"></i><span>Admin Management</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
                                 <li><a href="{{ url('/admin/delivery-persons') }}"
                                         class="{{ request()->is('admin/delivery-persons') ? 'active' : '' }}">Delivery Person</a></li>
+                                <li><a href="{{ url('/admin/create-user') }}"
+                                        class="{{ request()->is('admin/create-user') ? 'active' : '' }}">Create User</a></li>
                             </ul>
                         </li>
+                        @endif
                     </ul>
                 </li>
                 <li class="menu-title"><span>Others</span></li>
@@ -239,9 +252,11 @@
                         <li>
                             <a href="{{ url('/tracking') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                         </li>
+                        @if($authAdmin && $authAdmin->hasModuleAccess('my_profile'))
                         <li>
                             <a href="{{ route('admin.my-profile') }}" class="{{ request()->is('admin/my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                         </li>
+                        @endif
                         <li>
                             <a href="#"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
                         </li>

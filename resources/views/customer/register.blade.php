@@ -130,11 +130,16 @@
 
                         <!-- Business Category -->
                         <div class="mb-3">
+                            <label class="form-label-custom">User Type</label>
                             <div class="input-group-custom">
                                 <select name="business_category" class="form-select input-custom">
                                     <option value="" selected disabled>Select your business category</option>
-                                    @foreach($businessCategories as $category)
-                                        <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                    @foreach($groupedBusinessCategories as $groupName => $categories)
+                                        <optgroup label="{{ $groupName }}">
+                                            @foreach($categories as $category)
+                                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                            @endforeach
+                                        </optgroup>
                                     @endforeach
                                 </select>
                                 <i class="fas fa-briefcase"></i>
