@@ -17,6 +17,7 @@ class Zone extends Model
         'zone_id',
         'zone_name',
         'zone_code',
+        'zone_number_testing',
         'description',
     ];
 

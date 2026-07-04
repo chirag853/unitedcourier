@@ -1919,7 +1919,11 @@ class customerController extends Controller
                             ->get();
                     }
 
-                    // Find rates matching weight AND zone
+                    // Find rates matching weight AND zone.
+                    // Matching uses the zone's `zone_number_testing` field (compared against
+                    // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
+                    // always shown weight-wise; zone-matched rates are shown when the rate's
+                    // zone_no equals the selected zone's zone_number_testing.
                     $matchedRates = $rates->filter(function ($r) use ($totalChgWeight, $zone) {
                         if (!($totalChgWeight >= $r->wt_range_start && $totalChgWeight <= $r->wt_range_end)) {
                             return false;
@@ -1928,7 +1932,7 @@ class customerController extends Controller
                         if ($zoneNo === null || $zoneNo == 0) {
                             return true;
                         }
-                        if ($zone && $zoneNo == $zone->id) {
+                        if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
                             return true;
                         }
                         return false;
@@ -2062,7 +2066,11 @@ class customerController extends Controller
             return $result;
         }
 
-        // Find the rate matching the weight AND zone
+        // Find the rate matching the weight AND zone.
+        // Matching uses the zone's `zone_number_testing` field (compared against the
+        // rate's `zone_no`). Zone-independent rates (zone_no=null/0) are always shown
+        // weight-wise; zone-matched rates are shown when the rate's zone_no equals the
+        // selected zone's zone_number_testing.
         $matchedRate = $rates->first(function ($r) use ($totalWeight, $zone) {
             if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
                 return false;
@@ -2071,8 +2079,8 @@ class customerController extends Controller
             if ($zoneNo === null || $zoneNo == 0) {
                 return true; // Zone-independent rate
             }
-            if ($zone && $zoneNo == $zone->id) {
-                return true; // Zone-matched rate
+            if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
+                return true; // Zone-matched rate (via zone_number_testing)
             }
             return false;
         });
@@ -2261,8 +2269,11 @@ class customerController extends Controller
                             ->get();
                     }
 
-                    // Find rates matching the current weight AND the selected zone
-                    // Show zone-independent rates (zone_no=null/0) AND zone-matched rates only
+                    // Find rates matching the current weight AND the selected zone.
+                    // Matching uses the zone's `zone_number_testing` field (compared against
+                    // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
+                    // always shown weight-wise; zone-matched rates are shown when the rate's
+                    // zone_no equals the selected zone's zone_number_testing.
                     $matchedRates = $rates->filter(function ($r) use ($totalWeight, $zone) {
                         // print_r("Checking rate ID {$r->id}: weight range {$r->wt_range_start}-{$r->wt_range_end}, zone_no={$r->zone_no}\n");
                         if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
@@ -2272,8 +2283,8 @@ class customerController extends Controller
                         if ($zoneNo === null || $zoneNo == 0) {
                             return true; // Zone-independent rate - always show
                         }
-                        if ($zone && $zoneNo == $zone->id) {
-                            return true; // Zone-matched rate
+                        if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
+                            return true; // Zone-matched rate (via zone_number_testing)
                         }
                         return false; // Rate from a different zone - exclude
                     });
@@ -2291,8 +2302,8 @@ class customerController extends Controller
                             'scode' => $service->scode,
                             'price' => $matchedRate->price,
                             'zone_no' => $matchedRate->zone_no,
-                            'zone_name' => ($matchedRate->zone_no && $zone && $matchedRate->zone_no == $zone->id) ? $zone->zone_name : null,
-                            'zone_code' => ($matchedRate->zone_no && $zone && $matchedRate->zone_no == $zone->id) ? $zone->zone_code : null,
+                            'zone_name' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_name : null,
+                            'zone_code' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_code : null,
                             'fuel_charge' => $matchedRate->fuel_charge,
                             'fuel_percentage' => $matchedRate->fuel_percentage,
                             'gst_percentage' => $matchedRate->gst_percentage,
@@ -2307,7 +2318,7 @@ class customerController extends Controller
                     'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
                     'selected_zone' => $zone ? [
                         'zone_id' => $zone->id,
-                        'zone_number' => $zone->id,
+                        'zone_number' => $zone->zone_number_testing,
                         'zone_name' => $zone->zone_name,
                         'zone_code' => $zone->zone_code,
                         'state' => $consigneeState, // The state you selected
@@ -2367,8 +2378,11 @@ class customerController extends Controller
                 $customerExists = false;
             }
 
-            // Find the rate that matches the current weight AND the selected zone
-            // Show zone-independent rates (zone_no=null/0) AND zone-matched rates only
+            // Find the rate that matches the current weight AND the selected zone.
+            // Matching uses the zone's `zone_number_testing` field (compared against
+            // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
+            // always shown weight-wise; zone-matched rates are shown when the rate's
+            // zone_no equals the selected zone's zone_number_testing.
             $filteredRates = $rates->filter(function ($r) use ($totalWeight, $zone) {
                 if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
                     return false;
@@ -2377,8 +2391,8 @@ class customerController extends Controller
                 if ($zoneNo === null || $zoneNo == 0) {
                     return true; // Zone-independent rate - always show
                 }
-                if ($zone && $zoneNo == $zone->id) {
-                    return true; // Zone-matched rate
+                if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
+                    return true; // Zone-matched rate (via zone_number_testing)
                 }
                 return false; // Rate from a different zone - exclude
             });
@@ -2389,7 +2403,7 @@ class customerController extends Controller
                 'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
                 'selected_zone' => $zone ? [
                     'zone_id' => $zone->id,
-                    'zone_number' => $zone->id,
+                    'zone_number' => $zone->zone_number_testing,
                     'zone_name' => $zone->zone_name,
                     'zone_code' => $zone->zone_code,
                     'state' => $consigneeState, // The state you selected

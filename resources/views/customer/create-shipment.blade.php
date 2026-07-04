@@ -8459,7 +8459,7 @@
                                             </div>
                                             <div class="service-info">
                                             <div class="service-title">${r.method}</div>
-                                            <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'} Days</div>
+                                            <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'}</div>
                                             ${r.zone_no ? '<div class="service-zone" style="font-size: 12px; color: #666;"><i class="fas fa-map-marker-alt me-1"></i>' + (r.zone_name ? r.zone_name + ' (' + r.zone_code + ')' : 'Zone ' + r.zone_no) + '</div>' : ''}
                                             <span class="status-badge">
                                                     <i class="fas fa-check-circle"></i>
