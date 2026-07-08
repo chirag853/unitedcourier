@@ -1,0 +1,1 @@
+SELECT cs.method , cr.wt_range_start ,cr.wt_range_end , z.zone_name , cr.price , cr.fuel_charge , cr.fuel_percentage , cr.gst_percentage , cr.gst_amount FROM `courier_rates` cr left join courier_services cs on cr.service_id = cs.id left join zone z on cr.zone_no = z.id where cr.customer_id = '0';

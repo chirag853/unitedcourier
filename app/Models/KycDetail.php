@@ -15,6 +15,11 @@ class KycDetail extends Model
         'aadhar_verified',
         'organization_name',
         'authorized_signatory',
+        'signature',
+        'billing_address',
+        'billing_gst',
+        'billing_contact',
+        'billing_email',
         'terms_accepted',
         'terms_accepted_at',
         'kyc_status'

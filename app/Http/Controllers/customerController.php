@@ -26,12 +26,135 @@ use App\Models\CourierService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Validation\Rules\Password as PasswordRule;
+use Illuminate\Validation\ValidationException;
 
 class customerController extends Controller
 {
     public function login()
     {
         return view('customer.login');
+    }
+
+    /**
+     * Handle email/password login for customers.
+     */
+    public function loginWithPassword(Request $request)
+    {
+        $credentials = $request->validate([
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string'],
+        ]);
+
+        $customer = Customer::where('email', $credentials['email'])->first();
+
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No account found with this email address.',
+            ], 422);
+        }
+
+        if (!Hash::check($credentials['password'], $customer->getAuthPassword())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Incorrect password. Please try again.',
+            ], 422);
+        }
+
+        $remember = (bool) $request->boolean('remember');
+
+        auth()->guard('customer')->login($customer, $remember);
+        $request->session()->regenerate();
+
+        session([
+            'customer_id'   => $customer->id,
+            'customer_name' => $customer->first_name . ' ' . $customer->last_name,
+        ]);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Login successful! Redirecting...',
+            'redirect' => route('customer.dashboard'),
+        ]);
+    }
+
+    /**
+     * Show the forgot password form.
+     */
+    public function showForgotPasswordForm()
+    {
+        return view('customer.forgot-password');
+    }
+
+    /**
+     * Send a password reset link to the given email.
+     */
+    public function sendResetLinkEmail(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $status = Password::broker('customers')->sendResetLink(
+            $request->only('email')
+        );
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return back()->with('status', __($status));
+        }
+
+        return back()
+            ->withInput($request->only('email'))
+            ->withErrors(['email' => __($status)]);
+    }
+
+    /**
+     * Show the password reset form.
+     */
+    public function showResetForm(Request $request, $token = null)
+    {
+        return view('customer.reset-password', [
+            'token' => $token,
+            'email' => $request->email,
+        ]);
+    }
+
+    /**
+     * Reset the customer's password.
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token'    => ['required'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'confirmed', PasswordRule::min(6)],
+        ]);
+
+        $status = Password::broker('customers')->reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function ($customer, $password) {
+                $customer->forceFill([
+                    'password_hash' => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->setRememberToken(Str::random(60));
+
+                $customer->save();
+
+                event(new PasswordReset($customer));
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()->route('login')->with('status', __($status));
+        }
+
+        return back()
+            ->withInput($request->only('email'))
+            ->withErrors(['email' => __($status)]);
     }
     
     public function register()
@@ -605,6 +728,11 @@ class customerController extends Controller
                 'aadhar_verified' => 'boolean',
                 'organization_name' => 'nullable|string|max:255',
                 'authorized_signatory' => 'nullable|string|max:255',
+                'signature' => 'nullable|string',
+                'billing_address' => 'nullable|string|max:1000',
+                'billing_gst' => 'nullable|string|max:15',
+                'billing_contact' => 'nullable|string|max:20',
+                'billing_email' => 'nullable|string|email|max:255',
                 'terms_accepted' => 'boolean',
                 'terms_accepted_at' => 'nullable|date',
             ], [
@@ -625,8 +753,13 @@ class customerController extends Controller
                 'aadhar_verified' => $request->aadhar_verified ?? false,
                 'organization_name' => $request->organization_name,
                 'authorized_signatory' => $request->authorized_signatory,
-                'terms_accepted' => $request->terms_accepted ?? false,
-                'terms_accepted_at' => $request->terms_accepted ? now() : null,
+                'signature' => $request->signature,
+                'billing_address' => $request->billing_address,
+                'billing_gst' => $request->billing_gst,
+                'billing_contact' => $request->billing_contact,
+                'billing_email' => $request->billing_email,
+                'terms_accepted' => $request->terms_accepted ?? true,
+                'terms_accepted_at' => now(),
                 'kyc_status' => 'pending', // Set status to under_review after submission
             ];
 
@@ -859,22 +992,69 @@ class customerController extends Controller
                 'is_csb_v' => 'required|boolean',
                 'is_gst' => 'required|boolean',
                 'is_lut' => 'required|boolean',
+                'lut_verified' => 'nullable|boolean',
                 'ad_code' => 'required|string|max:50',
                 'iec_number' => 'required|string|max:50',
+                'iec_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'gst_certificate_number' => 'required|string|max:50',
+                'gst_certificate_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'gst_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
                 'bank_account_number' => 'required|string|max:50',
+                'bank_type' => 'required|in:private,government',
                 'lut_document' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
             // Get current customer
             $customer = auth()->guard('customer')->user();
 
+            // Ensure upload directories exist
+            $uploadDirs = [
+                'uploads/lut_documents',
+                'uploads/gst_documents',
+                'uploads/iec_documents',
+                'uploads/gst_certificate_documents',
+            ];
+            foreach ($uploadDirs as $dir) {
+                $path = public_path($dir);
+                if (!file_exists($path)) {
+                    mkdir($path, 0755, true);
+                }
+            }
+
             // Handle LUT document upload
             $lutDocumentPath = null;
             if ($request->hasFile('lut_document')) {
                 $file = $request->file('lut_document');
-                $filename = time() . '_' . $file->getClientOriginalName();
+                $filename = time() . '_lut_' . $file->getClientOriginalName();
                 $file->move(public_path('uploads/lut_documents'), $filename);
                 $lutDocumentPath = 'uploads/lut_documents/' . $filename;
+            }
+
+            // Handle GST document upload
+            $gstDocumentPath = null;
+            if ($request->hasFile('gst_document')) {
+                $file = $request->file('gst_document');
+                $filename = time() . '_gst_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/gst_documents'), $filename);
+                $gstDocumentPath = 'uploads/gst_documents/' . $filename;
+            }
+
+            // Handle IEC document upload
+            $iecDocumentPath = null;
+            if ($request->hasFile('iec_document')) {
+                $file = $request->file('iec_document');
+                $filename = time() . '_iec_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/iec_documents'), $filename);
+                $iecDocumentPath = 'uploads/iec_documents/' . $filename;
+            }
+
+            // Handle GST certificate document upload
+            $gstCertificateDocumentPath = null;
+            if ($request->hasFile('gst_certificate_document')) {
+                $file = $request->file('gst_certificate_document');
+                $filename = time() . '_gstcert_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/gst_certificate_documents'), $filename);
+                $gstCertificateDocumentPath = 'uploads/gst_certificate_documents/' . $filename;
             }
 
             // Create CSB Form record
@@ -883,10 +1063,16 @@ class customerController extends Controller
                 'is_csb_v' => $validated['is_csb_v'],
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
+                'lut_verified' => $validated['lut_verified'] ?? false,
                 'ad_code' => $validated['ad_code'],
                 'iec_number' => $validated['iec_number'],
+                'iec_document' => $iecDocumentPath,
+                'gst_certificate_number' => $validated['gst_certificate_number'],
+                'gst_certificate_document' => $gstCertificateDocumentPath,
                 'bank_account_number' => $validated['bank_account_number'],
+                'bank_type' => $validated['bank_type'],
                 'lut_document' => $lutDocumentPath,
+                'gst_document' => $gstDocumentPath,
             ]);
 
             // Update customer CSB status based on selection
@@ -1032,6 +1218,8 @@ class customerController extends Controller
                 'packages.*.height_cm' => 'nullable|numeric|min:0',
                 'packages.*.volumetric_weight' => 'nullable|numeric|min:0',
                 'packages.*.chargeable_weight' => 'nullable|numeric|min:0',
+                'oversize_charge' => 'nullable|numeric|min:0',
+                'handling_charge' => 'nullable|numeric|min:0',
 
                 // CSB Information
                 'ecommerce' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
@@ -1090,6 +1278,140 @@ class customerController extends Controller
                 }
             }
 
+            // Server-side validation: enforce max invoice total based on origin_type.
+            // CSB IV -> max 25,000 | CSB V -> max 10,00,000 (1,000,000)
+            $items = $request->input('items', []);
+            $calculatedTotal = 0;
+            if (is_array($items)) {
+                foreach ($items as $item) {
+                    $calculatedTotal += (float)($item['amount'] ?? 0);
+                }
+            }
+            $maxAllowedTotal = ($validatedData['origin_type'] === 'CSB V') ? 1000000 : 25000;
+            if ($calculatedTotal > $maxAllowedTotal) {
+                $originLabel = ($validatedData['origin_type'] === 'CSB V') ? 'CSB V' : 'CSB IV';
+                $message = 'The total invoice amount is ₹' . number_format($calculatedTotal, 2) .
+                    ', which exceeds the maximum allowed limit of ₹' . number_format($maxAllowedTotal, 2) .
+                    ' for ' . $originLabel . '. Please reduce the invoice total and try again.';
+                if (!$request->expectsJson()) {
+                    return back()
+                        ->withErrors(['invoice_amount' => $message])
+                        ->withInput()
+                        ->with('error', $message);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                    'errors' => [
+                        'invoice_amount' => [$message]
+                    ]
+                ], 422);
+            }
+
+            // Server-side validation: enforce max total package weight (68 kg) for CSB IV only.
+            // CSB V has no weight limit.
+            if ($validatedData['origin_type'] !== 'CSB V') {
+                $packages = $request->input('packages', []);
+                $totalWeight = 0;
+                if (is_array($packages)) {
+                    foreach ($packages as $pkg) {
+                        $totalWeight += (float)($pkg['chargeable_weight'] ?? 0);
+                    }
+                }
+                $maxWeight = 68;
+                if ($totalWeight > $maxWeight) {
+                    $weightMessage = 'The total package weight is ' . number_format($totalWeight, 2) .
+                        ' kg, which exceeds the maximum allowed limit of ' . $maxWeight .
+                        ' kg for CSB IV. Please reduce the weight and try again.';
+                    if (!$request->expectsJson()) {
+                        return back()
+                            ->withErrors(['packages' => $weightMessage])
+                            ->withInput()
+                            ->with('error', $weightMessage);
+                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => $weightMessage,
+                        'errors' => [
+                            'packages' => [$weightMessage]
+                        ]
+                    ], 422);
+                }
+            }
+
+            // ============================================================
+            // SERVER-SIDE PER-PACKAGE WEIGHT & DIMENSION VALIDATION
+            // Max Actual Weight: 30 kg | Max Length: 120 cm | Max Width: 76 cm
+            // Max Volumetric Weight: 68 kg (hard block above this)
+            // Oversize: vol wt 40.001–68 kg → ₹21,000 charge (allowed)
+            // ============================================================
+            $pkgMaxActualWeight = 30;
+            $pkgMaxLength = 120;
+            $pkgMaxWidth = 76;
+            $pkgMaxVolumetricWeight = 68;
+            $pkgOversizeMin = 40.001;
+            $oversizeChargeAmount = 21000;
+
+            $packagesForValidation = $request->input('packages', []);
+            $hasOversizePackage = false;
+            if (is_array($packagesForValidation)) {
+                foreach ($packagesForValidation as $idx => $pkg) {
+                    $actualWt = (float)($pkg['actual_weight_kg'] ?? 0);
+                    $length = (float)($pkg['length_cm'] ?? 0);
+                    $width = (float)($pkg['width_cm'] ?? 0);
+                    $volWt = (float)($pkg['volumetric_weight'] ?? 0);
+
+                    $pkgErrors = [];
+                    if ($actualWt > $pkgMaxActualWeight) {
+                        $pkgErrors[] = 'Actual weight ' . number_format($actualWt, 2) .
+                            ' kg exceeds max ' . $pkgMaxActualWeight . ' kg.';
+                    }
+                    if ($length > $pkgMaxLength) {
+                        $pkgErrors[] = 'Length ' . number_format($length, 2) .
+                            ' cm exceeds max ' . $pkgMaxLength . ' cm.';
+                    }
+                    if ($width > $pkgMaxWidth) {
+                        $pkgErrors[] = 'Width ' . number_format($width, 2) .
+                            ' cm exceeds max ' . $pkgMaxWidth . ' cm.';
+                    }
+                    if ($volWt > $pkgMaxVolumetricWeight) {
+                        $pkgErrors[] = 'Volumetric weight ' . number_format($volWt, 2) .
+                            ' kg exceeds the maximum allowed ' . $pkgMaxVolumetricWeight . ' kg.';
+                    }
+
+                    if (!empty($pkgErrors)) {
+                        $boxNum = $idx + 1;
+                        $pkgMessage = 'Box #' . $boxNum . ': ' . implode(' ', $pkgErrors) .
+                            ' Please correct the values and try again.';
+                        if (!$request->expectsJson()) {
+                            return back()
+                                ->withErrors(['packages' => $pkgMessage])
+                                ->withInput()
+                                ->with('error', $pkgMessage);
+                        }
+                        return response()->json([
+                            'success' => false,
+                            'message' => $pkgMessage,
+                            'errors' => [
+                                'packages' => [$pkgMessage]
+                            ]
+                        ], 422);
+                    }
+
+                    // Track whether any package is in the oversize range (40.001–68 kg)
+                    if ($volWt > $pkgOversizeMin && $volWt <= $pkgMaxVolumetricWeight) {
+                        $hasOversizePackage = true;
+                    }
+                }
+            }
+
+            // Determine the final oversize charge:
+            // Use the frontend-confirmed value if present, otherwise compute from packages.
+            $oversizeCharge = (float)($validatedData['oversize_charge'] ?? 0);
+            if ($hasOversizePackage && $oversizeCharge <= 0) {
+                $oversizeCharge = $oversizeChargeAmount;
+            }
+
             // Resolve shipping_method from service_id when the shipping_method
             // <select> dropdown is empty but a DDP/DDU radio button was selected.
             // The JS at line 8610 sends 'service_id' alongside FormData.
@@ -1101,6 +1423,31 @@ class customerController extends Controller
                         $validatedData['shipping_method'] = $courierService->method;
                         \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
                     }
+                }
+            }
+
+            // ============================================================
+            // USA – UNITED GROUND PREMIUM HANDLING CHARGE
+            // If the resolved shipping_method is "United Ground Premium" and
+            // any package's actual weight exceeds 22 kg, apply a ₹5,000
+            // handling charge. Use the frontend-confirmed value if present,
+            // otherwise compute from packages (defense in depth).
+            // ============================================================
+            $handlingChargeAmount = 5000;
+            $handlingCharge = (float)($validatedData['handling_charge'] ?? 0);
+            if (strcasecmp(($validatedData['shipping_method'] ?? ''), 'UNITED GROUND PREMIUM') === 0 && $handlingCharge <= 0) {
+                $hasHandlingPackage = false;
+                if (!empty($validatedData['packages']) && is_array($validatedData['packages'])) {
+                    foreach ($validatedData['packages'] as $pkg) {
+                        $actualWt = (float)($pkg['actual_weight_kg'] ?? 0);
+                        if ($actualWt > 22) {
+                            $hasHandlingPackage = true;
+                            break;
+                        }
+                    }
+                }
+                if ($hasHandlingPackage) {
+                    $handlingCharge = $handlingChargeAmount;
                 }
             }
 
@@ -1279,6 +1626,8 @@ class customerController extends Controller
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
                 'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
                 'status' => 'draft',
+                'oversize_charge' => $oversizeCharge,
+                'handling_charge' => $handlingCharge,
             ]);
 
             // Create initial tracking record for the shipment
@@ -1317,6 +1666,8 @@ class customerController extends Controller
                     'package_ids' => $packageIds,
                     'csb_id' => $csb->id,
                     'invoice_id' => $invoice->id,
+                    'oversize_charge' => (float) $oversizeCharge,
+                    'handling_charge' => (float) $handlingCharge,
                 ]
             ], 200);
 
@@ -2208,6 +2559,12 @@ class customerController extends Controller
             $consigneeState = $request->consignee_state;
             $deliveryDestination = $request->delivery_destination;
 
+            // Optional: per-package chargeable weights for box-wise rate calculation.
+            // When more than one package is present, only "United Ground Premium"
+            // service is offered and its rate is computed box-wise (per package).
+            $packageWeights = $request->package_weights; // array of floats
+            $isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
+
             // Get the currently logged-in customer
             $customer = auth()->guard('customer')->user();
             $customerId = $customer ? $customer->id : 0;
@@ -2247,6 +2604,14 @@ class customerController extends Controller
                         continue; // Non-UK: skip DPD services
                     }
 
+                    // Multi-package rule: when more than one package is present,
+                    // only "United Ground Premium" service is offered.
+                    // (DB stores the method as "UNITED GROUND PREMIUM" — compare
+                    // case-insensitively so it matches regardless of casing.)
+                    if ($isMultiPackage && strcasecmp($service->method, 'UNITED GROUND PREMIUM') !== 0) {
+                        continue;
+                    }
+
                     // Fetch ALL rates for this service (both zone-independent and zone-dependent)
                     // Priority: customer-specific rates first, then default rates as fallback
                     $rates = collect();
@@ -2269,46 +2634,160 @@ class customerController extends Controller
                             ->get();
                     }
 
-                    // Find rates matching the current weight AND the selected zone.
-                    // Matching uses the zone's `zone_number_testing` field (compared against
-                    // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
-                    // always shown weight-wise; zone-matched rates are shown when the rate's
-                    // zone_no equals the selected zone's zone_number_testing.
-                    $matchedRates = $rates->filter(function ($r) use ($totalWeight, $zone) {
-                        // print_r("Checking rate ID {$r->id}: weight range {$r->wt_range_start}-{$r->wt_range_end}, zone_no={$r->zone_no}\n");
-                        if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
-                            return false;
-                        }
-                        $zoneNo = $r->zone_no;
-                        if ($zoneNo === null || $zoneNo == 0) {
-                            return true; // Zone-independent rate - always show
-                        }
-                        if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
-                            return true; // Zone-matched rate (via zone_number_testing)
-                        }
-                        return false; // Rate from a different zone - exclude
-                    });
+                    // -------------------------------------------------------------------
+                    // BOX-WISE RATE CALCULATION (multi-package, United Ground Premium only)
+                    // -------------------------------------------------------------------
+                    // When multiple packages are present, the rate is computed per box:
+                    // each package's chargeable weight is matched to its own rate row,
+                    // and the base/fuel/gst amounts are summed into ONE combined rate card.
+                    // The combined card carries a `box_breakdown` array so the frontend can
+                    // render a per-box table, and `is_multi_package => true`.
+                    // -------------------------------------------------------------------
+                    if ($isMultiPackage && strcasecmp($service->method, 'UNITED GROUND PREMIUM') === 0) {
+                        $boxBreakdown = [];
+                        $combinedBase = 0;
+                        $combinedFuel = 0;
+                        $combinedGst = 0;
+                        $combinedTotal = 0;
+                        $firstMatchedRate = null;
+                        $boxIndex = 1;
+                        $allBoxesMatched = true;
 
-                    foreach ($matchedRates as $matchedRate) {
-                        $allRates[] = [
-                            'rate_id' => $matchedRate->id,
-                            'service_id' => $service->id,
-                            'method' => $service->method,
-                            'method_display' => $service->method . ' ' . $service->tat,
-                            'network' => $service->network,
-                            'method_code' => $service->method_code,
-                            'tat' => $service->tat,
-                            'delivery_days' => $service->tat,
-                            'scode' => $service->scode,
-                            'price' => $matchedRate->price,
-                            'zone_no' => $matchedRate->zone_no,
-                            'zone_name' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_name : null,
-                            'zone_code' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_code : null,
-                            'fuel_charge' => $matchedRate->fuel_charge,
-                            'fuel_percentage' => $matchedRate->fuel_percentage,
-                            'gst_percentage' => $matchedRate->gst_percentage,
-                            'gst_amount' => $matchedRate->gst_amount,
-                        ];
+                        foreach ($packageWeights as $pkgWt) {
+                            $pkgWt = floatval($pkgWt);
+                            if ($pkgWt <= 0) {
+                                $pkgWt = 1; // default 1kg if missing
+                            }
+
+                            // Find the rate row matching this package's weight + zone
+                            $boxMatched = null;
+                            foreach ($rates as $r) {
+                                if (!($pkgWt >= $r->wt_range_start && $pkgWt <= $r->wt_range_end)) {
+                                    continue;
+                                }
+                                $zoneNo = $r->zone_no;
+                                if ($zoneNo === null || $zoneNo == 0) {
+                                    $boxMatched = $r;
+                                    break; // Zone-independent rate - use it
+                                }
+                                if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
+                                    $boxMatched = $r;
+                                    break; // Zone-matched rate
+                                }
+                            }
+
+                            if (!$boxMatched) {
+                                $allBoxesMatched = false;
+                                break; // a box has no matching rate → skip this service
+                            }
+
+                            if (!$firstMatchedRate) {
+                                $firstMatchedRate = $boxMatched;
+                            }
+
+                            // Compute per-box amounts using the SAME formula as the frontend:
+                            //   fuel = fuel_charge > 0 ? fuel_charge : (base * fuel_pct / 100)
+                            //   gst  = gst_amount  > 0 ? gst_amount  : ((base + fuel) * gst_pct / 100)
+                            $boxBase = floatval($boxMatched->price);
+                            $boxFuelPct = floatval($boxMatched->fuel_percentage);
+                            $boxFuelCharge = floatval($boxMatched->fuel_charge);
+                            $boxGstPct = floatval($boxMatched->gst_percentage);
+                            $boxGstAmount = floatval($boxMatched->gst_amount);
+
+                            $boxFuel = $boxFuelCharge > 0 ? $boxFuelCharge : ($boxBase * $boxFuelPct / 100);
+                            $boxGst = $boxGstAmount > 0 ? $boxGstAmount : (($boxBase + $boxFuel) * $boxGstPct / 100);
+                            $boxTotal = $boxBase + $boxFuel + $boxGst;
+
+                            $boxBreakdown[] = [
+                                'box' => $boxIndex,
+                                'weight' => $pkgWt,
+                                'base' => $boxBase,
+                                'fuel' => $boxFuel,
+                                'gst' => $boxGst,
+                                'total' => $boxTotal,
+                            ];
+
+                            $combinedBase += $boxBase;
+                            $combinedFuel += $boxFuel;
+                            $combinedGst += $boxGst;
+                            $combinedTotal += $boxTotal;
+                            $boxIndex++;
+                        }
+
+                        // Only emit a combined card if every box found a matching rate.
+                        if ($allBoxesMatched && $firstMatchedRate) {
+                            $allRates[] = [
+                                'rate_id' => $firstMatchedRate->id,
+                                'service_id' => $service->id,
+                                'method' => $service->method,
+                                'method_display' => $service->method . ' ' . $service->tat,
+                                'network' => $service->network,
+                                'method_code' => $service->method_code,
+                                'tat' => $service->tat,
+                                'delivery_days' => $service->tat,
+                                'scode' => $service->scode,
+                                // Combined amounts so the frontend shows the grand total.
+                                'price' => $combinedBase,
+                                'zone_no' => $firstMatchedRate->zone_no,
+                                'zone_name' => ($firstMatchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $firstMatchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_name : null,
+                                'zone_code' => ($firstMatchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $firstMatchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_code : null,
+                                // Pass the already-computed fuel/gst as fixed amounts so the
+                                // frontend does NOT recompute them from percentages (avoids
+                                // double-counting). Percentages are zeroed out accordingly.
+                                'fuel_charge' => $combinedFuel,
+                                'fuel_percentage' => 0,
+                                'gst_percentage' => 0,
+                                'gst_amount' => $combinedGst,
+                                // Multi-package extras for the frontend breakdown table.
+                                'is_multi_package' => true,
+                                'box_breakdown' => $boxBreakdown,
+                            ];
+                        }
+                    } else {
+                        // -----------------------------------------------------------------
+                        // STANDARD RATE MATCHING (single package, or non-multi service)
+                        // -----------------------------------------------------------------
+                        // Find rates matching the current weight AND the selected zone.
+                        // Matching uses the zone's `zone_number_testing` field (compared against
+                        // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
+                        // always shown weight-wise; zone-matched rates are shown when the rate's
+                        // zone_no equals the selected zone's zone_number_testing.
+                        $matchedRates = $rates->filter(function ($r) use ($totalWeight, $zone) {
+                            // print_r("Checking rate ID {$r->id}: weight range {$r->wt_range_start}-{$r->wt_range_end}, zone_no={$r->zone_no}\n");
+                            if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
+                                return false;
+                            }
+                            $zoneNo = $r->zone_no;
+                            if ($zoneNo === null || $zoneNo == 0) {
+                                return true; // Zone-independent rate - always show
+                            }
+                            if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
+                                return true; // Zone-matched rate (via zone_number_testing)
+                            }
+                            return false; // Rate from a different zone - exclude
+                        });
+
+                        foreach ($matchedRates as $matchedRate) {
+                            $allRates[] = [
+                                'rate_id' => $matchedRate->id,
+                                'service_id' => $service->id,
+                                'method' => $service->method,
+                                'method_display' => $service->method . ' ' . $service->tat,
+                                'network' => $service->network,
+                                'method_code' => $service->method_code,
+                                'tat' => $service->tat,
+                                'delivery_days' => $service->tat,
+                                'scode' => $service->scode,
+                                'price' => $matchedRate->price,
+                                'zone_no' => $matchedRate->zone_no,
+                                'zone_name' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_name : null,
+                                'zone_code' => ($matchedRate->zone_no && $zone && $zone->zone_number_testing !== null && $matchedRate->zone_no == $zone->zone_number_testing) ? $zone->zone_code : null,
+                                'fuel_charge' => $matchedRate->fuel_charge,
+                                'fuel_percentage' => $matchedRate->fuel_percentage,
+                                'gst_percentage' => $matchedRate->gst_percentage,
+                                'gst_amount' => $matchedRate->gst_amount,
+                            ];
+                        }
                     }
                 }
 
@@ -2820,7 +3299,7 @@ class customerController extends Controller
         ];
 
         // return;
-        print_r($payload);
+        // print_r($payload);
 
         return $payload;
     }
@@ -2923,7 +3402,7 @@ class customerController extends Controller
     private function getCountryCodeFromDestination($dest)
     {
         $map = [
-            'US- United State of America' => 'UK',
+            'US- United State of America' => 'US',
             'India' => 'IN',
             'UK - United Kingdom' => 'GB',
             'China' => 'CN',

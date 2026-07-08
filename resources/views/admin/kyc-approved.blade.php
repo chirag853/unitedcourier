@@ -62,6 +62,20 @@
             border-radius: 4px;
             font-size: 12px;
         }
+        .login-id-cell {
+            font-family: monospace;
+            font-size: 13px;
+            color: #1d4ed8;
+        }
+        .login-id-cell .copy-btn {
+            cursor: pointer;
+            color: #64748b;
+            margin-left: 6px;
+            font-size: 12px;
+        }
+        .login-id-cell .copy-btn:hover {
+            color: #1d4ed8;
+        }
     </style>
 </head>
 
@@ -125,6 +139,8 @@
                                                 <th>Phone</th>
                                                 <th>Organization</th>
                                                 <th>GST Number</th>
+                                                <th>Login ID</th>
+                                                <th>Password</th>
                                                 <th>Approved At</th>
                                             </tr>
                                         </thead>
@@ -139,6 +155,21 @@
                                                 <td>{{ $kyc->customer->phone_number ?? '—' }}</td>
                                                 <td class="org-cell">{{ $kyc->organization_name ?? '—' }}</td>
                                                 <td>{{ $kyc->gst_number ?? '—' }}</td>
+                                                <td class="login-id-cell">
+                                                    {{ $kyc->customer->email ?? '—' }}
+                                                    @if($kyc->customer)
+                                                        <i class="ti ti-copy copy-btn" title="Copy Login ID" onclick="copyLoginId('{{ $kyc->customer->email }}')"></i>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if($kyc->customer)
+                                                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="openResetPasswordModal({{ $kyc->customer->id }}, '{{ addslashes($kyc->customer->first_name . ' ' . $kyc->customer->last_name) }}')">
+                                                            <i class="ti ti-key me-1"></i> Reset Password
+                                                        </button>
+                                                    @else
+                                                        —
+                                                    @endif
+                                                </td>
                                                 <td>
                                                     <span class="badge-approved">
                                                         {{ $kyc->updated_at->format('d M Y, h:i A') }}
@@ -164,6 +195,49 @@
 
     </div>
     <!-- End Wrapper -->
+
+    <!-- Reset Password Modal -->
+    <div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="resetPasswordForm" method="POST" action="">
+                    @csrf
+                    <input type="hidden" name="customer_id" id="resetCustomerId">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="resetPasswordModalLabel">
+                            <i class="ti ti-key me-2"></i> Reset Customer Password
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted mb-3">
+                            Set a new password for <strong id="resetCustomerName">this customer</strong>.
+                            The customer can use this new password with their Login ID (email) to sign in.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">New Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" name="password" id="resetPassword" required minlength="6" autocomplete="new-password">
+                            <small class="text-muted">Minimum 6 characters.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" name="password_confirmation" id="resetPasswordConfirmation" required minlength="6" autocomplete="new-password">
+                            <div class="invalid-feedback" id="passwordMismatchError" style="display:none;">
+                                Passwords do not match.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning" id="resetPasswordSubmit">
+                            <i class="ti ti-check me-1"></i> Reset Password
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- End Reset Password Modal -->
 
     <!-- jQuery -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
@@ -207,6 +281,84 @@
                 }
             });
         });
+
+        // Copy Login ID (email) to clipboard
+        function copyLoginId(email) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(email).then(function() {
+                    showToast('Login ID copied: ' + email);
+                }).catch(function() {
+                    fallbackCopy(email);
+                });
+            } else {
+                fallbackCopy(email);
+            }
+        }
+
+        function fallbackCopy(text) {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('Login ID copied: ' + text);
+            } catch (e) {
+                showToast('Unable to copy. Please copy manually.');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // Simple toast notification
+        function showToast(message) {
+            var toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1d4ed8;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.3s ease;';
+            document.body.appendChild(toast);
+            requestAnimationFrame(function() { toast.style.opacity = '1'; });
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { document.body.removeChild(toast); }, 300);
+            }, 2500);
+        }
+
+        // Open Reset Password Modal
+        function openResetPasswordModal(customerId, customerName) {
+            document.getElementById('resetCustomerId').value = customerId;
+            document.getElementById('resetCustomerName').textContent = customerName || 'this customer';
+            document.getElementById('resetPassword').value = '';
+            document.getElementById('resetPasswordConfirmation').value = '';
+            document.getElementById('passwordMismatchError').style.display = 'none';
+            document.getElementById('resetPasswordForm').action = '{{ route("admin.customer.reset-password", ":id") }}'.replace(':id', customerId);
+            var modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+            modal.show();
+        }
+
+        // Validate password match before submit
+        (function() {
+            var form = document.getElementById('resetPasswordForm');
+            if (!form) return;
+            form.addEventListener('submit', function(e) {
+                var pwd = document.getElementById('resetPassword').value;
+                var confirm = document.getElementById('resetPasswordConfirmation').value;
+                var errEl = document.getElementById('passwordMismatchError');
+                if (pwd.length < 6) {
+                    e.preventDefault();
+                    errEl.textContent = 'Password must be at least 6 characters.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                if (pwd !== confirm) {
+                    e.preventDefault();
+                    errEl.textContent = 'Passwords do not match.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                errEl.style.display = 'none';
+            });
+        })();
     </script>
 
 </body>

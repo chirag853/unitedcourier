@@ -59,6 +59,8 @@ class CreateShipment extends Model
         'bank_account_number',
         'bank_ifsc_code',
         'status',
+        'oversize_charge',
+        'handling_charge',
     ];
 
     protected $casts = [
@@ -67,6 +69,8 @@ class CreateShipment extends Model
         'consignee_email_opt_out' => 'boolean',
         'invoice_date' => 'date',
         'invoice_amount' => 'decimal:2',
+        'oversize_charge' => 'decimal:2',
+        'handling_charge' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -516,6 +516,8 @@ Route::prefix('admin')->group(function () {
     Route::get('/kyc-approved', [AdminController::class, 'kycApproved'])->name('admin.kyc-approved');
     Route::post('/kyc-pending/approve/{id}', [AdminController::class, 'approveKyc'])->name('admin.kyc-pending.approve');
     Route::post('/kyc-pending/reject/{id}', [AdminController::class, 'rejectKyc'])->name('admin.kyc-pending.reject');
+    Route::post('/customer/{id}/reset-password', [AdminController::class, 'resetCustomerPassword'])->name('admin.customer.reset-password');
+    Route::post('/customer/{id}/recharge-wallet', [AdminController::class, 'rechargeCustomerWallet'])->name('admin.customer.recharge-wallet');
 
     // Manage Rate Routes
     Route::get('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate');
@@ -558,6 +560,12 @@ Route::prefix('customer')->name('customer.')->group(function () {
     // Route::get('/', [customerController::class, 'login'])->name('login');
     Route::post('/check-phone', [customerController::class, 'checkPhone'])->name('check.phone');
     Route::post('/verify-otp', [customerController::class, 'verifyOtp'])->name('verify.otp');
+    // Email / Password authentication
+    Route::post('/login-password', [customerController::class, 'loginWithPassword'])->name('login.password');
+    Route::get('/forgot-password', [customerController::class, 'showForgotPasswordForm'])->name('password.request');
+    Route::post('/forgot-password', [customerController::class, 'sendResetLinkEmail'])->name('password.email');
+    Route::get('/reset-password/{token}', [customerController::class, 'showResetForm'])->name('password.reset');
+    Route::post('/reset-password', [customerController::class, 'resetPassword'])->name('password.update');
     Route::post('/send-registration-otp', [customerController::class, 'sendRegistrationOtp'])->name('send.registration.otp');
     Route::post('/verify-registration-otp', [customerController::class, 'verifyRegistrationOtp'])->name('verify.registration.otp');
     // Route::get('/register', [customerController::class, 'register'])->name('register');

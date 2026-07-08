@@ -6948,10 +6948,19 @@
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                        <!-- Per-package limit warning (max act wt 30kg, max length 120cm, max width 76cm) -->
+                                                        <div class="package-limit-warning alert alert-warning mt-2"
+                                                            style="display:none; font-size:12px; font-weight:600; padding:6px 10px; margin-bottom:0;">
+                                                        </div>
                                                     </div>
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+                                        <!-- Total weight limit warning (max 68 kg) -->
+                                        <div id="totalWeightLimitWarning"
+                                            class="alert alert-warning mt-2"
+                                            style="display:none; font-size:13px; font-weight:600; padding:8px 12px; margin-bottom:0;">
                                         </div>
                                         <!-- /Package Dimension -->
                                         
@@ -6993,6 +7002,147 @@
                                             }
                                         }
 
+                                        // ============================================================
+                                        // PER-PACKAGE WEIGHT & DIMENSION VALIDATION
+                                        // Max Actual Weight: 30 kg
+                                        // Max Volumetric Weight: 40 kg (without oversize charges)
+                                        // Max Length: 120 cm | Max Width: 76 cm | Height: no limit
+                                        // Oversize: vol wt 40.001–68 kg → ₹21,000 charge + popup
+                                        // Block: vol wt > 68 kg
+                                        // ============================================================
+                                        const PKG_LIMITS = {
+                                            maxActualWeight: 30,
+                                            maxVolumetricWeight: 40,
+                                            oversizeMin: 40.001,
+                                            oversizeMax: 68,
+                                            maxLength: 120,
+                                            maxWidth: 76,
+                                            oversizeCharge: 21000,
+                                        };
+
+                                        // Validate a single package card's inputs and show inline warning.
+                                        // Returns an object: { valid, oversize, blocked, messages }
+                                        window.validatePackageCard = function(card) {
+                                            const warning = card.querySelector('.package-limit-warning');
+                                            const actualWt = parseFloat(card.querySelector('[name$="[actual_weight_kg]"]')?.value) || 0;
+                                            const length = parseFloat(card.querySelector('[name$="[length_cm]"]')?.value) || 0;
+                                            const width = parseFloat(card.querySelector('[name$="[width_cm]"]')?.value) || 0;
+                                            const volWt = parseFloat(card.querySelector('[name$="[volumetric_weight]"]')?.value) || 0;
+
+                                            const messages = [];
+                                            let oversize = false;
+                                            let blocked = false;
+
+                                            if (actualWt > PKG_LIMITS.maxActualWeight) {
+                                                messages.push('Actual weight ' + actualWt.toFixed(2) +
+                                                    ' kg exceeds max ' + PKG_LIMITS.maxActualWeight + ' kg.');
+                                                blocked = true;
+                                            }
+                                            if (length > PKG_LIMITS.maxLength) {
+                                                messages.push('Length ' + length.toFixed(2) +
+                                                    ' cm exceeds max ' + PKG_LIMITS.maxLength + ' cm.');
+                                                blocked = true;
+                                            }
+                                            if (width > PKG_LIMITS.maxWidth) {
+                                                messages.push('Width ' + width.toFixed(2) +
+                                                    ' cm exceeds max ' + PKG_LIMITS.maxWidth + ' cm.');
+                                                blocked = true;
+                                            }
+                                            if (volWt > PKG_LIMITS.oversizeMax) {
+                                                messages.push('Volumetric weight ' + volWt.toFixed(2) +
+                                                    ' kg exceeds the maximum allowed ' + PKG_LIMITS.oversizeMax + ' kg.');
+                                                blocked = true;
+                                            } else if (volWt > PKG_LIMITS.maxVolumetricWeight) {
+                                                // 40.001–68 kg → oversize (allowed with charge)
+                                                oversize = true;
+                                                messages.push('Oversize: Volumetric weight ' + volWt.toFixed(2) +
+                                                    ' kg (limit ' + PKG_LIMITS.maxVolumetricWeight +
+                                                    ' kg). A ₹' + PKG_LIMITS.oversizeCharge.toLocaleString('en-IN') +
+                                                    ' oversize charge will apply.');
+                                            }
+
+                                            if (warning) {
+                                                if (messages.length > 0) {
+                                                    warning.innerHTML = messages.join('<br>');
+                                                    warning.style.display = 'block';
+                                                    // Use danger styling when blocked, warning when oversize-only
+                                                    warning.className = 'package-limit-warning alert mt-2 ' +
+                                                        (blocked ? 'alert-danger' : 'alert-warning');
+                                                    warning.style.cssText = 'display:block; font-size:12px; font-weight:600; padding:6px 10px; margin-bottom:0;';
+                                                } else {
+                                                    warning.style.display = 'none';
+                                                }
+                                            }
+
+                                            return {
+                                                valid: !blocked,
+                                                oversize: oversize,
+                                                blocked: blocked,
+                                                messages: messages,
+                                                volumetricWeight: volWt,
+                                            };
+                                        };
+
+                                        // Validate ALL package cards. Returns { valid, hasOversize, blockedCards, oversizeCards }
+                                        window.validateAllPackages = function() {
+                                            const cards = document.querySelectorAll('.rowContaineraddmore');
+                                            let valid = true;
+                                            let hasOversize = false;
+                                            const blockedCards = [];
+                                            const oversizeCards = [];
+                                            cards.forEach(function(card, idx) {
+                                                const result = window.validatePackageCard(card);
+                                                if (result.blocked) {
+                                                    valid = false;
+                                                    blockedCards.push({ index: idx, result: result });
+                                                }
+                                                if (result.oversize) {
+                                                    hasOversize = true;
+                                                    oversizeCards.push({ index: idx, result: result });
+                                                }
+                                            });
+                                            return {
+                                                valid: valid,
+                                                hasOversize: hasOversize,
+                                                blockedCards: blockedCards,
+                                                oversizeCards: oversizeCards,
+                                            };
+                                        };
+
+                                        // Total weight limit validation
+                                        // CSB IV -> max 68 kg | CSB V -> no limit
+                                        window.getMaxWeight = function() {
+                                            const originTypeSelect = document.getElementById('originType');
+                                            const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                            return isCsb5 ? Infinity : 68;
+                                        };
+                                        window.getTotalWeight = function() {
+                                            let total = 0;
+                                            document.querySelectorAll('.rowContaineraddmore').forEach(function(row) {
+                                                const chgWtInput = row.querySelector('[name$="[chargeable_weight]"]');
+                                                if (chgWtInput) {
+                                                    total += parseFloat(chgWtInput.value) || 0;
+                                                }
+                                            });
+                                            return total;
+                                        };
+                                        window.checkWeightLimit = function() {
+                                            const total = window.getTotalWeight();
+                                            const max = window.getMaxWeight();
+                                            const warning = document.getElementById('totalWeightLimitWarning');
+                                            const exceeded = total > max;
+                                            if (!warning) return exceeded;
+                                            if (exceeded) {
+                                                warning.textContent = 'Total weight is ' + total.toFixed(2) +
+                                                    ' kg, which exceeds the maximum allowed limit of ' + max +
+                                                    ' kg for CSB IV. Please reduce the weight.';
+                                                warning.style.display = 'block';
+                                            } else {
+                                                warning.style.display = 'none';
+                                            }
+                                            return total > max;
+                                        };
+
                                         function syncPackageRows() {
                                             const numBoxes = parseInt(document.getElementById('numberOfBoxes').value) || 1;
                                             const container = document.getElementById('packageCardsContainer');
@@ -7013,6 +7163,12 @@
                                                     // Reset chargeable weight
                                                     const chgWtInput = newRow.querySelector('.chargeable-weight-input');
                                                     if (chgWtInput) chgWtInput.value = '';
+                                                    // Reset per-package limit warning
+                                                    const pkgWarning = newRow.querySelector('.package-limit-warning');
+                                                    if (pkgWarning) {
+                                                        pkgWarning.style.display = 'none';
+                                                        pkgWarning.innerHTML = '';
+                                                    }
                                                     container.appendChild(newRow);
                                                 }
                                             } else if (numBoxes < currentCount) {
@@ -7044,6 +7200,10 @@
                                             if (targetName.match(/\[actual_weight_kg\]$/) || targetName.match(/\[volumetric_weight\]$/)) {
                                                 updateChargeableWeight(card);
                                             }
+                                            // Per-package weight & dimension validation (inline warning)
+                                            if (window.validatePackageCard) window.validatePackageCard(card);
+                                            // Validate total weight against 68 kg limit
+                                            if (window.checkWeightLimit) window.checkWeightLimit();
                                         });
 
                                         document.getElementById('numberOfBoxes').addEventListener('input', function() {
@@ -7051,6 +7211,9 @@
                                             if (val < 1) { this.value = 1; }
                                             if (val > 50) { this.value = 50; }
                                             syncPackageRows();
+                                            // Validate all package cards after row count change
+                                            if (window.validateAllPackages) window.validateAllPackages();
+                                            if (window.checkWeightLimit) window.checkWeightLimit();
                                         });
 
                                         // Initialize on DOM ready
@@ -7272,8 +7435,8 @@
                                                                         <th>Unit Type</th>
                                                                         <th>QTY</th>
                                                                         <th>Rates</th>
-                                                                        <th>IGST(%)</th>
-                                                                        <th>IGST</th>
+                                                                        <th class="igst-col">IGST(%)</th>
+                                                                        <th class="igst-col">IGST</th>
                                                                         <th>Amount</th>
                                                                         <th>Action</th>
                                                                     </tr>
@@ -7330,12 +7493,12 @@
                                                                                 name="items[0][unit_rate]" value="{{ old('items.0.unit_rate') }}"
                                                                                 placeholder="Rate">
                                                                         </td>
-                                                                        <td><input type="number"
+                                                                        <td class="igst-col"><input type="number"
                                                                                 class="form-control igst-percentage"
                                                                                 name="items[0][igst_percentage]" value="{{ old('items.0.igst_percentage') }}"
                                                                                 placeholder="IGST %" step="0.01" min="0" max="100">
                                                                         </td>
-                                                                        <td><input type="text"
+                                                                        <td class="igst-col"><input type="text"
                                                                                 class="form-control igst-amount" readonly
                                                                                 name="items[0][igst_amount]"
                                                                                 placeholder="IGST">
@@ -7355,12 +7518,26 @@
                                                             </table>
                                                         </div>
 
+                                                        <!-- Add More button shown below table when more than 1 invoice row exists -->
+                                                        <div class="text-end mt-2">
+                                                            <div id="addMoreBelowBtn"
+                                                                class="invoice-add-more-btn"
+                                                                style="display:none;">
+                                                                <span class="invoice-add-more-icon">+</span>
+                                                                <span>Add More</span>
+                                                            </div>
+                                                        </div>
+
                                                         
                                                         <div class="mt-3 d-flex align-items-end gap-3">
                                                             <div>
                                                                 <label>Total Amount</label>
                                                                 <input type="text" id="totalAmount"
                                                                     class="form-control w-100" readonly>
+                                                                <div id="invoiceTotalLimitWarning"
+                                                                    class="text-danger mt-1"
+                                                                    style="display:none; font-size:12px; font-weight:600;">
+                                                                </div>
                                                             </div>
                                                             <button type="button" class="btn btn-primary" id="rateCalculateBtn">
                                                                 <i class="ti ti-calculator me-1"></i> Next
@@ -7372,25 +7549,73 @@
                                                             min-width: 80px;
                                                         }
 
+                                                        /* Delete (×) button in each invoice row */
                                                         .remove-btn {
-                                                            background: red;
+                                                            background: #ef4444;
                                                             color: #fff;
                                                             border: none;
                                                             border-radius: 50%;
-                                                            width: 26px;
-                                                            height: 26px;
-                                                            font-size: 14px;
+                                                            width: 28px;
+                                                            height: 28px;
+                                                            font-size: 16px;
+                                                            line-height: 1;
                                                             cursor: pointer;
+                                                            display: inline-flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                            transition: background .15s ease, transform .15s ease;
+                                                        }
+                                                        .remove-btn:hover {
+                                                            background: #dc2626;
+                                                            transform: scale(1.08);
                                                         }
 
+                                                        /* In-row ➕ add button (shown when only 1 row) */
                                                         .add-more {
-                                                            color: red;
+                                                            color: #4f46e5;
                                                             cursor: pointer;
-                                                            font-weight: 500;
+                                                            font-weight: 600;
+                                                            font-size: 20px;
+                                                            width: 28px;
+                                                            height: 28px;
+                                                            display: inline-flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                            border-radius: 50%;
+                                                            border: 1.5px dashed #4f46e5;
+                                                            transition: background .15s ease, color .15s ease;
+                                                        }
+                                                        .add-more:hover {
+                                                            background: #4f46e5;
+                                                            color: #fff;
+                                                            text-decoration: none;
                                                         }
 
-                                                        .add-more:hover {
-                                                            text-decoration: underline;
+                                                        /* Below-table "Add More" button (shown when >1 row) */
+                                                        .invoice-add-more-btn {
+                                                            display: inline-flex;
+                                                            align-items: center;
+                                                            gap: 5px;
+                                                            padding: 4px 12px;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                            color: #4f46e5;
+                                                            background: #eef2ff;
+                                                            border: 1.5px dashed #818cf8;
+                                                            border-radius: 6px;
+                                                            cursor: pointer;
+                                                            user-select: none;
+                                                            transition: background .15s ease, color .15s ease, border-color .15s ease;
+                                                        }
+                                                        .invoice-add-more-btn:hover {
+                                                            background: #4f46e5;
+                                                            color: #fff;
+                                                            border-color: #4f46e5;
+                                                        }
+                                                        .invoice-add-more-icon {
+                                                            font-size: 14px;
+                                                            line-height: 1;
+                                                            font-weight: 700;
                                                         }
                                                         </style>
                                                         <script>
@@ -7418,77 +7643,193 @@
                                                             });
                                                         }
 
-                                                        // ADD ROW
+                                                        // Toggle visibility of the in-row ➕ button vs the below-table "Add More" button.
+                                                        // When there is more than 1 invoice row, the ➕ moves below the table.
+                                                        window.toggleAddMoreButton = function() {
+                                                            const table = document.getElementById('invoiceTable');
+                                                            if (!table) return;
+                                                            const rowCount = table.querySelectorAll('tr').length;
+                                                            const inRowBtn = document.getElementById('tableaddRowBtn');
+                                                            const belowBtn = document.getElementById('addMoreBelowBtn');
+                                                            if (rowCount > 1) {
+                                                                if (inRowBtn) inRowBtn.style.display = 'none';
+                                                                if (belowBtn) belowBtn.style.display = 'inline-flex';
+                                                            } else {
+                                                                if (inRowBtn) inRowBtn.style.display = '';
+                                                                if (belowBtn) belowBtn.style.display = 'none';
+                                                            }
+                                                        };
+                                                        // ADD ROW (shared logic used by both the in-row ➕ and the below-table button)
+                                                        window.addInvoiceRow = function() {
+                                                            let table = document.getElementById('invoiceTable');
+                                                            let rows = table.querySelectorAll('tr');
+                                                            let lastRow = rows[rows.length - 1];
+                                                            let newRow = lastRow.cloneNode(true);
+                                                            let newIndex = rows.length;
+                                                            // Clear text/number inputs
+                                                            newRow.querySelectorAll('input').forEach(input => {
+                                                                input.value = '';
+                                                                // Remove hs autocomplete marker so it re-attaches
+                                                                delete input.dataset.hsAttached;
+                                                            });
+                                                            // Reset unit_type select to empty
+                                                            const unitTypeSelect = newRow.querySelector('select[name$="[unit_type]"]');
+                                                            if (unitTypeSelect) unitTypeSelect.value = '';
+                                                            // Update names with new index
+                                                            const boxNoSelect = newRow.querySelector('.boxNo');
+                                                            if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
+                                                            let inputs = newRow.querySelectorAll('input');
+                                                            // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
+                                                            if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
+                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
+                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
+                                                            if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
+                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
+                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
+                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
+                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
+                                                            // remove old button
+                                                            let actionCell = newRow.children[10];
+                                                            actionCell.innerHTML = '';
+                                                            // add delete button
+                                                            let btn = document.createElement('button');
+                                                            btn.innerHTML = '×';
+                                                            btn.className = 'remove-btn';
+                                                            btn.onclick = function() {
+                                                                newRow.remove();
+                                                                updateTotal();
+                                                                updateInputNames();
+                                                                updateBoxNoDropdowns();
+                                                                window.toggleAddMoreButton();
+                                                            };
+                                                            actionCell.appendChild(btn);
+                                                            table.appendChild(newRow);
+                                                            updateInputNames();
+                                                            updateBoxNoDropdowns();
+                                                            window.toggleAddMoreButton();
+                                                        };
                                                         document.getElementById('tableaddRowBtn').addEventListener(
                                                             'click',
                                                             function() {
-                                                                let table = document.getElementById('invoiceTable');
-                                                                let rows = table.querySelectorAll('tr');
-                                                                let lastRow = rows[rows.length - 1];
-                                                                let newRow = lastRow.cloneNode(true);
-                                                                let newIndex = rows.length;
-                                                                // Clear text/number inputs
-                                                                newRow.querySelectorAll('input').forEach(input => {
-                                                                    input.value = '';
-                                                                    // Remove hs autocomplete marker so it re-attaches
-                                                                    delete input.dataset.hsAttached;
-                                                                });
-                                                                // Reset unit_type select to empty
-                                                                const unitTypeSelect = newRow.querySelector('select[name$="[unit_type]"]');
-                                                                if (unitTypeSelect) unitTypeSelect.value = '';
-                                                                // Update names with new index
-                                                                const boxNoSelect = newRow.querySelector('.boxNo');
-                                                                if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
-                                                                let inputs = newRow.querySelectorAll('input');
-                                                                // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
-                                                                if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
-                                                                if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
-                                                                if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
-                                                                if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
-                                                                if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
-                                                                if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
-                                                                // remove old button
-                                                                let actionCell = newRow.children[10];
-                                                                actionCell.innerHTML = '';
-                                                                // add delete button
-                                                                let btn = document.createElement('button');
-                                                                btn.innerHTML = '×';
-                                                                btn.className = 'remove-btn';
-                                                                btn.onclick = function() {
-                                                                    newRow.remove();
-                                                                    updateTotal();
-                                                                    updateInputNames();
-                                                                    updateBoxNoDropdowns();
-                                                                };
-                                                                actionCell.appendChild(btn);
-                                                                table.appendChild(newRow);
-                                                                updateInputNames();
-                                                                updateBoxNoDropdowns();
+                                                                window.addInvoiceRow();
                                                             });
+                                                        const addMoreBelowBtn = document.getElementById('addMoreBelowBtn');
+                                                        if (addMoreBelowBtn) {
+                                                            addMoreBelowBtn.addEventListener('click', function() {
+                                                                window.addInvoiceRow();
+                                                            });
+                                                        }
+                                                        // Set initial state on load
+                                                        document.addEventListener('DOMContentLoaded', function() {
+                                                            window.toggleAddMoreButton();
+                                                        });
+                                                        window.toggleAddMoreButton();
+                                                        // IGST visibility based on Origin Type (CSB IV = no IGST, CSB V = IGST applies)
+                                                        // Assigned to window so it is accessible from all script scopes
+                                                        window.applyIgstVisibility = function() {
+                                                            const originTypeSelect = document.getElementById('originType');
+                                                            const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                                            const igstCols = document.querySelectorAll('.igst-col');
+                                                            igstCols.forEach(function(col) {
+                                                                col.style.display = isCsb5 ? '' : 'none';
+                                                            });
+                                                            document.querySelectorAll('#invoiceTable tr').forEach(function(row) {
+                                                                if (window.recalcRow) window.recalcRow(row);
+                                                            });
+                                                            if (typeof updateTotal === 'function') {
+                                                                updateTotal();
+                                                            }
+                                                        };
+                                                        window.recalcRow = function(row) {
+                                                            if (!row) return;
+                                                            let qtyEl = row.querySelector('.qty');
+                                                            let rateEl = row.querySelector('.rate');
+                                                            let qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : 0;
+                                                            let rate = rateEl ? (parseFloat(rateEl.value) || 0) : 0;
+                                                            let amount = qty * rate;
+                                                            const originTypeSelect = document.getElementById('originType');
+                                                            const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                                            let igstAmount = 0;
+                                                            if (isCsb5) {
+                                                                let igstPctEl = row.querySelector('.igst-percentage');
+                                                                let igstPct = igstPctEl ? (parseFloat(igstPctEl.value) || 0) : 0;
+                                                                igstAmount = (amount * igstPct) / 100;
+                                                            } else {
+                                                                if (row.querySelector('.igst-percentage')) row.querySelector('.igst-percentage').value = '';
+                                                                if (row.querySelector('.igst-amount')) row.querySelector('.igst-amount').value = '';
+                                                            }
+                                                            if (row.querySelector('.igst-amount')) {
+                                                                row.querySelector('.igst-amount').value = igstAmount.toFixed(2);
+                                                            }
+                                                            if (row.querySelector('.amount')) {
+                                                                row.querySelector('.amount').value = (amount + igstAmount).toFixed(2);
+                                                            }
+                                                        };
                                                         // AUTO CALCULATION
                                                         document.addEventListener('input', function(e) {
                                                             if (e.target.classList.contains('qty') || e.target.classList.contains('rate') || e.target.classList.contains('igst-percentage')) {
                                                                 let row = e.target.closest('tr');
-                                                                let qty = parseFloat(row.querySelector('.qty').value) || 0;
-                                                                let rate = parseFloat(row.querySelector('.rate').value) || 0;
-                                                                let igstPct = parseFloat(row.querySelector('.igst-percentage').value) || 0;
-                                                                let amount = qty * rate;
-                                                                let igstAmount = (amount * igstPct) / 100;
-                                                                row.querySelector('.igst-amount').value = igstAmount.toFixed(2);
-                                                                row.querySelector('.amount').value = (amount + igstAmount).toFixed(2);
-                                                                updateTotal();
+                                                                if (window.recalcRow) window.recalcRow(row);
+                                                                if (typeof updateTotal === 'function') updateTotal();
+                                                            }
+                                                        });
+                                                        // Apply IGST visibility on page load
+                                                        document.addEventListener('DOMContentLoaded', function() {
+                                                            if (window.applyIgstVisibility) window.applyIgstVisibility();
+                                                        });
+                                                        // Also listen for Select2 change on originType (backup listener)
+                                                        document.addEventListener('DOMContentLoaded', function() {
+                                                            const ot = document.getElementById('originType');
+                                                            if (ot && typeof $ !== 'undefined') {
+                                                                $(ot).on('change', function() {
+                                                                    if (window.applyIgstVisibility) window.applyIgstVisibility();
+                                                                    if (window.checkWeightLimit) window.checkWeightLimit();
+                                                                });
                                                             }
                                                         });
                                                         // TOTAL
-                                                        function updateTotal() {
+                                                        // Max invoice total based on Origin Type:
+                                                        // CSB IV -> 25,000 | CSB V -> 10,00,000
+                                                        window.getMaxInvoiceTotal = function() {
+                                                            const originTypeSelect = document.getElementById('originType');
+                                                            const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                                            return isCsb5 ? 1000000 : 25000;
+                                                        };
+                                                        window.updateTotal = function() {
                                                             let total = 0;
                                                             document.querySelectorAll('.amount').forEach(input => {
                                                                 total += Number(input.value) || 0;
                                                             });
-                                                            document.getElementById('totalAmount').value = total;
-                                                        }
+                                                            const totalInput = document.getElementById('totalAmount');
+                                                            if (totalInput) totalInput.value = total;
+                                                            // Validate against max allowed total
+                                                            const maxTotal = window.getMaxInvoiceTotal();
+                                                            const totalAmountEl = document.getElementById('totalAmount');
+                                                            if (totalAmountEl) {
+                                                                if (total > maxTotal) {
+                                                                    totalAmountEl.style.borderColor = '#dc3545';
+                                                                    totalAmountEl.style.color = '#dc3545';
+                                                                } else {
+                                                                    totalAmountEl.style.borderColor = '';
+                                                                    totalAmountEl.style.color = '';
+                                                                }
+                                                            }
+                                                            const limitWarning = document.getElementById('invoiceTotalLimitWarning');
+                                                            if (limitWarning) {
+                                                                if (total > maxTotal) {
+                                                                    const originTypeSelect = document.getElementById('originType');
+                                                                    const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                                                    limitWarning.textContent = 'Maximum allowed total for ' +
+                                                                        (isCsb5 ? 'CSB V' : 'CSB IV') + ' is ₹' +
+                                                                        maxTotal.toLocaleString('en-IN') +
+                                                                        '. Current total is ₹' + total.toLocaleString('en-IN') + '.';
+                                                                    limitWarning.style.display = 'block';
+                                                                } else {
+                                                                    limitWarning.style.display = 'none';
+                                                                }
+                                                            }
+                                                        };
+                                                        function updateTotal() { window.updateTotal(); }
                                                         // UPDATE INPUT NAMES
                                                         function updateInputNames() {
                                                             let rows = document.querySelectorAll('#invoiceTable tr');
@@ -8158,7 +8499,7 @@
                                             <!-- i want to fetch gst rate -->
                                             <th>QTY</th>
                                             <th>Rate</th>
-                                            <th>GST Rate</th>
+                                            <th class="igst-col">GST Rate</th>
                                             <th>Amount</th>
                                         </tr>
                                     </thead>
@@ -8365,16 +8706,72 @@
         const consigneeState = getVal('select[name="consignee_state"]');
         const deliveryDestination = getVal('select[name="delivery_destination"]');
 
-        // Calculate total weight from all package rows
+        // Calculate total weight from all package rows using Chargeable Weight
+        // (Chg. Wt = max of actual weight & volumetric weight per package).
+        // Also collect each package's chargeable weight for box-wise rate
+        // calculation (used when multiple packages are present).
         let totalWeight = 0;
-        const packageRows = document.querySelectorAll('.rowContaineraddmore');
-        packageRows.forEach(function(row) {
-            const weightKg = getNestedVal(row, 'actual_weight_kg');
-            if (weightKg && !isNaN(weightKg) && parseFloat(weightKg) > 0) {
-                totalWeight += parseFloat(weightKg);
-            }
+        let packageWeights = [];
+        const pkgRows = document.querySelectorAll('.rowContaineraddmore');
+        pkgRows.forEach(function(row) {
+            const chgWt = getNestedVal(row, 'chargeable_weight');
+            const wt = (chgWt && !isNaN(chgWt) && parseFloat(chgWt) > 0) ? parseFloat(chgWt) : 0;
+            packageWeights.push(wt);
+            totalWeight += wt;
         });
         if (totalWeight <= 0) totalWeight = 1; // default 1kg
+        const isMultiPackage = packageWeights.length > 1;
+
+        // Block rate calculation if any package's actual weight exceeds 30 kg.
+        // The per-package max actual weight limit is 30 kg; rates should not
+        // be shown until the user corrects the overweight package(s).
+        let overweightPackages = [];
+        const pkgCards = document.querySelectorAll('.rowContaineraddmore');
+        pkgCards.forEach(function(row, idx) {
+            const actualWt = parseFloat(getNestedVal(row, 'actual_weight_kg')) || 0;
+            if (actualWt > 30) {
+                overweightPackages.push({ box: idx + 1, weight: actualWt });
+            }
+        });
+        if (overweightPackages.length > 0) {
+            // Make the rate result area visible so the inline warning
+            // (status badge + error div) is shown in the rate calculate section.
+            resultDiv.style.display = 'block';
+            if (statusBadge) {
+                statusBadge.textContent = 'Blocked';
+                statusBadge.className = 'badge bg-danger';
+            }
+            if (errorDiv) {
+                let errHtml = '<p>Rate calculation is blocked because the following package(s) exceed the 30 kg actual weight limit:</p><ul style="text-align:left;">';
+                overweightPackages.forEach(function(p) {
+                    errHtml += '<li><strong>Box #' + p.box + ':</strong> ' + p.weight.toFixed(2) + ' kg</li>';
+                });
+                errHtml += '</ul><p>Please reduce the actual weight to 30 kg or below and try again.</p>';
+                errorDiv.innerHTML = errHtml;
+                errorDiv.classList.remove('d-none');
+            }
+            if (cardList) cardList.innerHTML = '';
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
+            }
+            // Show a SweetAlert2 warning popup listing the overweight packages
+            let warningHtml = '<div style="text-align:left;">' +
+                '<p>The following package(s) exceed the maximum actual weight limit of <strong>30 kg</strong>:</p><ul style="text-align:left;">';
+            overweightPackages.forEach(function(p) {
+                warningHtml += '<li><strong>Box #' + p.box + ':</strong> ' + p.weight.toFixed(2) + ' kg</li>';
+            });
+            warningHtml += '</ul><p style="color:#dc3545;font-weight:600;">Actual weight must not be more than 30 kg.</p>' +
+                '<p>Please reduce the weight and try again.</p></div>';
+            Swal.fire({
+                icon: 'warning',
+                title: 'Actual Weight Exceeds Limit',
+                html: warningHtml,
+                confirmButtonColor: '#dc3545',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
 
         // Always send empty service_id to get rates for ALL services
         fetch('{{ route("customer.ups.rate") }}', {
@@ -8387,7 +8784,8 @@
                 service_id: '',
                 total_weight: totalWeight,
                 consignee_state: consigneeState,
-                delivery_destination: deliveryDestination
+                delivery_destination: deliveryDestination,
+                package_weights: packageWeights
             })
         })
         .then(res => res.json())
@@ -8512,6 +8910,48 @@
                                 </div>
                                 <div id="breakdown-${idx}" class="accordion-collapse collapse" data-bs-parent="#upsRateCardList">
                                     <div class="breakdown-section">
+                                        ${r.is_multi_package && r.box_breakdown && r.box_breakdown.length > 0 ? `
+                                        <div class="mb-3">
+                                            <div class="breakdown-title" style="color:#1565C0;">
+                                                <i class="fas fa-box me-1"></i> Box-wise Breakdown (Multi-Package)
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered mb-0" style="font-size:13px;">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Box</th>
+                                                            <th>Chg. Wt (Kg)</th>
+                                                            <th>Base (₹)</th>
+                                                            <th>Fuel (₹)</th>
+                                                            <th>GST (₹)</th>
+                                                            <th>Total (₹)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${r.box_breakdown.map(function(b) {
+                                                            return '<tr>' +
+                                                                '<td>#' + b.box + '</td>' +
+                                                                '<td>' + b.weight.toFixed(2) + '</td>' +
+                                                                '<td>' + b.base.toFixed(2) + '</td>' +
+                                                                '<td>' + b.fuel.toFixed(2) + '</td>' +
+                                                                '<td>' + b.gst.toFixed(2) + '</td>' +
+                                                                '<td><strong>' + b.total.toFixed(2) + '</strong></td>' +
+                                                            '</tr>';
+                                                        }).join('')}
+                                                    </tbody>
+                                                    <tfoot class="table-light">
+                                                        <tr>
+                                                            <th colspan="2">Combined Total</th>
+                                                            <th>${basePrice.toFixed(2)}</th>
+                                                            <th>${computedFuel.toFixed(2)}</th>
+                                                            <th>${computedGst.toFixed(2)}</th>
+                                                            <th>${totalPrice.toFixed(2)}</th>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        ` : ''}
                                         <div class="breakdown-grid">
                                             <div class="breakdown-column">
                                                 <div class="breakdown-title">Base Charges</div>
@@ -8865,6 +9305,13 @@
             document.getElementById('preview_reference_number').textContent = getVal('reference_number');
 
             // Invoice Items
+            // IGST columns only show for CSB V shipments (reuse originTypeValue declared above)
+            const isCsb5 = originTypeValue === 'CSB V';
+            document.querySelectorAll('#preview_items_table').forEach(function(tbl) {
+                tbl.closest('.card').querySelectorAll('.igst-col').forEach(function(col) {
+                    col.style.display = isCsb5 ? '' : 'none';
+                });
+            });
             const itemsTable = document.getElementById('preview_items_table');
             itemsTable.innerHTML = '';
             const itemRows = form.querySelectorAll('#invoiceTable tr');
@@ -8877,10 +9324,11 @@
                 const unitType = getVal('items[' + idx + '][unit_type]');
                 const qty = getVal('items[' + idx + '][qty]');
                 const unitRate = getVal('items[' + idx + '][unit_rate]');
-                const gstRate = getVal('items[' + idx + '][igst_amount]');
+                const gstRate = isCsb5 ? getVal('items[' + idx + '][igst_amount]') : '0.00';
+                const gstNum = parseFloat(gstRate) || 0;
                 // const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate)).toFixed(2) : '0.00';
                 // i want to add gstRate to the amount calculation, so the total amount includes GST
-                const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate) + parseFloat(gstRate)).toFixed(2) : '0.00';
+                const amount = qty && unitRate ? (parseFloat(qty) * parseFloat(unitRate) + gstNum).toFixed(2) : '0.00';
                 if (parseFloat(amount) > 0) totalAmount += parseFloat(amount);
 
                 const tr = document.createElement('tr');
@@ -8892,7 +9340,7 @@
                     <td>${unitType}</td>
                     <td>${qty}</td>
                     <td>${unitRate}</td>
-                    <td>${gstRate}</td>
+                    <td class="igst-col">${gstRate}</td>
                     <td>${amount}</td>
                 `;
                 itemsTable.appendChild(tr);
@@ -8947,11 +9395,167 @@
         // ===== /Preview "Create Now" Button Handler =====
 
         forms.forEach(function(form) {
-            form.addEventListener('submit', function(e) {
+            form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const submitButton = form.querySelector('button[type="submit"]');
                 if (!submitButton) {
                     return;
+                }
+                // Validate invoice total against origin-type limit
+                // CSB IV -> max 25,000 | CSB V -> max 10,00,000
+                if (window.getMaxInvoiceTotal && window.updateTotal) {
+                    window.updateTotal();
+                    const total = parseFloat(document.getElementById('totalAmount').value) || 0;
+                    const maxTotal = window.getMaxInvoiceTotal();
+                    if (total > maxTotal) {
+                        const originTypeSelect = document.getElementById('originType');
+                        const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Invoice Total Exceeds Limit',
+                            html: 'The total invoice amount is <strong>₹' + total.toLocaleString('en-IN') +
+                                '</strong>, which exceeds the maximum allowed limit of <strong>₹' +
+                                maxTotal.toLocaleString('en-IN') + '</strong> for ' +
+                                (isCsb5 ? 'CSB V' : 'CSB IV') + '.<br>Please reduce the invoice total and try again.',
+                            confirmButtonColor: '#dc3545'
+                        });
+                        return;
+                    }
+                }
+                // Validate total package weight against 68 kg limit
+                if (window.checkWeightLimit && window.getTotalWeight) {
+                    const totalWeight = window.getTotalWeight();
+                    const maxWeight = window.getMaxWeight();
+                    if (totalWeight > maxWeight) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Total Weight Exceeds Limit',
+                            html: 'The total package weight is <strong>' + totalWeight.toFixed(2) +
+                                ' kg</strong>, which exceeds the maximum allowed limit of <strong>' +
+                                maxWeight + ' kg</strong>.<br>Please reduce the weight and try again.',
+                            confirmButtonColor: '#dc3545'
+                        });
+                        return;
+                    }
+                }
+                // ============================================================
+                // PER-PACKAGE WEIGHT & DIMENSION VALIDATION
+                // Block if any package exceeds: actual wt >30kg, length >120cm,
+                // width >76cm, or volumetric weight >68kg.
+                // If volumetric weight is 40.001–68 kg (oversize), show an
+                // info popup with ℹ️ icon before booking and apply ₹21,000 charge.
+                // ============================================================
+                let oversizeCharge = 0;
+                if (window.validateAllPackages) {
+                    const pkgResult = window.validateAllPackages();
+                    if (!pkgResult.valid) {
+                        // Build a detailed error message listing all blocked packages
+                        let errorHtml = '<p>The following package(s) exceed the allowed limits:</p><ul style="text-align:left;">';
+                        pkgResult.blockedCards.forEach(function(item) {
+                            errorHtml += '<li><strong>Box #' + (item.index + 1) + ':</strong> ' +
+                                item.result.messages.join(' ') + '</li>';
+                        });
+                        errorHtml += '</ul><p>Please correct the values and try again.</p>';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Package Limit Exceeded',
+                            html: errorHtml,
+                            confirmButtonColor: '#dc3545'
+                        });
+                        return;
+                    }
+                    if (pkgResult.hasOversize) {
+                        // Show the oversize info popup with ℹ️ icon before booking
+                        const oversizeChargeAmount = 21000;
+                        // Build the actual volumetric weight display from oversize packages
+                        const allCards = document.querySelectorAll('.rowContaineraddmore');
+                        const oversizeVolWts = [];
+                        pkgResult.oversizeCards.forEach(function(item) {
+                            const card = allCards[item.index];
+                            if (card) {
+                                const volWtInput = card.querySelector('[name$="[volumetric_weight]"]');
+                                const volWt = parseFloat(volWtInput ? volWtInput.value : 0) || 0;
+                                oversizeVolWts.push({ box: item.index + 1, volWt: volWt });
+                            }
+                        });
+                        let volWtDisplay;
+                        if (oversizeVolWts.length === 1) {
+                            volWtDisplay = oversizeVolWts[0].volWt.toFixed(2) + ' kg';
+                        } else {
+                            volWtDisplay = oversizeVolWts.map(function(v) {
+                                return 'Box #' + v.box + ': ' + v.volWt.toFixed(2) + ' kg';
+                            }).join(', ');
+                        }
+                        const confirmOversize = await Swal.fire({
+                            icon: 'info',
+                            iconHtml: '<i class="ti ti-info-circle-filled" style="font-size:42px;color:#0dcaf0;"></i>',
+                            title: 'Oversize Shipment Alert',
+                            html: '<div style="text-align:left;">' +
+                                '<p>This shipment exceeds the standard volumetric weight limit (40 kg).</p>' +
+                                '<p><strong>Volumetric Weight:</strong> ' + volWtDisplay + '</p>' +
+                                '<p><strong>Oversize Charge:</strong> ₹' +
+                                oversizeChargeAmount.toLocaleString('en-IN') +
+                                ' will be applicable.</p>' +
+                                '<p>For further assistance, please contact your Sales Representative before proceeding.</p>' +
+                                '</div>',
+                            showCancelButton: true,
+                            confirmButtonText: 'Proceed with Booking',
+                            cancelButtonText: 'Cancel',
+                            confirmButtonColor: '#2563eb',
+                            cancelButtonColor: '#6c757d',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                        });
+                        if (!confirmOversize.isConfirmed) {
+                            return; // User cancelled — do not submit
+                        }
+                        oversizeCharge = oversizeChargeAmount;
+                    }
+                }
+                // ============================================================
+                // USA – UNITED GROUND PREMIUM HANDLING CHARGE
+                // If the selected service is "United Ground Premium" and any
+                // package's actual weight exceeds 22 kg, show an info popup
+                // and apply a ₹5,000 handling charge.
+                // ============================================================
+                let handlingCharge = 0;
+                const selectedRateRadio = document.querySelector('input[name="rate_select"]:checked');
+                if (selectedRateRadio && (selectedRateRadio.dataset.method || '').toUpperCase() === 'UNITED GROUND PREMIUM') {
+                    const allPkgCards = document.querySelectorAll('.rowContaineraddmore');
+                    let maxActualWt = 0;
+                    allPkgCards.forEach(function(card) {
+                        const wtInput = card.querySelector('[name$="[actual_weight_kg]"]');
+                        const wt = parseFloat(wtInput ? wtInput.value : 0) || 0;
+                        if (wt > maxActualWt) {
+                            maxActualWt = wt;
+                        }
+                    });
+                    if (maxActualWt > 22) {
+                        const handlingChargeAmount = 5000;
+                        const confirmHandling = await Swal.fire({
+                            icon: 'info',
+                            iconHtml: '<i class="ti ti-info-circle-filled" style="font-size:42px;color:#0dcaf0;"></i>',
+                            title: 'Handling Charge Applicable',
+                            html: '<div style="text-align:left;">' +
+                                '<p>This shipment is booked under <strong>USA – United Ground Premium</strong> service.</p>' +
+                                '<p>The actual weight (<strong>' + maxActualWt.toFixed(2) + ' kg</strong>) exceeds 22 kg.</p>' +
+                                '<p><strong>Handling Charge:</strong> ₹' +
+                                handlingChargeAmount.toLocaleString('en-IN') +
+                                ' will be applicable.</p>' +
+                                '</div>',
+                            showCancelButton: true,
+                            confirmButtonText: 'Proceed with Booking',
+                            cancelButtonText: 'Cancel',
+                            confirmButtonColor: '#2563eb',
+                            cancelButtonColor: '#6c757d',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                        });
+                        if (!confirmHandling.isConfirmed) {
+                            return; // User cancelled — do not submit
+                        }
+                        handlingCharge = handlingChargeAmount;
+                    }
                 }
                 const originalText = submitButton.innerHTML;
                 // Show loading state
@@ -8984,6 +9588,10 @@
 // Submit form via AJAX - controller handles UPS payload + API call + DB storage
 const formData = new FormData(form);
 formData.append('service_id', serviceId);
+                // Append oversize charge (₹21,000) if an oversize package was confirmed
+                formData.append('oversize_charge', oversizeCharge || 0);
+                // Append handling charge (₹5,000) for United Ground Premium if actual wt > 22kg
+                formData.append('handling_charge', handlingCharge || 0);
                 // Append the selected rate's courier_rate ID as service_rate_id
                 if (rateRadio && rateRadio.dataset.rateId) {
                     formData.append('service_rate_id', rateRadio.dataset.rateId);
@@ -9108,8 +9716,20 @@ if (rateRadio && rateRadio.dataset.rate) {
                         form.find('input, select, textarea, button[type="submit"]').prop('disabled',
                             false);
                     }
+                    // Toggle IGST columns based on origin type (CSB IV = no IGST, CSB V = IGST)
+                    if (window.applyIgstVisibility) {
+                        window.applyIgstVisibility();
+                    }
+                    // Re-check weight limit (CSB V has no limit, CSB IV max 68 kg)
+                    if (window.checkWeightLimit) {
+                        window.checkWeightLimit();
+                    }
                 }
             });
+            // Apply IGST visibility on initial load too
+            if (window.applyIgstVisibility) {
+                window.applyIgstVisibility();
+            }
         }
     });
     </script>
@@ -9265,6 +9885,8 @@ if (rateRadio && rateRadio.dataset.rate) {
                             }
                         }
                     });
+                    // Ensure add-more button visibility matches current row count
+                    if (window.toggleAddMoreButton) window.toggleAddMoreButton();
                 }, 100);
             }, 150);
         }

@@ -14,6 +14,8 @@ use App\Models\Customer;
 use App\Models\KycDetail;
 use App\Models\ShipperInfo;
 use App\Models\Tracking;
+use App\Models\Wallet;
+use App\Models\WalletTransaction;
 
 class AdminController extends Controller
 {
@@ -5665,6 +5667,25 @@ class AdminController extends Controller
         return view('admin.kyc-approved', compact('approvedKycDetails'));
     }
 
+    /**
+     * Reset a customer's password (admin action).
+     */
+    public function resetCustomerPassword(Request $request, $id)
+    {
+        $customer = \App\Models\Customer::findOrFail($id);
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ]);
+
+        $customer->password_hash = \Illuminate\Support\Facades\Hash::make($validated['password']);
+        $customer->setRememberToken(\Illuminate\Support\Str::random(60));
+        $customer->save();
+
+        return redirect()->back()
+            ->with('success', 'Password for ' . $customer->first_name . ' ' . $customer->last_name . ' has been reset successfully.');
+    }
+
     public function approveKyc($id)
     {
         $kycDetail = \App\Models\KycDetail::findOrFail($id);
@@ -5694,6 +5715,62 @@ class AdminController extends Controller
 
         return redirect()->route('admin.kyc-pending')
             ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been rejected.');
+    }
+
+    /**
+     * Admin recharges a customer's wallet by a given amount.
+     */
+    public function rechargeCustomerWallet(Request $request, $id)
+    {
+        try {
+            $customer = Customer::findOrFail($id);
+
+            $validated = $request->validate([
+                'amount' => 'required|numeric|min:1',
+            ]);
+
+            $amount = (float) $validated['amount'];
+
+            // Find or create wallet for the customer
+            $wallet = Wallet::firstOrCreate(
+                ['customer_id' => $customer->id],
+                ['balance' => 0]
+            );
+
+            DB::transaction(function () use ($wallet, $amount, $customer) {
+                $wallet->increment('balance', $amount);
+                $wallet->refresh();
+
+                WalletTransaction::create([
+                    'customer_id'   => $customer->id,
+                    'type'          => 'credit',
+                    'reason'        => 'recharge',
+                    'amount'        => $amount,
+                    'balance_after' => $wallet->balance,
+                    'reference'     => 'ADMIN-' . now()->format('ymd'),
+                    'description'   => 'Wallet recharge of ₹' . number_format($amount, 2) . ' by Admin',
+                ]);
+            });
+
+            $wallet->refresh();
+
+            return response()->json([
+                'success'     => true,
+                'message'     => 'Wallet recharged successfully! ₹' . number_format($amount, 2) . ' has been added to ' . $customer->first_name . ' ' . $customer->last_name . "'s wallet.",
+                'new_balance' => (float) $wallet->balance,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Admin wallet recharge error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error processing recharge: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function manageRate()

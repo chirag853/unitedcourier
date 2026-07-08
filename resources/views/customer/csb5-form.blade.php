@@ -97,7 +97,7 @@
 
 
                 <!-- CSB5 Form Custom CSS -->
-                <link rel="stylesheet" href="{{ asset('css/csb5-form.css') }}">
+                <link rel="stylesheet" href="{{ asset('css/csb5-form.css') }}?v={{ filemtime(public_path('css/csb5-form.css')) ?: 1 }}">
 
                 <!-- card start -->
 
@@ -153,8 +153,98 @@
                                     <label class="section-label">IEC Number</label>
                                     <div class="input-wrapper">
                                         <input type="text" class="input-custom" placeholder="Enter IEC *"
-                                            name="iec_number" required>
+                                            name="iec_number" id="iecNumber" required>
                                         <i class="fas fa-file-invoice"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="section-title-alt">GST Details</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="section-label">GST Certificate Number</label>
+                                    <div class="input-wrapper">
+                                        <input type="text" class="input-custom"
+                                            placeholder="Enter GST Certificate Number *" name="gst_certificate_number"
+                                            id="gstCertificateNumber" required>
+                                        <i class="fas fa-certificate"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="section-label">GST Document</label>
+                                    <div class="doc-item compact" id="gstDocContainer">
+                                        <div class="doc-meta">
+                                            <div>
+                                                <span class="doc-name">GST File</span>
+                                                <div id="gstFileInfo" class="file-status">Selected: <span
+                                                        id="gstFileNameDisplay">file.pdf</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="text-end d-flex align-items-center">
+                                            <input type="file" id="gstFileInput" name="gst_document"
+                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                onchange="handleDocSelect(this, 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');">
+                                            <button type="button" class="link-alt border-0 bg-transparent gstUploadBtn"
+                                                onclick="document.getElementById('gstFileInput').click();">
+                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                            </button>
+                                            <span class="text-danger-alt gstRemoveFile" style="display: none;"
+                                                onclick="clearDocInput('gstFileInput', 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');"><i
+                                                    class="fas fa-trash-alt"></i> Remove</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="section-label">GST Certificate</label>
+                                    <div class="doc-item compact" id="gstCertDocContainer">
+                                        <div class="doc-meta">
+                                            <div>
+                                                <span class="doc-name">GST Certificate</span>
+                                                <div id="gstCertFileInfo" class="file-status">Selected: <span
+                                                        id="gstCertFileNameDisplay">file.pdf</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="text-end d-flex align-items-center">
+                                            <input type="file" id="gstCertFileInput" name="gst_certificate_document"
+                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                onchange="handleDocSelect(this, 'gstCertFileNameDisplay', 'gstCertFileInfo', 'gstCertRemoveFile', '.gstCertUploadBtn', '#gstCertDocContainer');">
+                                            <button type="button"
+                                                class="link-alt border-0 bg-transparent gstCertUploadBtn"
+                                                onclick="document.getElementById('gstCertFileInput').click();">
+                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                            </button>
+                                            <span class="text-danger-alt gstCertRemoveFile" style="display: none;"
+                                                onclick="clearDocInput('gstCertFileInput', 'gstCertFileNameDisplay', 'gstCertFileInfo', 'gstCertRemoveFile', '.gstCertUploadBtn', '#gstCertDocContainer');"><i
+                                                    class="fas fa-trash-alt"></i> Remove</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="section-label">IEC Document</label>
+                                    <div class="doc-item compact" id="iecDocContainer">
+                                        <div class="doc-meta">
+                                            <div>
+                                                <span class="doc-name">IEC File</span>
+                                                <div id="iecFileInfo" class="file-status">Selected: <span
+                                                        id="iecFileNameDisplay">file.pdf</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="text-end d-flex align-items-center">
+                                            <input type="file" id="iecFileInput" name="iec_document"
+                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                onchange="handleDocSelect(this, 'iecFileNameDisplay', 'iecFileInfo', 'iecRemoveFile', '.iecUploadBtn', '#iecDocContainer');">
+                                            <button type="button"
+                                                class="link-alt border-0 bg-transparent iecUploadBtn"
+                                                onclick="document.getElementById('iecFileInput').click();">
+                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                            </button>
+                                            <span class="text-danger-alt iecRemoveFile" style="display: none;"
+                                                onclick="clearDocInput('iecFileInput', 'iecFileNameDisplay', 'iecFileInfo', 'iecRemoveFile', '.iecUploadBtn', '#iecDocContainer');"><i
+                                                    class="fas fa-trash-alt"></i> Remove</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -170,10 +260,21 @@
                                         <i class="fas fa-university"></i>
                                     </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="section-label">Bank Type</label>
+                                    <div class="input-wrapper select-wrapper">
+                                        <select class="input-custom" name="bank_type" id="bankType" required>
+                                            <option value="" disabled selected>Select Bank Type *</option>
+                                            <option value="private">Private</option>
+                                            <option value="government">Government</option>
+                                        </select>
+                                        <i class="fas fa-landmark"></i>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="section-title-alt">Document List</div>
-                            <!-- Document Upload Item -->
+                            <!-- LUT Document Upload + Verify -->
                             <div class="doc-item" id="lutDocContainer">
                                 <div class="doc-meta">
                                     <div>
@@ -194,6 +295,13 @@
                                     </button>
                                     <span id="removeFile" class="text-danger-alt" style="display: none;"><i
                                             class="fas fa-trash-alt"></i> Remove</span>
+                                    <button type="button" id="lutVerifyBtn" class="btn-verify ms-2" disabled>
+                                        <i class="fas fa-shield-halved me-1"></i> Verify
+                                    </button>
+                                    <span id="lutVerifiedBadge" class="verified-badge" style="display: none;">
+                                        <i class="fas fa-circle-check me-1"></i> Verified
+                                    </span>
+                                    <input type="hidden" name="lut_verified" id="lutVerifiedInput" value="0">
                                 </div>
                             </div>
 
@@ -210,7 +318,38 @@
                 </div>
 
                 <!-- CSB5 Form Custom JS -->
-                <script src="{{ asset('js/csb5-form.js') }}"></script>
+                <script>
+                    // Inline helpers so the new upload widgets work even if the
+                    // external csb5-form.js is served from a stale cache.
+                    function handleDocSelect(input, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
+                        if (input.files && input.files.length > 0) {
+                            var name = input.files[0].name;
+                            var nameEl = document.getElementById(nameId);
+                            if (nameEl) { nameEl.textContent = name; }
+                            var infoEl = document.getElementById(infoId);
+                            if (infoEl) { infoEl.style.display = 'block'; }
+                            var removeEl = document.querySelector('.' + removeClass);
+                            if (removeEl) { removeEl.style.display = 'inline-block'; }
+                            var uploadBtn = document.querySelector(uploadBtnSel);
+                            if (uploadBtn) { uploadBtn.style.display = 'none'; }
+                            var container = document.querySelector(containerSel);
+                            if (container) { container.classList.add('has-file'); }
+                        }
+                    }
+                    function clearDocInput(inputId, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
+                        var input = document.getElementById(inputId);
+                        if (input) { input.value = ''; }
+                        var infoEl = document.getElementById(infoId);
+                        if (infoEl) { infoEl.style.display = 'none'; }
+                        var removeEl = document.querySelector('.' + removeClass);
+                        if (removeEl) { removeEl.style.display = 'none'; }
+                        var uploadBtn = document.querySelector(uploadBtnSel);
+                        if (uploadBtn) { uploadBtn.style.display = 'inline-block'; }
+                        var container = document.querySelector(containerSel);
+                        if (container) { container.classList.remove('has-file'); }
+                    }
+                </script>
+                <script src="{{ asset('js/csb5-form.js') }}?v={{ filemtime(public_path('js/csb5-form.js')) ?: 1 }}"></script>
 
 
             </div>
