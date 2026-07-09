@@ -713,7 +713,8 @@ class customerController extends Controller
         $customer = auth()->guard('customer')->user();
         $courierServices = \App\Models\CourierService::all();
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
-        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones'));
+        $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
+        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones', 'destinations'));
     }
     
     public function kycSubmit(Request $request)
@@ -2243,6 +2244,14 @@ class customerController extends Controller
                     str_contains($destUpper, 'GREAT BRITAIN')
                 );
 
+                // Canada destination detection (mirrors getUpsRate):
+                // The Excel "Destination" column may contain "Canada" or "CA".
+                $isCanadaDestination = (
+                    $destUpper === 'CANADA' ||
+                    $destUpper === 'CA' ||
+                    str_contains($destUpper, 'CANADA')
+                );
+
                 // Collect ALL available service rates for this shipment (like getUpsRate all-services mode)
                 $allRates = [];
                 $defaultRate = null; // first available rate as default selection
@@ -2255,6 +2264,17 @@ class customerController extends Controller
                     }
                     if (!$isUkDestination && $isAirPremium) {
                         continue; // Non-UK: UNITED AIR PREMIUM DDP is hidden
+                    }
+
+                    // Canada destination filtering (mirrors getUpsRate):
+                    // - Canada destination → show ONLY Canada services, hide all others.
+                    // - Non-Canada destination → hide Canada services, show all others.
+                    $isCanadaSvc = $this->isCanadaService($service);
+                    if ($isCanadaDestination && !$isCanadaSvc) {
+                        continue; // Canada: skip non-Canada services
+                    }
+                    if (!$isCanadaDestination && $isCanadaSvc) {
+                        continue; // Non-Canada: skip Canada services
                     }
 
                     // Fetch rates: customer-specific first, then default fallback
@@ -2586,6 +2606,11 @@ class customerController extends Controller
             // For any non-UK destination (e.g. US), DPD rates are hidden.
             $isUkDestination = ($deliveryDestination === 'UK - United Kingdom');
 
+            // Canada services (CANADA-DDP, CANADA-ECOM) are only shown when the
+            // delivery destination is Canada; all other services are hidden for
+            // Canada, and Canada services are hidden for every other destination.
+            $isCanadaDestination = ($deliveryDestination === 'Canada');
+
             // ALL-SERVICES MODE: When service_id is empty, return best matching rate for every service
             if (empty($serviceId)) {
                 $allServices = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
@@ -2602,6 +2627,17 @@ class customerController extends Controller
                     }
                     if (!$isUkDestination && $isDpd) {
                         continue; // Non-UK: skip DPD services
+                    }
+
+                    // Canada destination filtering:
+                    // - Canada destination → show ONLY Canada services, hide all others.
+                    // - Non-Canada destination → hide Canada services, show all others.
+                    $isCanadaSvc = $this->isCanadaService($service);
+                    if ($isCanadaDestination && !$isCanadaSvc) {
+                        continue; // Canada: skip non-Canada services
+                    }
+                    if (!$isCanadaDestination && $isCanadaSvc) {
+                        continue; // Non-Canada: skip Canada services
                     }
 
                     // Multi-package rule: when more than one package is present,
@@ -2834,6 +2870,23 @@ class customerController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'DPD service is only available for UK destinations.'
+                ], 404);
+            }
+
+            // Canada destination filtering (mirrors ALL-SERVICES MODE):
+            // - Canada destination → ONLY Canada services are allowed; reject all others.
+            // - Non-Canada destination → Canada services are not allowed; reject them.
+            $isCanadaSvc = $this->isCanadaService($service);
+            if ($isCanadaDestination && !$isCanadaSvc) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only Canada services are available for Canada destinations.'
+                ], 404);
+            }
+            if (!$isCanadaDestination && $isCanadaSvc) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Canada service is only available for Canada destinations.'
                 ], 404);
             }
 
@@ -5346,6 +5399,37 @@ class customerController extends Controller
         $isAirPremium = str_contains($methodUpper, 'UNITED AIR PREMIUM');
 
         return $isDdp && $isAirPremium;
+    }
+
+    /**
+     * Determine if a courier service is a Canada-only service.
+     * Canada services (CANADA-DDP, CANADA-ECOM) are only shown when the
+     * delivery destination is Canada, and are hidden for all other destinations.
+     *
+     * @param \App\Models\CourierService|string|null $service
+     * @return bool
+     */
+    private function isCanadaService($service)
+    {
+        if (empty($service)) {
+            return false;
+        }
+
+        // Accept either a CourierService model or a plain method string.
+        if (is_object($service)) {
+            $network = strtoupper(trim($service->network ?? ''));
+            $serviceCode = strtoupper(trim($service->service_code ?? ''));
+            $method = strtoupper(trim($service->method ?? ''));
+        } else {
+            $network = '';
+            $serviceCode = '';
+            $method = strtoupper(trim((string) $service));
+        }
+
+        // Match by network, service_code, or method name (case-insensitive).
+        return $network === 'CANADA'
+            || str_starts_with($serviceCode, 'CANADA-')
+            || str_contains($method, 'UNITED CANADA');
     }
 
     /**

@@ -3540,12 +3540,9 @@
                                                                     data-select2-id="12" tabindex="-1"
                                                                     aria-hidden="true">
                                                                     <option value="">Select</option>
-                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
-                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
-                                                                    <!-- <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
-                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}> CN - China</option>
-                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>RU - Russia</option>
-                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option> -->
+                                                                    @foreach($destinations as $destination)
+                                                                        <option value="{{ $destination->name }}" {{ old('delivery_destination') == $destination->name ? 'selected' : '' }}>{{ $destination->name }}</option>
+                                                                    @endforeach
                                                                 </select>
                                                             </div>
                                                         </div>

@@ -19,6 +19,7 @@ class Zone extends Model
         'zone_code',
         'zone_number_testing',
         'description',
+        'destination_id',
     ];
 
     protected $casts = [
@@ -32,5 +33,13 @@ class Zone extends Model
     public function upsRates()
     {
         return $this->hasMany(UpsRate::class, 'zone_id', 'id');
+    }
+
+    /**
+     * Get the destination this zone belongs to.
+     */
+    public function destination()
+    {
+        return $this->belongsTo(Destination::class, 'destination_id', 'id');
     }
 }
