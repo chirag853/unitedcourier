@@ -386,7 +386,7 @@
                                 <a href="{{ route('customer.kyc.personal') }}" class="btn btn-light">
                                     <i class="ti ti-user me-1"></i> Personal KYC
                                 </a>
-                                <a href="{{ route('customer.csb5.form') }}" class="btn btn-light">
+                                <a href="{{ route('customer.csb5-form') }}" class="btn btn-light">
                                     <i class="ti ti-building me-1"></i> Business KYC
                                 </a>
                             </div>

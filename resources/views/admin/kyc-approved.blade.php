@@ -76,6 +76,81 @@
         .login-id-cell .copy-btn:hover {
             color: #1d4ed8;
         }
+        .btn-export {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #0369a1;
+            font-size: 13px;
+            padding: 6px 16px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-export:hover {
+            background-color: #0369a1;
+            color: #fff;
+        }
+        .btn-profile {
+            background-color: #f3e8ff;
+            color: #6b21a8;
+            border: 1px solid #6b21a8;
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-profile:hover {
+            background-color: #6b21a8;
+            color: #fff;
+        }
+        .btn-toggle-status {
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-toggle-status.is-active {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #b91c1c;
+        }
+        .btn-toggle-status.is-active:hover {
+            background-color: #b91c1c;
+            color: #fff;
+        }
+        .btn-toggle-status.is-inactive {
+            background-color: #dcfce7;
+            color: #15803d;
+            border: 1px solid #15803d;
+        }
+        .btn-toggle-status.is-inactive:hover {
+            background-color: #15803d;
+            color: #fff;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-pill.active {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .status-pill.inactive {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .action-cell {
+            min-width: 200px;
+        }
     </style>
 </head>
 
@@ -116,9 +191,19 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title">Approved Customer KYC</h5>
-                                <p class="card-text">View all approved KYC submissions from customers</p>
+                            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <div>
+                                    <h5 class="card-title mb-1">Approved Customer KYC</h5>
+                                    <p class="card-text mb-0">View all approved KYC submissions from customers</p>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a href="{{ route('admin.kyc-export', ['status' => 'approved']) }}" class="btn-export" title="Export approved KYC records to Excel">
+                                        <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
+                                    </a>
+                                    <a href="{{ route('admin.kyc-export', ['status' => 'all']) }}" class="btn-export" title="Export all KYC records to Excel">
+                                        <i class="ti ti-file-export me-1"></i>Export All
+                                    </a>
+                                </div>
                             </div>
                             <div class="card-body">
                                 @if ($message = Session::get('success'))
@@ -143,6 +228,8 @@
                                                 <th>Login ID</th>
                                                 <th>Password</th>
                                                 <th>Approved At</th>
+                                                <th>Account Status</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -182,6 +269,40 @@
                                                     <span class="badge-approved">
                                                         {{ $kyc->updated_at->format('d M Y, h:i A') }}
                                                     </span>
+                                                </td>
+                                                @php
+                                                    $customerId = $kyc->customer->id ?? null;
+                                                    $isActive = isset($kyc->customer->status) ? (bool) $kyc->customer->status : true;
+                                                @endphp
+                                                <td>
+                                                    @if($isActive)
+                                                        <span class="status-pill active">Active</span>
+                                                    @else
+                                                        <span class="status-pill inactive">Deactivated</span>
+                                                    @endif
+                                                </td>
+                                                <td class="action-cell">
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        @if($customerId)
+                                                            <a href="{{ route('admin.customer-profile', $customerId) }}" class="btn-profile" title="View customer profile, login credentials & full KYC">
+                                                                <i class="ti ti-user me-1"></i>Profile
+                                                            </a>
+                                                        @endif
+                                                        @if($customerId)
+                                                            <form action="{{ route('admin.customer.toggle-status', $customerId) }}" method="POST" class="d-inline toggle-status-form">
+                                                                @csrf
+                                                                @if($isActive)
+                                                                    <button type="submit" class="btn-toggle-status is-active" title="Deactivate this customer account (blocks login)">
+                                                                        <i class="ti ti-user-off me-1"></i>Deactivate
+                                                                    </button>
+                                                                @else
+                                                                    <button type="submit" class="btn-toggle-status is-inactive" title="Activate this customer account (allows login)">
+                                                                        <i class="ti ti-user-check me-1"></i>Activate
+                                                                    </button>
+                                                                @endif
+                                                            </form>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                             </tr>
                                             @endforeach
@@ -247,6 +368,9 @@
     </div>
     <!-- End Reset Password Modal -->
 
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <!-- jQuery -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
 
@@ -286,7 +410,39 @@
                     lengthMenu: "Show _MENU_ entries per page",
                     info: "Showing _START_ to _END_ of _TOTAL_ entries",
                     emptyTable: "No approved KYC submissions found.",
-                }
+                },
+                columnDefs: [
+                    { orderable: false, targets: [10, 11] }
+                ]
+            });
+
+            // SweetAlert2 confirmation for Activate/Deactivate account
+            $('.toggle-status-form').on('submit', function(e) {
+                e.preventDefault();
+                var form = this;
+                var btn = $(form).find('button[type="submit"]');
+                var isDeactivate = btn.hasClass('is-active');
+                var title = isDeactivate ? 'Deactivate Account?' : 'Activate Account?';
+                var text = isDeactivate
+                    ? "This customer will no longer be able to log in. You can reactivate the account later."
+                    : "This will allow the customer to log in again.";
+                var icon = isDeactivate ? 'warning' : 'question';
+                var confirmColor = isDeactivate ? '#b91c1c' : '#15803d';
+                var confirmText = isDeactivate ? 'Yes, Deactivate' : 'Yes, Activate';
+                Swal.fire({
+                    title: title,
+                    text: text,
+                    icon: icon,
+                    showCancelButton: true,
+                    confirmButtonColor: confirmColor,
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: confirmText,
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
             });
         });
 

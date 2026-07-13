@@ -24,7 +24,8 @@ class Customer extends Authenticatable
         'aadhar_verified',
         'pan_number',
         'pan_verified',
-        'csb_status'
+        'csb_status',
+        'status',
     ];
 
     protected $hidden = [
@@ -37,6 +38,7 @@ class Customer extends Authenticatable
         'aadhar_verified' => 'boolean',
         'pan_verified' => 'boolean',
         'csb_status' => 'integer',
+        'status' => 'boolean',
     ];
 
     public function getAuthPassword()
@@ -63,5 +65,13 @@ class Customer extends Authenticatable
     public function csbForm()
     {
         return $this->hasOne(CsbForm::class)->latest();
+    }
+
+    /**
+     * Get the customer's business category.
+     */
+    public function businessCategory()
+    {
+        return $this->belongsTo(BusinessCategory::class, 'business_category_id');
     }
 }

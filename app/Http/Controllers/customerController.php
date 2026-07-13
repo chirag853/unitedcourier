@@ -65,6 +65,14 @@ class customerController extends Controller
             ], 422);
         }
 
+        // Block login if the account has been deactivated by an admin
+        if (isset($customer->status) && !$customer->status) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has been deactivated. Please contact support for assistance.',
+            ], 403);
+        }
+
         $remember = (bool) $request->boolean('remember');
 
         auth()->guard('customer')->login($customer, $remember);

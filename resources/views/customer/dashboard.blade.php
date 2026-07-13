@@ -324,8 +324,23 @@
             </div>
         </div>
 
-        <!-- Sidenav Menu Start -->
+        @php
+        $customerId = auth()->guard('customer')->user()->id;
+        $kycExists = \App\Models\KycDetail::where('customer_id', $customerId)->exists();
+        $kycRecord = \App\Models\KycDetail::where('customer_id', $customerId)->first();
+        @endphp
+
+        <!-- Sidenav Menu Start (hidden while KYC stepper is showing) -->
+        @if($kycExists)
         @include('customer.partials.sidebar')
+        @else
+        {{-- Sidebar is hidden during KYC stepper: hide toggle buttons + make content full width --}}
+        <style>
+            #mobile_btn, #toggle_btn2 { display: none !important; }
+            .page-wrapper { margin-left: 0 !important; }
+            .navbar-header { margin-left: 0 !important; }
+        </style>
+        @endif
         <!-- Sidenav Menu End -->
 
         <!-- ========================
@@ -369,11 +384,6 @@
 
                 {{-- Show KYC status if customer is logged in and KYC exists but not approved --}}
                 @if(auth()->guard('customer')->check())
-                @php
-                $customerId = auth()->guard('customer')->user()->id;
-                $kycExists = \App\Models\KycDetail::where('customer_id', $customerId)->exists();
-                $kycRecord = \App\Models\KycDetail::where('customer_id', $customerId)->first();
-                @endphp
 
                 @if($kycExists && $kycRecord && $kycRecord->kyc_status != 'approved')
                 <!-- KYC Progress Bar -->
@@ -748,12 +758,12 @@
 
                     <div class="stepper-wrapper">
                         @if($userType === 'Business')
-                        <!-- Business KYC (CSB-V): 10 Steps -->
+                        <!-- Business KYC (CSB-V): 6 Steps -->
                         <div class="step-item active" id="step1-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">1. KYC Verification</div>
+                            <div class="step-label">1. Verify GST</div>
                         </div>
                         <div class="step-item" id="step2-indicator">
                             <div class="step-bar">
@@ -771,43 +781,19 @@
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">4. Verify GST</div>
+                            <div class="step-label">4. CSB-V</div>
                         </div>
                         <div class="step-item" id="step5-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Export Codes</div>
+                            <div class="step-label">5. Signature & Agreement</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. LUT Details</div>
-                        </div>
-                        <div class="step-item" id="step7-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">7. Banking Details</div>
-                        </div>
-                        <div class="step-item" id="step8-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">8. Billing Details</div>
-                        </div>
-                        <div class="step-item" id="step9-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">9. Signature & Agreement</div>
-                        </div>
-                        <div class="step-item" id="step10-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">10. Bill & Submit</div>
+                            <div class="step-label">6. Bill & Submit</div>
                         </div>
                         @else
                         <!-- Personal KYC (CSB-IV): 7 Steps -->
@@ -858,68 +844,129 @@
 
                     <div class="kyc-card">
 
-                        <!-- Step 1 Content -->
-                        <div id="step1-content" class="step-content active">
-                            <h3 class="kyc-card-title">Complete <span class="gradient-text">KYC</span></h3>
-                            <p class="text-muted mb-4">Please enter your GST details to verify your business identity.
-                            </p>
+                        @if($userType === 'Business')
+                            <!-- Step 1 Content: Verify GST Certificate (Business) -->
+                            <div id="step1-content" class="step-content active">
+                                <h3 class="kyc-card-title">Verify <span class="gradient-text">GST</span></h3>
+                                <p class="text-muted mb-4">Provide your GST Certificate number and upload the certificate
+                                    document to verify your business identity.</p>
 
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-8">
-                                    <label class="form-label-custom">GST Number</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom"
-                                            placeholder="22AAAAA0000A1Z5" id="gstInput" maxlength="15"
-                                            style="text-transform: uppercase;">
-                                        <i class="fas fa-file-invoice"></i>
-                                    </div>
-                                    <small class="text-muted d-block mt-1">Format: 2-digit state code + 10-char PAN +
-                                        entity code + Z + checksum (15 chars)</small>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label-custom d-none d-md-block">&nbsp;</label>
-                                    <button class="btn btn-primary-custom" style="padding: 14px;" id="verifyGstBtn"
-                                        onclick="verifyGst()">Verify GST</button>
-                                </div>
-                            </div>
-
-                            <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
-
-                            <div id="otpSection" style="display: none;">
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-8">
-                                        <label class="form-label-custom">Send OTP</label>
-                                        <p class="text-muted small mb-2">GST verified. Send an OTP to your registered
-                                            mobile/email to continue.</p>
+                                        <label class="form-label-custom">GST Certificate Number</label>
+                                        <div class="input-group-custom">
+                                            <input type="text" class="form-control input-custom"
+                                                placeholder="22AAAAA0000A1Z5" id="bizGstCertNumber" maxlength="15"
+                                                style="text-transform: uppercase;">
+                                            <i class="fas fa-file-invoice"></i>
+                                        </div>
                                     </div>
                                     <div class="col-md-4">
-                                        <button class="btn btn-primary-custom" style="padding: 14px;" id="sendOtpBtn"
-                                            onclick="sendOTP()">Send OTP</button>
+                                        <label class="form-label-custom d-none d-md-block">&nbsp;</label>
+                                        <button class="btn btn-primary-custom w-100" style="padding: 14px;"
+                                            id="bizVerifyGstCertBtn" onclick="verifyGstBiz()">Verify GST</button>
                                     </div>
                                 </div>
 
-                                <div id="otpStatus" class="otp-sent-status" style="display: none;">
-                                    <i class="fas fa-check-circle"></i> OTP has been sent to your registered
-                                    mobile/email
-                                </div>
-
-                                <!-- OTP Field (Visible only after sendOTP) -->
-                                <div id="otpContainer" style="display: none;">
-                                    <label class="form-label-custom">Enter 6-Digit OTP</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom" placeholder="******"
-                                            maxlength="6" id="otpInput">
-                                        <i class="fas fa-key"></i>
+                                <div class="row g-4 mb-4">
+                                    <div class="col-md-12">
+                                        <label class="form-label-custom">Upload GST Certificate</label>
+                                        <div id="bizGstCertUploadArea"
+                                            style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                            onclick="document.getElementById('bizGstCertFileInput').click()">
+                                            <input type="file" id="bizGstCertFileInput"
+                                                accept="image/png, image/jpeg, image/jpg, application/pdf" style="display: none;">
+                                            <div id="bizGstCertUploadPlaceholder">
+                                                <i class="fas fa-file-invoice"
+                                                    style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                                <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
+                                                    upload GST Certificate</p>
+                                                <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
+                                            </div>
+                                            <div id="bizGstCertPreview" style="display: none;">
+                                                <i class="fas fa-check-circle"
+                                                    style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                                <p class="mb-0 fw-semibold small" id="bizGstCertFileName"
+                                                    style="color: #166534;"></p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <button class="btn btn-primary-custom mt-2" onclick="nextStep(2)">Verify &
-                                        Continue</button>
+                                </div>
+
+                                <div id="bizGstStatus" class="otp-sent-status" style="display: none;">
+                                    <i class="fas fa-check-circle"></i> GST Certificate verified successfully!
+                                </div>
+
+                                <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                    <button class="btn btn-outline-custom flex-md-shrink-1"
+                                        style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                        onclick="nextStep(2)">Continue</button>
                                 </div>
                             </div>
+                        @else
+                            <!-- Step 1 Content: Complete KYC (Personal) -->
+                            <div id="step1-content" class="step-content active">
+                                <h3 class="kyc-card-title">Complete <span class="gradient-text">KYC</span></h3>
+                                <p class="text-muted mb-4">Please enter your GST details to verify your business
+                                    identity.</p>
 
-                            <div class="text-center mt-4">
-                                <button class="btn btn-outline-custom" onclick="nextStep(2)">Skip For Now</button>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-8">
+                                        <label class="form-label-custom">GST Number</label>
+                                        <div class="input-group-custom">
+                                            <input type="text" class="form-control input-custom"
+                                                placeholder="22AAAAA0000A1Z5" id="gstInput" maxlength="15"
+                                                style="text-transform: uppercase;">
+                                            <i class="fas fa-file-invoice"></i>
+                                        </div>
+                                        <small class="text-muted d-block mt-1">Format: 2-digit state code + 10-char PAN
+                                            + entity code + Z + checksum (15 chars)</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-custom d-none d-md-block">&nbsp;</label>
+                                        <button class="btn btn-primary-custom" style="padding: 14px;" id="verifyGstBtn"
+                                            onclick="verifyGst()">Verify GST</button>
+                                    </div>
+                                </div>
+
+                                <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
+
+                                <div id="otpSection" style="display: none;">
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-8">
+                                            <label class="form-label-custom">Send OTP</label>
+                                            <p class="text-muted small mb-2">GST verified. Send an OTP to your
+                                                registered mobile/email to continue.</p>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <button class="btn btn-primary-custom" style="padding: 14px;"
+                                                id="sendOtpBtn" onclick="sendOTP()">Send OTP</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="otpStatus" class="otp-sent-status" style="display: none;">
+                                        <i class="fas fa-check-circle"></i> OTP has been sent to your registered
+                                        mobile/email
+                                    </div>
+
+                                    <!-- OTP Field (Visible only after sendOTP) -->
+                                    <div id="otpContainer" style="display: none;">
+                                        <label class="form-label-custom">Enter 6-Digit OTP</label>
+                                        <div class="input-group-custom">
+                                            <input type="text" class="form-control input-custom" placeholder="******"
+                                                maxlength="6" id="otpInput">
+                                            <i class="fas fa-key"></i>
+                                        </div>
+                                        <button class="btn btn-primary-custom mt-2" onclick="nextStep(2)">Verify &
+                                            Continue</button>
+                                    </div>
+                                </div>
+
+                                <div class="text-center mt-4">
+                                    <button class="btn btn-outline-custom" onclick="nextStep(2)">Skip For Now</button>
+                                </div>
                             </div>
-                        </div>
+                        @endif
 
                         <!-- Step 2 Content: Verify Aadhar -->
                         <div id="step2-content" class="step-content">
@@ -1076,75 +1123,16 @@
                         </div>
 
                         @if($userType === 'Business')
-                        <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-10 ===== -->
+                        <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-6 ===== -->
 
-                        <!-- Business Step 4: Verify GST Certificate -->
+                        <!-- Business Step 4: CSB-V (Export Codes + LUT + Banking + Billing merged) -->
                         <div id="step4-content" class="step-content">
-                            <h3 class="kyc-card-title">Verify <span class="gradient-text">GST</span></h3>
-                            <p class="text-muted mb-4">Your GST number was verified in Step 1. Now provide your GST
-                                Certificate number and upload the certificate document.</p>
+                            <h3 class="kyc-card-title">CSB-<span class="gradient-text">V</span></h3>
+                            <p class="text-muted mb-4">Complete your CSB-V details: Export Codes, LUT, Banking and Billing
+                                information.</p>
 
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-8">
-                                    <label class="form-label-custom">GST Certificate Number</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom"
-                                            placeholder="22AAAAA0000A1Z5" id="bizGstCertNumber" maxlength="15"
-                                            style="text-transform: uppercase;">
-                                        <i class="fas fa-file-invoice"></i>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label-custom d-none d-md-block">&nbsp;</label>
-                                    <button class="btn btn-primary-custom w-100" style="padding: 14px;"
-                                        id="bizVerifyGstCertBtn" onclick="verifyGstBiz()">Verify GST</button>
-                                </div>
-                            </div>
-
-                            <div class="row g-4 mb-4">
-                                <div class="col-md-12">
-                                    <label class="form-label-custom">Upload GST Certificate</label>
-                                    <div id="bizGstCertUploadArea"
-                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
-                                        onclick="document.getElementById('bizGstCertFileInput').click()">
-                                        <input type="file" id="bizGstCertFileInput"
-                                            accept="image/png, image/jpeg, image/jpg, application/pdf" style="display: none;">
-                                        <div id="bizGstCertUploadPlaceholder">
-                                            <i class="fas fa-file-invoice"
-                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
-                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                upload GST Certificate</p>
-                                            <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
-                                        </div>
-                                        <div id="bizGstCertPreview" style="display: none;">
-                                            <i class="fas fa-check-circle"
-                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
-                                            <p class="mb-0 fw-semibold small" id="bizGstCertFileName"
-                                                style="color: #166534;"></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="bizGstStatus" class="otp-sent-status" style="display: none;">
-                                <i class="fas fa-check-circle"></i> GST Certificate verified successfully!
-                            </div>
-
-                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
-                                <button class="btn btn-outline-custom flex-md-shrink-1"
-                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(3)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    id="bizGstContinueBtn" onclick="nextStep(5)">Continue</button>
-                            </div>
-                        </div>
-
-                        <!-- Business Step 5: Export Codes (IEC + AD Code) -->
-                        <div id="step5-content" class="step-content">
-                            <h3 class="kyc-card-title">Export <span class="gradient-text">Codes</span></h3>
-                            <p class="text-muted mb-4">Enter your IEC (Import Export Code) and AD Code details with
-                                supporting documents.</p>
+                            <!-- ===== Export Codes Section ===== -->
+                            <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-export me-2"></i>Export Codes</h5>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-8">
@@ -1214,21 +1202,10 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
-                                <button class="btn btn-outline-custom flex-md-shrink-1"
-                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(4)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(6)">Continue</button>
-                            </div>
-                        </div>
+                            <hr class="my-4" style="border-color:#e2e8f0;">
 
-                        <!-- Business Step 6: LUT Details -->
-                        <div id="step6-content" class="step-content">
-                            <h3 class="kyc-card-title">LUT <span class="gradient-text">Details</span></h3>
-                            <p class="text-muted mb-4">Enter your Letter of Undertaking (LUT) details for export without
-                                payment of IGST.</p>
+                            <!-- ===== LUT Details Section ===== -->
+                            <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-contract me-2"></i>LUT Details</h5>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
@@ -1273,20 +1250,10 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
-                                <button class="btn btn-outline-custom flex-md-shrink-1"
-                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(5)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(7)">Continue</button>
-                            </div>
-                        </div>
+                            <hr class="my-4" style="border-color:#e2e8f0;">
 
-                        <!-- Business Step 7: Banking Details -->
-                        <div id="step7-content" class="step-content">
-                            <h3 class="kyc-card-title">Banking <span class="gradient-text">Details</span></h3>
-                            <p class="text-muted mb-4">Enter your bank account details for financial transactions.</p>
+                            <!-- ===== Banking Details Section ===== -->
+                            <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-landmark me-2"></i>Banking Details</h5>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
@@ -1311,21 +1278,10 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
-                                <button class="btn btn-outline-custom flex-md-shrink-1"
-                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(6)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(8)">Continue</button>
-                            </div>
-                        </div>
+                            <hr class="my-4" style="border-color:#e2e8f0;">
 
-                        <!-- Business Step 8: Billing Details -->
-                        <div id="step8-content" class="step-content">
-                            <h3 class="kyc-card-title">Billing <span class="gradient-text">Details</span></h3>
-                            <p class="text-muted mb-4">Confirm your billing address (should match your GST registered
-                                address).</p>
+                            <!-- ===== Billing Details Section ===== -->
+                            <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-invoice-dollar me-2"></i>Billing Details</h5>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
@@ -1372,15 +1328,15 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(7)">Back</button>
+                                    onclick="nextStep(3)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(9)">Continue</button>
+                                    onclick="nextStep(5)">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Business Step 9: Signature & Agreement -->
-                        <div id="step9-content" class="step-content">
+                        <!-- Business Step 5: Signature & Agreement -->
+                        <div id="step5-content" class="step-content">
                             <h3 class="kyc-card-title">Signature & <span class="gradient-text">Agreement</span></h3>
                             <p class="text-muted mb-4">Upload your authorized signature with company stamp and the signed
                                 Merchant Agreement.</p>
@@ -1436,15 +1392,15 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(8)">Back</button>
+                                    onclick="nextStep(4)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(10)">Continue</button>
+                                    onclick="nextStep(6)">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Business Step 10: Bill & Submit (Activation Pending) -->
-                        <div id="step10-content" class="step-content text-center py-4">
+                        <!-- Business Step 6: Bill & Submit (Activation Pending) -->
+                        <div id="step6-content" class="step-content text-center py-4">
                             <div class="mb-4">
                                 <i class="fas fa-check-circle text-success" style="font-size: 80px;"></i>
                             </div>
@@ -2119,7 +2075,7 @@
 
                     // Detect Business vs Personal flow
                     const isBusinessFlow = @json($userType === 'Business');
-                    const totalSteps = isBusinessFlow ? 10 : 7;
+                    const totalSteps = isBusinessFlow ? 6 : 7;
 
                     // Clone the T&C document into the popup modal (avoids duplicating the large legal text)
                     (function cloneTermsIntoModal() {
@@ -2556,50 +2512,158 @@
                         initFileUploadPreviews();
                     }
 
-                    function nextStep(stepNumber) {
-                        // Save data from current step before moving
+                    // Validate that the current step is complete before allowing forward navigation
+                    function validateStep(step) {
                         if (isBusinessFlow) {
-                            // ===== BUSINESS FLOW (10 steps) =====
-                            if (stepNumber === 2) {
-                                // Save OTP verification
-                                const otpInput = document.querySelector('#otpContainer input');
-                                if (otpInput && otpInput.value.length === 6) {
-                                    kycData.otp_verified = true;
+                            // ===== BUSINESS FLOW (6 steps) =====
+                            if (step === 1) {
+                                // Step 1: Verify GST Certificate
+                                if (!kycData.gst_certificate_verified) {
+                                    alert('Please verify your GST Certificate number before continuing.');
+                                    return false;
                                 }
-                            } else if (stepNumber === 5) {
-                                // Leaving step 4 (Verify GST) -> save GST certificate number
-                                const gstCertInput = document.getElementById('bizGstCertNumber');
-                                if (gstCertInput) kycData.gst_certificate_number = gstCertInput.value.trim().toUpperCase();
-                            } else if (stepNumber === 6) {
-                                // Leaving step 5 (Export Codes) -> save IEC + AD Code
+                                const gstFile = document.getElementById('bizGstCertFileInput');
+                                if (!gstFile || !gstFile.files || !gstFile.files[0]) {
+                                    alert('Please upload your GST Certificate document before continuing.');
+                                    return false;
+                                }
+                            } else if (step === 2) {
+                                // Step 2: Verify Aadhar
+                                if (!kycData.aadhar_verified) {
+                                    alert('Please verify your Aadhar number before continuing.');
+                                    return false;
+                                }
+                                const frontFile = document.getElementById('aadharFrontFileInput');
+                                const backFile = document.getElementById('aadharBackFileInput');
+                                if (!frontFile || !frontFile.files || !frontFile.files[0]) {
+                                    alert('Please upload the front side of your Aadhaar before continuing.');
+                                    return false;
+                                }
+                                if (!backFile || !backFile.files || !backFile.files[0]) {
+                                    alert('Please upload the back side of your Aadhaar before continuing.');
+                                    return false;
+                                }
+                            } else if (step === 3) {
+                                // Step 3: Verify PAN
+                                if (!kycData.pan_verified) {
+                                    alert('Please verify your PAN before continuing.');
+                                    return false;
+                                }
+                                const panFile = document.getElementById('panFileInput');
+                                if (!panFile || !panFile.files || !panFile.files[0]) {
+                                    alert('Please upload your PAN card before continuing.');
+                                    return false;
+                                }
+                            } else if (step === 4) {
+                                // Step 4: CSB-V (Export Codes + LUT + Banking + Billing)
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
-                                if (iecInput) kycData.iec_number = iecInput.value.trim();
-                                if (adCodeInput) kycData.ad_code = adCodeInput.value.trim();
-                            } else if (stepNumber === 7) {
-                                // Leaving step 6 (LUT Details) -> save LUT fields
                                 const lutExpiry = document.getElementById('bizLutExpiry');
                                 const lutBondYear = document.getElementById('bizLutBondYear');
-                                if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
-                                if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
-                            } else if (stepNumber === 8) {
-                                // Leaving step 7 (Banking Details) -> save bank fields
                                 const bankType = document.getElementById('bizBankType');
                                 const bankAccount = document.getElementById('bizBankAccount');
-                                if (bankType) kycData.bank_type = bankType.value;
-                                if (bankAccount) kycData.bank_account_number = bankAccount.value.trim();
-                            } else if (stepNumber === 9) {
-                                // Leaving step 8 (Billing Details) -> save billing fields
+                                const billingContact = document.getElementById('bizBillingContact');
+                                const billingEmail = document.getElementById('bizBillingEmail');
+                                const billingAddress = document.getElementById('bizBillingAddress');
+                                const iecFile = document.getElementById('bizIecFileInput');
+                                const adCodeFile = document.getElementById('bizAdCodeFileInput');
+                                const lutFile = document.getElementById('bizLutFileInput');
+
+                                if (!iecInput || !iecInput.value.trim()) { alert('Please enter your IEC Number.'); return false; }
+                                if (!iecFile || !iecFile.files || !iecFile.files[0]) { alert('Please upload your IEC Certificate.'); return false; }
+                                if (!adCodeInput || !adCodeInput.value.trim()) { alert('Please enter your AD Code.'); return false; }
+                                if (!adCodeFile || !adCodeFile.files || !adCodeFile.files[0]) { alert('Please upload your AD Code Document.'); return false; }
+                                if (!lutExpiry || !lutExpiry.value) { alert('Please select your LUT Expiry Date.'); return false; }
+                                if (!lutBondYear || !lutBondYear.value.trim()) { alert('Please enter your LUT Bond Year.'); return false; }
+                                if (!lutFile || !lutFile.files || !lutFile.files[0]) { alert('Please upload your LUT Document.'); return false; }
+                                if (!bankType || !bankType.value) { alert('Please select your Bank Category.'); return false; }
+                                if (!bankAccount || !bankAccount.value.trim()) { alert('Please enter your Bank Account Number.'); return false; }
+                                if (!billingContact || !billingContact.value.trim()) { alert('Please enter your Billing Contact Number.'); return false; }
+                                if (!billingEmail || !billingEmail.value.trim()) { alert('Please enter your Billing Email.'); return false; }
+                                if (!billingAddress || !billingAddress.value.trim()) { alert('Please enter your Billing Address.'); return false; }
+                            } else if (step === 5) {
+                                // Step 5: Signature & Agreement
+                                const sigFile = document.getElementById('bizSignatureFileInput');
+                                const agreementFile = document.getElementById('bizMerchantAgreementFileInput');
+                                if (!sigFile || !sigFile.files || !sigFile.files[0]) { alert('Please upload your Authorized Signature.'); return false; }
+                                if (!agreementFile || !agreementFile.files || !agreementFile.files[0]) { alert('Please upload the signed Merchant Agreement.'); return false; }
+                            }
+                        } else {
+                            // ===== PERSONAL FLOW (7 steps) =====
+                            // Step 1 (Complete KYC) is not validated - it has a "Skip For Now" option
+                            if (step === 2) {
+                                // Step 2: Verify Aadhar
+                                if (!kycData.aadhar_verified) { alert('Please verify your Aadhar number before continuing.'); return false; }
+                                const frontFile = document.getElementById('aadharFrontFileInput');
+                                const backFile = document.getElementById('aadharBackFileInput');
+                                if (!frontFile || !frontFile.files || !frontFile.files[0]) { alert('Please upload the front side of your Aadhaar.'); return false; }
+                                if (!backFile || !backFile.files || !backFile.files[0]) { alert('Please upload the back side of your Aadhaar.'); return false; }
+                            } else if (step === 3) {
+                                // Step 3: Verify PAN
+                                if (!kycData.pan_verified) { alert('Please verify your PAN before continuing.'); return false; }
+                                const panFile = document.getElementById('panFileInput');
+                                if (!panFile || !panFile.files || !panFile.files[0]) { alert('Please upload your PAN card.'); return false; }
+                            } else if (step === 4) {
+                                // Step 4: Business Details
+                                const orgName = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
+                                const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
+                                if (!orgName || !orgName.value.trim()) { alert('Please enter your Organization Name.'); return false; }
+                                if (!signatory || !signatory.value.trim()) { alert('Please enter the Authorized Signatory name.'); return false; }
+                            } else if (step === 5) {
+                                // Step 5: Upload Signature
+                                if (!signatureDataUrl) { alert('Please upload your signature before continuing.'); return false; }
+                            }
+                        }
+                        return true;
+                    }
+
+                    function nextStep(stepNumber) {
+                        // Determine the currently active step to detect forward vs backward navigation
+                        const activeStepEl = document.querySelector('.step-content.active');
+                        let activeStepNum = 0;
+                        if (activeStepEl) {
+                            const match = activeStepEl.id.match(/step(\d+)-content/);
+                            if (match) activeStepNum = parseInt(match[1]);
+                        }
+
+                        // Only validate when moving FORWARD (target step > current step)
+                        if (stepNumber > activeStepNum) {
+                            if (!validateStep(activeStepNum)) {
+                                return; // Block navigation - current step is incomplete
+                            }
+                        }
+
+                        // Save data from current step before moving
+                        if (isBusinessFlow) {
+                            // ===== BUSINESS FLOW (6 steps) =====
+                            if (stepNumber === 2) {
+                                // Leaving step 1 (Verify GST Certificate) -> save GST certificate number
+                                const gstCertInput = document.getElementById('bizGstCertNumber');
+                                if (gstCertInput) kycData.gst_certificate_number = gstCertInput.value.trim().toUpperCase();
+                            } else if (stepNumber === 5) {
+                                // Leaving step 4 (CSB-V merged) -> save IEC + AD Code + LUT + Bank + Billing
+                                const iecInput = document.getElementById('bizIecNumber');
+                                const adCodeInput = document.getElementById('bizAdCode');
+                                const lutExpiry = document.getElementById('bizLutExpiry');
+                                const lutBondYear = document.getElementById('bizLutBondYear');
+                                const bankType = document.getElementById('bizBankType');
+                                const bankAccount = document.getElementById('bizBankAccount');
                                 const billingGst = document.getElementById('bizBillingGst');
                                 const billingContact = document.getElementById('bizBillingContact');
                                 const billingEmail = document.getElementById('bizBillingEmail');
                                 const billingAddress = document.getElementById('bizBillingAddress');
+                                if (iecInput) kycData.iec_number = iecInput.value.trim();
+                                if (adCodeInput) kycData.ad_code = adCodeInput.value.trim();
+                                if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
+                                if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
+                                if (bankType) kycData.bank_type = bankType.value;
+                                if (bankAccount) kycData.bank_account_number = bankAccount.value.trim();
                                 if (billingGst) kycData.billing_gst = billingGst.value.trim().toUpperCase();
                                 if (billingContact) kycData.billing_contact = billingContact.value.trim();
                                 if (billingEmail) kycData.billing_email = billingEmail.value.trim();
                                 if (billingAddress) kycData.billing_address = billingAddress.value.trim();
-                            } else if (stepNumber === 10) {
-                                // Leaving step 9 (Signature & Agreement) -> submit Business KYC
+                            } else if (stepNumber === 6) {
+                                // Leaving step 5 (Signature & Agreement) -> submit Business KYC
                                 submitBusinessKYC();
                             }
                         } else {
@@ -2735,7 +2799,7 @@
 
                     // ===== Business KYC: Submit via FormData (file uploads) =====
                     function submitBusinessKYC() {
-                        const submitBtn = document.querySelector('#step10-content button');
+                        const submitBtn = document.querySelector('#step6-content button');
                         if (submitBtn) {
                             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
                             submitBtn.disabled = true;
@@ -2790,7 +2854,7 @@
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    const messageDiv = document.querySelector('#step10-content p.text-muted');
+                                    const messageDiv = document.querySelector('#step6-content p.text-muted');
                                     if (messageDiv) {
                                         messageDiv.innerHTML = '<strong>' + data.message + '</strong>';
                                         messageDiv.className = 'text-success mx-auto';

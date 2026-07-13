@@ -5896,4 +5896,153 @@ class AdminController extends Controller
         return redirect()->route('admin.my-profile')->with('success', 'Profile updated successfully.');
     }
 
+    /**
+     * View a customer's full profile (personal info, KYC, business details, wallet).
+     */
+    public function customerProfile($id)
+    {
+        $customer = Customer::with(['kycDetail', 'csbForm', 'wallet', 'businessCategory'])
+            ->findOrFail($id);
+
+        $personalKyc = $customer->kycDetail;
+        $businessKyc = $customer->csbForm;
+        $businessCategory = $customer->businessCategory;
+        $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
+        $wallet = $customer->wallet;
+
+        return view('admin.customer-profile', compact(
+            'customer',
+            'personalKyc',
+            'businessKyc',
+            'businessCategory',
+            'userType',
+            'wallet'
+        ));
+    }
+
+    /**
+     * Activate or deactivate a customer account.
+     */
+    public function toggleCustomerStatus($id)
+    {
+        $customer = Customer::findOrFail($id);
+
+        $customer->status = !$customer->status;
+        $customer->save();
+
+        $action = $customer->status ? 'activated' : 'deactivated';
+        $customerName = $customer->first_name . ' ' . $customer->last_name;
+
+        return redirect()->back()
+            ->with('success', "Account for {$customerName} has been {$action} successfully.");
+    }
+
+    /**
+     * Export KYC records to an Excel (.xlsx) file using PhpSpreadsheet.
+     * Accepts an optional ?status=pending|approved|rejected|all filter.
+     */
+    public function exportKycExcel(Request $request)
+    {
+        $status = $request->query('status', 'all');
+
+        $query = KycDetail::with(['customer.csbForm', 'customer.businessCategory']);
+
+        if ($status === 'pending') {
+            $query->whereIn('kyc_status', ['pending', 'under_review']);
+        } elseif ($status === 'approved') {
+            $query->where('kyc_status', 'approved');
+        } elseif ($status === 'rejected') {
+            $query->where('kyc_status', 'rejected');
+        }
+
+        $kycRecords = $query->orderBy('id', 'desc')->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('KYC Records');
+
+        $headers = [
+            'KYC ID', 'KYC Type', 'KYC Status', 'Customer Name', 'Email', 'Phone',
+            'Alternate Phone', 'Organization', 'Authorized Signatory', 'GST Number',
+            'GST Verified', 'Aadhar Number', 'Aadhar Verified', 'PAN Number',
+            'PAN Holder Name', 'PAN DOB', 'PAN Verified', 'OTP Verified', 'Terms Accepted',
+            'Billing Address', 'Billing GST', 'Billing Contact', 'Billing Email',
+            'IEC Number', 'AD Code', 'GST Certificate Number', 'LUT Expiry Date',
+            'LUT Bond Year', 'Bank Account Number', 'Bank Type', 'Account Status',
+            'Submitted At', 'Updated At',
+        ];
+
+        $col = 'A';
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . '1', $header);
+            $sheet->getStyle($col . '1')->getFont()->setBold(true);
+            $col++;
+        }
+
+        $row = 2;
+        foreach ($kycRecords as $kyc) {
+            $customer = $kyc->customer;
+            $csb = $customer ? $customer->csbForm : null;
+
+            $data = [
+                $kyc->id,
+                ucfirst($kyc->kyc_type ?? 'personal'),
+                ucfirst($kyc->kyc_status ?? 'pending'),
+                $customer ? ($customer->first_name . ' ' . $customer->last_name) : '',
+                $customer->email ?? '',
+                $customer->phone_number ?? '',
+                $customer->alternate_phone_number ?? '',
+                $kyc->organization_name ?? '',
+                $kyc->authorized_signatory ?? '',
+                $kyc->gst_number ?? '',
+                $kyc->gst_verified ? 'Yes' : 'No',
+                $kyc->aadhar_number ?? '',
+                $kyc->aadhar_verified ? 'Yes' : 'No',
+                $kyc->pan_number ?? '',
+                $kyc->pan_holder_name ?? '',
+                $kyc->pan_dob ? $kyc->pan_dob->format('Y-m-d') : '',
+                $kyc->pan_verified ? 'Yes' : 'No',
+                $kyc->otp_verified ? 'Yes' : 'No',
+                $kyc->terms_accepted ? 'Yes' : 'No',
+                $kyc->billing_address ?? '',
+                $kyc->billing_gst ?? '',
+                $kyc->billing_contact ?? '',
+                $kyc->billing_email ?? '',
+                $csb->iec_number ?? '',
+                $csb->ad_code ?? '',
+                $csb->gst_certificate_number ?? '',
+                $csb && $csb->lut_expiry_date ? $csb->lut_expiry_date->format('Y-m-d') : '',
+                $csb->lut_bond_year ?? '',
+                $csb->bank_account_number ?? '',
+                $csb->bank_type ?? '',
+                $customer && isset($customer->status) ? ($customer->status ? 'Active' : 'Deactivated') : 'Active',
+                $kyc->created_at ? $kyc->created_at->format('Y-m-d H:i:s') : '',
+                $kyc->updated_at ? $kyc->updated_at->format('Y-m-d H:i:s') : '',
+            ];
+
+            $col = 'A';
+            foreach ($data as $value) {
+                $sheet->setCellValue($col . $row, $value);
+                $col++;
+            }
+            $row++;
+        }
+
+        foreach (range('A', 'AG') as $columnID) {
+            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        }
+
+        $fileName = 'kyc_records_' . $status . '_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
 }

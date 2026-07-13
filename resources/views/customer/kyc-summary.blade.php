@@ -463,12 +463,12 @@
                                         <i class="ti ti-user me-1"></i>
                                         {{ $personalKyc ? 'Edit Personal KYC' : 'Start Personal KYC (CSB-IV)' }}
                                     </a>
-                                    <a href="{{ route('customer.csb5.form') }}" class="btn kyc-action-btn btn-business btn-kyc-secondary">
+                                    <a href="{{ route('customer.csb5-form') }}" class="btn kyc-action-btn btn-business btn-kyc-secondary">
                                         <i class="ti ti-building me-1"></i>
                                         {{ $businessKyc ? 'Edit Business KYC' : 'Start Business KYC (CSB-V)' }}
                                     </a>
                                 @else
-                                    <a href="{{ route('customer.csb5.form') }}" class="btn kyc-action-btn btn-business">
+                                    <a href="{{ route('customer.csb5-form') }}" class="btn kyc-action-btn btn-business">
                                         <i class="ti ti-building me-1"></i>
                                         {{ $businessKyc ? 'Edit Business KYC' : 'Start Business KYC (CSB-V)' }}
                                     </a>
@@ -715,7 +715,7 @@
                                     <div class="empty-state">
                                         <i class="ti ti-building-x"></i>
                                         <p class="mb-0">Business KYC has not been submitted yet.</p>
-                                        <a href="{{ route('customer.csb5.form') }}" class="btn kyc-action-btn btn-business mt-3">
+                                        <a href="{{ route('customer.csb5-form') }}" class="btn kyc-action-btn btn-business mt-3">
                                             <i class="ti ti-plus me-1"></i> Start Business KYC
                                         </a>
                                     </div>

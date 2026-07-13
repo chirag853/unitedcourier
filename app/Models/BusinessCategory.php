@@ -10,6 +10,7 @@ class BusinessCategory extends Model
         'category_name',
         'category_slug',
         'parent_group',
+        'user_type',
         'description',
         'status',
         'display_order'

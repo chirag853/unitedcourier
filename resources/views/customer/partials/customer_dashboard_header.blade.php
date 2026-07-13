@@ -154,7 +154,7 @@
                         <button class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#walletRechargeModal" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
                         border-color: #7b1fa2;
                         color: white;
-                        box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3);">
+                        box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3); font-weight: 700 !important;">
                         <i class="bi bi-currency-rupee"></i>&nbsp;Recharge
                         </button>
                     </div>
@@ -164,7 +164,8 @@
                         <button b-hoqn66jiy3="" class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#modalCenter" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
                         border-color: #7b1fa2;
                         color: white;
-                        box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3);">
+                        box-shadow: 0 2px 6px rgba(156, 39, 176, 0.3);
+                        font-weight: 700 !important;">
                         <i class="bi bi-currency-rupee"></i>&nbsp;{{ number_format($walletBalance, 2) }}
                         </button>
                     </div>

@@ -519,6 +519,11 @@ Route::prefix('admin')->group(function () {
     Route::post('/customer/{id}/reset-password', [AdminController::class, 'resetCustomerPassword'])->name('admin.customer.reset-password');
     Route::post('/customer/{id}/recharge-wallet', [AdminController::class, 'rechargeCustomerWallet'])->name('admin.customer.recharge-wallet');
 
+    // Customer Profile, Activate/Deactivate, Excel Export
+    Route::get('/customer-profile/{id}', [AdminController::class, 'customerProfile'])->name('admin.customer-profile');
+    Route::post('/customer/{id}/toggle-status', [AdminController::class, 'toggleCustomerStatus'])->name('admin.customer.toggle-status');
+    Route::get('/kyc-export', [AdminController::class, 'exportKycExcel'])->name('admin.kyc-export');
+
     // Manage Rate Routes
     Route::get('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate');
     Route::get('/manage-rate/get-customer-rates', [AdminController::class, 'getCustomerRates'])->name('admin.manage-rate.get-customer-rates');
