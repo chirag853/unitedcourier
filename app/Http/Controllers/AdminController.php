@@ -28,7 +28,7 @@ class AdminController extends Controller
 
         // Customer Summary
         $totalRegistrations = Customer::count();
-        $kycPending = KycDetail::where('kyc_status', 'pending')->count();
+        $kycPending = KycDetail::whereIn('kyc_status', ['pending', 'under_review'])->count();
         $onboardedCustomers = KycDetail::where('kyc_status', 'approved')->count();
         $csb5Enabled = Customer::where('csb_status', 2)->count();
 
@@ -73,8 +73,8 @@ class AdminController extends Controller
         $lastMonthRegistrations = Customer::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
         $registrationsChangePercent = $lastMonthRegistrations > 0 ? round(($thisMonthRegistrations - $lastMonthRegistrations) / $lastMonthRegistrations * 100, 1) : ($thisMonthRegistrations > 0 ? 100 : 0);
 
-        $thisMonthKycPending = KycDetail::where('kyc_status', 'pending')->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
-        $lastMonthKycPending = KycDetail::where('kyc_status', 'pending')->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $thisMonthKycPending = KycDetail::whereIn('kyc_status', ['pending', 'under_review'])->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthKycPending = KycDetail::whereIn('kyc_status', ['pending', 'under_review'])->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
         $kycPendingChangePercent = $lastMonthKycPending > 0 ? round(($thisMonthKycPending - $lastMonthKycPending) / $lastMonthKycPending * 100, 1) : ($thisMonthKycPending > 0 ? 100 : 0);
 
         $thisMonthOnboarded = KycDetail::where('kyc_status', 'approved')->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
@@ -87,7 +87,7 @@ class AdminController extends Controller
 
         // KYC Pending list for the dashboard table
         $kycPendingList = KycDetail::with('customer')
-            ->where('kyc_status', 'pending')
+            ->whereIn('kyc_status', ['pending', 'under_review'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -143,7 +143,7 @@ class AdminController extends Controller
         // Customer Summary — cumulative (all-time), not date-filtered
         // These metrics represent total counts regardless of date period
         $totalRegistrations = Customer::count();
-        $kycPending = KycDetail::where('kyc_status', 'pending')->count();
+        $kycPending = KycDetail::whereIn('kyc_status', ['pending', 'under_review'])->count();
         $onboardedCustomers = KycDetail::where('kyc_status', 'approved')->count();
         $csb5Enabled = Customer::where('csb_status', 2)->count();
 
@@ -5649,8 +5649,8 @@ class AdminController extends Controller
 
     public function kycPending()
     {
-        $kycDetails = \App\Models\KycDetail::with('customer')
-            ->where('kyc_status', 'pending')
+        $kycDetails = \App\Models\KycDetail::with(['customer.csbForm'])
+            ->whereIn('kyc_status', ['pending', 'under_review'])
             ->orderBy('id', 'desc')
             ->get();
 
@@ -5659,7 +5659,7 @@ class AdminController extends Controller
 
     public function kycApproved()
     {
-        $approvedKycDetails = \App\Models\KycDetail::with('customer')
+        $approvedKycDetails = \App\Models\KycDetail::with(['customer.csbForm'])
             ->where('kyc_status', 'approved')
             ->orderBy('id', 'desc')
             ->get();

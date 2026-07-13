@@ -747,6 +747,8 @@
                     <h2 class="stepper-title">Finish KYC <span class="gradient-text">in seconds</span></h2>
 
                     <div class="stepper-wrapper">
+                        @if($userType === 'Business')
+                        <!-- Business KYC (CSB-V): 10 Steps -->
                         <div class="step-item active" id="step1-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
@@ -763,26 +765,95 @@
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">3. Basic Info & Signing</div>
+                            <div class="step-label">3. Verify PAN</div>
                         </div>
                         <div class="step-item" id="step4-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">4. Upload Signature</div>
+                            <div class="step-label">4. Verify GST</div>
                         </div>
                         <div class="step-item" id="step5-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Bill</div>
+                            <div class="step-label">5. Export Codes</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. CSB V Ramp UP</div>
+                            <div class="step-label">6. LUT Details</div>
                         </div>
+                        <div class="step-item" id="step7-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">7. Banking Details</div>
+                        </div>
+                        <div class="step-item" id="step8-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">8. Billing Details</div>
+                        </div>
+                        <div class="step-item" id="step9-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">9. Signature & Agreement</div>
+                        </div>
+                        <div class="step-item" id="step10-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">10. Bill & Submit</div>
+                        </div>
+                        @else
+                        <!-- Personal KYC (CSB-IV): 7 Steps -->
+                        <div class="step-item active" id="step1-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">1. KYC Verification</div>
+                        </div>
+                        <div class="step-item" id="step2-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">2. Verify Aadhar</div>
+                        </div>
+                        <div class="step-item" id="step3-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">3. Verify PAN</div>
+                        </div>
+                        <div class="step-item" id="step4-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">4. Basic Info & Signing</div>
+                        </div>
+                        <div class="step-item" id="step5-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">5. Upload Signature</div>
+                        </div>
+                        <div class="step-item" id="step6-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">6. Bill</div>
+                        </div>
+                        <div class="step-item" id="step7-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">7. CSB V Ramp UP</div>
+                        </div>
+                        @endif
                     </div>
 
                     <div class="kyc-card">
@@ -853,7 +924,7 @@
                         <!-- Step 2 Content: Verify Aadhar -->
                         <div id="step2-content" class="step-content">
                             <h3 class="kyc-card-title">Verify <span class="gradient-text">Aadhar</span></h3>
-                            <p class="text-muted mb-4">Enter your 12-digit Aadhar number to verify your identity.</p>
+                            <p class="text-muted mb-4">Enter your 12-digit Aadhar number and upload front & back photos to verify your identity.</p>
 
                             <div class="row g-3 mb-4">
                                 <div class="col-md-8">
@@ -872,6 +943,48 @@
                                 </div>
                             </div>
 
+                            <!-- Aadhaar Front & Back Upload -->
+                            <div class="row g-4 mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Upload Aadhaar (Front)</label>
+                                    <div id="aadharFrontUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('aadharFrontFileInput').click()">
+                                        <input type="file" id="aadharFrontFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="aadharFrontUploadPlaceholder">
+                                            <i class="fas fa-id-card"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload Aadhaar front</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                        </div>
+                                        <div id="aadharFrontPreview" style="display: none;">
+                                            <i class="fas fa-check-circle" style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="aadharFrontFileName" style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Upload Aadhaar (Back)</label>
+                                    <div id="aadharBackUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('aadharBackFileInput').click()">
+                                        <input type="file" id="aadharBackFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="aadharBackUploadPlaceholder">
+                                            <i class="fas fa-id-card"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload Aadhaar back</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                        </div>
+                                        <div id="aadharBackPreview" style="display: none;">
+                                            <i class="fas fa-check-circle" style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="aadharBackFileName" style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div id="aadharStatus" class="otp-sent-status" style="display: none;">
                                 <i class="fas fa-check-circle"></i> Aadhar verified successfully!
                             </div>
@@ -886,8 +999,470 @@
                             </div>
                         </div>
 
-                        <!-- Step 3 Content -->
+                        <!-- Step 3 Content: Verify PAN -->
                         <div id="step3-content" class="step-content">
+                            <h3 class="kyc-card-title">Verify <span class="gradient-text">PAN</span></h3>
+                            <p class="text-muted mb-4">Enter your PAN details and upload your PAN card to complete verification.</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">PAN Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="ABCDE1234F" id="panInput" maxlength="10"
+                                            style="text-transform: uppercase;">
+                                        <i class="fas fa-file-invoice"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">PAN Holder Name</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="Name as on PAN card" id="panHolderName">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Date of Birth</label>
+                                    <div class="input-group-custom">
+                                        <input type="date" class="form-control input-custom" id="panDob">
+                                        <i class="fas fa-calendar"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Upload PAN Card</label>
+                                    <div id="panUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('panFileInput').click()">
+                                        <input type="file" id="panFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="panUploadPlaceholder">
+                                            <i class="fas fa-file-invoice"
+                                                style="font-size: 28px; color: #6366f1; margin-bottom: 6px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 13px;">Click to upload PAN card</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                        </div>
+                                        <div id="panPreview" style="display: none;">
+                                            <i class="fas fa-check-circle" style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="panFileName" style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8"></div>
+                                <div class="col-md-4">
+                                    <button class="btn btn-primary-custom w-100" style="padding: 14px;" id="verifyPanBtn"
+                                        onclick="verifyPan()">Verify PAN</button>
+                                </div>
+                            </div>
+
+                            <div id="panStatus" class="otp-sent-status" style="display: none;">
+                                <i class="fas fa-check-circle"></i> PAN verified successfully!
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(2)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;" id="panContinueBtn"
+                                    onclick="nextStep(4)">Continue</button>
+                            </div>
+                        </div>
+
+                        @if($userType === 'Business')
+                        <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-10 ===== -->
+
+                        <!-- Business Step 4: Verify GST Certificate -->
+                        <div id="step4-content" class="step-content">
+                            <h3 class="kyc-card-title">Verify <span class="gradient-text">GST</span></h3>
+                            <p class="text-muted mb-4">Your GST number was verified in Step 1. Now provide your GST
+                                Certificate number and upload the certificate document.</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label-custom">GST Certificate Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="22AAAAA0000A1Z5" id="bizGstCertNumber" maxlength="15"
+                                            style="text-transform: uppercase;">
+                                        <i class="fas fa-file-invoice"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label-custom d-none d-md-block">&nbsp;</label>
+                                    <button class="btn btn-primary-custom w-100" style="padding: 14px;"
+                                        id="bizVerifyGstCertBtn" onclick="verifyGstBiz()">Verify GST</button>
+                                </div>
+                            </div>
+
+                            <div class="row g-4 mb-4">
+                                <div class="col-md-12">
+                                    <label class="form-label-custom">Upload GST Certificate</label>
+                                    <div id="bizGstCertUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizGstCertFileInput').click()">
+                                        <input type="file" id="bizGstCertFileInput"
+                                            accept="image/png, image/jpeg, image/jpg, application/pdf" style="display: none;">
+                                        <div id="bizGstCertUploadPlaceholder">
+                                            <i class="fas fa-file-invoice"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
+                                                upload GST Certificate</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
+                                        </div>
+                                        <div id="bizGstCertPreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizGstCertFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="bizGstStatus" class="otp-sent-status" style="display: none;">
+                                <i class="fas fa-check-circle"></i> GST Certificate verified successfully!
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(3)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    id="bizGstContinueBtn" onclick="nextStep(5)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 5: Export Codes (IEC + AD Code) -->
+                        <div id="step5-content" class="step-content">
+                            <h3 class="kyc-card-title">Export <span class="gradient-text">Codes</span></h3>
+                            <p class="text-muted mb-4">Enter your IEC (Import Export Code) and AD Code details with
+                                supporting documents.</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label-custom">IEC Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="10-digit IEC number" id="bizIecNumber" maxlength="10">
+                                        <i class="fas fa-file-export"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label-custom">Upload IEC Certificate</label>
+                                    <div id="bizIecUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizIecFileInput').click()">
+                                        <input type="file" id="bizIecFileInput"
+                                            accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="bizIecUploadPlaceholder">
+                                            <i class="fas fa-file-export"
+                                                style="font-size: 28px; color: #6366f1; margin-bottom: 6px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 13px;">Click to
+                                                upload IEC</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                        </div>
+                                        <div id="bizIecPreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizIecFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label-custom">AD Code (Authorized Dealer Code)</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="Enter AD Code" id="bizAdCode">
+                                        <i class="fas fa-university"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label-custom">Upload AD Code Document</label>
+                                    <div id="bizAdCodeUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizAdCodeFileInput').click()">
+                                        <input type="file" id="bizAdCodeFileInput"
+                                            accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="bizAdCodeUploadPlaceholder">
+                                            <i class="fas fa-university"
+                                                style="font-size: 28px; color: #6366f1; margin-bottom: 6px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 13px;">Click to
+                                                upload AD Code</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                        </div>
+                                        <div id="bizAdCodePreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizAdCodeFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(4)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    onclick="nextStep(6)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 6: LUT Details -->
+                        <div id="step6-content" class="step-content">
+                            <h3 class="kyc-card-title">LUT <span class="gradient-text">Details</span></h3>
+                            <p class="text-muted mb-4">Enter your Letter of Undertaking (LUT) details for export without
+                                payment of IGST.</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">LUT Expiry Date</label>
+                                    <div class="input-group-custom">
+                                        <input type="date" class="form-control input-custom" id="bizLutExpiry">
+                                        <i class="fas fa-calendar"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">LUT Bond Year</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="e.g. 2026-27" id="bizLutBondYear">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-4 mb-4">
+                                <div class="col-md-12">
+                                    <label class="form-label-custom">Upload LUT Document</label>
+                                    <div id="bizLutUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizLutFileInput').click()">
+                                        <input type="file" id="bizLutFileInput" accept="application/pdf"
+                                            style="display: none;">
+                                        <div id="bizLutUploadPlaceholder">
+                                            <i class="fas fa-file-contract"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
+                                                upload LUT Document</p>
+                                            <p class="text-muted small mb-0">PDF only (max 5MB)</p>
+                                        </div>
+                                        <div id="bizLutPreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizLutFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(5)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    onclick="nextStep(7)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 7: Banking Details -->
+                        <div id="step7-content" class="step-content">
+                            <h3 class="kyc-card-title">Banking <span class="gradient-text">Details</span></h3>
+                            <p class="text-muted mb-4">Enter your bank account details for financial transactions.</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Bank Category</label>
+                                    <div class="input-group-custom">
+                                        <select class="form-control input-custom" id="bizBankType">
+                                            <option value="">Select bank category</option>
+                                            <option value="government">Public Sector Bank</option>
+                                            <option value="private">Private Sector Bank</option>
+                                        </select>
+                                        <i class="fas fa-landmark"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Bank Account Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="Enter bank account number" id="bizBankAccount"
+                                            inputmode="numeric">
+                                        <i class="fas fa-wallet"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(6)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    onclick="nextStep(8)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 8: Billing Details -->
+                        <div id="step8-content" class="step-content">
+                            <h3 class="kyc-card-title">Billing <span class="gradient-text">Details</span></h3>
+                            <p class="text-muted mb-4">Confirm your billing address (should match your GST registered
+                                address).</p>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Billing GST Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="Auto-filled from GST verification" id="bizBillingGst"
+                                            style="text-transform: uppercase;" readonly>
+                                        <i class="fas fa-file-invoice"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Billing Contact Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom"
+                                            placeholder="Contact number" id="bizBillingContact" inputmode="numeric">
+                                        <i class="fas fa-phone"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Billing Email</label>
+                                    <div class="input-group-custom">
+                                        <input type="email" class="form-control input-custom"
+                                            placeholder="billing@company.com" id="bizBillingEmail">
+                                        <i class="fas fa-envelope"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-12">
+                                    <label class="form-label-custom">Billing Address (as per GST)</label>
+                                    <div class="input-group-custom">
+                                        <textarea class="form-control input-custom" rows="3"
+                                            placeholder="Enter billing address as per GST certificate"
+                                            id="bizBillingAddress"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(7)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    onclick="nextStep(9)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 9: Signature & Agreement -->
+                        <div id="step9-content" class="step-content">
+                            <h3 class="kyc-card-title">Signature & <span class="gradient-text">Agreement</span></h3>
+                            <p class="text-muted mb-4">Upload your authorized signature with company stamp and the signed
+                                Merchant Agreement.</p>
+
+                            <div class="row g-4 mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Upload Authorized Signature (with Company Stamp)</label>
+                                    <div id="bizSignatureUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizSignatureFileInput').click()">
+                                        <input type="file" id="bizSignatureFileInput"
+                                            accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                            style="display: none;">
+                                        <div id="bizSignatureUploadPlaceholder">
+                                            <i class="fas fa-signature"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
+                                                upload signature</p>
+                                            <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
+                                        </div>
+                                        <div id="bizSignaturePreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizSignatureFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-custom">Upload Signed Merchant Agreement</label>
+                                    <div id="bizAgreementUploadArea"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizMerchantAgreementFileInput').click()">
+                                        <input type="file" id="bizMerchantAgreementFileInput" accept="application/pdf"
+                                            style="display: none;">
+                                        <div id="bizAgreementUploadPlaceholder">
+                                            <i class="fas fa-file-signature"
+                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
+                                                upload Merchant Agreement</p>
+                                            <p class="text-muted small mb-0">PDF only (max 10MB)</p>
+                                        </div>
+                                        <div id="bizAgreementPreview" style="display: none;">
+                                            <i class="fas fa-check-circle"
+                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                            <p class="mb-0 fw-semibold small" id="bizAgreementFileName"
+                                                style="color: #166534;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                <button class="btn btn-outline-custom flex-md-shrink-1"
+                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                    onclick="nextStep(8)">Back</button>
+                                <button class="btn btn-primary-custom"
+                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                    onclick="nextStep(10)">Continue</button>
+                            </div>
+                        </div>
+
+                        <!-- Business Step 10: Bill & Submit (Activation Pending) -->
+                        <div id="step10-content" class="step-content text-center py-4">
+                            <div class="mb-4">
+                                <i class="fas fa-check-circle text-success" style="font-size: 80px;"></i>
+                            </div>
+                            <h3 class="kyc-card-title mb-2">Activation <span class="gradient-text">Pending</span></h3>
+                            <p class="text-muted mx-auto" style="max-width: 500px;">We have received your Business KYC
+                                documents. Our verification team will review your application within 24 hours. CSB-5 will
+                                be enabled upon approval.</p>
+                            <div class="mx-auto" style="max-width: 300px;">
+                                <button class="btn btn-primary-custom mt-4" onclick="location.reload()">Go to
+                                    Dashboard</button>
+                            </div>
+                        </div>
+
+                        @else
+                        <!-- ===== PERSONAL KYC (CSB-IV) STEPS 4-7 ===== -->
+
+                        <!-- Step 4 Content -->
+                        <div id="step4-content" class="step-content">
                             <h3 class="kyc-card-title">Business <span class="gradient-text">Details</span></h3>
                             <p class="text-muted small mb-4">Provide details for the digital agreement.</p>
 
@@ -911,15 +1486,15 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(2)">Back</button>
+                                    onclick="nextStep(3)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(4)">Continue</button>
+                                    onclick="nextStep(5)">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Step 4 Content - Upload Signature -->
-                        <div id="step4-content" class="step-content">
+                        <!-- Step 5 Content - Upload Signature -->
+                        <div id="step5-content" class="step-content">
                             <h3 class="kyc-card-title">Upload <span class="gradient-text">Signature</span></h3>
                             <p class="text-muted small mb-4">Upload your signature to be appended to the agreement.</p>
 
@@ -951,15 +1526,15 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(3)">Back</button>
+                                    onclick="nextStep(4)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(5)">Continue</button>
+                                    onclick="nextStep(6)">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Step 5 Content - Bill -->
-                        <div id="step5-content" class="step-content">
+                        <!-- Step 6 Content - Bill -->
+                        <div id="step6-content" class="step-content">
                             <!-- <h3 class="kyc-card-title">Bill</h3> -->
 
                             <div id="billTermsDocument" class="mt-4">
@@ -1473,16 +2048,16 @@
                                 <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mt-3">
                                     <button class="btn btn-outline-custom"
                                         style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                        onclick="nextStep(4)">Back</button>
+                                        onclick="nextStep(5)">Back</button>
                                     <button class="btn btn-primary-custom"
                                         style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                        onclick="nextStep(6)">Submit & Finish</button>
+                                        onclick="nextStep(7)">Submit & Finish</button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Step 6 Content -->
-                        <div id="step6-content" class="step-content text-center py-4">
+                        <!-- Step 7 Content -->
+                        <div id="step7-content" class="step-content text-center py-4">
                             <div class="mb-4">
                                 <i class="fas fa-check-circle text-success" style="font-size: 80px;"></i>
                             </div>
@@ -1494,6 +2069,8 @@
                                     Dashboard</button>
                             </div>
                         </div>
+
+                        @endif
 
                     </div>
 
@@ -1523,8 +2100,26 @@
                         billing_gst: '',
                         billing_contact: '',
                         billing_email: '',
-                        terms_accepted: true
+                        terms_accepted: true,
+                        // Business KYC (CSB-V) fields
+                        is_csb_v: true,
+                        is_gst: true,
+                        is_lut: true,
+                        gst_certificate_number: '',
+                        gst_certificate_verified: false,
+                        iec_number: '',
+                        ad_code: '',
+                        lut_expiry_date: '',
+                        lut_bond_year: '',
+                        bank_account_number: '',
+                        bank_type: '',
+                        biz_signature_file: null,
+                        merchant_agreement_file: null
                     };
+
+                    // Detect Business vs Personal flow
+                    const isBusinessFlow = @json($userType === 'Business');
+                    const totalSteps = isBusinessFlow ? 10 : 7;
 
                     // Clone the T&C document into the popup modal (avoids duplicating the large legal text)
                     (function cloneTermsIntoModal() {
@@ -1828,30 +2423,210 @@
                             });
                     }
 
-                    function nextStep(stepNumber) {
-                        // Save data from current step before moving
-                        if (stepNumber === 2) {
-                            // Save OTP verification
-                            const otpInput = document.querySelector('#otpContainer input');
-                            if (otpInput && otpInput.value.length === 6) {
-                                kycData.otp_verified = true;
-                            }
-                        } else if (stepNumber === 4) {
-                            // Leaving step 3 (Business Details) -> save business details
-                            const orgName = document.querySelector('#step3-content input[placeholder="Company Ltd"]');
-                            const signatory = document.querySelector('#step3-content input[placeholder="Full Name"]');
-                            if (orgName) kycData.organization_name = orgName.value;
-                            if (signatory) kycData.authorized_signatory = signatory.value;
-                        } else if (stepNumber === 5) {
-                            // Leaving step 4 (Upload Signature) -> save signature
-                            kycData.signature = signatureDataUrl || '';
-                        } else if (stepNumber === 6) {
-                            // Leaving step 5 (Bill) -> submit KYC data
-                            submitKYC();
+                    function verifyPan() {
+                        const panField = document.getElementById('panInput');
+                        const holderField = document.getElementById('panHolderName');
+                        const dobField = document.getElementById('panDob');
+                        const verifyBtn = document.getElementById('verifyPanBtn');
+                        const panStatus = document.getElementById('panStatus');
+
+                        if (!panField) return;
+
+                        // Normalize PAN to uppercase, no spaces
+                        const pan = panField.value.replace(/\s+/g, '').toUpperCase();
+
+                        if (!pan) {
+                            alert('Please enter your PAN number.');
+                            return;
+                        }
+                        if (pan.length !== 10 || !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+                            alert('Invalid PAN number. It must be 10 characters: 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).');
+                            return;
+                        }
+                        if (holderField && !holderField.value.trim()) {
+                            alert('Please enter the PAN holder name.');
+                            return;
+                        }
+                        if (dobField && !dobField.value) {
+                            alert('Please select your date of birth.');
+                            return;
                         }
 
-                        // When entering the Bill step (5), render the uploaded signature at the bottom
-                        if (stepNumber === 5) {
+                        verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                        verifyBtn.disabled = true;
+
+                        fetch('{{ route("customer.verify.pan") }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({
+                                    pan_number: pan
+                                })
+                            })
+                            .then(response => {
+                                const contentType = response.headers.get('content-type');
+                                if (contentType && contentType.includes('application/json')) {
+                                    return response.json();
+                                }
+                                return response.text().then(text => {
+                                    console.error('Non-JSON PAN response:', text);
+                                    return {
+                                        success: false,
+                                        message: 'Server error (non-JSON response). Please try again.'
+                                    };
+                                });
+                            })
+                            .then(data => {
+                                if (data.success) {
+                                    kycData.pan_number = pan;
+                                    kycData.pan_holder_name = holderField ? holderField.value.trim() : '';
+                                    kycData.pan_dob = dobField ? dobField.value : '';
+                                    kycData.pan_verified = true;
+
+                                    panStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'PAN verified successfully!');
+                                    panStatus.style.display = 'block';
+                                    panStatus.style.color = '#10b981';
+
+                                    verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
+                                    verifyBtn.disabled = true;
+                                    panField.readOnly = true;
+                                    if (holderField) holderField.readOnly = true;
+                                    if (dobField) dobField.readOnly = true;
+                                } else {
+                                    panStatus.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message || 'PAN verification failed.');
+                                    panStatus.style.display = 'block';
+                                    panStatus.style.color = '#dc3545';
+
+                                    verifyBtn.innerHTML = 'Verify PAN';
+                                    verifyBtn.disabled = false;
+
+                                    alert(data.message || 'PAN verification failed. Please try again.');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('PAN verify error:', error);
+                                panStatus.innerHTML = '<i class="fas fa-times-circle"></i> Connection error';
+                                panStatus.style.display = 'block';
+                                panStatus.style.color = '#dc3545';
+
+                                verifyBtn.innerHTML = 'Verify PAN';
+                                verifyBtn.disabled = false;
+
+                                alert('A network error occurred while verifying your PAN. Please try again.');
+                            });
+                    }
+
+                    // File upload preview handlers for Aadhaar front/back and PAN card
+                    function handleFilePreview(fileInputId, placeholderId, previewId, fileNameId, dataKey) {
+                        const input = document.getElementById(fileInputId);
+                        if (!input) return;
+                        input.addEventListener('change', function () {
+                            if (this.files && this.files[0]) {
+                                const file = this.files[0];
+                                const placeholder = document.getElementById(placeholderId);
+                                const preview = document.getElementById(previewId);
+                                const fileNameEl = document.getElementById(fileNameId);
+                                if (placeholder) placeholder.style.display = 'none';
+                                if (preview) preview.style.display = 'block';
+                                if (fileNameEl) fileNameEl.textContent = file.name;
+                                kycData[dataKey] = file;
+                            }
+                        });
+                    }
+
+                    function initFileUploadPreviews() {
+                        handleFilePreview('aadharFrontFileInput', 'aadharFrontUploadPlaceholder', 'aadharFrontPreview', 'aadharFrontFileName', 'aadhar_front_file');
+                        handleFilePreview('aadharBackFileInput', 'aadharBackUploadPlaceholder', 'aadharBackPreview', 'aadharBackFileName', 'aadhar_back_file');
+                        handleFilePreview('panFileInput', 'panUploadPlaceholder', 'panPreview', 'panFileName', 'pan_file');
+                        // Business KYC document previews
+                        handleFilePreview('bizGstCertFileInput', 'bizGstCertUploadPlaceholder', 'bizGstCertPreview', 'bizGstCertFileName', 'gst_certificate_file');
+                        handleFilePreview('bizIecFileInput', 'bizIecUploadPlaceholder', 'bizIecPreview', 'bizIecFileName', 'iec_file');
+                        handleFilePreview('bizAdCodeFileInput', 'bizAdCodeUploadPlaceholder', 'bizAdCodePreview', 'bizAdCodeFileName', 'ad_code_file');
+                        handleFilePreview('bizLutFileInput', 'bizLutUploadPlaceholder', 'bizLutPreview', 'bizLutFileName', 'lut_file');
+                        handleFilePreview('bizSignatureFileInput', 'bizSignatureUploadPlaceholder', 'bizSignaturePreview', 'bizSignatureFileName', 'biz_signature_file');
+                        handleFilePreview('bizMerchantAgreementFileInput', 'bizAgreementUploadPlaceholder', 'bizAgreementPreview', 'bizAgreementFileName', 'merchant_agreement_file');
+                    }
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initFileUploadPreviews);
+                    } else {
+                        initFileUploadPreviews();
+                    }
+
+                    function nextStep(stepNumber) {
+                        // Save data from current step before moving
+                        if (isBusinessFlow) {
+                            // ===== BUSINESS FLOW (10 steps) =====
+                            if (stepNumber === 2) {
+                                // Save OTP verification
+                                const otpInput = document.querySelector('#otpContainer input');
+                                if (otpInput && otpInput.value.length === 6) {
+                                    kycData.otp_verified = true;
+                                }
+                            } else if (stepNumber === 5) {
+                                // Leaving step 4 (Verify GST) -> save GST certificate number
+                                const gstCertInput = document.getElementById('bizGstCertNumber');
+                                if (gstCertInput) kycData.gst_certificate_number = gstCertInput.value.trim().toUpperCase();
+                            } else if (stepNumber === 6) {
+                                // Leaving step 5 (Export Codes) -> save IEC + AD Code
+                                const iecInput = document.getElementById('bizIecNumber');
+                                const adCodeInput = document.getElementById('bizAdCode');
+                                if (iecInput) kycData.iec_number = iecInput.value.trim();
+                                if (adCodeInput) kycData.ad_code = adCodeInput.value.trim();
+                            } else if (stepNumber === 7) {
+                                // Leaving step 6 (LUT Details) -> save LUT fields
+                                const lutExpiry = document.getElementById('bizLutExpiry');
+                                const lutBondYear = document.getElementById('bizLutBondYear');
+                                if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
+                                if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
+                            } else if (stepNumber === 8) {
+                                // Leaving step 7 (Banking Details) -> save bank fields
+                                const bankType = document.getElementById('bizBankType');
+                                const bankAccount = document.getElementById('bizBankAccount');
+                                if (bankType) kycData.bank_type = bankType.value;
+                                if (bankAccount) kycData.bank_account_number = bankAccount.value.trim();
+                            } else if (stepNumber === 9) {
+                                // Leaving step 8 (Billing Details) -> save billing fields
+                                const billingGst = document.getElementById('bizBillingGst');
+                                const billingContact = document.getElementById('bizBillingContact');
+                                const billingEmail = document.getElementById('bizBillingEmail');
+                                const billingAddress = document.getElementById('bizBillingAddress');
+                                if (billingGst) kycData.billing_gst = billingGst.value.trim().toUpperCase();
+                                if (billingContact) kycData.billing_contact = billingContact.value.trim();
+                                if (billingEmail) kycData.billing_email = billingEmail.value.trim();
+                                if (billingAddress) kycData.billing_address = billingAddress.value.trim();
+                            } else if (stepNumber === 10) {
+                                // Leaving step 9 (Signature & Agreement) -> submit Business KYC
+                                submitBusinessKYC();
+                            }
+                        } else {
+                            // ===== PERSONAL FLOW (7 steps) =====
+                            if (stepNumber === 2) {
+                                // Save OTP verification
+                                const otpInput = document.querySelector('#otpContainer input');
+                                if (otpInput && otpInput.value.length === 6) {
+                                    kycData.otp_verified = true;
+                                }
+                            } else if (stepNumber === 5) {
+                                // Leaving step 4 (Business Details) -> save business details
+                                const orgName = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
+                                const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
+                                if (orgName) kycData.organization_name = orgName.value;
+                                if (signatory) kycData.authorized_signatory = signatory.value;
+                            } else if (stepNumber === 6) {
+                                // Leaving step 5 (Upload Signature) -> save signature
+                                kycData.signature = signatureDataUrl || '';
+                            } else if (stepNumber === 7) {
+                                // Leaving step 6 (Bill) -> submit KYC data
+                                submitKYC();
+                            }
+                        }
+
+                        // When entering the Bill step (6 for Personal), render the uploaded signature at the bottom
+                        if (!isBusinessFlow && stepNumber === 6) {
                             const billSignatureImg = document.getElementById('billSignatureImg');
                             const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
                             if (signatureDataUrl) {
@@ -1885,9 +2660,172 @@
                         });
                     }
 
+                    // ===== Business KYC: Verify GST Certificate =====
+                    function verifyGstBiz() {
+                        const gstField = document.getElementById('bizGstCertNumber');
+                        const verifyBtn = document.getElementById('bizVerifyGstCertBtn');
+                        const statusDiv = document.getElementById('bizGstStatus');
+                        const continueBtn = document.getElementById('bizGstContinueBtn');
+
+                        if (!gstField || !verifyBtn) return;
+
+                        const gstValue = gstField.value.trim().toUpperCase();
+
+                        if (gstValue.length !== 15) {
+                            alert('Please enter a valid 15-character GST number.');
+                            return;
+                        }
+
+                        verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                        verifyBtn.disabled = true;
+
+                        fetch('{{ route("customer.verify.gst") }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ gst_number: gstValue })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    kycData.gst_certificate_number = gstValue;
+                                    kycData.gst_certificate_verified = true;
+                                    kycData.gst_number = gstValue;
+                                    kycData.gst_verified = true;
+
+                                    if (statusDiv) {
+                                        statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> GST Certificate verified successfully!';
+                                        statusDiv.style.display = 'block';
+                                        statusDiv.style.color = '#10b981';
+                                    }
+
+                                    // Auto-fill billing GST number
+                                    const billingGst = document.getElementById('bizBillingGst');
+                                    if (billingGst) billingGst.value = gstValue;
+
+                                    verifyBtn.innerHTML = 'Verified';
+                                    verifyBtn.disabled = true;
+                                    if (continueBtn) continueBtn.focus();
+                                } else {
+                                    if (statusDiv) {
+                                        statusDiv.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message || 'GST verification failed.');
+                                        statusDiv.style.display = 'block';
+                                        statusDiv.style.color = '#dc3545';
+                                    }
+                                    verifyBtn.innerHTML = 'Verify GST';
+                                    verifyBtn.disabled = false;
+                                    alert(data.message || 'GST verification failed. Please check the number and try again.');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                if (statusDiv) {
+                                    statusDiv.innerHTML = '<i class="fas fa-times-circle"></i> Connection error';
+                                    statusDiv.style.display = 'block';
+                                    statusDiv.style.color = '#dc3545';
+                                }
+                                verifyBtn.innerHTML = 'Verify GST';
+                                verifyBtn.disabled = false;
+                                alert('A network error occurred while verifying your GST. Please try again.');
+                            });
+                    }
+
+                    // ===== Business KYC: Submit via FormData (file uploads) =====
+                    function submitBusinessKYC() {
+                        const submitBtn = document.querySelector('#step10-content button');
+                        if (submitBtn) {
+                            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                            submitBtn.disabled = true;
+                        }
+
+                        // Build FormData for file uploads
+                        const formData = new FormData();
+                        formData.append('is_csb_v', kycData.is_csb_v ? 1 : 0);
+                        formData.append('is_gst', kycData.is_gst ? 1 : 0);
+                        formData.append('is_lut', kycData.is_lut ? 1 : 0);
+                        formData.append('gst_certificate_number', kycData.gst_certificate_number || kycData.gst_number || '');
+                        formData.append('iec_number', kycData.iec_number || '');
+                        formData.append('ad_code', kycData.ad_code || '');
+                        formData.append('lut_expiry_date', kycData.lut_expiry_date || '');
+                        formData.append('lut_bond_year', kycData.lut_bond_year || '');
+                        formData.append('bank_account_number', kycData.bank_account_number || '');
+                        formData.append('bank_type', kycData.bank_type || '');
+                        formData.append('aadhar_number', (kycData.aadhar_number || '').replace(/\s/g, ''));
+                        formData.append('billing_address', kycData.billing_address || '');
+                        formData.append('billing_gst', kycData.billing_gst || kycData.gst_number || '');
+                        formData.append('billing_contact', kycData.billing_contact || '');
+                        formData.append('billing_email', kycData.billing_email || '');
+                        formData.append('terms_accepted', kycData.terms_accepted ? 1 : 0);
+
+                        // Append files if present
+                        const fileFields = {
+                            'gst_certificate_document': 'bizGstCertFileInput',
+                            'gst_document': 'bizGstCertFileInput',
+                            'iec_document': 'bizIecFileInput',
+                            'ad_code_document': 'bizAdCodeFileInput',
+                            'lut_document': 'bizLutFileInput',
+                            'aadhar_document': 'aadharFrontFileInput',
+                            'signature_document': 'bizSignatureFileInput',
+                            'merchant_agreement': 'bizMerchantAgreementFileInput'
+                        };
+
+                        Object.keys(fileFields).forEach(function(fieldName) {
+                            const input = document.getElementById(fileFields[fieldName]);
+                            if (input && input.files && input.files[0]) {
+                                formData.append(fieldName, input.files[0]);
+                            }
+                        });
+
+                        fetch('{{ route("customer.csb5-form.store") }}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    const messageDiv = document.querySelector('#step10-content p.text-muted');
+                                    if (messageDiv) {
+                                        messageDiv.innerHTML = '<strong>' + data.message + '</strong>';
+                                        messageDiv.className = 'text-success mx-auto';
+                                    }
+                                    if (submitBtn) {
+                                        submitBtn.innerHTML = 'Go to Dashboard';
+                                        submitBtn.onclick = function() {
+                                            if (data.redirect) {
+                                                window.location.href = data.redirect;
+                                            } else {
+                                                location.reload();
+                                            }
+                                        };
+                                    }
+                                } else {
+                                    alert('Error: ' + (data.message || 'Unknown error'));
+                                    if (submitBtn) {
+                                        submitBtn.innerHTML = 'Go to Dashboard';
+                                        submitBtn.disabled = false;
+                                    }
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                alert('An error occurred while submitting your Business KYC application.');
+                                if (submitBtn) {
+                                    submitBtn.innerHTML = 'Go to Dashboard';
+                                    submitBtn.disabled = false;
+                                }
+                            });
+                    }
+
                     function submitKYC() {
                         // Show loading state
-                        const submitBtn = document.querySelector('#step6-content button');
+                        const submitBtn = document.querySelector('#step7-content button');
                         if (submitBtn) {
                             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
                             submitBtn.disabled = true;
@@ -1906,7 +2844,7 @@
                             .then(data => {
                                 if (data.success) {
                                     // Show success message
-                                    const messageDiv = document.querySelector('#step6-content p.text-muted');
+                                    const messageDiv = document.querySelector('#step7-content p.text-muted');
                                     if (messageDiv) {
                                         messageDiv.innerHTML = '<strong>' + data.message + '</strong>';
                                         messageDiv.className = 'text-success mx-auto';

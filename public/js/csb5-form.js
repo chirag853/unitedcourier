@@ -180,6 +180,54 @@ if (lutVerifyBtn) {
 }
 
 // ------------------------------------------------------------
+// Aadhaar input formatting (digits only, max 12)
+// ------------------------------------------------------------
+const businessAadharNumber = document.getElementById('businessAadharNumber');
+if (businessAadharNumber) {
+    businessAadharNumber.addEventListener('input', function () {
+        // Strip non-digits and cap at 12 characters
+        this.value = this.value.replace(/\D/g, '').slice(0, 12);
+    });
+}
+
+// ------------------------------------------------------------
+// Aadhaar Verify button logic (Business KYC)
+// ------------------------------------------------------------
+const businessAadharVerifyBtn = document.getElementById('businessAadharVerifyBtn');
+if (businessAadharVerifyBtn) {
+    businessAadharVerifyBtn.addEventListener('click', function () {
+        const aadharInput = document.getElementById('businessAadharNumber');
+        const verifiedBadge = document.getElementById('businessAadharVerifiedBadge');
+
+        if (!aadharInput) {
+            return;
+        }
+
+        const value = aadharInput.value.trim();
+
+        // Aadhaar format: 12 digits, must not start with 0 or 1
+        const aadharRegex = /^[2-9][0-9]{11}$/;
+        if (!aadharRegex.test(value)) {
+            alert('Please enter a valid 12-digit Aadhaar number. It must not start with 0 or 1.');
+            return;
+        }
+
+        const originalHTML = this.innerHTML;
+        this.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> VERIFYING...';
+        this.disabled = true;
+
+        // Simulate a verification request (no real Aadhaar API integrated)
+        setTimeout(() => {
+            this.style.display = 'none';
+            if (verifiedBadge) {
+                verifiedBadge.style.display = 'inline-flex';
+            }
+            this.innerHTML = originalHTML;
+        }, 1200);
+    });
+}
+
+// ------------------------------------------------------------
 // Form Submit
 // ------------------------------------------------------------
 document.getElementById('csbvForm').addEventListener('submit', function (e) {
@@ -220,6 +268,74 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
             alert('Please upload the GST document before continuing.');
             return;
         }
+    }
+
+    // ------------------------------------------------------------
+    // New Business KYC field validations
+    // ------------------------------------------------------------
+
+    // Aadhaar number - required, 12 digits, valid format
+    const businessAadharNumberEl = document.getElementById('businessAadharNumber');
+    if (businessAadharNumberEl) {
+        const aadharValue = businessAadharNumberEl.value.trim();
+        const aadharRegex = /^[2-9][0-9]{11}$/;
+        if (!aadharRegex.test(aadharValue)) {
+            alert('Please enter a valid 12-digit Aadhaar number (must not start with 0 or 1).');
+            return;
+        }
+    }
+
+    // Aadhaar document - required
+    const businessAadharFileInput = document.getElementById('businessAadharFileInput');
+    if (!businessAadharFileInput || businessAadharFileInput.files.length === 0) {
+        alert('Please upload the Aadhaar document before continuing.');
+        return;
+    }
+
+    // Signature document - required
+    const businessSignatureFileInput = document.getElementById('businessSignatureFileInput');
+    if (!businessSignatureFileInput || businessSignatureFileInput.files.length === 0) {
+        alert('Please upload the authorized signature document before continuing.');
+        return;
+    }
+
+    // Billing address - required
+    const billingAddressEl = form.querySelector('textarea[name="billing_address"]');
+    if (billingAddressEl && billingAddressEl.value.trim() === '') {
+        alert('Please enter the billing address.');
+        return;
+    }
+
+    // Billing contact - required
+    const billingContactEl = form.querySelector('input[name="billing_contact"]');
+    if (billingContactEl && billingContactEl.value.trim() === '') {
+        alert('Please enter the billing contact number.');
+        return;
+    }
+
+    // Billing email - required + valid format
+    const billingEmailEl = form.querySelector('input[name="billing_email"]');
+    if (billingEmailEl) {
+        const emailValue = billingEmailEl.value.trim();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (emailValue === '' || !emailRegex.test(emailValue)) {
+            alert('Please enter a valid billing email address.');
+            return;
+        }
+    }
+
+    // Merchant agreement - required PDF
+    const businessMerchantAgreementFileInput = document.getElementById('businessMerchantAgreementFileInput');
+    if (!businessMerchantAgreementFileInput || businessMerchantAgreementFileInput.files.length === 0) {
+        alert('Please upload the signed merchant agreement before continuing.');
+        return;
+    }
+
+    // Terms accepted - must be checked
+    const businessTermsAccepted = document.getElementById('businessTermsAccepted');
+    if (!businessTermsAccepted || !businessTermsAccepted.checked) {
+        alert('Please accept the terms and conditions before continuing.');
+        return;
     }
 
     btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> SUBMITTING...';

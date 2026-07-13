@@ -127,6 +127,19 @@
                                     <a href="{{ url('track-shipment') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                                 </li>
                                 <li>
+                                    @php
+                                        $sidebarCustomer = auth()->guard('customer')->user();
+                                        $sidebarUserType = 'Personal';
+                                        if ($sidebarCustomer && $sidebarCustomer->business_category_id) {
+                                            $sidebarBizCat = \App\Models\BusinessCategory::find($sidebarCustomer->business_category_id);
+                                            if ($sidebarBizCat && $sidebarBizCat->user_type) {
+                                                $sidebarUserType = $sidebarBizCat->user_type;
+                                            }
+                                        }
+                                    @endphp
+                                    <a href="{{ route('customer.kyc.summary') }}"><i class="ti ti-shield-check"></i><span>{{ $sidebarUserType === 'Business' ? 'Business KYC' : 'Personal KYC' }}</span></a>
+                                </li>
+                                <li>
                                     <a href="{{ route('customer.my-profile') }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
                                 <li>

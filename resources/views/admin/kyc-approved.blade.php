@@ -137,6 +137,7 @@
                                                 <th>Customer Name</th>
                                                 <th>Email</th>
                                                 <th>Phone</th>
+                                                <th>KYC Type</th>
                                                 <th>Organization</th>
                                                 <th>GST Number</th>
                                                 <th>Login ID</th>
@@ -153,6 +154,13 @@
                                                 </td>
                                                 <td><a href="mailto:{{ $kyc->customer->email ?? '' }}">{{ $kyc->customer->email ?? '—' }}</a></td>
                                                 <td>{{ $kyc->customer->phone_number ?? '—' }}</td>
+                                                <td>
+                                                    @if(($kyc->kyc_type ?? 'personal') === 'business')
+                                                        <span class="badge bg-info text-white">Business (CSB-V)</span>
+                                                    @else
+                                                        <span class="badge bg-primary">Personal (CSB-IV)</span>
+                                                    @endif
+                                                </td>
                                                 <td class="org-cell">{{ $kyc->organization_name ?? '—' }}</td>
                                                 <td>{{ $kyc->gst_number ?? '—' }}</td>
                                                 <td class="login-id-cell">

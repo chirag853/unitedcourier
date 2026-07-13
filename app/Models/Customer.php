@@ -12,7 +12,7 @@ class Customer extends Authenticatable
 
     protected $fillable = [
         'first_name',
-        'last_name', 
+        'last_name',
         'email',
         'phone_number',
         'alternate_phone_number',
@@ -22,6 +22,8 @@ class Customer extends Authenticatable
         'is_terms_accepted',
         'email_verified',
         'aadhar_verified',
+        'pan_number',
+        'pan_verified',
         'csb_status'
     ];
 
@@ -33,6 +35,7 @@ class Customer extends Authenticatable
         'is_terms_accepted' => 'boolean',
         'email_verified' => 'boolean',
         'aadhar_verified' => 'boolean',
+        'pan_verified' => 'boolean',
         'csb_status' => 'integer',
     ];
 
@@ -44,5 +47,21 @@ class Customer extends Authenticatable
     public function wallet()
     {
         return $this->hasOne(Wallet::class);
+    }
+
+    /**
+     * Get the customer's latest KYC detail record.
+     */
+    public function kycDetail()
+    {
+        return $this->hasOne(KycDetail::class)->latest();
+    }
+
+    /**
+     * Get the customer's latest CSB form record.
+     */
+    public function csbForm()
+    {
+        return $this->hasOne(CsbForm::class)->latest();
     }
 }

@@ -369,6 +369,31 @@
                     </div>
                 </div>
 
+                <!-- KYC Quick Actions -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body p-4">
+                        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
+                            <div>
+                                <h5 class="mb-1 fw-bold">KYC Verification</h5>
+                                <p class="text-muted mb-0" style="font-size:13px;">
+                                    Complete your KYC to start shipping. View your KYC summary or start a new application.
+                                </p>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a href="{{ route('customer.kyc.summary') }}" class="btn btn-primary">
+                                    <i class="ti ti-shield-check me-1"></i> View KYC Summary
+                                </a>
+                                <a href="{{ route('customer.kyc.personal') }}" class="btn btn-light">
+                                    <i class="ti ti-user me-1"></i> Personal KYC
+                                </a>
+                                <a href="{{ route('customer.csb5.form') }}" class="btn btn-light">
+                                    <i class="ti ti-building me-1"></i> Business KYC
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Detail Cards Row -->
                 <div class="row g-3 mb-4">
                     <!-- Personal Information -->

@@ -346,6 +346,72 @@
             padding: 12px;
             background: #fff;
         }
+        /* KYC Type badge in modal header */
+        #vk-kyc-type-badge {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        #vk-kyc-type-badge.type-personal {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        #vk-kyc-type-badge.type-business {
+            background: #cffafe;
+            color: #155e75;
+        }
+        /* Section headings inside modal */
+        .vk-section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1e3a8a;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 6px;
+            margin: 20px 0 12px 0;
+        }
+        /* Document grid for uploaded KYC documents */
+        .kyc-doc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 8px;
+        }
+        .kyc-doc-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .kyc-doc-card .doc-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+        }
+        .kyc-doc-card .doc-link {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1565c0;
+            text-decoration: none;
+            word-break: break-all;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .kyc-doc-card .doc-link:hover {
+            text-decoration: underline;
+        }
+        .kyc-doc-card .doc-empty {
+            font-size: 13px;
+            color: #94a3b8;
+            font-style: italic;
+        }
     </style>
 </head>
 
@@ -419,6 +485,7 @@
                                                 <th>Customer Name</th>
                                                 <th>Email</th>
                                                 <th>Phone</th>
+                                                <th>KYC Type</th>
                                                 <th>Organization</th>
                                                 <th>GST Number</th>
                                                 <th>Submitted At</th>
@@ -434,6 +501,13 @@
                                                 </td>
                                                 <td><a href="mailto:{{ $kyc->customer->email ?? '' }}">{{ $kyc->customer->email ?? '—' }}</a></td>
                                                 <td>{{ $kyc->customer->phone_number ?? '—' }}</td>
+                                                <td>
+                                                    @if(($kyc->kyc_type ?? 'personal') === 'business')
+                                                        <span class="badge bg-info text-white">Business (CSB-V)</span>
+                                                    @else
+                                                        <span class="badge bg-primary">Personal (CSB-IV)</span>
+                                                    @endif
+                                                </td>
                                                 <td class="org-cell">{{ $kyc->organization_name ?? '—' }}</td>
                                                 <td>{{ $kyc->gst_number ?? '—' }}</td>
                                                 <td>
@@ -443,10 +517,15 @@
                                                 </td>
                                                 <td class="action-cell">
                                                     <div class="d-flex flex-wrap gap-1 mb-2">
+                                                        @php
+                                                            $csb = $kyc->customer->csbForm ?? null;
+                                                            $docBase = asset('uploads/');
+                                                        @endphp
                                                         <button type="button" class="btn-view-kyc"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#viewKycModal"
                                                             data-kyc-id="{{ $kyc->id }}"
+                                                            data-kyc-type="{{ $kyc->kyc_type ?? 'personal' }}"
                                                             data-customer-name="{{ $kyc->customer->first_name ?? '' }} {{ $kyc->customer->last_name ?? '' }}"
                                                             data-customer-email="{{ $kyc->customer->email ?? '—' }}"
                                                             data-customer-phone="{{ $kyc->customer->phone_number ?? '—' }}"
@@ -460,6 +539,34 @@
                                                             data-otp-verified="{{ $kyc->otp_verified ? '1' : '0' }}"
                                                             data-terms-accepted="{{ $kyc->terms_accepted ? '1' : '0' }}"
                                                             data-submitted="{{ $kyc->created_at ? $kyc->created_at->format('d M Y, h:i A') : '—' }}"
+                                                            data-pan-number="{{ $kyc->pan_number ?? '' }}"
+                                                            data-pan-holder-name="{{ $kyc->pan_holder_name ?? '' }}"
+                                                            data-pan-dob="{{ $kyc->pan_dob ? $kyc->pan_dob->format('d M Y') : '' }}"
+                                                            data-pan-verified="{{ $kyc->pan_verified ? '1' : '0' }}"
+                                                            data-aadhar-front-doc="{{ $kyc->aadhar_front_document ? $docBase . '/' . ltrim($kyc->aadhar_front_document, '/') : '' }}"
+                                                            data-aadhar-back-doc="{{ $kyc->aadhar_back_document ? $docBase . '/' . ltrim($kyc->aadhar_back_document, '/') : '' }}"
+                                                            data-pan-doc="{{ $kyc->pan_document ? $docBase . '/' . ltrim($kyc->pan_document, '/') : '' }}"
+                                                            data-signature-doc="{{ $kyc->signature_document ? $docBase . '/' . ltrim($kyc->signature_document, '/') : '' }}"
+                                                            data-merchant-agreement-doc="{{ $kyc->merchant_agreement ? $docBase . '/' . ltrim($kyc->merchant_agreement, '/') : '' }}"
+                                                            data-billing-address="{{ $kyc->billing_address ?? '' }}"
+                                                            data-billing-gst="{{ $kyc->billing_gst ?? '' }}"
+                                                            data-billing-contact="{{ $kyc->billing_contact ?? '' }}"
+                                                            data-billing-email="{{ $kyc->billing_email ?? '' }}"
+                                                            data-csb-ad-code="{{ $csb->ad_code ?? '' }}"
+                                                            data-csb-ad-code-doc="{{ $csb && $csb->ad_code_document ? $docBase . '/' . ltrim($csb->ad_code_document, '/') : '' }}"
+                                                            data-csb-iec-number="{{ $csb->iec_number ?? '' }}"
+                                                            data-csb-iec-doc="{{ $csb && $csb->iec_document ? $docBase . '/' . ltrim($csb->iec_document, '/') : '' }}"
+                                                            data-csb-gst-cert-number="{{ $csb->gst_certificate_number ?? '' }}"
+                                                            data-csb-gst-cert-doc="{{ $csb && $csb->gst_certificate_document ? $docBase . '/' . ltrim($csb->gst_certificate_document, '/') : '' }}"
+                                                            data-csb-gst-doc="{{ $csb && $csb->gst_document ? $docBase . '/' . ltrim($csb->gst_document, '/') : '' }}"
+                                                            data-csb-lut-doc="{{ $csb && $csb->lut_document ? $docBase . '/' . ltrim($csb->lut_document, '/') : '' }}"
+                                                            data-csb-lut-expiry="{{ $csb && $csb->lut_expiry_date ? $csb->lut_expiry_date->format('d M Y') : '' }}"
+                                                            data-csb-lut-bond-year="{{ $csb->lut_bond_year ?? '' }}"
+                                                            data-csb-bank-account="{{ $csb->bank_account_number ?? '' }}"
+                                                            data-csb-bank-type="{{ $csb->bank_type ?? '' }}"
+                                                            data-csb-aadhar-doc="{{ $csb && $csb->aadhar_document ? $docBase . '/' . ltrim($csb->aadhar_document, '/') : '' }}"
+                                                            data-csb-signature-doc="{{ $csb && $csb->signature_document ? $docBase . '/' . ltrim($csb->signature_document, '/') : '' }}"
+                                                            data-csb-merchant-agreement-doc="{{ $csb && $csb->merchant_agreement ? $docBase . '/' . ltrim($csb->merchant_agreement, '/') : '' }}"
                                                             title="View KYC Details">
                                                             <i class="ti ti-eye me-1"></i>View KYC
                                                         </button>
@@ -519,6 +626,11 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <!-- KYC Type Badge -->
+                    <div class="mb-3">
+                        <span id="vk-kyc-type-badge" class="badge bg-primary" style="font-size:14px;padding:6px 16px;">Personal (CSB-IV)</span>
+                    </div>
+
                     <!-- KYC Information Grid -->
                     <div class="kyc-info-grid">
                         <div class="kyc-info-item">
@@ -566,6 +678,110 @@
                         <div class="kyc-info-item">
                             <span class="label">Submitted On</span>
                             <span class="value" id="vk-submitted">—</span>
+                        </div>
+                    </div>
+
+                    <!-- ===== Personal KYC Section (PAN + Documents) ===== -->
+                    <div id="vk-personal-section" style="display:none;">
+                        <hr class="my-4">
+                        <h4 class="mb-3"><i class="ti ti-user me-2"></i>Personal KYC Details</h4>
+                        <div class="kyc-info-grid">
+                            <div class="kyc-info-item">
+                                <span class="label">PAN Number</span>
+                                <span class="value">
+                                    <span id="vk-pan-number">—</span>
+                                    <span class="status-badge" id="vk-pan-status"></span>
+                                </span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">PAN Holder Name</span>
+                                <span class="value" id="vk-pan-holder-name">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Date of Birth</span>
+                                <span class="value" id="vk-pan-dob">—</span>
+                            </div>
+                        </div>
+
+                        <h6 class="mt-3 mb-2"><i class="ti ti-files me-2"></i>Documents</h6>
+                        <div class="kyc-doc-grid" id="vk-personal-docs">
+                            <div class="kyc-doc-card" id="vk-doc-aadhar-front"></div>
+                            <div class="kyc-doc-card" id="vk-doc-aadhar-back"></div>
+                            <div class="kyc-doc-card" id="vk-doc-pan"></div>
+                            <div class="kyc-doc-card" id="vk-doc-signature"></div>
+                            <div class="kyc-doc-card" id="vk-doc-merchant-agreement"></div>
+                        </div>
+                    </div>
+
+                    <!-- ===== Business KYC Section (CsbForm fields) ===== -->
+                    <div id="vk-business-section" style="display:none;">
+                        <hr class="my-4">
+                        <h4 class="mb-3"><i class="ti ti-building me-2"></i>Business KYC Details (CSB-V)</h4>
+                        <div class="kyc-info-grid">
+                            <div class="kyc-info-item">
+                                <span class="label">AD Code</span>
+                                <span class="value" id="vk-csb-ad-code">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">IEC Number</span>
+                                <span class="value" id="vk-csb-iec-number">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">GST Certificate Number</span>
+                                <span class="value" id="vk-csb-gst-cert-number">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Bank Account Number</span>
+                                <span class="value" id="vk-csb-bank-account">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Bank Type</span>
+                                <span class="value" id="vk-csb-bank-type">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">LUT Expiry Date</span>
+                                <span class="value" id="vk-csb-lut-expiry">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">LUT Bond Year</span>
+                                <span class="value" id="vk-csb-lut-bond-year">—</span>
+                            </div>
+                        </div>
+
+                        <h6 class="mt-3 mb-2"><i class="ti ti-files me-2"></i>Business Documents</h6>
+                        <div class="kyc-doc-grid" id="vk-business-docs">
+                            <div class="kyc-doc-card" id="vk-doc-csb-aadhar"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-signature"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-ad-code"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-iec"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-gst-cert"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-gst"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-lut"></div>
+                            <div class="kyc-doc-card" id="vk-doc-csb-merchant-agreement"></div>
+                        </div>
+                    </div>
+
+                    <!-- ===== Billing Details (both types) ===== -->
+                    <div id="vk-billing-section" style="display:none;">
+                        <hr class="my-4">
+                        <h4 class="mb-3"><i class="ti ti-receipt me-2"></i>Billing Details</h4>
+                        <div class="kyc-info-grid">
+                            <div class="kyc-info-item" style="grid-column: span 2;">
+                                <span class="label">Billing Address</span>
+                                <span class="value" id="vk-billing-address">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Billing GST</span>
+                                <span class="value" id="vk-billing-gst">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Billing Contact</span>
+                                <span class="value" id="vk-billing-contact">—</span>
+                            </div>
+                            <div class="kyc-info-item">
+                                <span class="label">Billing Email</span>
+                                <span class="value" id="vk-billing-email">—</span>
+                            </div>
                         </div>
                     </div>
 
@@ -660,7 +876,7 @@
                     emptyTable: "No pending KYC submissions found. All submissions have been reviewed.",
                 },
                 columnDefs: [
-                    { orderable: false, targets: 7 }
+                    { orderable: false, targets: 8 }
                 ]
             });
 
@@ -740,6 +956,79 @@
                 } else {
                     img.hide();
                     placeholder.show();
+                }
+
+                // ===== KYC Type badge + section visibility =====
+                var kycType = button.attr('data-kyc-type') || 'personal';
+                var typeBadge = modal.find('#vk-kyc-type-badge');
+                if (kycType === 'business') {
+                    typeBadge.removeClass('bg-primary type-personal')
+                             .addClass('bg-info text-white type-business')
+                             .text('Business (CSB-V)');
+                    modal.find('#vk-personal-section').hide();
+                    modal.find('#vk-business-section').show();
+                } else {
+                    typeBadge.removeClass('bg-info text-white type-business')
+                             .addClass('bg-primary type-personal')
+                             .text('Personal (CSB-IV)');
+                    modal.find('#vk-personal-section').show();
+                    modal.find('#vk-business-section').hide();
+                }
+
+                // ===== Personal KYC: PAN fields =====
+                modal.find('#vk-pan-number').text(button.attr('data-pan-number') || '—');
+                modal.find('#vk-pan-holder-name').text(button.attr('data-pan-holder-name') || '—');
+                modal.find('#vk-pan-dob').text(button.attr('data-pan-dob') || '—');
+                modal.find('#vk-pan-status').html(statusBadge(button.attr('data-pan-verified') === '1', 'Verified', 'Pending'));
+
+                // ===== Document card helper =====
+                function docCard(label, url) {
+                    if (url && url.length > 0) {
+                        return '<span class="doc-label">' + label + '</span>' +
+                               '<a class="doc-link" href="' + url + '" target="_blank" rel="noopener">' +
+                               '<i class="ti ti-external-link"></i> View Document</a>';
+                    }
+                    return '<span class="doc-label">' + label + '</span>' +
+                           '<span class="doc-empty">Not uploaded</span>';
+                }
+
+                // ===== Personal documents =====
+                modal.find('#vk-doc-aadhar-front').html(docCard('Aadhaar Front', button.attr('data-aadhar-front-doc')));
+                modal.find('#vk-doc-aadhar-back').html(docCard('Aadhaar Back', button.attr('data-aadhar-back-doc')));
+                modal.find('#vk-doc-pan').html(docCard('PAN Card', button.attr('data-pan-doc')));
+                modal.find('#vk-doc-signature').html(docCard('Signature', button.attr('data-signature-doc')));
+                modal.find('#vk-doc-merchant-agreement').html(docCard('Merchant Agreement', button.attr('data-merchant-agreement-doc')));
+
+                // ===== Business KYC fields =====
+                modal.find('#vk-csb-ad-code').text(button.attr('data-csb-ad-code') || '—');
+                modal.find('#vk-csb-iec-number').text(button.attr('data-csb-iec-number') || '—');
+                modal.find('#vk-csb-gst-cert-number').text(button.attr('data-csb-gst-cert-number') || '—');
+                modal.find('#vk-csb-bank-account').text(button.attr('data-csb-bank-account') || '—');
+                var bankType = button.attr('data-csb-bank-type') || '';
+                modal.find('#vk-csb-bank-type').text(bankType ? (bankType.charAt(0).toUpperCase() + bankType.slice(1)) : '—');
+                modal.find('#vk-csb-lut-expiry').text(button.attr('data-csb-lut-expiry') || '—');
+                modal.find('#vk-csb-lut-bond-year').text(button.attr('data-csb-lut-bond-year') || '—');
+
+                // ===== Business documents =====
+                modal.find('#vk-doc-csb-aadhar').html(docCard('Aadhaar Document', button.attr('data-csb-aadhar-doc')));
+                modal.find('#vk-doc-csb-signature').html(docCard('Authorized Signature', button.attr('data-csb-signature-doc')));
+                modal.find('#vk-doc-csb-ad-code').html(docCard('AD Code Document', button.attr('data-csb-ad-code-doc')));
+                modal.find('#vk-doc-csb-iec').html(docCard('IEC Certificate', button.attr('data-csb-iec-doc')));
+                modal.find('#vk-doc-csb-gst-cert').html(docCard('GST Certificate', button.attr('data-csb-gst-cert-doc')));
+                modal.find('#vk-doc-csb-gst').html(docCard('GST Document', button.attr('data-csb-gst-doc')));
+                modal.find('#vk-doc-csb-lut').html(docCard('LUT Document', button.attr('data-csb-lut-doc')));
+                modal.find('#vk-doc-csb-merchant-agreement').html(docCard('Merchant Agreement', button.attr('data-csb-merchant-agreement-doc')));
+
+                // ===== Billing details (shown for both types if present) =====
+                var billingAddress = button.attr('data-billing-address') || '';
+                if (billingAddress) {
+                    modal.find('#vk-billing-section').show();
+                    modal.find('#vk-billing-address').text(billingAddress);
+                    modal.find('#vk-billing-gst').text(button.attr('data-billing-gst') || '—');
+                    modal.find('#vk-billing-contact').text(button.attr('data-billing-contact') || '—');
+                    modal.find('#vk-billing-email').text(button.attr('data-billing-email') || '—');
+                } else {
+                    modal.find('#vk-billing-section').hide();
                 }
             });
 

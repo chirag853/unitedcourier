@@ -8716,8 +8716,40 @@
             packageWeights.push(wt);
             totalWeight += wt;
         });
-        if (totalWeight <= 0) totalWeight = 1; // default 1kg
         const isMultiPackage = packageWeights.length > 1;
+
+        // Block rate calculation if no actual weight has been entered.
+        // Rates should only appear when Act. Wt (Kg) is greater than 0.
+        let totalActualWt = 0;
+        const pkgCardsWt = document.querySelectorAll('.rowContaineraddmore');
+        pkgCardsWt.forEach(function(row) {
+            const actWt = parseFloat(getNestedVal(row, 'actual_weight_kg')) || 0;
+            totalActualWt += actWt;
+        });
+        if (totalActualWt <= 0) {
+            resultDiv.style.display = 'block';
+            if (statusBadge) {
+                statusBadge.textContent = 'Blocked';
+                statusBadge.className = 'badge bg-danger';
+            }
+            if (errorDiv) {
+                errorDiv.innerHTML = '<p>Please enter Actual Weight (Act. Wt) greater than 0 to calculate rates.</p>';
+                errorDiv.classList.remove('d-none');
+            }
+            if (cardList) cardList.innerHTML = '';
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
+            }
+            Swal.fire({
+                icon: 'warning',
+                title: 'Weight Required',
+                text: 'Please enter Actual Weight (Act. Wt) greater than 0 to calculate rates.',
+                confirmButtonColor: '#dc3545',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
 
         // Block rate calculation if any package's actual weight exceeds 30 kg.
         // The per-package max actual weight limit is 30 kg; rates should not

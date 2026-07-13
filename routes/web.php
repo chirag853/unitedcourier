@@ -580,6 +580,10 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/verify-gst', [customerController::class, 'verifyGst'])->name('verify.gst');
     Route::post('/verify-aadhar', [customerController::class, 'verifyAadhar'])->name('verify.aadhar');
+    Route::post('/verify-pan', [customerController::class, 'verifyPan'])->name('verify.pan');
+    Route::get('/kyc-personal', [customerController::class, 'personalKyc'])->name('kyc.personal');
+    Route::post('/kyc-personal', [customerController::class, 'storePersonalKyc'])->name('kyc.personal.store');
+    Route::get('/kyc-summary', [customerController::class, 'kycSummary'])->name('kyc.summary');
     Route::post('/create-shipment', [customerController::class, 'storeShipment'])->name('create-shipment.store');
     Route::get('/bulk-upload', [customerController::class, 'bulkUpload'])->name('bulk-upload');
     Route::post('/bulk-upload', [customerController::class, 'processBulkUpload'])->name('bulk-upload.process');
