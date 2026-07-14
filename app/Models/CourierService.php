@@ -25,6 +25,7 @@ class CourierService extends Model
         'description',
         'weight',
         'real_name',
+        'country',
     ];
 
     /**
