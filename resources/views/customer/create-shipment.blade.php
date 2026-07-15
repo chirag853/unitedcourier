@@ -3540,9 +3540,13 @@
                                                                     data-select2-id="12" tabindex="-1"
                                                                     aria-hidden="true">
                                                                     <option value="">Select</option>
-                                                                    @foreach($destinations as $destination)
-                                                                        <option value="{{ $destination->name }}" {{ old('delivery_destination') == $destination->name ? 'selected' : '' }}>{{ $destination->name }}</option>
-                                                                    @endforeach
+                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
+                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
+                                                                    <option value="Canada" {{ old('delivery_destination') == 'Canada' ? 'selected' : '' }}>Canada</option>
+                                                                    <!-- <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
+                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}> CN - China</option>
+                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>RU - Russia</option>
+                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option> -->
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -7030,6 +7034,11 @@
                                             let oversize = false;
                                             let blocked = false;
 
+                                            // Actual weight must never be 0/empty — always warn.
+                                            if (actualWt <= 0) {
+                                                messages.push('Actual weight cannot be 0. Please enter a valid actual weight (kg).');
+                                                blocked = true;
+                                            }
                                             if (actualWt > PKG_LIMITS.maxActualWeight) {
                                                 messages.push('Actual weight ' + actualWt.toFixed(2) +
                                                     ' kg exceeds max ' + PKG_LIMITS.maxActualWeight + ' kg.');
@@ -7189,8 +7198,14 @@
                                                 const w = parseFloat(card.querySelector('[name$="[width_cm]"]')?.value) || 0;
                                                 const h = parseFloat(card.querySelector('[name$="[height_cm]"]')?.value) || 0;
                                                 const volWtInput = card.querySelector('[name$="[volumetric_weight]"]');
-                                                if (volWtInput && l > 0 && w > 0 && h > 0) {
-                                                    volWtInput.value = ((l * w * h) / 5000).toFixed(2);
+                                                if (volWtInput) {
+                                                    if (l > 0 && w > 0 && h > 0) {
+                                                        volWtInput.value = ((l * w * h) / 5000).toFixed(2);
+                                                    } else {
+                                                        // Reset volumetric weight to 0 when any dimension is missing/zero
+                                                        // so chargeable weight also becomes 0 (max of actual & vol).
+                                                        volWtInput.value = '';
+                                                    }
                                                 }
                                                 updateChargeableWeight(card);
                                             }
@@ -7878,7 +7893,11 @@
                                                                     <span class="badge bg-success" id="rateStatusBadge">Success</span>
                                                                 </div>
                                                                 <div class="card-body">
-                                                                    <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div>
+
+
+                                                                    <!-- <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div> -->
+
+
                                                                     <!-- <div class="d-flex align-items-center gap-2 mb-3 text-muted small fw-semibold">
                                                                         <span class="ms-1">Method</span>
                                                                         <span class="ms-auto">Delivery Days</span>
@@ -8083,7 +8102,7 @@
                                     <!-- /Access -->
                                     <div class="mt-4 d-flex align-items-center justify-content-end">
                                         <button type="reset" class="btn btn-light me-2">Reset</button>
-                                        <button type="button" class="btn btn-primary" id="previewOrderBtn">
+                                        <button type="button" class="btn btn-primary" id="previewOrderBtn" disabled>
                                             <i class="ti ti-eye me-1"></i> Preview Order
                                         </button>
                                         <button type="submit" class="btn btn-primary d-none" id="hiddenSubmitBtn">Create Now</button>
@@ -8716,40 +8735,8 @@
             packageWeights.push(wt);
             totalWeight += wt;
         });
+        if (totalWeight <= 0) totalWeight = 1; // default 1kg
         const isMultiPackage = packageWeights.length > 1;
-
-        // Block rate calculation if no actual weight has been entered.
-        // Rates should only appear when Act. Wt (Kg) is greater than 0.
-        let totalActualWt = 0;
-        const pkgCardsWt = document.querySelectorAll('.rowContaineraddmore');
-        pkgCardsWt.forEach(function(row) {
-            const actWt = parseFloat(getNestedVal(row, 'actual_weight_kg')) || 0;
-            totalActualWt += actWt;
-        });
-        if (totalActualWt <= 0) {
-            resultDiv.style.display = 'block';
-            if (statusBadge) {
-                statusBadge.textContent = 'Blocked';
-                statusBadge.className = 'badge bg-danger';
-            }
-            if (errorDiv) {
-                errorDiv.innerHTML = '<p>Please enter Actual Weight (Act. Wt) greater than 0 to calculate rates.</p>';
-                errorDiv.classList.remove('d-none');
-            }
-            if (cardList) cardList.innerHTML = '';
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
-            }
-            Swal.fire({
-                icon: 'warning',
-                title: 'Weight Required',
-                text: 'Please enter Actual Weight (Act. Wt) greater than 0 to calculate rates.',
-                confirmButtonColor: '#dc3545',
-                confirmButtonText: 'OK'
-            });
-            return;
-        }
 
         // Block rate calculation if any package's actual weight exceeds 30 kg.
         // The per-package max actual weight limit is 30 kg; rates should not
@@ -8780,6 +8767,9 @@
                 errorDiv.classList.remove('d-none');
             }
             if (cardList) cardList.innerHTML = '';
+            // Disable Preview Order button when rate calculation is blocked.
+            const previewBtnOw = document.getElementById('previewOrderBtn');
+            if (previewBtnOw) previewBtnOw.disabled = true;
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
@@ -8795,6 +8785,115 @@
             Swal.fire({
                 icon: 'warning',
                 title: 'Actual Weight Exceeds Limit',
+                html: warningHtml,
+                confirmButtonColor: '#dc3545',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Block rate calculation if any package has actual weight 0/empty.
+        // Actual weight must never be 0 — show a clear error before rates load.
+        let zeroActualWeightPackages = [];
+        const pkgCardsActual = document.querySelectorAll('.rowContaineraddmore');
+        pkgCardsActual.forEach(function(row, idx) {
+            const actualWt = parseFloat(getNestedVal(row, 'actual_weight_kg')) || 0;
+            if (actualWt <= 0) {
+                zeroActualWeightPackages.push({ box: idx + 1, actualWt: actualWt });
+            }
+        });
+        if (zeroActualWeightPackages.length > 0) {
+            // Make the rate result area visible so the inline warning
+            // (status badge + error div) is shown in the rate calculate section.
+            resultDiv.style.display = 'block';
+            if (statusBadge) {
+                statusBadge.textContent = 'Blocked';
+                statusBadge.className = 'badge bg-danger';
+            }
+            if (errorDiv) {
+                let errHtml = '<p>Rate calculation is blocked because the following package(s) have actual weight 0 or empty:</p><ul style="text-align:left;">';
+                zeroActualWeightPackages.forEach(function(p) {
+                    errHtml += '<li><strong>Box #' + p.box + ':</strong> Actual Wt: ' + p.actualWt.toFixed(2) + ' kg</li>';
+                });
+                errHtml += '</ul><p>Actual weight cannot be 0. Please enter a valid actual weight for all packages and try again.</p>';
+                errorDiv.innerHTML = errHtml;
+                errorDiv.classList.remove('d-none');
+            }
+            if (cardList) cardList.innerHTML = '';
+            // Disable Preview Order button when rate calculation is blocked.
+            const previewBtnZaw = document.getElementById('previewOrderBtn');
+            if (previewBtnZaw) previewBtnZaw.disabled = true;
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
+            }
+            // Show a SweetAlert2 warning popup listing the packages with 0 actual weight
+            let warningHtml = '<div style="text-align:left;">' +
+                '<p>The following package(s) have actual weight <strong>0 or empty</strong>:</p><ul style="text-align:left;">';
+            zeroActualWeightPackages.forEach(function(p) {
+                warningHtml += '<li><strong>Box #' + p.box + ':</strong> Actual Wt: ' + p.actualWt.toFixed(2) + ' kg</li>';
+            });
+            warningHtml += '</ul><p style="color:#dc3545;font-weight:600;">Actual weight cannot be 0.</p>' +
+                '<p>Please enter a valid actual weight for all packages.</p></div>';
+            Swal.fire({
+                icon: 'warning',
+                title: 'Actual Weight Is 0',
+                html: warningHtml,
+                confirmButtonColor: '#dc3545',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Block rate calculation if any package has no chargeable weight
+        // (i.e., actual weight AND dimensions are 0/empty). Chargeable weight
+        // = max(actual, volumetric); when it is 0 the package has no usable
+        // weight, so rates should not be shown until the user enters valid data.
+        let zeroWeightPackages = [];
+        const pkgCardsAll = document.querySelectorAll('.rowContaineraddmore');
+        pkgCardsAll.forEach(function(row, idx) {
+            const actualWt = parseFloat(getNestedVal(row, 'actual_weight_kg')) || 0;
+            const chgWt = parseFloat(getNestedVal(row, 'chargeable_weight')) || 0;
+            if (chgWt <= 0) {
+                zeroWeightPackages.push({ box: idx + 1, actualWt: actualWt, chgWt: chgWt });
+            }
+        });
+        if (zeroWeightPackages.length > 0) {
+            // Make the rate result area visible so the inline warning
+            // (status badge + error div) is shown in the rate calculate section.
+            resultDiv.style.display = 'block';
+            if (statusBadge) {
+                statusBadge.textContent = 'Blocked';
+                statusBadge.className = 'badge bg-danger';
+            }
+            if (errorDiv) {
+                let errHtml = '<p>Rate calculation is blocked because the following package(s) have no valid weight (actual weight and dimensions are 0/empty):</p><ul style="text-align:left;">';
+                zeroWeightPackages.forEach(function(p) {
+                    errHtml += '<li><strong>Box #' + p.box + ':</strong> Actual Wt: ' + p.actualWt.toFixed(2) + ' kg, Chg. Wt: ' + p.chgWt.toFixed(2) + ' kg</li>';
+                });
+                errHtml += '</ul><p>Please enter a valid actual weight (and/or dimensions) for all packages and try again.</p>';
+                errorDiv.innerHTML = errHtml;
+                errorDiv.classList.remove('d-none');
+            }
+            if (cardList) cardList.innerHTML = '';
+            // Disable Preview Order button when rate calculation is blocked.
+            const previewBtnZw = document.getElementById('previewOrderBtn');
+            if (previewBtnZw) previewBtnZw.disabled = true;
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate Rate';
+            }
+            // Show a SweetAlert2 warning popup listing the packages with no weight
+            let warningHtml = '<div style="text-align:left;">' +
+                '<p>The following package(s) have no valid weight (actual weight and dimensions are 0/empty):</p><ul style="text-align:left;">';
+            zeroWeightPackages.forEach(function(p) {
+                warningHtml += '<li><strong>Box #' + p.box + ':</strong> Actual Wt: ' + p.actualWt.toFixed(2) + ' kg, Chg. Wt: ' + p.chgWt.toFixed(2) + ' kg</li>';
+            });
+            warningHtml += '</ul><p style="color:#dc3545;font-weight:600;">Chargeable weight cannot be 0.</p>' +
+                '<p>Please enter a valid actual weight and/or dimensions for all packages.</p></div>';
+            Swal.fire({
+                icon: 'warning',
+                title: 'Missing Package Weight',
                 html: warningHtml,
                 confirmButtonColor: '#dc3545',
                 confirmButtonText: 'OK'
@@ -8826,6 +8925,7 @@
             }
 
             if (data.success) {
+                console.log(data);
                 // Show customer + zone info
                 if (customerInfo) {
                     customerInfo.style.display = 'block';
@@ -8842,6 +8942,10 @@
                     }
                     customerInfo.textContent = infoText;
                 }
+
+                // Enable the Preview Order button now that rates have loaded.
+                const previewBtn = document.getElementById('previewOrderBtn');
+                if (previewBtn) previewBtn.disabled = false;
 
                 // Build selectable rate cards with breakdown — grouped by zone
                 let cardsHtml = '';
@@ -9039,33 +9143,23 @@
                     let globalIndex = 0;
 
                     // Render zone-independent group first (if exists)
-                    if (zoneGroups['general']) {
-                        cardsHtml += `<div class="zone-group mb-4">
-                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
-                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
-                            </div>`;
-                        zoneGroups['general'].forEach(function(r) {
-                            const isChecked = globalIndex === 0;
-                            cardsHtml += renderRateCard(r, globalIndex, isChecked);
-                            globalIndex++;
-                        });
-                        cardsHtml += `</div>`;
-                    }
+                    // if (zoneGroups['general']) {
+                    //     cardsHtml += `<div class="zone-group mb-4">
+                    //         <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
+                    //             <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
+                    //         </div>`;
+                    //     zoneGroups['general'].forEach(function(r) {
+                    //         const isChecked = globalIndex === 0;
+                    //         cardsHtml += renderRateCard(r, globalIndex, isChecked);
+                    //         globalIndex++;
+                    //     });
+                    //     cardsHtml += `</div>`;
+                    // }
 
                     // Render zone-specific groups
                     const zoneKeys = Object.keys(zoneGroups).filter(k => k !== 'general');
                     zoneKeys.forEach(function(zoneKey) {
-                        console.log('Rendering rates for zone:', zoneKey, 'with rates:', zoneGroups[zoneKey]);
-                        // console.log(zoneGroups[zoneKey][0].zone_name);
-                        // Build zone header label using zone info from response
-                        let zoneLabel = 'Zone ' + zoneKey;
-                        if (data.zone && String(data.zone.zone_number) === zoneKey) {
-                            zoneLabel = 'Zone ' + zoneKey + ' - ' + data.zone.zone_name + ' (' + data.zone.zone_code + ')';
-                        }
-                        cardsHtml += `<div class="zone-group mb-4">
-                            <div class="zone-group-header" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
-                                <i class="fas fa-map-marker-alt me-2"></i> ${zoneGroups[zoneKey][0].zone_name}
-                            </div>`;
+                        cardsHtml += `<div class="zone-group mb-4">`;
                         zoneGroups[zoneKey].forEach(function(r) {
                             const isChecked = globalIndex === 0;
                             cardsHtml += renderRateCard(r, globalIndex, isChecked);
@@ -9111,6 +9205,9 @@
                 cardList.innerHTML = '';
                 errorDiv.textContent = data.message || 'Failed to get rate';
                 errorDiv.classList.remove('d-none');
+                // Disable Preview Order button when rate calculation fails.
+                const previewBtnFail = document.getElementById('previewOrderBtn');
+                if (previewBtnFail) previewBtnFail.disabled = true;
             }
         })
         .catch(err => {
@@ -9123,6 +9220,9 @@
                 statusBadge.textContent = 'Error';
                 statusBadge.className = 'badge bg-danger';
             }
+            // Disable Preview Order button on network error.
+            const previewBtnErr = document.getElementById('previewOrderBtn');
+            if (previewBtnErr) previewBtnErr.disabled = true;
         })
         .finally(() => {
             if (btn) {
@@ -10341,6 +10441,11 @@ if (rateRadio && rateRadio.dataset.rate) {
         integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ=="
         data-cf-beacon='{"rayId":"967b314f0fc122a8","version":"2025.7.0","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"token":"3ca157e612a14eccbb30cf6db6691c29","b":1}'
         crossorigin="anonymous"></script>
+</body>
+<!-- Mirrored from crms.dreamstechnologies.com/html/template/contacts.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:56:53 GMT -->
+
+</html>
+</script>
 </body>
 <!-- Mirrored from crms.dreamstechnologies.com/html/template/contacts.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:56:53 GMT -->
 

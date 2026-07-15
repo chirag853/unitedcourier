@@ -2969,6 +2969,8 @@ class customerController extends Controller
         return $data['access_token'];
     }
 
+
+    // new ups rate made by "Anil Sir"
     public function getUpsRate(Request $request)
     {
         //try {
@@ -2982,14 +2984,14 @@ class customerController extends Controller
             }
 
             // 2. Get all inputs
-            $serviceId = $request->service_id;
+            //$serviceId = $request->service_id;
             $totalWeight = floatval($request->total_weight ?? 0);
             $consigneeState = $request->consignee_state;
             $deliveryDestination = $request->delivery_destination;
-           $packageWeights = $request->package_weights;
-           // $isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
+            $packageWeights = $request->package_weights;
+           //$isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
             $isMultiPackage = is_array($packageWeights) ? count($packageWeights) :1;
-
+			
             // 3. Weight validation
             if ($totalWeight <= 0) {
                 return response()->json([
@@ -3011,64 +3013,33 @@ class customerController extends Controller
                 $zone = !empty($zone) ? $zone[0] : null;
             }
             $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
-            $zoneNumber = $zone ? $zone->zone_number_testing : null;
+            $zoneNumber = !empty($zone) ? $zone->zone_number_testing : null;
 
             // 5. Get services
-            if ($serviceId) {
-                $serviceRows = \DB::select(
-                    "SELECT * FROM courier_services WHERE id = ? LIMIT 1",
-                    [$serviceId]
-                );
-                $service = !empty($serviceRows) ? $serviceRows[0] : null;
-                
-                // Check if service is available for this destination
-                if (!$service || strcasecmp($service->country ?? 'US', $destinationCountry) !== 0) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Service not available for this destination.'
-                    ], 404);
-                }
-                
-                // For multi-package US, only allow UNITED GROUND PREMIUM
-                if ($isMultiPackage && $destinationCountry === 'US' && 
-                    strcasecmp($service->method, 'UNITED GROUND PREMIUM') !== 0) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'For multiple packages, only UNITED GROUND PREMIUM service is available.'
-                    ], 400);
-                }
-                
-                $services = [$service];
-            } else {
-                // Get all services
-                $allServices = \DB::select(
-                    "SELECT * FROM courier_services ORDER BY network ASC, method ASC"
-                );
-                
-                // For multi-package US, filter only UNITED GROUND PREMIUM
-                if ($isMultiPackage && $destinationCountry === 'US') {
-                    $services = array_filter($allServices, function($s) {
-                        return strcasecmp($s->method, 'UNITED GROUND PREMIUM') === 0;
-                    });
-                    // Re-index array
-                    $services = array_values($services);
-                } else {
-                    $services = $allServices;
-                }
+            /*$serviceRows = \DB::select(
+				 "SELECT * FROM courier_services WHERE country = ? LIMIT 1",
+                [$destinationCountry]
+            );*/
+            $services = CourierService::where('country', $destinationCountry)->get();
+            
+            if(empty($services)){
+            	return response()->json([
+                    'success' => false,
+                    'message' => 'Service not available.'
+                ], 404); 
             }
-
+            
+            //print_r($services); exit;   
             // 6. Process rates - SINGLE LOOP
             $allRates = [];
             $customerRatesExist = false;
             $singleServiceModel = null;
                 
-            foreach ($services as $service) {
+            foreach ($services as $key=>$service) {
                 
                 // ========== SPECIAL CASE: US Multi-package with United Ground Premium ==========
-                if ($destinationCountry === 'US' && 
-                    strcasecmp($service->method, 'UNITED GROUND PREMIUM') === 0) {
+                if ($destinationCountry === 'US' && strtolower($service->method)=='united ground premium') {
                         // echo 'A';
-                    
                     // Box-wise calculation
                     $boxBreakdown = [];
                     $combinedBase = 0;
@@ -3076,11 +3047,12 @@ class customerController extends Controller
                     $combinedGst = 0;
                     $firstMatchedRate = null;
                     $allBoxesMatched = true;
-
-                    
-
+					
                     foreach ($packageWeights as $index => $pkgWt) {
                       $pkgWt = floatval($pkgWt);
+                      
+                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+					//echo "<br>";
 
                         // Try customer rates first
                         $boxRate = \DB::select(
@@ -3089,98 +3061,186 @@ class customerController extends Controller
                             INNER JOIN courier_services cs ON cr.service_id = cs.id
                             WHERE cr.customer_id = ?
                             AND cr.service_id = ?
-                            AND cs.country = 'US'
-                            AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
-                            AND cr.wt_range_start <= ? AND cr.wt_range_end >= ?
+                            AND cs.country = ?
+                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
                             ORDER BY cr.zone_no DESC, cr.wt_range_start
                             LIMIT 1",
-                            [$customer->id, $service->id, $zoneNumber, $pkgWt, $pkgWt]
+                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
 
-                        // If no customer rate, try default
-                        if (empty($boxRate)) {
-                            $boxRate = \DB::select(
-                                "SELECT cr.*, cs.country, cs.service_code, cs.method
-                                FROM courier_rates cr
-                                INNER JOIN courier_services cs ON cr.service_id = cs.id
-                                WHERE cr.customer_id = 0
-                                AND cr.service_id = ?
-                                AND cs.country = 'US'
-                                AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
-                                AND cr.wt_range_start <= ? AND cr.wt_range_end >= ?
-                                ORDER BY cr.zone_no DESC, cr.wt_range_start
-                                LIMIT 1",
-                                [$service->id, $zoneNumber, $pkgWt, $pkgWt]
-                            );
+                        // print_r($boxRate);
+                        // exit;
+                        
+                        if(!empty($boxRate)){
+                        	$boxRate = $boxRate[0];
+
+	                        // Calculate per-box amounts
+	                        $base = floatval($boxRate->price);
+	                        $fuel = floatval($boxRate->fuel_charge) > 0 
+	                            ? floatval($boxRate->fuel_charge) 
+	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+	                        $gst = floatval($boxRate->gst_amount) > 0 
+	                            ? floatval($boxRate->gst_amount) 
+	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+	                        $boxBreakdown[] = [
+	                            'box' => $index + 1,
+	                            'weight' => $pkgWt,
+	                            'base' => $base,
+	                            'fuel' => $fuel,
+	                            'gst' => $gst,
+	                            'total' => $base + $fuel + $gst,
+	                        ];
+
+	                        $combinedBase += $base;
+	                        $combinedFuel += $fuel;
+	                        $combinedGst += $gst;
+	                        
                         }
+                        /*else{
+                        	
+                        	return response()->json([
+			                    'success' => false,
+			                    'message' => 'Service rate not available. Please contact to support.'
+			                ], 404);
+                        }*/ 
+                        
+                    }//end foreach loop
 
-                        $boxRate = $boxRate[0];
-
-                        // Calculate per-box amounts
-                        $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0 
-                            ? floatval($boxRate->fuel_charge) 
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-                        $gst = floatval($boxRate->gst_amount) > 0 
-                            ? floatval($boxRate->gst_amount) 
-                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
-
-                        $boxBreakdown[] = [
-                            'box' => $index + 1,
-                            'weight' => $pkgWt,
-                            'base' => $base,
-                            'fuel' => $fuel,
-                            'gst' => $gst,
-                            'total' => $base + $fuel + $gst,
-                        ];
-
-                        $combinedBase += $base;
-                        $combinedFuel += $fuel;
-                        $combinedGst += $gst;
-                    }
-
-                    // if ($allBoxesMatched && $firstMatchedRate) {
-                        $allRates[] = [
-                            // 'rate_id' => $firstMatchedRate->id,
-                            'service_id' => $service->id,
-                            'method' => $service->method,
-                            'method_display' => $service->method . ' ' . $service->tat,
-                            'network' => $service->network,
-                            'method_code' => $service->method_code,
-                            'tat' => $service->tat,
-                            'delivery_days' => $service->tat,
-                            'scode' => $service->scode,
-                            'price' => $combinedBase,
-                            // 'zone_no' => $firstMatchedRate->zone_no,
-                          
-                            'pkg_wt' => $pkgWt,
-                            // 'wt_range_start' => $firstMatchedRate->wt_range_start,
-                            // 'wt_range_end' => $firstMatchedRate->wt_range_end,
-                            'fuel_charge' => $combinedFuel,
-                            'fuel_percentage' => 0,
-                            'gst_percentage' => 0,
-                            'gst_amount' => $combinedGst,
-                            'is_multi_package' => true,
-                            'box_breakdown' => $boxBreakdown,
-                        ];
-                    // }
-                    
-                    //continue; // Skip standard processing for this service
+                   
+                    $allRates[] = [
+                        // 'rate_id' => $firstMatchedRate->id,
+                        'service_id' => $service->id,
+                        'method' => $service->method,
+                        'method_display' => $service->method . ' ' . $service->tat,
+                        'network' => $service->network,
+                        'method_code' => $service->method_code,
+                        'tat' => $service->tat,
+                        'delivery_days' => $service->tat,
+                        'scode' => $service->scode,
+                        'consigneeState' => $consigneeState,
+                        'zone_no' => $zoneNumber,
+                        // i want to print zone name
+                        'zone_name' => $zoneName ?? null,
+                        'pkg_wt' => $pkgWt,
+                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
+                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
+                        'price' => $combinedBase,
+                        'fuel_charge' => $combinedFuel,
+                        'fuel_percentage' => 0,
+                        'gst_percentage' => 0,
+                        'gst_amount' => $combinedGst,
+                        'is_multi_package' => true,
+                        'box_breakdown' => $boxBreakdown,
+                    ];
+                
                 }//end if
+                
+                if ($destinationCountry === 'US' && $isMultiPackage<=1 && strtolower($service->method)!='united ground premium') {
+				    // Box-wise calculation
+				    $boxBreakdown = [];
+				    $combinedBase = 0;
+				    $combinedFuel = 0;
+				    $combinedGst = 0;
+				    $firstMatchedRate = null;
+				    $allBoxesMatched = true;
 
+				    foreach ($packageWeights as $index => $pkgWt) {
+				        $pkgWt = floatval($pkgWt) ?: 1;
 
-                if ($destinationCountry === 'US' && !$isMultiPackage && strcasecmp($service->method, 'UNITED GROUND PREMIUM')!= 0) {
-                    echo 'B';
-                    // Box-wise calculation
-                    $boxBreakdown = [];
+				        // Try customer rates first
+				        $boxRate = \DB::select(
+				            "SELECT cr.*, cs.country, cs.service_code, cs.method
+				            FROM courier_rates cr
+				            INNER JOIN courier_services cs ON cr.service_id = cs.id
+				            WHERE cr.customer_id = ?
+				            AND cr.service_id = ?
+				            AND cs.country = ?
+				            AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
+				            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+				            ORDER BY cr.zone_no DESC, cr.wt_range_start
+				            LIMIT 1",
+				            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+				        );
+
+				        // If no customer rate, try default
+				        
+						if(!empty($boxRate)){
+							$boxRate = $boxRate[0];
+				        
+				            // Calculate per-box amounts
+				            $base = floatval($boxRate->price);
+				            $fuel = floatval($boxRate->fuel_charge) > 0 
+				                ? floatval($boxRate->fuel_charge) 
+				                : ($base * floatval($boxRate->fuel_percentage) / 100);
+				            $gst = floatval($boxRate->gst_amount) > 0 
+				                ? floatval($boxRate->gst_amount) 
+				                : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+				            $boxBreakdown[] = [
+				                'box' => $index + 1,
+				                'weight' => $pkgWt,
+				                'base' => $base,
+				                'fuel' => $fuel,
+				                'gst' => $gst,
+				                'total' => $base + $fuel + $gst,
+				            ];
+
+				            $combinedBase += $base;
+				            $combinedFuel += $fuel;
+				            $combinedGst += $gst;
+				            
+						}
+						/*else{
+							
+							return response()->json([
+				                'success' => false,
+				                'message' => 'Service rate not available. Please contact to support.'
+				            ], 404);
+						}*/
+				        
+				    }
+
+				    $allRates[] = [
+				        // 'rate_id' => $firstMatchedRate->id,
+				        'service_id' => $service->id,
+				        'method' => $service->method,
+				        'method_display' => $service->method . ' ' . $service->tat,
+				        'network' => $service->network,
+				        'method_code' => $service->method_code,
+				        'tat' => $service->tat,
+				        'delivery_days' => $service->tat,
+				        'scode' => $service->scode,
+				        'consigneeState' => $consigneeState,
+				        'zone_no' => $zoneNumber,
+				        'pkg_wt' => $pkgWt,
+				        //'wt_range_start' => $firstMatchedRate->wt_range_start,
+				        //'wt_range_end' => $firstMatchedRate->wt_range_end,
+				        'price' => $combinedBase,
+				        'fuel_charge' => $combinedFuel,
+				        'fuel_percentage' => 0,
+				        'gst_percentage' => 0,
+				        'gst_amount' => $combinedGst,
+				        'is_multi_package' => true,
+				        'box_breakdown' => $boxBreakdown,
+				    ];
+
+				}//end if
+
+				if ($destinationCountry === 'UK'){
+					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
                     $combinedGst = 0;
                     $firstMatchedRate = null;
                     $allBoxesMatched = true;
-
+					
                     foreach ($packageWeights as $index => $pkgWt) {
-                        $pkgWt = floatval($pkgWt) ?: 1;
+                      $pkgWt = floatval($pkgWt);
+                      
+                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+					//echo "<br>";
 
                         // Try customer rates first
                         $boxRate = \DB::select(
@@ -3189,96 +3249,173 @@ class customerController extends Controller
                             INNER JOIN courier_services cs ON cr.service_id = cs.id
                             WHERE cr.customer_id = ?
                             AND cr.service_id = ?
-                            AND cs.country = 'US'
-                            AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
-                            AND cr.wt_range_start <= ? AND cr.wt_range_end >= ?
+                            AND cs.country = ?
+                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
                             ORDER BY cr.zone_no DESC, cr.wt_range_start
                             LIMIT 1",
-                            [$customer->id, $service->id, $zoneNumber, $pkgWt, $pkgWt]
+                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
 
-                        // If no customer rate, try default
-                        if (empty($boxRate)) {
-                            $boxRate = \DB::select(
-                                "SELECT cr.*, cs.country, cs.service_code, cs.method
-                                FROM courier_rates cr
-                                INNER JOIN courier_services cs ON cr.service_id = cs.id
-                                WHERE cr.customer_id = 0
-                                AND cr.service_id = ?
-                                AND cs.country = 'US'
-                                AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
-                                AND cr.wt_range_start <= ? AND cr.wt_range_end >= ?
-                                ORDER BY cr.zone_no DESC, cr.wt_range_start
-                                LIMIT 1",
-                                [$service->id, $zoneNumber, $pkgWt, $pkgWt]
-                            );
-                        }
-
-                        if (empty($boxRate)) {
-                            $allBoxesMatched = false;
-                            break;
-                        }
-
-                        $boxRate = $boxRate[0];
+                        //print_r($boxRate);
                         
-                        if (!$firstMatchedRate) {
-                            $firstMatchedRate = $boxRate;
-                            $customerRatesExist = true;
+                        if(!empty($boxRate)){
+                        	$boxRate = $boxRate[0];
+
+	                        // Calculate per-box amounts
+	                        $base = floatval($boxRate->price);
+	                        $fuel = floatval($boxRate->fuel_charge) > 0 
+	                            ? floatval($boxRate->fuel_charge) 
+	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+	                        $gst = floatval($boxRate->gst_amount) > 0 
+	                            ? floatval($boxRate->gst_amount) 
+	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+	                        $boxBreakdown[] = [
+	                            'box' => $index + 1,
+	                            'weight' => $pkgWt,
+	                            'base' => $base,
+	                            'fuel' => $fuel,
+	                            'gst' => $gst,
+	                            'total' => $base + $fuel + $gst,
+	                        ];
+
+	                        $combinedBase += $base;
+	                        $combinedFuel += $fuel;
+	                        $combinedGst += $gst;
+	                        
                         }
+                        /*else{
+                        	
+                        	return response()->json([
+			                    'success' => false,
+			                    'message' => 'Service rate not available. Please contact to support.'
+			                ], 404);
+                        }*/ 
+                        
+                    }//end foreach loop
 
-                        // Calculate per-box amounts
-                        $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0 
-                            ? floatval($boxRate->fuel_charge) 
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-                        $gst = floatval($boxRate->gst_amount) > 0 
-                            ? floatval($boxRate->gst_amount) 
-                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+                   
+                    $allRates[] = [
+                        // 'rate_id' => $firstMatchedRate->id,
+                        'service_id' => $service->id,
+                        'method' => $service->method,
+                        'method_display' => $service->method . ' ' . $service->tat,
+                        'network' => $service->network,
+                        'method_code' => $service->method_code,
+                        'tat' => $service->tat,
+                        'delivery_days' => $service->tat,
+                        'scode' => $service->scode,
+                        'consigneeState' => $consigneeState,
+                        'zone_no' => $zoneNumber,
+                        'pkg_wt' => $pkgWt,
+                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
+                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
+                        'price' => $combinedBase,
+                        'fuel_charge' => $combinedFuel,
+                        'fuel_percentage' => 0,
+                        'gst_percentage' => 0,
+                        'gst_amount' => $combinedGst,
+                        'is_multi_package' => true,
+                        'box_breakdown' => $boxBreakdown,
+                    ];
+				}
+				
+				if ($destinationCountry === 'Canada'){
+					$boxBreakdown = [];
+                    $combinedBase = 0;
+                    $combinedFuel = 0;
+                    $combinedGst = 0;
+                    $firstMatchedRate = null;
+                    $allBoxesMatched = true;
+					
+                    foreach ($packageWeights as $index => $pkgWt) {
+                      $pkgWt = floatval($pkgWt);
+                      
+                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+					//echo "<br>";
 
-                        $boxBreakdown[] = [
-                            'box' => $index + 1,
-                            'weight' => $pkgWt,
-                            'base' => $base,
-                            'fuel' => $fuel,
-                            'gst' => $gst,
-                            'total' => $base + $fuel + $gst,
-                        ];
+                        // Try customer rates first
+                        $boxRate = \DB::select(
+                            "SELECT cr.*, cs.country, cs.service_code, cs.method
+                            FROM courier_rates cr
+                            INNER JOIN courier_services cs ON cr.service_id = cs.id
+                            WHERE cr.customer_id = ?
+                            AND cr.service_id = ?
+                            AND cs.country = ?
+                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                            ORDER BY cr.zone_no DESC, cr.wt_range_start
+                            LIMIT 1",
+                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                        );
 
-                        $combinedBase += $base;
-                        $combinedFuel += $fuel;
-                        $combinedGst += $gst;
-                    }
+                        //print_r($boxRate);
+                        
+                        if(!empty($boxRate)){
+                        	$boxRate = $boxRate[0];
 
-                    if ($allBoxesMatched && $firstMatchedRate) {
-                        $allRates[] = [
-                            'rate_id' => $firstMatchedRate->id,
-                            'service_id' => $service->id,
-                            'method' => $service->method,
-                            'method_display' => $service->method . ' ' . $service->tat,
-                            'network' => $service->network,
-                            'method_code' => $service->method_code,
-                            'tat' => $service->tat,
-                            'delivery_days' => $service->tat,
-                            'scode' => $service->scode,
-                            'price' => $combinedBase,
-                            'zone_no' => $firstMatchedRate->zone_no,
-                            'wt_range_start' => $firstMatchedRate->wt_range_start,
-                            'wt_range_end' => $firstMatchedRate->wt_range_end,
-                            'fuel_charge' => $combinedFuel,
-                            'fuel_percentage' => 0,
-                            'gst_percentage' => 0,
-                            'gst_amount' => $combinedGst,
-                            'is_multi_package' => true,
-                            'box_breakdown' => $boxBreakdown,
-                        ];
-                    }
-                    
-                    if ($serviceId) {
-                        $singleServiceModel = $service;
-                    }
-                    //continue; // Skip standard processing for this service
-                }//end if
+	                        // Calculate per-box amounts
+	                        $base = floatval($boxRate->price);
+	                        $fuel = floatval($boxRate->fuel_charge) > 0 
+	                            ? floatval($boxRate->fuel_charge) 
+	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+	                        $gst = floatval($boxRate->gst_amount) > 0 
+	                            ? floatval($boxRate->gst_amount) 
+	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
 
+	                        $boxBreakdown[] = [
+	                            'box' => $index + 1,
+	                            'weight' => $pkgWt,
+	                            'base' => $base,
+	                            'fuel' => $fuel,
+	                            'gst' => $gst,
+	                            'total' => $base + $fuel + $gst,
+	                        ];
+
+	                        $combinedBase += $base;
+	                        $combinedFuel += $fuel;
+	                        $combinedGst += $gst;
+	                        
+                        }
+                        /*else{
+                        	
+                        	return response()->json([
+			                    'success' => false,
+			                    'message' => 'Service rate not available. Please contact to support.'
+			                ], 404);
+                        }*/ 
+                        
+                    }//end foreach loop
+
+                   
+                    $allRates[] = [
+                        // 'rate_id' => $firstMatchedRate->id,
+                        'service_id' => $service->id,
+                        'method' => $service->method,
+                        'method_display' => $service->method . ' ' . $service->tat,
+                        'network' => $service->network,
+                        'method_code' => $service->method_code,
+                        'tat' => $service->tat,
+                        'delivery_days' => $service->tat,
+                        'scode' => $service->scode,
+                        'consigneeState' => $consigneeState,
+                        'zone_no' => $zoneNumber,
+                        'pkg_wt' => $pkgWt,
+                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
+                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
+                        'price' => $combinedBase,
+                        'fuel_charge' => $combinedFuel,
+                        'fuel_percentage' => 0,
+                        'gst_percentage' => 0,
+                        'gst_amount' => $combinedGst,
+                        'is_multi_package' => true,
+                        'box_breakdown' => $boxBreakdown,
+                    ];
+				}
+                
+                
+                
                 // ========== STANDARD RATE FETCHING (For all other cases) ==========
                 // Skip if multi-package US and NOT United Ground Premium
                
@@ -3287,8 +3424,8 @@ class customerController extends Controller
             }//end foreach
 
 
-            // print_r($allRates); 
-            //     exit;
+            //print_r($allRates); 
+            //exit;
 
             // 7. Build response
             $response = [
@@ -3640,6 +3777,8 @@ class customerController extends Controller
     //             'success' => true,
     //             'customer_exists' => $customerRatesExist,
     //             'customer_name' => $customer ? ($customer->first_name . ' ' . $customer->last_name) : null,
+    //             // i want to print destination country in response
+    //             'destination_country' => $destinationCountry,
     //             'selected_zone' => $zone ? [
     //                 'zone_id' => $zone->id,
     //                 'zone_number' => $zone->zone_number_testing,
