@@ -5786,7 +5786,157 @@ class AdminController extends Controller
 
         $services = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
 
-        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services'));
+        // ------------------------------------------------------------------
+        // Zone lookup map for the "Zone Name" / "Zone Category" columns.
+        //
+        // courier_rates.zone_no  matches  zone.zone_number_testing  (0-13).
+        // Multiple zones can share the same zone_number_testing, so for each
+        // (destination_id, zone_number_testing) pair we pre-compute:
+        //   - category : the zone_category ('state' or 'zipcode')
+        //   - names    : comma-separated zone names (for the table columns)
+        //   - nameList : array of individual zone names (for the Add Rate
+        //                modal's Select2 dropdown, where each name becomes a
+        //                separate searchable option)
+        //   - count    : number of zones in this group
+        //
+        // This is built once server-side and passed to the view so the
+        // Default Rate table can render the columns without extra queries,
+        // and the Customer Rate tab can look them up in JS. The Add Rate
+        // modal's Select2 zone dropdown shows each zone name as a separate
+        // option so the admin can search for a specific state/postal code.
+        // ------------------------------------------------------------------
+        $zoneLookup = [];
+        // Increase GROUP_CONCAT limit so the full list of zone names (which
+        // can be hundreds of postal codes for zipcode-category zones) is
+        // not truncated by MySQL's default 1024-byte limit.
+        \DB::statement('SET SESSION group_concat_max_len = 1000000');
+        $zones = \App\Models\Zone::selectRaw('destination_id, zone_number_testing, zone_category, COUNT(*) as cnt, GROUP_CONCAT(zone_name SEPARATOR ", ") as names')
+            ->groupBy('destination_id', 'zone_number_testing', 'zone_category')
+            ->get();
+
+        foreach ($zones as $z) {
+            $zoneNo = (int) $z->zone_number_testing;
+            $category = $z->zone_category ?: 'state';
+            $count = (int) $z->cnt;
+            // Comma-separated string for the table columns.
+            $nameDisplay = $z->names ?: ('Zone ' . $zoneNo);
+            // Array of individual names for the Add Rate modal dropdown,
+            // where each name becomes a separate searchable Select2 option.
+            $nameList = $z->names
+                ? array_map('trim', explode(',', $z->names))
+                : ['Zone ' . $zoneNo];
+            $zoneLookup[$z->destination_id][$zoneNo] = [
+                'category' => $category,
+                'names'    => $nameDisplay,
+                'nameList' => $nameList,
+                'count'    => $count,
+            ];
+        }
+
+        // Map CourierService.country -> Destination.id so we can look up
+        // zones for a given rate's service. The destinations table uses
+        // different name/code formats (e.g. "US", "UK", "CA", "AUS") while
+        // courier_services.country uses "US", "UK", "Canada", "Australia".
+        // We build a lookup that tries several match strategies so the
+        // mapping stays correct regardless of which format is used.
+        $destinations = \App\Models\Destination::orderBy('name')->get();
+        $countryToDestId = [];
+        foreach ($destinations as $dest) {
+            $countryToDestId[$dest->id] = [
+                'name'         => $dest->name,
+                'code'         => $dest->code,
+                'country_code' => $dest->country_code,
+            ];
+        }
+
+        // Helper: given a service's country string, find the matching
+        // destination_id. Tries (in order): exact code, exact country_code,
+        // case-insensitive name contains, code prefix.
+        $countryToDestinationId = [];
+        foreach ($destinations as $dest) {
+            $countryToDestinationId[strtolower($dest->code)] = $dest->id;
+            $countryToDestinationId[strtolower($dest->country_code)] = $dest->id;
+            $countryToDestinationId[strtolower($dest->name)] = $dest->id;
+        }
+        // Also map the friendly country names used by courier_services.
+        $friendlyMap = [
+            'us'        => 1,
+            'usa'       => 1,
+            'uk'        => 2,
+            'united kingdom' => 2,
+            'canada'    => 3,
+            'ca'        => 3,
+            'australia' => 4,
+            'aus'       => 4,
+            'au'        => 4,
+        ];
+        foreach ($friendlyMap as $k => $v) {
+            if (!isset($countryToDestinationId[$k])) {
+                $countryToDestinationId[$k] = $v;
+            }
+        }
+
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations'));
+    }
+
+    /**
+     * Service page content management page.
+     *
+     * Backs the admin/change-service route and the change-service.blade.php
+     * view. Loads every ServicePage record (active AND inactive) ordered by
+     * sort_order so the admin can view and edit all service-page content
+     * sections (services, faq, stats, partners, testimonials, ...).
+     *
+     * NOTE: This is distinct from services() below, which manages the
+     * CourierService catalogue (enable/disable rate services). The route
+     * /change-service maps here; /services maps to services().
+     */
+    public function service()
+    {
+        $serviceContent = \App\Models\ServicePage::orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        return view('admin.change-service', compact('serviceContent'));
+    }
+
+    /**
+     * Courier Services management page.
+     *
+     * Lists every courier service (enabled AND disabled) so the admin can
+     * see the full catalogue and toggle each service's status. Only enabled
+     * services (status = 1) show rates to customers on the create-shipment
+     * page, bulk upload and bulk rate calculation.
+     */
+    public function services()
+    {
+        // Show all services so disabled ones can be re-enabled from this page.
+        $services = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
+
+        return view('admin.services', compact('services'));
+    }
+
+    /**
+     * Toggle the enabled/disabled status of a courier service.
+     *
+     *  - status = 1  -> service shows rates to customers
+     *  - status = 0  -> service is hidden from rate calculations
+     *
+     * Mirrors toggleCustomerStatus(): a plain form POST that redirects back
+     * with a flash message. This is the proven, reliable pattern used across
+     * the admin panel (no AJAX/CSRF-token juggling required).
+     */
+    public function toggleServiceStatus($id)
+    {
+        $service = \App\Models\CourierService::findOrFail($id);
+
+        $service->status = $service->status ? 0 : 1;
+        $service->save();
+
+        $action = $service->status ? 'ENABLED' : 'DISABLED';
+        $message = 'Service "' . $service->method . '" has been ' . $action . '.';
+
+        return redirect()->back()->with('success', $message);
     }
 
     public function getCustomerRates(Request $request)
@@ -5847,6 +5997,935 @@ class AdminController extends Controller
         $rate->save();
 
         return response()->json(['success' => true, 'message' => 'Customer rate updated successfully.']);
+    }
+
+    /**
+     * Add a new default rate (customer_id = 0) for a given service.
+     *
+     * The admin selects a country (which filters the service list) and a
+     * service, then provides the weight range, zone number and price.
+     * Optional fuel/GST fields default to 0 when left blank.
+     *
+     * A duplicate guard prevents creating two default rates for the exact
+     * same (service_id, wt_range_start, wt_range_end, zone_no) combination.
+     */
+    public function addRate(Request $request)
+    {
+        $validated = $request->validate([
+            'service_id'      => 'required|integer|exists:courier_services,id',
+            'wt_range_start'  => 'required|numeric|min:0',
+            'wt_range_end'    => 'required|numeric|min:0|gt:wt_range_start',
+            'zone_no'         => 'required|integer|min:0|max:13',
+            'price'           => 'required|numeric|min:0',
+            'fuel_charge'     => 'nullable|numeric|min:0',
+            'fuel_percentage' => 'nullable|numeric|min:0',
+            'gst_percentage'  => 'nullable|numeric|min:0',
+        ]);
+
+        // Guard against duplicate default rates for the same service+weight+zone.
+        $exists = \App\Models\CourierRate::where('customer_id', 0)
+            ->where('service_id', $validated['service_id'])
+            ->where('wt_range_start', $validated['wt_range_start'])
+            ->where('wt_range_end', $validated['wt_range_end'])
+            ->where('zone_no', $validated['zone_no'])
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A default rate already exists for this service, weight range and zone.',
+            ], 409);
+        }
+
+        $customerCount = 0;
+
+        DB::transaction(function () use ($validated, &$rate, &$customerCount) {
+            $rate = \App\Models\CourierRate::create([
+                'customer_id'     => 0,
+                'service_id'      => $validated['service_id'],
+                'wt_range_start'  => $validated['wt_range_start'],
+                'wt_range_end'    => $validated['wt_range_end'],
+                'zone_no'         => $validated['zone_no'],
+                'price'           => $validated['price'],
+                'fuel_charge'     => $validated['fuel_charge'] ?? 0,
+                'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
+                'gst_percentage'  => $validated['gst_percentage'] ?? 0,
+                'gst_amount'      => 0,
+                'is_default'      => true,
+            ]);
+
+            // Propagate the new default rate to every customer so they inherit
+            // it (is_default = 1) until an admin customizes their own rate.
+            // Customers who already have a rate for this service + weight +
+            // zone (inherited or customized) are skipped so we never clobber
+            // a customized rate.
+            $customerIds = \App\Models\Customer::pluck('id')->toArray();
+
+            if (!empty($customerIds)) {
+                $customersWithRate = \App\Models\CourierRate::whereIn('customer_id', $customerIds)
+                    ->where('service_id', $validated['service_id'])
+                    ->where('wt_range_start', $validated['wt_range_start'])
+                    ->where('wt_range_end', $validated['wt_range_end'])
+                    ->where('zone_no', $validated['zone_no'])
+                    ->pluck('customer_id')
+                    ->toArray();
+
+                $customersNeedingRate = array_values(array_diff($customerIds, $customersWithRate));
+                $customerCount = count($customersNeedingRate);
+
+                if (!empty($customersNeedingRate)) {
+                    $now = now();
+                    $rows = array_map(function ($customerId) use ($validated, $now) {
+                        return [
+                            'customer_id'     => $customerId,
+                            'service_id'      => $validated['service_id'],
+                            'wt_range_start'  => $validated['wt_range_start'],
+                            'wt_range_end'    => $validated['wt_range_end'],
+                            'zone_no'         => $validated['zone_no'],
+                            'price'           => $validated['price'],
+                            'fuel_charge'     => $validated['fuel_charge'] ?? 0,
+                            'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
+                            'gst_percentage'  => $validated['gst_percentage'] ?? 0,
+                            'gst_amount'      => 0,
+                            'is_default'      => true,
+                            'created_at'      => $now,
+                            'updated_at'      => $now,
+                        ];
+                    }, $customersNeedingRate);
+
+                    foreach (array_chunk($rows, 500) as $chunk) {
+                        \App\Models\CourierRate::insert($chunk);
+                    }
+                }
+            }
+        });
+
+        return response()->json([
+            'success'        => true,
+            'message'        => 'Default rate added successfully' . ($customerCount > 0 ? ' and propagated to ' . $customerCount . ' customer(s).' : '.'),
+            'rate_id'        => $rate->id,
+            'propagated_to'  => $customerCount,
+        ]);
+    }
+
+    /**
+     * Download a sample Excel file for bulk rate upload.
+     *
+     * The admin selects a Service (and optionally a Zone No) on the Manage
+     * Rate page, then clicks "Download Sample". This generates an .xlsx
+     * file with the expected header row (Weight Start, Weight End, Zone No,
+     * Price, Fuel Charge, Fuel %, GST %). If a service is selected, the
+     * file is pre-filled with the existing default rates for that service
+     * so the admin can see the current values and edit them.
+     *
+     * Query params:
+     *   - service_id : optional, pre-fills existing rates for this service
+     *   - zone_no    : optional, further filters the pre-filled rates
+     */
+    public function downloadRateSample(Request $request)
+    {
+        $serviceId = $request->query('service_id');
+        $zoneNo    = $request->query('zone_no');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Header row
+        $sheet->setCellValue('A1', 'Weight Start');
+        $sheet->setCellValue('B1', 'Weight End');
+        $sheet->setCellValue('C1', 'Zone No');
+        $sheet->setCellValue('D1', 'Price');
+        $sheet->setCellValue('E1', 'Fuel Charge');
+        $sheet->setCellValue('F1', 'Fuel %');
+        $sheet->setCellValue('G1', 'GST %');
+
+        $row = 2;
+
+        // If a service is selected, include the default rates that already
+        // exist for that service (optionally filtered by zone) so the admin
+        // can see what's already there and edit/update them.
+        if ($serviceId) {
+            $query = \App\Models\CourierRate::where('customer_id', 0)
+                ->where('service_id', $serviceId)
+                ->orderBy('zone_no')
+                ->orderBy('wt_range_start');
+
+            if ($zoneNo !== null && $zoneNo !== '') {
+                $query->where('zone_no', $zoneNo);
+            }
+
+            $existingRates = $query->get();
+
+            foreach ($existingRates as $r) {
+                $sheet->setCellValue('A' . $row, $r->wt_range_start);
+                $sheet->setCellValue('B' . $row, $r->wt_range_end);
+                $sheet->setCellValue('C' . $row, $r->zone_no);
+                $sheet->setCellValue('D' . $row, $r->price);
+                $sheet->setCellValue('E' . $row, $r->fuel_charge);
+                $sheet->setCellValue('F' . $row, $r->fuel_percentage);
+                $sheet->setCellValue('G' . $row, $r->gst_percentage);
+                $row++;
+            }
+        }
+
+        // If no existing rates were found (or no service was selected), fall
+        // back to a few example rows so the file is not empty.
+        if ($row === 2) {
+            $samples = [
+                [0.5, 1.0, 1, 1500, 0, 0, 18],
+                [1.0, 2.0, 1, 1800, 0, 0, 18],
+                [2.0, 3.0, 1, 2100, 0, 0, 18],
+                [0.5, 1.0, 2, 1600, 0, 0, 18],
+                [1.0, 2.0, 2, 1900, 0, 0, 18],
+            ];
+            foreach ($samples as $s) {
+                $sheet->setCellValue('A' . $row, $s[0]);
+                $sheet->setCellValue('B' . $row, $s[1]);
+                $sheet->setCellValue('C' . $row, $s[2]);
+                $sheet->setCellValue('D' . $row, $s[3]);
+                $sheet->setCellValue('E' . $row, $s[4]);
+                $sheet->setCellValue('F' . $row, $s[5]);
+                $sheet->setCellValue('G' . $row, $s[6]);
+                $row++;
+            }
+        }
+
+        // Bold the header row and auto-size columns
+        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
+        foreach (range('A', 'G') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $fileName = 'rate-upload-sample.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'max-age=0',
+        ]);
+    }
+
+    /**
+     * Bulk-import default rates from an uploaded Excel file.
+     *
+     * The admin selects a Service (and optionally a Zone No) on the Manage
+     * Rate page, then uploads an .xlsx/.xls/.csv file. The file must have a
+     * header row with "Weight Start", "Weight End", "Price" (required) and
+     * optionally "Zone No", "Fuel Charge", "Fuel %", "GST %". If the file
+     * does not contain a "Zone No" column, the zone selected on the form is
+     * applied to every row. Each data row creates a new default rate
+     * (customer_id = 0, is_default = true) for the chosen service.
+     *
+     * Duplicate detection: a rate is considered a duplicate if a default
+     * rate already exists for the same service_id + wt_range_start +
+     * wt_range_end + zone_no combination.
+     */
+    public function uploadRateExcel(Request $request)
+    {
+        $validated = $request->validate([
+            'service_id' => 'required|integer|exists:courier_services,id',
+            'zone_no'    => 'nullable|integer|min:0|max:13',
+            'rate_file'  => 'required|file|mimes:xlsx,xls,csv|max:5120',
+        ]);
+
+        $file = $request->file('rate_file');
+        $filePath = $file->getRealPath();
+
+        try {
+            // Detect the file type and load the spreadsheet.
+            $inputFileType = \PhpOffice\PhpSpreadsheet\IOFactory::identify($filePath);
+            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($filePath);
+        } catch (\Exception $e) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'Could not read the uploaded file. Please ensure it is a valid Excel/CSV file.');
+        }
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, false);
+
+        if (count($rows) < 2) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'The file is empty or has no data rows (only a header was found).');
+        }
+
+        // The first row is the header. Find each column by matching header
+        // text (case-insensitive) so the admin does not have to worry about
+        // exact column order.
+        $header = array_map(function ($h) {
+            // Normalize: lowercase, trim and collapse internal whitespace.
+            return preg_replace('/\s+/', ' ', strtolower(trim((string) $h)));
+        }, $rows[0]);
+
+        $wtStartHeaders    = ['weight start', 'wt start', 'wt_range_start', 'weightstart', 'start weight', 'from weight', 'min weight', 'weight from'];
+        $wtEndHeaders      = ['weight end', 'wt end', 'wt_range_end', 'weightend', 'end weight', 'to weight', 'max weight', 'weight to'];
+        $zoneNoHeaders     = ['zone no', 'zone_no', 'zoneno', 'zone number', 'zone'];
+        $priceHeaders      = ['price', 'rate', 'amount', 'cost'];
+        $fuelChargeHeaders = ['fuel charge', 'fuel_charge', 'fuelcharge', 'fuel'];
+        $fuelPctHeaders    = ['fuel %', 'fuel percentage', 'fuel_percentage', 'fuelpercentage', 'fuel pct', 'fuel_pct'];
+        $gstPctHeaders     = ['gst %', 'gst percentage', 'gst_percentage', 'gstpercentage', 'gst pct', 'gst_pct', 'gst'];
+
+        $wtStartCol    = null;
+        $wtEndCol      = null;
+        $zoneNoCol     = null;
+        $priceCol      = null;
+        $fuelChargeCol = null;
+        $fuelPctCol    = null;
+        $gstPctCol     = null;
+
+        foreach ($header as $idx => $h) {
+            if ($wtStartCol === null && in_array($h, $wtStartHeaders, true)) {
+                $wtStartCol = $idx;
+            }
+            if ($wtEndCol === null && in_array($h, $wtEndHeaders, true)) {
+                $wtEndCol = $idx;
+            }
+            if ($zoneNoCol === null && in_array($h, $zoneNoHeaders, true)) {
+                $zoneNoCol = $idx;
+            }
+            if ($priceCol === null && in_array($h, $priceHeaders, true)) {
+                $priceCol = $idx;
+            }
+            if ($fuelChargeCol === null && in_array($h, $fuelChargeHeaders, true)) {
+                $fuelChargeCol = $idx;
+            }
+            if ($fuelPctCol === null && in_array($h, $fuelPctHeaders, true)) {
+                $fuelPctCol = $idx;
+            }
+            if ($gstPctCol === null && in_array($h, $gstPctHeaders, true)) {
+                $gstPctCol = $idx;
+            }
+        }
+
+        // Weight Start, Weight End and Price are required columns.
+        if ($wtStartCol === null || $wtEndCol === null || $priceCol === null) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'The file must contain "Weight Start", "Weight End" and "Price" columns. Please download the sample file for the correct format.');
+        }
+
+        $created = 0;
+        $skipped = 0;
+        $duplicates = 0;
+        $dataRows = array_slice($rows, 1);
+
+        // Pre-fetch all existing default rates for this service so we can
+        // skip duplicates without running a query per row. Keys are
+        // "wtStart|wtEnd|zoneNo" for fast lookup.
+        $existingRates = \App\Models\CourierRate::where('customer_id', 0)
+            ->where('service_id', $validated['service_id'])
+            ->get(['wt_range_start', 'wt_range_end', 'zone_no']);
+
+        $existingKeys = [];
+        foreach ($existingRates as $r) {
+            $key = $r->wt_range_start . '|' . $r->wt_range_end . '|' . $r->zone_no;
+            $existingKeys[$key] = true;
+        }
+
+        // Track keys seen within this upload too, so the same combination
+        // appearing twice in the same file is only inserted once.
+        $seenInUpload = [];
+
+        $formZoneNo = $validated['zone_no'] ?? null;
+
+        // Pre-fetch all customer IDs once so we can propagate every new
+        // default rate to all customers (is_default = 1) in a single batch
+        // insert per row. Customers who already have a rate for a given
+        // service + weight + zone combination are skipped so we never
+        // clobber a customized rate.
+        $customerIds = \App\Models\Customer::pluck('id')->toArray();
+        $propagated = 0;
+
+        // Map of "wtStart|wtEnd|zoneNo" => [customerId => true] for every
+        // customer rate that already exists for this service.
+        $existingCustomerKeys = [];
+        if (!empty($customerIds)) {
+            $existingCustomerRates = \App\Models\CourierRate::whereIn('customer_id', $customerIds)
+                ->where('service_id', $validated['service_id'])
+                ->get(['customer_id', 'wt_range_start', 'wt_range_end', 'zone_no']);
+            foreach ($existingCustomerRates as $cr) {
+                $k = $cr->wt_range_start . '|' . $cr->wt_range_end . '|' . $cr->zone_no;
+                $existingCustomerKeys[$k][$cr->customer_id] = true;
+            }
+        }
+
+        // Track customer rates we create during this upload so we don't
+        // duplicate-propagate when the same combination appears twice in
+        // the file.
+        $propagatedInUpload = [];
+
+        foreach ($dataRows as $row) {
+            $wtStart = isset($row[$wtStartCol]) ? trim((string) $row[$wtStartCol]) : '';
+            $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
+            $price   = isset($row[$priceCol]) ? trim((string) $row[$priceCol]) : '';
+
+            // Zone No: prefer the file column, fall back to the form value.
+            $zoneNo = ($zoneNoCol !== null && isset($row[$zoneNoCol]) && trim((string) $row[$zoneNoCol]) !== '')
+                ? trim((string) $row[$zoneNoCol])
+                : ($formZoneNo !== null ? (string) $formZoneNo : '');
+
+            $fuelCharge = ($fuelChargeCol !== null && isset($row[$fuelChargeCol])) ? trim((string) $row[$fuelChargeCol]) : '';
+            $fuelPct    = ($fuelPctCol !== null && isset($row[$fuelPctCol])) ? trim((string) $row[$fuelPctCol]) : '';
+            $gstPct     = ($gstPctCol !== null && isset($row[$gstPctCol])) ? trim((string) $row[$gstPctCol]) : '';
+
+            // Skip completely empty rows.
+            if ($wtStart === '' && $wtEnd === '' && $price === '' && $zoneNo === '') {
+                $skipped++;
+                continue;
+            }
+
+            // Validate required numeric fields.
+            if ($wtStart === '' || $wtEnd === '' || $price === '') {
+                $skipped++;
+                continue;
+            }
+            if (!is_numeric($wtStart) || !is_numeric($wtEnd) || !is_numeric($price)) {
+                $skipped++;
+                continue;
+            }
+            if ((float) $wtEnd <= (float) $wtStart) {
+                $skipped++;
+                continue;
+            }
+
+            // Zone No must be a valid integer 0-13.
+            if ($zoneNo === '' || !is_numeric($zoneNo) || (int) $zoneNo < 0 || (int) $zoneNo > 13) {
+                $skipped++;
+                continue;
+            }
+            $zoneNoInt = (int) $zoneNo;
+
+            $key = $wtStart . '|' . $wtEnd . '|' . $zoneNoInt;
+
+            // Skip duplicates (already in DB or already in this upload).
+            if (isset($existingKeys[$key]) || isset($seenInUpload[$key])) {
+                $duplicates++;
+                continue;
+            }
+
+            \App\Models\CourierRate::create([
+                'customer_id'     => 0,
+                'service_id'      => $validated['service_id'],
+                'wt_range_start'  => $wtStart,
+                'wt_range_end'    => $wtEnd,
+                'zone_no'         => $zoneNoInt,
+                'price'           => $price,
+                'fuel_charge'     => ($fuelCharge !== '' && is_numeric($fuelCharge)) ? $fuelCharge : 0,
+                'fuel_percentage' => ($fuelPct !== '' && is_numeric($fuelPct)) ? $fuelPct : 0,
+                'gst_percentage'  => ($gstPct !== '' && is_numeric($gstPct)) ? $gstPct : 0,
+                'gst_amount'      => 0,
+                'is_default'      => true,
+            ]);
+            $seenInUpload[$key] = true;
+            $created++;
+
+            // Propagate this new default rate to every customer that does
+            // not already have a rate for this service + weight + zone
+            // combination (inherited or customized).
+            if (!empty($customerIds)) {
+                $alreadyHave = $existingCustomerKeys[$key] ?? [];
+                $propagatedHave = $propagatedInUpload[$key] ?? [];
+                $customersNeedingRate = array_values(array_filter($customerIds, function ($cid) use ($alreadyHave, $propagatedHave) {
+                    return !isset($alreadyHave[$cid]) && !isset($propagatedHave[$cid]);
+                }));
+
+                if (!empty($customersNeedingRate)) {
+                    $now = now();
+                    $rows = array_map(function ($customerId) use ($validated, $wtStart, $wtEnd, $zoneNoInt, $price, $fuelCharge, $fuelPct, $gstPct, $now) {
+                        return [
+                            'customer_id'     => $customerId,
+                            'service_id'      => $validated['service_id'],
+                            'wt_range_start'  => $wtStart,
+                            'wt_range_end'    => $wtEnd,
+                            'zone_no'         => $zoneNoInt,
+                            'price'           => $price,
+                            'fuel_charge'     => ($fuelCharge !== '' && is_numeric($fuelCharge)) ? $fuelCharge : 0,
+                            'fuel_percentage' => ($fuelPct !== '' && is_numeric($fuelPct)) ? $fuelPct : 0,
+                            'gst_percentage'  => ($gstPct !== '' && is_numeric($gstPct)) ? $gstPct : 0,
+                            'gst_amount'      => 0,
+                            'is_default'      => true,
+                            'created_at'      => $now,
+                            'updated_at'      => $now,
+                        ];
+                    }, $customersNeedingRate);
+
+                    foreach (array_chunk($rows, 500) as $chunk) {
+                        \App\Models\CourierRate::insert($chunk);
+                    }
+
+                    foreach ($customersNeedingRate as $cid) {
+                        $propagatedInUpload[$key][$cid] = true;
+                    }
+                    $propagated += count($customersNeedingRate);
+                }
+            }
+        }
+
+        if ($created === 0) {
+            $msg = 'No new rates were imported.';
+            if ($duplicates > 0) {
+                $msg .= ' ' . $duplicates . ' duplicate rate(s) already exist and were skipped.';
+            }
+            if ($skipped > 0) {
+                $msg .= ' ' . $skipped . ' invalid/empty row(s) skipped.';
+            }
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', $msg);
+        }
+
+        $msg = $created . ' rate(s) imported successfully.';
+        if ($duplicates > 0) {
+            $msg .= ' ' . $duplicates . ' duplicate rate(s) already existed and were skipped.';
+        }
+        if ($skipped > 0) {
+            $msg .= ' ' . $skipped . ' invalid/empty row(s) skipped.';
+        }
+        if ($propagated > 0) {
+            $msg .= ' ' . $propagated . ' customer rate(s) propagated.';
+        }
+
+        return redirect()
+            ->route('admin.manage-rate')
+            ->with('success', $msg);
+    }
+
+    /**
+     * Show the "Add Zone" page.
+     *
+     * Loads all destinations (countries) so the admin can pick one, then
+     * choose a zone category (state / zipcode / city), and finally enter one
+     * or more zone entries (zone name, zone code, zone number) for that
+     * country + category combination.
+     */
+    public function addZone()
+    {
+        $destinations = \App\Models\Destination::orderBy('name')->get();
+
+        return view('admin.add-zone', compact('destinations'));
+    }
+
+    /**
+     * Store one or more new zone entries submitted from the Add Zone page.
+     *
+     * The form submits:
+     *   - destination_id : the selected country
+     *   - zone_category  : state | zipcode | city
+     *   - zone_number    : the zone number (0-13) that rates reference
+     *   - entries        : array of { zone_name, zone_code } pairs
+     *
+     * Each entry creates a new row in the `zone` table linked to the chosen
+     * destination and category. zone_number_testing is set to the supplied
+     * zone_number so the new zones are immediately usable by the rate system.
+     */
+    public function storeZone(Request $request)
+    {
+        $validated = $request->validate([
+            'destination_id' => 'required|integer|exists:destinations,id',
+            'zone_category'  => 'required|in:state,zipcode,city',
+            'zone_number'    => 'required|integer|min:0|max:13',
+            'entries'        => 'required|array|min:1',
+            'entries.*.zone_name' => 'required|string|max:100',
+            'entries.*.zone_code' => 'nullable|string|max:10',
+        ]);
+
+        $created = 0;
+        $skipped = 0;
+
+        // Pre-fetch existing zone names AND codes for this country + category
+        // (lower-cased keys for case-insensitive duplicate detection) so we
+        // can skip duplicates without running a query per entry.
+        $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
+            ->where('zone_category', $validated['zone_category'])
+            ->get(['zone_name', 'zone_code']);
+
+        $existingNames = [];
+        $existingCodes  = [];
+        foreach ($existingZones as $z) {
+            $n = trim((string) $z->zone_name);
+            if ($n !== '') {
+                $existingNames[strtolower($n)] = true;
+            }
+            $c = trim((string) $z->zone_code);
+            if ($c !== '') {
+                $existingCodes[strtolower($c)] = true;
+            }
+        }
+
+        // Track names/codes added within this same submission too.
+        $seenNames = [];
+        $seenCodes = [];
+
+        foreach ($validated['entries'] as $entry) {
+            $name = trim((string) $entry['zone_name']);
+            $code = trim((string) ($entry['zone_code'] ?? ''));
+
+            $nameKey = strtolower($name);
+            $codeKey = $code !== '' ? strtolower($code) : '';
+
+            // Skip if the zone name OR zone code already exists in the
+            // database, or was already added earlier in this same submission.
+            if (isset($existingNames[$nameKey]) || isset($seenNames[$nameKey])) {
+                $skipped++;
+                continue;
+            }
+            if ($codeKey !== '' && (isset($existingCodes[$codeKey]) || isset($seenCodes[$codeKey]))) {
+                $skipped++;
+                continue;
+            }
+
+            \App\Models\Zone::create([
+                'destination_id'      => $validated['destination_id'],
+                'zone_category'       => $validated['zone_category'],
+                'zone_number'         => $validated['zone_number'],
+                'zone_number_testing' => $validated['zone_number'],
+                'zone_name'           => $name,
+                'zone_code'           => $code,
+            ]);
+            $seenNames[$nameKey] = true;
+            if ($codeKey !== '') {
+                $seenCodes[$codeKey] = true;
+            }
+            $created++;
+        }
+
+        $msg = $created . ' zone(s) added successfully.';
+        if ($skipped > 0) {
+            $msg .= ' ' . $skipped . ' duplicate zone(s) (name or code already existed) were skipped.';
+        }
+
+        return redirect()
+            ->route('admin.add-zone')
+            ->with($created > 0 ? 'success' : 'error', $msg);
+    }
+
+    /**
+     * Download a sample Excel file showing the expected format for bulk
+     * zone uploads.
+     *
+     * The sample contains a header row (Zone Name, Zone Code). If a
+     * destination_id (and optionally zone_category) is passed as a query
+     * parameter, the existing zones for that country/category are also
+     * included so the admin can see which zones are already present (and
+     * avoid duplicating them on re-upload). The file is generated on the fly
+     * with PhpSpreadsheet and streamed back as a download (.xlsx).
+     */
+    public function downloadZoneSample(Request $request)
+    {
+        $destinationId = $request->query('destination_id');
+        $zoneCategory  = $request->query('zone_category', 'state');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Header row
+        $sheet->setCellValue('A1', 'Zone Name');
+        $sheet->setCellValue('B1', 'Zone Code');
+
+        $row = 2;
+
+        // If a country is selected, include the zones that already exist for
+        // that country + category so the admin can see what's already there.
+        if ($destinationId) {
+            $existingZones = \App\Models\Zone::where('destination_id', $destinationId)
+                ->where('zone_category', $zoneCategory)
+                ->orderBy('zone_name')
+                ->get();
+
+            foreach ($existingZones as $z) {
+                $sheet->setCellValue('A' . $row, $z->zone_name);
+                $sheet->setCellValue('B' . $row, $z->zone_code ?: '');
+                $row++;
+            }
+        }
+
+        // If no existing zones were found (or no country was selected), fall
+        // back to a few example rows so the file is not empty.
+        if ($row === 2) {
+            $samples = [
+                ['New South Wales', 'NSW'],
+                ['Victoria',        'VIC'],
+                ['Queensland',      'QLD'],
+                ['Western Australia', 'WA'],
+                ['South Australia', 'SA'],
+            ];
+            foreach ($samples as $s) {
+                $sheet->setCellValue('A' . $row, $s[0]);
+                $sheet->setCellValue('B' . $row, $s[1]);
+                $row++;
+            }
+        }
+
+        // Bold the header row and auto-size columns
+        $sheet->getStyle('A1:B1')->getFont()->setBold(true);
+        $sheet->getColumnDimension('A')->setAutoSize(true);
+        $sheet->getColumnDimension('B')->setAutoSize(true);
+
+        $fileName = 'zone-upload-sample.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'max-age=0',
+        ]);
+    }
+
+    /**
+     * Bulk-import zones from an uploaded Excel file.
+     *
+     * The admin first selects a Country, Zone Category and Zone Number on
+     * the Add Zone page, then uploads an .xlsx/.xls/.csv file. The file must
+     * have a header row with "Zone Name" (required) and "Zone Code"
+     * (optional). Each data row creates a new zone entry linked to the
+     * chosen country + category + zone number.
+     */
+    public function uploadZoneExcel(Request $request)
+    {
+        $validated = $request->validate([
+            'destination_id' => 'required|integer|exists:destinations,id',
+            'zone_category'  => 'required|in:state,zipcode,city',
+            'zone_number'    => 'required|integer|min:0|max:13',
+            'zone_file'      => 'required|file|mimes:xlsx,xls,csv|max:5120',
+        ]);
+
+        $file = $request->file('zone_file');
+        $filePath = $file->getRealPath();
+
+        try {
+            // Detect the file type and load the spreadsheet.
+            $inputFileType = \PhpOffice\PhpSpreadsheet\IOFactory::identify($filePath);
+            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($filePath);
+        } catch (\Exception $e) {
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', 'Could not read the uploaded file. Please ensure it is a valid Excel/CSV file.');
+        }
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, false);
+
+        if (count($rows) < 2) {
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', 'The file is empty or has no data rows (only a header was found).');
+        }
+
+        // The first row is the header. Find the Zone Name and Zone Code
+        // columns by matching header text (case-insensitive) so the admin
+        // does not have to worry about exact column order. Each column is
+        // detected INDEPENDENTLY so that a file which only has a "Zone Name"
+        // or only a "Zone Code" column is mapped to the correct database
+        // column (zone_name / zone_code) instead of being forced into the
+        // first two positions.
+        $header = array_map(function ($h) {
+            // Normalize: lowercase, trim and collapse internal whitespace so
+            // "Zone  Name", "ZONE NAME" and "Zone_Name" all match the same key.
+            return preg_replace('/\s+/', ' ', strtolower(trim((string) $h)));
+        }, $rows[0]);
+
+        $nameHeaders = ['zone name', 'zone_name', 'zonename', 'name', 'state', 'zipcode', 'zip', 'city', 'zone'];
+        $codeHeaders = ['zone code', 'zone_code', 'zonecode', 'code'];
+
+        $nameCol = null;
+        $codeCol = null;
+        foreach ($header as $idx => $h) {
+            if ($nameCol === null && in_array($h, $nameHeaders, true)) {
+                $nameCol = $idx;
+            }
+            if ($codeCol === null && in_array($h, $codeHeaders, true)) {
+                $codeCol = $idx;
+            }
+        }
+
+        // Fallback ONLY when NEITHER column was recognized by its header:
+        // assume the first column is the zone name and the second (if
+        // present) is the zone code. This keeps backward compatibility for
+        // headerless files while no longer clobbering a correctly-detected
+        // "Zone Code" column.
+        if ($nameCol === null && $codeCol === null) {
+            $nameCol = 0;
+            $codeCol = isset($header[1]) ? 1 : null;
+        } elseif ($nameCol === null) {
+            // Only the code column was recognized. Use the first available
+            // column that is not the code column as the name column.
+            $nameCol = ($codeCol === 0 && isset($header[1])) ? 1 : 0;
+        }
+        // If only the name column was recognized, codeCol stays null (no code).
+
+        $created = 0;
+        $skipped = 0;
+        $duplicates = 0;
+        $dataRows = array_slice($rows, 1);
+
+        // Pre-fetch all existing zone names AND zone codes for this country +
+        // category so we can skip duplicates without running a query per row.
+        // Keys are lower-cased values for case-insensitive comparison.
+        $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
+            ->where('zone_category', $validated['zone_category'])
+            ->get(['zone_name', 'zone_code']);
+
+        $existingNames = [];
+        $existingCodes  = [];
+        foreach ($existingZones as $z) {
+            $n = trim((string) $z->zone_name);
+            if ($n !== '') {
+                $existingNames[strtolower($n)] = true;
+            }
+            $c = trim((string) $z->zone_code);
+            if ($c !== '') {
+                $existingCodes[strtolower($c)] = true;
+            }
+        }
+
+        // Track zone names AND codes seen within this upload too, so the same
+        // value appearing twice in the same file is only inserted once.
+        $seenInUpload = [];
+        $seenCodesInUpload = [];
+
+        foreach ($dataRows as $row) {
+            $zoneName = ($nameCol !== null && isset($row[$nameCol])) ? trim((string) $row[$nameCol]) : '';
+            $zoneCode = ($codeCol !== null && isset($row[$codeCol])) ? trim((string) $row[$codeCol]) : '';
+
+            // Skip completely empty rows (neither a name nor a code present).
+            if ($zoneName === '' && $zoneCode === '') {
+                $skipped++;
+                continue;
+            }
+
+            // The `zone` table requires a zone_name. If the file only had a
+            // "Zone Code" column (no Zone Name), fall back to using the code
+            // as the name so the row can still be imported.
+            $effectiveName = $zoneName !== '' ? $zoneName : $zoneCode;
+
+            $nameKey = strtolower($effectiveName);
+            $codeKey = $zoneCode !== '' ? strtolower($zoneCode) : '';
+
+            // Skip if this zone name OR zone code already exists in the
+            // database for this country + category, or if it was already
+            // added earlier in this same upload. This prevents duplicate
+            // zone codes from being inserted.
+            if (isset($existingNames[$nameKey]) || isset($seenInUpload[$nameKey])) {
+                $duplicates++;
+                continue;
+            }
+            if ($codeKey !== '' && (isset($existingCodes[$codeKey]) || isset($seenCodesInUpload[$codeKey]))) {
+                $duplicates++;
+                continue;
+            }
+
+            \App\Models\Zone::create([
+                'destination_id'      => $validated['destination_id'],
+                'zone_category'       => $validated['zone_category'],
+                'zone_number'         => $validated['zone_number'],
+                'zone_number_testing' => $validated['zone_number'],
+                'zone_name'           => mb_substr($effectiveName, 0, 100),
+                'zone_code'           => mb_substr($zoneCode, 0, 10),
+            ]);
+            $seenInUpload[$nameKey] = true;
+            if ($codeKey !== '') {
+                $seenCodesInUpload[$codeKey] = true;
+            }
+            $created++;
+        }
+
+        if ($created === 0) {
+            $msg = 'No new zones were imported.';
+            if ($duplicates > 0) {
+                $msg .= ' ' . $duplicates . ' duplicate zone(s) already exist and were skipped.';
+            }
+            if ($skipped > 0) {
+                $msg .= ' ' . $skipped . ' empty row(s) skipped.';
+            }
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', $msg);
+        }
+
+        $msg = $created . ' zone(s) imported successfully.';
+        if ($duplicates > 0) {
+            $msg .= ' ' . $duplicates . ' duplicate zone(s) already existed and were skipped.';
+        }
+        if ($skipped > 0) {
+            $msg .= ' ' . $skipped . ' empty row(s) skipped.';
+        }
+
+        return redirect()
+            ->route('admin.add-zone')
+            ->with('success', $msg);
+    }
+
+    /**
+     * Show the "Add Country" page.
+     *
+     * A simple form where the admin enters a country name. The new country
+     * is added to the `destinations` table so it can be selected when adding
+     * zones or rates.
+     */
+    public function addCountry()
+    {
+        $destinations = \App\Models\Destination::orderBy('name')->get();
+
+        return view('admin.add-country', compact('destinations'));
+    }
+
+    /**
+     * Store a new country (destination).
+     *
+     * The admin supplies a country name. We auto-derive a short code from the
+     * name if one is not provided, and default is_active to true.
+     */
+    public function storeCountry(Request $request)
+    {
+        $validated = $request->validate([
+            'name'         => 'required|string|max:150|unique:destinations,name',
+            'code'         => 'nullable|string|max:10|unique:destinations,code',
+            'country_code' => 'nullable|string|max:5',
+            'is_active'    => 'nullable|boolean',
+        ]);
+
+        // Auto-derive a short code from the name if none was provided.
+        $code = $validated['code'] ?? '';
+        if ($code === '') {
+            $words = preg_split('/\s+/', trim($validated['name']));
+            if (count($words) === 1) {
+                $code = strtoupper(substr($words[0], 0, 3));
+            } else {
+                $code = '';
+                foreach ($words as $w) {
+                    $code .= strtoupper(substr($w, 0, 1));
+                }
+                $code = substr($code, 0, 10);
+            }
+            // Ensure uniqueness by appending a number if needed.
+            $base = $code;
+            $i = 1;
+            while (\App\Models\Destination::where('code', $code)->exists()) {
+                $code = $base . $i;
+                $i++;
+            }
+        }
+
+        \App\Models\Destination::create([
+            'name'         => $validated['name'],
+            'code'         => $code,
+            'country_code' => $validated['country_code'] ?? null,
+            'is_active'    => $validated['is_active'] ?? true,
+        ]);
+
+        return redirect()
+            ->route('admin.add-country')
+            ->with('success', 'Country "' . $validated['name'] . '" added successfully (code: ' . $code . ').');
     }
 
     public function myProfile()

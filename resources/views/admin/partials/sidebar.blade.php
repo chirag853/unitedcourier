@@ -226,7 +226,18 @@
                             <ul>
                                 <li><a href="{{ url('/admin/manage-rate') }}"
                                         class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
+                                <li><a href="{{ url('/admin/add-zone') }}"
+                                        class="{{ request()->is('admin/add-zone') ? 'active' : '' }}">Add Zone</a></li>
+                                <li><a href="{{ url('/admin/add-country') }}"
+                                        class="{{ request()->is('admin/add-country') ? 'active' : '' }}">Add Country</a></li>
                             </ul>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('services'))
+                        <li>
+                            <a href="{{ url('/admin/services') }}" class="{{ request()->is('admin/services*') ? 'active' : '' }}">
+                                <i class="ti ti-truck"></i><span>Courier Services</span>
+                            </a>
                         </li>
                         @endif
                         @if($authAdmin && $authAdmin->hasModuleAccess('admin_management'))

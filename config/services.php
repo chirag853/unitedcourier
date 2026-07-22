@@ -93,4 +93,34 @@ return [
         'timeout' => (int) env('FLYINGTIGERS_TIMEOUT', 60),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Overseas Logistic API (Canada)
+    |--------------------------------------------------------------------------
+    | Used for shipments created with the methods:
+    |   - UNITED CANADA DDP
+    |   - UNITED CANADA E-COMMERCE
+    |
+    | Two-step flow:
+    |   1. Generate Bearer token:  POST https://api.overseaslogistic.com/token
+    |      (username/password form or JSON credentials)
+    |   2. Create shipment:        POST https://api.overseaslogistic.com/api/shipment/create
+    |      (Authorization: Bearer <token>)
+    |
+    | The same endpoint/payload is used for both DDP and E-Commerce variants;
+    | the Service field inside ServiceDetails differentiates the service
+    | (e.g. CANADA_YVR_SELF).
+    |
+    */
+
+    'overseas' => [
+        'base_url'      => env('OVERSEAS_BASE_URL', 'https://api.overseaslogistic.com'),
+        'token_url'     => env('OVERSEAS_TOKEN_URL', 'https://api.overseaslogistic.com/token'),
+        'shipment_url'  => env('OVERSEAS_SHIPMENT_URL', 'https://api.overseaslogistic.com/api/shipment/create'),
+        'username'      => env('OVERSEAS_USERNAME', 'F25064758DAE48CBABC95DE709DCC253'),
+        'password'      => env('OVERSEAS_PASSWORD', 'J2YTXPW1MGMGWOGW6DS7H9RA0A7EVONWYAJGMR5FFST1HCEEVZTVQ7L19SISZIDT'),
+        'account_code'  => env('OVERSEAS_ACCOUNT_CODE', 'PR-U02'),
+        'timeout'       => (int) env('OVERSEAS_TIMEOUT', 60),
+    ],
+
 ];

@@ -26,6 +26,17 @@ class CourierService extends Model
         'weight',
         'real_name',
         'country',
+        'status',
+    ];
+
+    /**
+     * Attribute casting.
+     *
+     * `status` is stored as a tinyInteger (1 = enabled, 0 = disabled)
+     * and is cast to integer so toggling persists cleanly.
+     */
+    protected $casts = [
+        'status' => 'integer',
     ];
 
     /**

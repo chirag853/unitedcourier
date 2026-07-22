@@ -724,10 +724,92 @@ class customerController extends Controller
         }
 
         $customer = auth()->guard('customer')->user();
-        $courierServices = \App\Models\CourierService::all();
+        // Only enabled services (status = 1) are offered to the customer.
+        $courierServices = \App\Models\CourierService::where('status', 1)->get();
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
         $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
         return view('customer.create-shipment', compact('customer', 'courierServices', 'zones', 'destinations'));
+    }
+
+    /**
+     * AJAX endpoint: return zones for a given destination_id.
+     *
+     * Checks whether any zone exists in the `zone` table for the supplied
+     * destination_id. If zones exist, reads the `zone_category` column to
+     * determine whether suggestions should be shown as a state dropdown
+     * (zone_category = 'state') or as zipcode suggestions (zone_category =
+     * 'zipcode').
+     *
+     * Response JSON:
+     *   {
+     *     "exists": bool,
+     *     "category": "state" | "zipcode" | null,
+     *     "destination": { id, name, code, country_code } | null,
+     *     "zones": [ { zone_code, zone_name }, ... ]
+     *   }
+     */
+    public function getZonesByDestination(Request $request)
+    {
+        $destinationId = $request->query('destination_id');
+
+        if (!$destinationId || !ctype_digit((string) $destinationId)) {
+            return response()->json([
+                'exists'  => false,
+                'category' => null,
+                'destination' => null,
+                'zones'   => [],
+            ], 200);
+        }
+
+        $destination = \App\Models\Destination::find((int) $destinationId);
+
+        if (!$destination) {
+            return response()->json([
+                'exists'  => false,
+                'category' => null,
+                'destination' => null,
+                'zones'   => [],
+            ], 200);
+        }
+
+        $zones = \App\Models\Zone::where('destination_id', $destination->id)
+            ->orderBy('zone_name')
+            ->get();
+
+        if ($zones->isEmpty()) {
+            return response()->json([
+                'exists'  => false,
+                'category' => null,
+                'destination' => [
+                    'id'           => $destination->id,
+                    'name'         => $destination->name,
+                    'code'         => $destination->code,
+                    'country_code' => $destination->country_code,
+                ],
+                'zones'   => [],
+            ], 200);
+        }
+
+        // Determine the category from the first zone's zone_category value.
+        // All zones for a destination are expected to share the same category.
+        $category = $zones->first()->zone_category ?: 'state';
+
+        return response()->json([
+            'exists'  => true,
+            'category' => $category,
+            'destination' => [
+                'id'           => $destination->id,
+                'name'         => $destination->name,
+                'code'         => $destination->code,
+                'country_code' => $destination->country_code,
+            ],
+            'zones'   => $zones->map(function ($z) {
+                return [
+                    'zone_code' => $z->zone_code,
+                    'zone_name' => $z->zone_name,
+                ];
+            })->values(),
+        ], 200);
     }
     
     public function kycSubmit(Request $request)
@@ -1607,7 +1689,11 @@ class customerController extends Controller
             // Validate the request data
             $validatedData = $request->validate([
                 // Shipper Info
-                'delivery_destination' => 'required|string|max:100',
+                // delivery_destination now arrives as the destination_id (numeric)
+                // selected from the dropdown. It is resolved to the destination NAME
+                // below so all downstream code (storage, country-code mapping, APIs)
+                // keeps working with the human-readable name.
+                'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
@@ -1685,6 +1771,77 @@ class customerController extends Controller
                 'items.*.amount' => 'nullable|numeric|min:0',
 
             ]);
+
+            // ------------------------------------------------------------------
+            // KYC Number format validation based on the selected KYC Type.
+            // Patterns:
+            //   GST (Normal)       -> ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
+            //   Aadhar Card        -> ^[2-9]{1}[0-9]{11}$  (12 digits, first digit 2-9)
+            //   PAN Card           -> ^[A-Z]{5}[0-9]{4}[A-Z]{1}$
+            //   Passport Number    -> ^[A-Z][0-9]{7}$
+            // ------------------------------------------------------------------
+            $kycType   = $validatedData['shipper_kyc_type']   ?? null;
+            $kycNumber = $validatedData['shipper_kyc_number'] ?? null;
+
+            if ($kycType && $kycNumber !== null && $kycNumber !== '') {
+                $kycPatterns = [
+                    'GST (Normal)'     => '/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
+                    'Aadhar Card'      => '/^[2-9]{1}[0-9]{11}$/',
+                    'PAN Card'          => '/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
+                    'Passport Number'  => '/^[A-Z][0-9]{7}$/',
+                ];
+
+                $kycHints = [
+                    'GST (Normal)'     => 'GSTIN must be 15 characters in the format 2 digits, 5 letters, 4 digits, 1 letter, 1 alphanumeric, Z, 1 alphanumeric (e.g. 27ABCDE1234F1Z5).',
+                    'Aadhar Card'      => 'Aadhaar number must be 12 digits and the first digit must be between 2 and 9.',
+                    'PAN Card'          => 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).',
+                    'Passport Number'  => 'Passport number must be 1 letter followed by 7 digits (e.g. A1234567).',
+                ];
+
+                if (isset($kycPatterns[$kycType]) && !preg_match($kycPatterns[$kycType], $kycNumber)) {
+                    $kycMessage = 'The KYC Number entered is not valid for the selected KYC Type (' . $kycType . '). ' . ($kycHints[$kycType] ?? '');
+                    if (!$request->expectsJson()) {
+                        return back()
+                            ->withErrors(['shipper_kyc_number' => $kycMessage])
+                            ->withInput()
+                            ->with('error', $kycMessage);
+                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => $kycMessage,
+                        'errors' => [
+                            'shipper_kyc_number' => [$kycMessage]
+                        ]
+                    ], 422);
+                }
+            }
+
+            // ------------------------------------------------------------------
+            // Resolve delivery_destination: the dropdown now sends the numeric
+            // destination_id. Convert it back to the destination NAME so all
+            // downstream logic (storage, getCountryCodeFromDestination(),
+            // resolveDestinationCountry(), rate calculation, APIs) keeps
+            // working with the human-readable name as before.
+            // ------------------------------------------------------------------
+            $destInput = $validatedData['delivery_destination'] ?? null;
+            $destName  = is_numeric($destInput)
+                ? optional(\App\Models\Destination::find((int) $destInput))->name
+                : $destInput;
+
+            if (!$destName) {
+                if (!$request->expectsJson()) {
+                    return back()
+                        ->withErrors(['delivery_destination' => 'The selected destination is invalid.'])
+                        ->withInput()
+                        ->with('error', 'The selected destination is invalid.');
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected destination is invalid.',
+                    'errors'  => ['delivery_destination' => ['The selected destination is invalid.']],
+                ], 422);
+            }
+            $validatedData['delivery_destination'] = $destName;
 
             // Check if origin_type is CSB V and customer has CSB status 1 (CSB-IV only)
             if ($validatedData['origin_type'] === 'CSB V') {
@@ -1854,6 +2011,36 @@ class customerController extends Controller
                         $validatedData['shipping_method'] = $courierService->method;
                         \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
                     }
+                }
+            }
+
+            // ============================================================
+            // OVERSEAS LOGISTIC — SHIPPER STATE VALIDATION
+            // The Overseas Logistic API (used for UNITED CANADA DDP /
+            // E-COMMERCE and ARAMEX GPX / Australia) requires the shipper
+            // state to be a 2-letter code (e.g. "GJ", "MH"). If the shipper
+            // state field contains more than 2 characters, block shipment
+            // creation here so the user is informed BEFORE the shipment is
+            // saved (rather than failing later at manifest time).
+            // ============================================================
+            $resolvedShippingMethod = $validatedData['shipping_method'] ?? '';
+            if ($this->isOverseasLogisticMethod($resolvedShippingMethod)) {
+                $shipperStateInput = trim((string)($validatedData['shipper_state'] ?? ''));
+                if (strlen($shipperStateInput) > 2) {
+                    $stateMessage = 'Shipper state must be a 2-letter code (e.g. "GJ", "MH") for Overseas shipments. The provided state "' . $shipperStateInput . '" is too long. Please enter a 2-letter state code and try again.';
+                    if (!$request->expectsJson()) {
+                        return back()
+                            ->withErrors(['shipper_state' => $stateMessage])
+                            ->withInput()
+                            ->with('error', $stateMessage);
+                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => $stateMessage,
+                        'errors' => [
+                            'shipper_state' => [$stateMessage]
+                        ]
+                    ], 422);
                 }
             }
 
@@ -2140,7 +2327,8 @@ class customerController extends Controller
         }
 
         $customer = auth()->guard('customer')->user();
-        $courierServices = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
+        // Only enabled services (status = 1) are offered in the bulk upload flow.
+        $courierServices = \App\Models\CourierService::where('status', 1)->orderBy('network')->orderBy('method')->get();
 
         return view('customer.bulk-upload', compact('customer', 'courierServices'));
     }
@@ -2628,8 +2816,9 @@ class customerController extends Controller
             $grandTotal = 0;
             $errors = [];
 
-            // Fetch all courier services once (mirrors getUpsRate all-services mode)
-            $allServices = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
+            // Fetch all ENABLED courier services once (mirrors getUpsRate all-services mode).
+            // Disabled services (status = 0) are excluded so their rates are not shown.
+            $allServices = \App\Models\CourierService::where('status', 1)->orderBy('network')->orderBy('method')->get();
 
             foreach ($grouped as $awbNo => $rowGroup) {
                 $firstRow = $rowGroup[0];
@@ -2987,6 +3176,7 @@ class customerController extends Controller
             //$serviceId = $request->service_id;
             $totalWeight = floatval($request->total_weight ?? 0);
             $consigneeState = $request->consignee_state;
+            $consigneeZipCode = $request->consignee_zip_code;
             $deliveryDestination = $request->delivery_destination;
             $packageWeights = $request->package_weights;
            //$isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
@@ -3004,6 +3194,13 @@ class customerController extends Controller
             }
 
             // 4. Get zone
+            // Zone lookup is category-aware:
+            //   - state-category destinations (e.g. US) store state codes as
+            //     zone_code, so we look up by consignee_state.
+            //   - zipcode-category destinations (e.g. UK/Canada) store postcodes
+            //     as zone_code, so we look up by consignee_zip_code.
+            // To stay backward-compatible we first try consignee_state, and
+            // only fall back to consignee_zip_code when no state match is found.
             $zone = null;
             if (!empty($consigneeState)) {
                 $zone = \DB::select(
@@ -3012,15 +3209,49 @@ class customerController extends Controller
                 );
                 $zone = !empty($zone) ? $zone[0] : null;
             }
+            if (empty($zone) && !empty($consigneeZipCode)) {
+                // Normalise the postcode (uppercase, trim spaces) for matching.
+                $zipNorm = strtoupper(preg_replace('/\s+/', '', trim($consigneeZipCode)));
+                if ($zipNorm !== '') {
+                    // Try an exact match first, then a prefix match (UK outward
+                    // codes like "SW1" / Canada FSAs like "M5H" are stored as
+                    // zone_code, while the user may type a full postcode such as
+                    // "SW1A 1AA" or "M5H 2N2").
+                    $zone = \DB::select(
+                        "SELECT * FROM zone WHERE UPPER(zone_code) = ? LIMIT 1",
+                        [$zipNorm]
+                    );
+                    $zone = !empty($zone) ? $zone[0] : null;
+
+                    if (empty($zone)) {
+                        // Prefix match: find the longest stored zone_code that is
+                        // a prefix of the typed postcode (e.g. "SW1" matches
+                        // "SW1A1AA"). This covers UK outward codes and Canada
+                        // forward sortation areas.
+                        $zone = \DB::select(
+                            "SELECT * FROM zone
+                             WHERE zone_category = 'zipcode'
+                             AND ? LIKE CONCAT(UPPER(zone_code), '%')
+                             ORDER BY LENGTH(zone_code) DESC
+                             LIMIT 1",
+                            [$zipNorm]
+                        );
+                        $zone = !empty($zone) ? $zone[0] : null;
+                    }
+                }
+            }
             $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
             $zoneNumber = !empty($zone) ? $zone->zone_number_testing : null;
+            $zoneName = !empty($zone) ? $zone->zone_name : null;
+            $zoneCode = !empty($zone) ? $zone->zone_code : null;
 
             // 5. Get services
             /*$serviceRows = \DB::select(
 				 "SELECT * FROM courier_services WHERE country = ? LIMIT 1",
                 [$destinationCountry]
             );*/
-            $services = CourierService::where('country', $destinationCountry)->get();
+            // Only enabled services (status = 1) show rates to customers.
+            $services = CourierService::where('country', $destinationCountry)->where('status', 1)->get();
             
             if(empty($services)){
             	return response()->json([
@@ -3321,7 +3552,12 @@ class customerController extends Controller
                     ];
 				}
 				
-				if ($destinationCountry === 'Canada'){
+				// Australia uses the same box-wise rate calculation as Canada
+				// (both are zipcode-category destinations with zone_no-based
+				// rates). The query below is fully parameterized by
+				// $destinationCountry, so adding 'Australia' here makes the
+				// ARAMEX GPX ALL IN service rates resolve correctly.
+				if ($destinationCountry === 'Canada' || $destinationCountry === 'Australia'){
 					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
@@ -5006,8 +5242,105 @@ class customerController extends Controller
             \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '"');
 
             // Route to appropriate API based on network
-            // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
-            if ($this->isPostShippingMethod($shippingMethod)) {
+            // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+            //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+            if ($this->isOverseasLogisticMethod($shippingMethod)) {
+                // Call Overseas Logistic API
+                $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
+                if (!$overseasResult['success']) {
+                    $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown error');
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Overseas Logistic API Failed: ' . $overseasMsg,
+                        'overseas_response' => $overseasResult['data'] ?? null,
+                        'request_payload' => $overseasResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                // Overseas Logistic succeeded - store tracking data
+                $apiResponse = $overseasResult['data'] ?? [];
+                $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
+                $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $customerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Overseas Logistic shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to manifested
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    // Create tracking record for manifested status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus('manifested'),
+                        'status' => 'manifested',
+                    ]);
+
+                    // Log the manifested status change
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        'manifested',
+                        'packed',
+                        'Shipment manifested via Overseas Logistic. Tracking: ' . ($trackingNumber ?? 'N/A'),
+                        $customerId,
+                        'customer'
+                    );
+
+                    \Log::info('Shipment manifested via Overseas Logistic: ' . ($trackingNumber ?? 'N/A'));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store shipment tracking for Overseas Logistic manifest: ' . $e->getMessage());
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Overseas Logistic!',
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'network' => 'Overseas Logistic',
+                    'overseas_response' => $apiResponse,
+                    'request_payload' => $overseasResult['request_payload'] ?? null,
+                ]);
+            } elseif ($this->isPostShippingMethod($shippingMethod)) {
+                // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
+                // Call PostShipping API
+                $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+                if (!$postShippingResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'PostShipping API Failed: ' . ($postShippingResult['message'] ?? 'Unknown error'),
+                        'postshipping_response' => $postShippingResult['data'] ?? null,
+                        'request_payload' => $postShippingResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                // PostShipping succeeded - store tracking data
+                $apiResponse = $postShippingResult['data'] ?? [];
+                $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+                $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
                 if (!$postShippingResult['success']) {
@@ -5390,8 +5723,75 @@ class customerController extends Controller
 
                     \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '"');
 
-                    // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
-                    if ($this->isPostShippingMethod($shippingMethod)) {
+                    // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+                    //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+                    if ($this->isOverseasLogisticMethod($shippingMethod)) {
+                        // Call Overseas Logistic API
+                        $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
+
+                        if (!$overseasResult['success']) {
+                            $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown');
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Overseas Logistic API error: ' . $overseasMsg,
+                                'request_payload' => $overseasResult['request_payload'] ?? null,
+                                'overseas_response' => $overseasResult['data'] ?? null,
+                            ];
+                            continue;
+                        }
+
+                        $apiResponse = $overseasResult['data'] ?? [];
+                        $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $customerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Overseas Logistic shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'network' => 'Overseas Logistic',
+                            'request_payload' => $overseasResult['request_payload'] ?? null,
+                        ];
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Overseas Logistic.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Overseas Logistic (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+
+                    } elseif ($this->isPostShippingMethod($shippingMethod)) {
+                        // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                         // Call PostShipping API
                         $postShippingResult = $this->callPostShippingApiFromDb($shipper);
 
@@ -6343,6 +6743,18 @@ class customerController extends Controller
             return 'Canada';
         }
 
+        // Australia detection — covers "Australia", "AU", "AUS",
+        // and any string containing "Australia".
+        $isAustralia = (
+            $destUpper === 'AUSTRALIA'
+            || $destUpper === 'AU'
+            || $destUpper === 'AUS'
+            || str_contains($destUpper, 'AUSTRALIA')
+        );
+        if ($isAustralia) {
+            return 'Australia';
+        }
+
         // Everything else (US, USA, United States, etc.) → US.
         return 'US';
     }
@@ -7092,6 +7504,834 @@ class customerController extends Controller
 
         // Flying Tigers API is called for UNITED ECO POST shipments.
         return str_contains($methodUpper, 'UNITED ECO POST');
+    }
+
+    /**
+     * Determine if a shipping method should be routed to the Overseas Logistic API.
+     * Triggered for Canada shipments created with the methods:
+     *   - UNITED CANADA DDP
+     *   - UNITED CANADA E-COMMERCE
+     *
+     * Both variants use the same Overseas Logistic endpoint and payload; the
+     * Service field inside ServiceDetails differentiates the exact service.
+     *
+     * @param string|null $shippingMethod
+     * @return bool
+     */
+    private function isCanadaOverseasMethod($shippingMethod)
+    {
+        if (empty($shippingMethod)) {
+            return false;
+        }
+
+        $methodUpper = strtoupper(trim($shippingMethod));
+
+        // Match "UNITED CANADA" with either "DDP" or "E-COMMERCE"/"ECOMMERCE".
+        $isCanada = str_contains($methodUpper, 'UNITED CANADA');
+        $isDdpOrEcom = str_contains($methodUpper, 'DDP')
+            || str_contains($methodUpper, 'E-COMMERCE')
+            || str_contains($methodUpper, 'ECOMMERCE')
+            || str_contains($methodUpper, 'E COMMERCE');
+
+        return $isCanada && $isDdpOrEcom;
+    }
+
+    /**
+     * Determine if a shipping method should be routed to the Overseas
+     * Logistic API for Australia shipments.
+     *
+     * Triggered for the "ARAMEX GPX ALL IN" service (Australia), whose
+     * courier_services.service_code is "AUSTRALIA-ARAMEX-GPX", and for the
+     * "DPEX_AU_EXPRESS" service (Australia), whose courier_services.service_code
+     * is "DPEX_AU_EXPRESS". The same Overseas Logistic endpoint/payload is
+     * reused; the Service field inside ServiceDetails (resolved from
+     * courier_services.service_code) differentiates the exact service, and
+     * ReceiverCountry is set to "AU" via getOverseasCountryCode().
+     *
+     * @param string|null $shippingMethod
+     * @return bool
+     */
+    private function isAustraliaOverseasMethod($shippingMethod)
+    {
+        if (empty($shippingMethod)) {
+            return false;
+        }
+
+        $methodUpper = strtoupper(trim($shippingMethod));
+
+        // Match "ARAMEX GPX" (the Australia service method is
+        // "ARAMEX GPX ALL IN"). Matching on "ARAMEX GPX" is intentionally
+        // tolerant of the "ALL IN" suffix so future variants still route
+        // correctly.
+        //
+        // Also match "DPEX_AU_EXPRESS" / "DPEX AU EXPRESS" — the Australia
+        // DPEX express service. Matching is tolerant of underscores vs
+        // spaces so both the service_code and human-readable variants route
+        // through the Overseas Logistic API.
+        return str_contains($methodUpper, 'ARAMEX GPX')
+            || str_contains($methodUpper, 'DPEX_AU_EXPRESS');
+    }
+
+    /**
+     * Determine if a shipping method should be routed to the Overseas
+     * Logistic API at all (Canada OR Australia variants).
+     *
+     * Centralises the Overseas-routing decision so both manifestShipment()
+     * and bulkManifestShipments() stay in sync.
+     *
+     * @param string|null $shippingMethod
+     * @return bool
+     */
+    private function isOverseasLogisticMethod($shippingMethod)
+    {
+        return $this->isCanadaOverseasMethod($shippingMethod)
+            || $this->isAustraliaOverseasMethod($shippingMethod);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Overseas Logistic API (UNITED CANADA DDP / UNITED CANADA E-COMMERCE)
+    |--------------------------------------------------------------------------
+    | Token URL:    https://api.overseaslogistic.com/token
+    | Shipment URL: https://api.overseaslogistic.com/api/shipment/create
+    |
+    | Two-step flow:
+    |   1. POST /token (OAuth2 client_credentials grant) -> Bearer access_token
+    |   2. POST /api/shipment/create with Authorization: Bearer <token>
+    |
+    | The /token endpoint is an OAuth2 token server. It requires a
+    | client_credentials grant with client_id/client_secret sent as
+    | form-encoded data (application/x-www-form-urlencoded). Sending
+    | username/password as JSON returns "invalid_client".
+    |
+    | The same endpoint/payload is used for both DDP and E-Commerce variants;
+    | the Service field inside ServiceDetails differentiates the service.
+    |
+    */
+
+    /**
+     * Generate a Bearer token from the Overseas Logistic /token endpoint.
+     *
+     * Uses the OAuth2 client_credentials grant type. The username configured
+     * in services.overseas.username is sent as client_id and the password as
+     * client_secret, form-encoded (NOT JSON).
+     *
+     * @return array ['success' => bool, 'token' => string|null, 'message' => string|null]
+     */
+    private function getOverseasLogisticToken()
+    {
+        try {
+            $tokenUrl   = config('services.overseas.token_url');
+            $clientId   = config('services.overseas.username');
+            $clientSec  = config('services.overseas.password');
+            $timeout    = (int) config('services.overseas.timeout', 60);
+
+            if (empty($tokenUrl) || empty($clientId) || empty($clientSec)) {
+                return [
+                    'success' => false,
+                    'message' => 'Overseas Logistic credentials are not configured.',
+                ];
+            }
+
+            // OAuth2 client_credentials grant — must be form-encoded.
+            $response = Http::asForm()
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                ])
+                ->timeout($timeout)
+                ->post($tokenUrl, [
+                    'grant_type'    => 'client_credentials',
+                    'client_id'     => $clientId,
+                    'client_secret' => $clientSec,
+                ]);
+
+            if (!$response->successful()) {
+                $errorBody = $response->json() ?: $response->body();
+                $errorMessage = 'Overseas Logistic token generation failed.';
+                if (is_array($errorBody)) {
+                    if (isset($errorBody['error_description'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['error_description']);
+                    } elseif (isset($errorBody['error'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['error']);
+                    } elseif (isset($errorBody['message'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['message']);
+                    }
+                }
+                \Log::error('Overseas Logistic token generation failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                ];
+            }
+
+            $tokenData = $response->json();
+            $bearerToken = null;
+
+            // Extract token from various possible response formats.
+            // The OAuth2 server returns "access_token" at the top level.
+            if (isset($tokenData['access_token'])) {
+                $bearerToken = $tokenData['access_token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['access_token'])) {
+                $bearerToken = $tokenData['data']['access_token'];
+            } elseif (isset($tokenData['token'])) {
+                $bearerToken = $tokenData['token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['token'])) {
+                $bearerToken = $tokenData['data']['token'];
+            } elseif (isset($tokenData['Token'])) {
+                $bearerToken = $tokenData['Token'];
+            }
+
+            if (!$bearerToken) {
+                \Log::error('Overseas Logistic: No token found in response. Response: ' . json_encode($tokenData));
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in Overseas Logistic authentication response.',
+                ];
+            }
+
+            \Log::info('Overseas Logistic token generated successfully.');
+            return [
+                'success' => true,
+                'token'   => $bearerToken,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Overseas Logistic token generation exception: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Overseas Logistic token generation failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Build the Overseas Logistic shipment-create payload from database records.
+     * Payload structure mirrors the documented /api/shipment/create format.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildOverseasLogisticPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (!$consignee) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+    
+        
+        if($shipper->kyc_type == "GST (Normal)"){
+            $kycType_data = "GSTIN (Normal)";
+        }
+        elseif($shipper->kyc_type == "Aadhar Card"){
+            $kycType_data = "Aadhaar Number";
+        }
+        elseif($shipper->kyc_type == "PAN Card"){
+            $kycType_data = "PAN Number";
+        }
+        else{
+            $kycType_data = $shipper->kyc_type ?? '';
+        }
+        
+        
+        // ---- Sender ----
+        $senderName      = $shipper->company_name ?? $shipper->contact_person ?? 'Shipper';
+        $senderContact   = $shipper->contact_person ?? $shipper->company_name ?? 'Shipper';
+        $senderAddress1  = $shipper->address_line1 ?? '';
+        $senderAddress2  = $shipper->address_line2 ?? '';
+        $senderAddress3  = $shipper->address_line3 ?? '';
+        $senderPincode   = (string) ($shipper->pincode ?? '');
+        $senderCity      = $shipper->city ?? '';
+        $senderState     = $shipper->state ?? '';
+
+        // ---- Validation: shipper state must not exceed 2 characters ----
+        // The Overseas Logistic API expects a 2-letter state code (e.g. "GJ",
+        // "MH"). If the shipper's state field contains more than 2 letters
+        // (e.g. a full state name like "Gujarat"), shipment creation is blocked
+        // here with an error so the API is never called with invalid data.
+        // This applies to ALL Overseas Logistic shipments (Canada DDP /
+        // E-Commerce and ARAMEX GPX / Australia).
+        $senderStateTrimmed = trim((string) $senderState);
+        if (strlen($senderStateTrimmed) > 2) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: Shipper state exceeds 2 characters for shipper #' . $shipper->id . ' | state="' . $senderStateTrimmed . '"');
+            return [
+                'success' => false,
+                'message' => 'Shipper state must be a 2-letter code (e.g. "GJ", "MH"). The provided state "' . $senderStateTrimmed . '" is too long. Please update the shipper state to a 2-letter code and try again.',
+            ];
+        }
+
+        $senderTelephone = (string) ($shipper->phone_number ?? '');
+        $senderEmail     = $shipper->email ?? '';
+        // $kycType         = $shipper->kyc_type ?? 'GSTIN (Normal)';
+        $kycType         = $kycType_data;
+        $kycNo           = (string) ($shipper->kyc_number ?? '');
+
+        // ---- Receiver ----
+        // $receiverType      = $consignee->origin_type ? ucfirst(strtolower($consignee->origin_type)) : 'Business';
+        // if($consignee->origin_type == "CSB IV") {
+        //     $receiverType = "customer";
+        // } else if($consignee->origin_type == "CSB V") {
+        //     $receiverType = "Business";
+        // }
+        $receiverName      = $consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee';
+        $receiverContact   = $consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee';
+        $receiverAddress1  = $consignee->address_line1 ?? '';
+        $receiverAddress2  = $consignee->address_line2 ?? '';
+        $receiverAddress3  = $consignee->address_line3 ?? '';
+        $receiverZipcode   = (string) ($consignee->zip_code ?? '');
+        $receiverCity      = $consignee->city ?? '';
+        $receiverState     = $consignee->state ?? '';
+        $receiverCountry   = $this->getOverseasCountryCode($consignee->delivery_destination ?? '', 'CA');
+        $receiverTelephone = (string) ($consignee->phone_number ?? '');
+        $receiverEmail     = $consignee->email ?? '';
+
+        // ---- Service details ----
+        // Resolve the courier service to get the Service code (e.g. CANADA_YVR_SELF).
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        $serviceCode    = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
+        if (empty($serviceCode)) {
+            // Fallback to a sensible default if the service code is missing.
+            $serviceCode = 'CANADA_YVR_SELF';
+        }
+
+        // GoodsType: NDox (documents) vs NDox (non-documents). Default to NDox.
+        $goodsType   = 'NDox';
+        $packageType = 'PACKAGE';
+
+        // ---- Package details ----
+        $packageDetail = [];
+        foreach ($packages as $pkg) {
+            $packageDetail[] = [
+                'Length'       => (float) ($pkg->length_cm ?? 0),
+                'Width'        => (float) ($pkg->width_cm ?? 0),
+                'Height'       => (float) ($pkg->height_cm ?? 0),
+                'ActualWeight' => (float) ($pkg->actual_weight_kg ?? 0),
+            ];
+        }
+
+        // ---- Additional details / product details ----
+        $productDetails = [];
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+            foreach ($invoiceItems as $item) {
+                $productDetails[] = [
+                    'BoxNo'         => (string) ($item->box_no ?? 1),
+                    'Description'   => $item->description ?? '',
+                    'HSNCode'       => (string) ($item->hs_code ?? ''),
+                    'HTSCode'       => (string) ($item->hts_code ?? ''),
+                    'UnitType'      => $item->unit_type ?? 'PCS',
+                    'Qty'           => (int) $item->qty,
+                    'UnitRate'      => (float) $item->unit_rate,
+                    'ShipPieceIGST' => (float) ($item->igst_percentage ?? 0),
+                    'PieceWt'       => (float) ($item->amount > 0 && $item->qty > 0 ? round($item->amount / $item->qty, 3) : 0),
+                ];
+            }
+        }
+
+        // Fallback product detail when no invoice items exist.
+        if (empty($productDetails)) {
+            $productDetails[] = [
+                'BoxNo'         => '1',
+                'Description'   => 'General Merchandise',
+                'HSNCode'       => '',
+                'HTSCode'       => '',
+                'UnitType'      => 'PCS',
+                'Qty'           => 1,
+                'UnitRate'      => (float) ($invoice ? $invoice->invoice_amount : 0),
+                'ShipPieceIGST' => 0.00,
+                'PieceWt'       => 0.3,
+            ];
+        }
+
+        // Invoice / export details.
+        $invoiceNo       = $invoice ? ($invoice->invoice_number ?? '') : '';
+        $invoiceDate      = $invoice && $invoice->invoice_date
+            ? $invoice->invoice_date->format('Y-m-d') . 'T00:00:00Z'
+            : now()->format('Y-m-d') . 'T00:00:00Z';
+        $invoiceCurrency  = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+        $termsOfSale      = $invoice ? ($invoice->incoterms ?? 'FOB') : 'FOB';
+        $customerRefNo    = $invoice ? ($invoice->reference_number ?? '') : '';
+        $transactionId    = $shipper->awb_number ?? ('TXN-' . $shipper->id);
+
+        // DutyTax: DDP for UNITED CANADA DDP, DDU otherwise (E-Commerce).
+        $methodUpper = strtoupper(trim($shippingMethod));
+        $dutyTax = str_contains($methodUpper, 'DDP') ? 'DDP' : 'DDU';
+
+        // CSB type from customer csb_status (1..5 -> "CSB 1".."CSB 5"); default CSB 4.
+        $customer = Customer::find($shipper->customer_id);
+        $csbType = 'CSB 4';
+        // if ($customer && $customer->csb_status) {
+        //     // m chahata hu ki ek condition ho ki agar csb_status 1 h toh csbtype "csb 1" ho toh $csbType = "CSB 4" print ho agar csb_status 2 h toh csbtype "csb 2" h toh $csbType = "CSB 5" print ho
+
+        //     if ($customer->csb_status == 1) {
+        //         $csbType = 'CSB 4';
+        //     } elseif ($customer->csb_status == 2) {
+        //         $csbType = 'CSB 5';
+        //     }
+        //     print_r($csbType);
+        // }
+
+        if($consignee->origin_type == 'CSB IV'){
+            
+            $csbType = 'CSB 4';
+        }
+        else if ($consignee->origin_type == 'CSB V'){
+            
+            $csbType = 'CSB 5';
+        }
+
+        $payload = [
+            'AccountCode' => config('services.overseas.account_code', 'PR-U02'),
+            'Sender' => [
+                'SenderName'           => $senderName,
+                'SenderContactPerson' => $senderContact,
+                'SenderAddressLine1'   => $senderAddress1,
+                'SenderAddressLine2'   => $senderAddress2,
+                'SenderAddressLine3'   => $senderAddress3,
+                'SenderPincode'        => $senderPincode,
+                'SenderCity'           => $senderCity,
+                'SenderState'          => $senderState,
+                'SenderTelephone'      => $senderTelephone,
+                'SenderEmailId'        => $senderEmail,
+                'KYCType'              => $kycType,
+                'KYCNo'                => $kycNo,
+            ],
+            'Receiver' => [
+                'ReceiverType'          => "Business",
+                'ReceiverName'          => $receiverName,
+                'ReceiverContactPerson' => $receiverContact,
+                'ReceiverAddressLine1'  => $receiverAddress1,
+                'ReceiverAddressLine2'  => $receiverAddress2,
+                'ReceiverAddressLine3'  => $receiverAddress3,
+                'ReceiverZipcode'       => $receiverZipcode,
+                'ReceiverCity'          => $receiverCity,
+                'ReceiverState'         => $receiverState,
+                'ReceiverCountry'       => $receiverCountry,
+                'ReceiverTelephone'     => $receiverTelephone,
+                'ReceiverEmailid'       => $receiverEmail,
+                'VatId'                 => '',
+            ],
+            'ServiceDetails' => [
+                'Service'     => $serviceCode,
+                'GoodsType'   => $goodsType,
+                'PackageType' => $packageType,
+            ],
+            'PackageDetails' => [
+                'PackageDetail' => $packageDetail,
+            ],
+            'AdditionalDetails' => [
+                'ProductDetails'       => $productDetails,
+                'InvoiceCurrency'      => $invoiceCurrency,
+                'InvoiceNo'            => $invoiceNo,
+                'InvoiceDate'          => $invoiceDate,
+                'TermsOfSale'          => $termsOfSale,
+                'ReasonForExport'      => 'GIFT',
+                'FreightCharge'        => 0,
+                'InsuranceCharge'      => 0,
+                'CSB_Type'             => $csbType,
+                'CustomerRefNo'        => $customerRefNo,
+                'DeliveryConfirmation' => 'No',
+                'DutyTax'              => $dutyTax,
+                'DutiesAccountNo'      => '',
+                'TransactionId'        => $transactionId,
+                'ShipperImage'         => '',
+                'ShipperKYC'           => '',
+                'FileName'             => '',
+            ],
+        ];
+
+        return ['success' => true, 'payload' => $payload];
+    }
+
+    /**
+     * Safely convert any value (string, array, object, null) into a string
+     * for use in log messages and error responses. Prevents
+     * "Array to string conversion" errors when API error fields are arrays.
+     *
+     * @param mixed $value
+     * @return string
+     */
+    private function overseasValueToString($value)
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_null($value)) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+        // Arrays / objects -> JSON string (never triggers array-to-string).
+        $json = json_encode($value);
+        return ($json === false) ? '' : $json;
+    }
+
+    /**
+     * Call the Overseas Logistic API to create a shipment.
+     * Two-step process:
+     * 1. Generate Bearer token from /token
+     * 2. Create shipment via /api/shipment/create using the Bearer token
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null, 'request_payload' => array|null]
+     */
+    private function callOverseasLogisticApiFromDb($shipper)
+    {
+        try {
+            // Step 1: Generate Bearer token.
+            $tokenResult = $this->getOverseasLogisticToken();
+            if (!$tokenResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $tokenResult['message'] ?? 'Overseas Logistic token generation failed.',
+                ];
+            }
+            $bearerToken = $tokenResult['token'];
+
+            // Step 2: Build the shipment payload.
+            $payloadResult = $this->buildOverseasLogisticPayloadFromDb($shipper);
+            if (!$payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build Overseas Logistic payload.',
+                ];
+            }
+            $payload = $payloadResult['payload'];
+
+            $shipmentUrl = config('services.overseas.shipment_url');
+            $timeout     = (int) config('services.overseas.timeout', 60);
+
+            \Log::info('Overseas Logistic shipment payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+
+            // Step 3: Call the shipment/create API with the Bearer token.
+            $response = Http::withHeaders([
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+                'Authorization' => 'Bearer ' . $bearerToken,
+            ])
+                ->timeout($timeout)
+                ->post($shipmentUrl, $payload);
+
+            $apiResponse = $response->json();
+
+            if (!$response->successful()) {
+                $errorMessage = 'Overseas Logistic API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['message']);
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && !empty($apiResponse['details'])) {
+                        $details = $apiResponse['details'];
+                        if (is_array($details)) {
+                            $flat = array_map([$this, 'overseasValueToString'], $details);
+                            $errorMessage .= ' — ' . implode('; ', $flat);
+                        } else {
+                            $errorMessage .= ' — ' . $this->overseasValueToString($details);
+                        }
+                    }
+                }
+                \Log::error('Overseas Logistic shipment creation failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                return [
+                    'success'         => false,
+                    'message'         => $errorMessage,
+                    'data'            => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code'     => $response->status(),
+                ];
+            }
+
+            // Check for a body-level error/status even on HTTP 200.
+            // The Overseas Logistic API returns { "Status": true/false, "Error": "...", "Data": {...} }.
+            // Treat Status === false (boolean) OR status === "ERROR" (string) as a failure.
+            if (is_array($apiResponse)) {
+                $responseStatus = $apiResponse['Status'] ?? $apiResponse['status'] ?? null;
+                $isError = false;
+                if ($responseStatus === false) {
+                    $isError = true;
+                } elseif ($responseStatus !== null && strtoupper((string) $responseStatus) === 'ERROR') {
+                    $isError = true;
+                }
+                if ($isError) {
+                    $rawError = $apiResponse['Error'] ?? $apiResponse['error']
+                        ?? $apiResponse['message'] ?? $apiResponse['Message']
+                        ?? 'Overseas Logistic API returned an error status.';
+                    $errorMessage = $this->overseasValueToString($rawError);
+                    \Log::error('Overseas Logistic API returned error in body for shipper #' . $shipper->id . ': ' . $errorMessage . ' | Body: ' . $response->body());
+                    return [
+                        'success'         => false,
+                        'message'         => $errorMessage,
+                        'data'            => $apiResponse,
+                        'request_payload' => $payload,
+                    ];
+                }
+            }
+
+            \Log::info('Overseas Logistic shipment created for shipper #' . $shipper->id . '. Response: ' . substr($response->body(), 0, 2000));
+            return [
+                'success'         => true,
+                'message'         => 'Overseas Logistic shipment created successfully.',
+                'data'            => $apiResponse,
+                'request_payload' => $payload,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Overseas Logistic API call failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Overseas Logistic API call failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Extract a tracking/AWB number from an Overseas Logistic API response.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractOverseasTrackingNumber($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the confirmed Overseas Logistic response format:
+        // { "Status": true, "Data": { "AwbNo": "55141977", ... } }
+        $priorityKeys = ['AwbNo', 'AwbNumber', 'awb_number', 'AWBNumber'];
+        $candidateKeys = [
+            'TrackingNumber', 'tracking_number',
+            'WaybillNumber', 'waybill_number', 'ConsignmentNumber', 'consignment_number',
+            'ShipmentNumber', 'shipment_number', 'OrderNumber', 'order_number',
+            'ReferenceNo', 'reference_no', 'RefNo', 'BookingId', 'booking_id',
+            'Waybill', 'waybill', 'Reference', 'reference', 'ShipmentId', 'shipment_id',
+        ];
+        $allKeys = array_merge($priorityKeys, $candidateKeys);
+
+        // Case A: The response itself is a list of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($allKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys.
+        foreach ($allKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "Data" (capital, confirmed format) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    foreach ($allKeys as $key) {
+                        if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                            return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                        }
+                    }
+                }
+                foreach ($allKeys as $key) {
+                    if (isset($data[$key]) && !empty($data[$key])) {
+                        return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                    }
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a label URL (or base64 label) from an Overseas Logistic API response.
+     *
+     * @param mixed $apiResponse
+     * @return string|null
+     */
+    private function extractOverseasLabelUrl($apiResponse)
+    {
+        if (!is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the confirmed Overseas Logistic response format:
+        // { "Data": { "Airwaybill": { "AirwaybillUrl": "...", "BoxlabelUrl": "...", "CustomInvoiceUrl": "..." } } }
+        $priorityKeys = ['AirwaybillUrl', 'BoxlabelUrl', 'LabelUrl', 'label_url', 'LabelURL', 'LabelLink', 'label_link'];
+        $labelKeys = [
+            'PdfUrl', 'pdf_url', 'PdfLink', 'pdf_link', 'Label', 'label',
+            'LabelData', 'label_data', 'PdfBase64', 'pdf_base64', 'LabelBase64', 'label_base64',
+        ];
+        $allKeys = array_merge($priorityKeys, $labelKeys);
+
+        // Case 0 (confirmed format): Data.Airwaybill.<key>
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                foreach (['Airwaybill', 'airwaybill', 'AirwayBill', 'Label', 'label'] as $awbKey) {
+                    if (isset($data[$awbKey]) && is_array($data[$awbKey])) {
+                        foreach ($priorityKeys as $key) {
+                            if (isset($data[$awbKey][$key]) && !empty($data[$awbKey][$key])) {
+                                return is_string($data[$awbKey][$key]) ? $data[$awbKey][$key] : (string) $data[$awbKey][$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Case A: List of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($allKeys as $key) {
+                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Top-level keys.
+        foreach ($allKeys as $key) {
+            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "Data" (capital) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    foreach ($allKeys as $key) {
+                        if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                            return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                        }
+                    }
+                }
+                foreach ($allKeys as $key) {
+                    if (isset($data[$key]) && !empty($data[$key])) {
+                        return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                    }
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && !empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize a delivery-destination string into an ISO country code for the
+     * Overseas Logistic API. Defaults to the provided fallback (CA for Canada).
+     *
+     * @param string|null $destination
+     * @param string $fallback
+     * @return string
+     */
+    private function getOverseasCountryCode($destination, $fallback = 'CA')
+    {
+        $destUpper = strtoupper(trim($destination ?? ''));
+
+        if ($destUpper === '') {
+            return $fallback;
+        }
+
+        // Canada detection.
+        $isCanada = (
+            $destUpper === 'CANADA'
+            || $destUpper === 'CA'
+            || str_contains($destUpper, 'CANADA')
+        );
+        if ($isCanada) {
+            return 'CA';
+        }
+
+        // Australia detection — covers "Australia", "AU", "AUS", and any
+        // string containing "Australia". Returns ISO code "AU" for the
+        // Overseas Logistic API ReceiverCountry field.
+        $isAustralia = (
+            $destUpper === 'AUSTRALIA'
+            || $destUpper === 'AU'
+            || $destUpper === 'AUS'
+            || str_contains($destUpper, 'AUSTRALIA')
+        );
+        if ($isAustralia) {
+            return 'AU';
+        }
+
+        // UK detection.
+        $isUk = (
+            $destUpper === 'UK'
+            || $destUpper === 'GB'
+            || str_contains($destUpper, 'UNITED KINGDOM')
+            || str_starts_with($destUpper, 'UK -')
+            || str_contains($destUpper, 'GREAT BRITAIN')
+        );
+        if ($isUk) {
+            return 'GB';
+        }
+
+        // US detection.
+        $isUs = (
+            $destUpper === 'US'
+            || $destUpper === 'USA'
+            || str_contains($destUpper, 'UNITED STATE')
+            || str_starts_with($destUpper, 'US-')
+        );
+        if ($isUs) {
+            return 'US';
+        }
+
+        return $fallback;
     }
 
     /**

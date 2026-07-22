@@ -3505,7 +3505,12 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">KYC Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="shipper_kyc_number" value="{{ old('shipper_kyc_number') }}" placeholder="KYC Number">
+                                                                    name="shipper_kyc_number" id="shipper_kyc_number"
+                                                                    value="{{ old('shipper_kyc_number') }}"
+                                                                    placeholder="KYC Number"
+                                                                    autocomplete="off">
+                                                                <div class="invalid-feedback d-block text-danger" id="shipper_kyc_number_error" style="display:none !important;"></div>
+                                                                <small class="text-muted d-block mt-1" id="shipper_kyc_number_hint"></small>
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
@@ -3536,17 +3541,19 @@
                                                                 <label class="form-label">Delivery Destination<span
                                                                         class="text-danger ms-1">*</span></label>
                                                                 <select class="select2 select2-hidden-accessible"
-                                                                    name="delivery_destination" data-toggle="select2"
+                                                                    name="delivery_destination" id="delivery_destination" data-toggle="select2"
                                                                     data-select2-id="12" tabindex="-1"
                                                                     aria-hidden="true">
                                                                     <option value="">Select</option>
-                                                                    <option value="US- United State of America" {{ old('delivery_destination') == 'US- United State of America' ? 'selected' : '' }}>US- United State of America</option>
-                                                                    <option value="UK - United Kingdom" {{ old('delivery_destination') == 'UK - United Kingdom' ? 'selected' : '' }}>UK - United Kingdom</option>
-                                                                    <option value="Canada" {{ old('delivery_destination') == 'Canada' ? 'selected' : '' }}>Canada</option>
-                                                                    <!-- <option value="India" {{ old('delivery_destination') == 'India' ? 'selected' : '' }}>IN -India</option>
-                                                                    <option value="China" {{ old('delivery_destination') == 'China' ? 'selected' : '' }}> CN - China</option>
-                                                                    <option value="Russia" {{ old('delivery_destination') == 'Russia' ? 'selected' : '' }}>RU - Russia</option>
-                                                                    <option value="Srilanka" {{ old('delivery_destination') == 'Srilanka' ? 'selected' : '' }}>LK - Srilanka</option> -->
+                                                                    @foreach($destinations as $destination)
+                                                                        <option value="{{ $destination->id }}"
+                                                                                data-name="{{ $destination->name }}"
+                                                                                data-code="{{ $destination->code }}"
+                                                                                data-country-code="{{ $destination->country_code }}"
+                                                                                {{ old('delivery_destination') == $destination->id ? 'selected' : '' }}>
+                                                                            {{ $destination->name }}
+                                                                        </option>
+                                                                    @endforeach
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -8720,7 +8727,19 @@
         if (customerInfo) customerInfo.style.display = 'none';
 
         const consigneeState = getVal('select[name="consignee_state"]');
-        const deliveryDestination = getVal('select[name="delivery_destination"]');
+        // delivery_destination option value is now the numeric destination_id,
+        // but the backend (getUpsRate → resolveDestinationCountry) expects the
+        // human-readable destination NAME. Read it from the selected option's
+        // data-name attribute (exposed globally by the zone-suggestions script).
+        const destSelectEl = document.querySelector('select[name="delivery_destination"]');
+        let deliveryDestination = '';
+        if (destSelectEl && destSelectEl.selectedIndex >= 0) {
+            const opt = destSelectEl.options[destSelectEl.selectedIndex];
+            deliveryDestination = (opt && opt.dataset.name) ? opt.dataset.name : (destSelectEl.value || '');
+        }
+        if (!deliveryDestination && typeof window.getDestinationName === 'function') {
+            deliveryDestination = window.getDestinationName();
+        }
 
         // Calculate total weight from all package rows using Chargeable Weight
         // (Chg. Wt = max of actual weight & volumetric weight per package).
@@ -8912,6 +8931,7 @@
                 service_id: '',
                 total_weight: totalWeight,
                 consignee_state: consigneeState,
+                consignee_zip_code: getVal('input[name="consignee_zip_code"]'),
                 delivery_destination: deliveryDestination,
                 package_weights: packageWeights
             })
@@ -9142,19 +9162,23 @@
 
                     let globalIndex = 0;
 
-                    // Render zone-independent group first (if exists)
-                    // if (zoneGroups['general']) {
-                    //     cardsHtml += `<div class="zone-group mb-4">
-                    //         <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
-                    //             <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
-                    //         </div>`;
-                    //     zoneGroups['general'].forEach(function(r) {
-                    //         const isChecked = globalIndex === 0;
-                    //         cardsHtml += renderRateCard(r, globalIndex, isChecked);
-                    //         globalIndex++;
-                    //     });
-                    //     cardsHtml += `</div>`;
-                    // }
+                    // Render zone-independent ("general") group first if it exists.
+                    // UK/Canada (zipcode-category) destinations store zone_number_testing
+                    // as 0, so their rates arrive with zone_no = 0/null and are grouped
+                    // here. Without rendering this group those rates never show on the
+                    // frontend even though the API returns them.
+                    if (zoneGroups['general']) {
+                        cardsHtml += `<div class="zone-group mb-4">
+                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
+                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
+                            </div>`;
+                        zoneGroups['general'].forEach(function(r) {
+                            const isChecked = globalIndex === 0;
+                            cardsHtml += renderRateCard(r, globalIndex, isChecked);
+                            globalIndex++;
+                        });
+                        cardsHtml += `</div>`;
+                    }
 
                     // Render zone-specific groups
                     const zoneKeys = Object.keys(zoneGroups).filter(k => k !== 'general');
@@ -9253,12 +9277,111 @@
 
     </script>
     <script>
+    // ===== KYC Number validation based on selected KYC Type =====
+    // Patterns:
+    //   GST (Normal)      -> ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
+    //   Aadhar Card       -> ^[2-9]{1}[0-9]{11}$  (12 digits, first digit 2-9)
+    //   PAN Card          -> ^[A-Z]{5}[0-9]{4}[A-Z]{1}$
+    //   Passport Number   -> ^[A-Z][0-9]{7}$
+    window.KYC_PATTERNS = {
+        'GST (Normal)': {
+            regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+            hint: 'GSTIN must be 15 characters: 2 digits, 5 letters, 4 digits, 1 letter, 1 alphanumeric, Z, 1 alphanumeric (e.g. 27ABCDE1234F1Z5).',
+            placeholder: 'e.g. 27ABCDE1234F1Z5'
+        },
+        'Aadhar Card': {
+            regex: /^[2-9]{1}[0-9]{11}$/,
+            hint: 'Aadhaar number must be 12 digits and the first digit must be between 2 and 9.',
+            placeholder: 'e.g. 234567890123'
+        },
+        'PAN Card': {
+            regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+            hint: 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).',
+            placeholder: 'e.g. ABCDE1234F'
+        },
+        'Passport Number': {
+            regex: /^[A-Z][0-9]{7}$/,
+            hint: 'Passport number must be 1 letter followed by 7 digits (e.g. A1234567).',
+            placeholder: 'e.g. A1234567'
+        }
+    };
+
+    window.validateShipperKycNumber = function() {
+        const kycTypeEl = document.querySelector('[name="shipper_kyc_type"]');
+        const kycNumberEl = document.getElementById('shipper_kyc_number');
+        const errorEl = document.getElementById('shipper_kyc_number_error');
+        const hintEl = document.getElementById('shipper_kyc_number_hint');
+        if (!kycTypeEl || !kycNumberEl || !errorEl) {
+            return true;
+        }
+
+        const kycType = kycTypeEl.value || '';
+        const kycNumber = kycNumberEl.value || '';
+        const pattern = window.KYC_PATTERNS[kycType];
+
+        // Update hint text and placeholder based on selected KYC type
+        if (hintEl) {
+            hintEl.textContent = pattern ? pattern.hint : '';
+        }
+        kycNumberEl.placeholder = pattern ? pattern.placeholder : 'KYC Number';
+
+        // If no KYC type selected, or no number entered, do not show error
+        if (!kycType || !kycNumber) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+            kycNumberEl.classList.remove('is-invalid');
+            return true;
+        }
+
+        if (!pattern) {
+            // Unknown KYC type - no specific validation
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+            kycNumberEl.classList.remove('is-invalid');
+            return true;
+        }
+
+        if (!pattern.regex.test(kycNumber)) {
+            errorEl.textContent = pattern.hint;
+            errorEl.style.display = 'block';
+            kycNumberEl.classList.add('is-invalid');
+            return false;
+        }
+
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+        kycNumberEl.classList.remove('is-invalid');
+        return true;
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const kycTypeEl = document.querySelector('[name="shipper_kyc_type"]');
+        const kycNumberEl = document.getElementById('shipper_kyc_number');
+        if (kycTypeEl) {
+            // Select2 fires 'change' on the underlying select
+            $(kycTypeEl).on('change', window.validateShipperKycNumber);
+            kycTypeEl.addEventListener('change', window.validateShipperKycNumber);
+        }
+        if (kycNumberEl) {
+            kycNumberEl.addEventListener('input', window.validateShipperKycNumber);
+            kycNumberEl.addEventListener('blur', window.validateShipperKycNumber);
+        }
+        // Run once on load to set hint/placeholder for the pre-selected type
+        window.validateShipperKycNumber();
+    });
+
     // Handle Next button click to open Consignee Info accordion
     document.addEventListener('DOMContentLoaded', function() {
         const nextButton = document.getElementById('nextToConsignee');
         if (nextButton) {
             nextButton.addEventListener('click', function(e) {
                 e.preventDefault();
+                // Validate KYC number before moving to the next step
+                if (!window.validateShipperKycNumber()) {
+                    // Re-open the Shipper Info accordion so the user can fix the error
+                    $('#basic').collapse('show');
+                    return;
+                }
                 // Close Shipper Info accordion
                 $('#basic').collapse('hide');
                 // Open Consignee Info accordion
@@ -9372,7 +9495,21 @@
             document.getElementById('preview_consignee_state').textContent = getSelectVal('consignee_state');
 
             // Shipment Details
-            document.getElementById('preview_delivery_destination').textContent = getSelectVal('delivery_destination');
+            // delivery_destination option value is the numeric destination_id;
+            // show the human-readable name from the selected option's data-name
+            // attribute (falling back to the option text).
+            {
+                const destEl = form.querySelector('[name="delivery_destination"]');
+                let destDisplay = '';
+                if (destEl && destEl.selectedIndex >= 0) {
+                    const opt = destEl.options[destEl.selectedIndex];
+                    destDisplay = (opt && opt.dataset.name) ? opt.dataset.name : (opt ? opt.text : '');
+                }
+                if (!destDisplay && typeof window.getDestinationName === 'function') {
+                    destDisplay = window.getDestinationName();
+                }
+                document.getElementById('preview_delivery_destination').textContent = destDisplay;
+            }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
             document.getElementById('preview_shipping_method').textContent = getSelectVal('shipping_method');
 
@@ -9530,6 +9667,57 @@
                 if (!submitButton) {
                     return;
                 }
+                // Validate KYC number format based on selected KYC type
+                if (typeof window.validateShipperKycNumber === 'function' && !window.validateShipperKycNumber()) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Invalid KYC Number',
+                        html: 'The KYC Number entered is not valid for the selected KYC Type.<br>Please check the KYC Number field and try again.',
+                        confirmButtonColor: '#dc3545'
+                    });
+                    // Re-open the Shipper Info accordion so the user can fix the error
+                    const basicCollapse = document.getElementById('basic');
+                    if (basicCollapse && window.bootstrap) {
+                        bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
+                    } else if (window.$ && window.$('#basic')) {
+                        window.$('#basic').collapse('show');
+                    }
+                    return;
+                }
+                // ===== Shipper state validation for Overseas Logistic methods =====
+                // The Overseas Logistic API (UNITED CANADA DDP / E-COMMERCE and
+                // ARAMEX GPX / Australia) requires the shipper state to be a
+                // 2-letter code (e.g. "GJ", "MH"). Block submission here so the
+                // user is informed BEFORE the shipment is created.
+                (function() {
+                    const rateRadioEl = document.querySelector('input[name="rate_select"]:checked');
+                    const selectedMethod = rateRadioEl ? (rateRadioEl.dataset.method || '') : '';
+                    const methodUpper = (selectedMethod || '').toUpperCase().trim();
+                    // Match Overseas Logistic methods: "UNITED CANADA" (DDP /
+                    // E-COMMERCE) and "ARAMEX GPX" (Australia).
+                    const isOverseas = methodUpper.includes('UNITED CANADA') || methodUpper.includes('ARAMEX GPX');
+                    if (isOverseas) {
+                        const stateEl = document.querySelector('[name="shipper_state"]');
+                        const stateVal = stateEl ? (stateEl.value || '').trim() : '';
+                        if (stateVal.length > 2) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Invalid Shipper State',
+                                html: 'Shipper state must be a <strong>2-letter code</strong> (e.g. "GJ", "MH") for Overseas shipments.<br>The provided state <strong>"' + stateVal + '"</strong> is too long.<br>Please enter a 2-letter state code and try again.',
+                                confirmButtonColor: '#dc3545'
+                            });
+                            // Re-open the Shipper Info accordion so the user can fix the error
+                            const basicCollapse = document.getElementById('basic');
+                            if (basicCollapse && window.bootstrap) {
+                                bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
+                            } else if (window.$ && window.$('#basic')) {
+                                window.$('#basic').collapse('show');
+                            }
+                            if (stateEl) { stateEl.focus(); }
+                            return;
+                        }
+                    }
+                })();
                 // Validate invoice total against origin-type limit
                 // CSB IV -> max 25,000 | CSB V -> max 10,00,000
                 if (window.getMaxInvoiceTotal && window.updateTotal) {
@@ -10279,66 +10467,577 @@ if (rateRadio && rateRadio.dataset.rate) {
     </script>
     <script>
     // ============================================================
-    // ZIP / POSTCODE AUTO-FILL: City & State
-    // - UK destination  → postcodes.io API (city = admin_district, state = region)
-    // - Other countries → zippopotam.us API (city = place name, state = state abbreviation)
+    // DESTINATION → ZONE SUGGESTIONS (state dropdown OR zipcode autocomplete)
+    //
+    // When the user selects a country (delivery_destination), we call the
+    // backend endpoint /customer/zones-by-destination?destination_id=...
+    // which checks the `zone` table for that destination_id and reads the
+    // `zone_category` column:
+    //
+    //   - zone_category = 'state'   → populate the consignee_state dropdown
+    //                                  with the returned zones.
+    //   - zone_category = 'zipcode' → clear/disable the state dropdown and
+    //                                  enable zipcode suggestions on the zip
+    //                                  input (filter zone rows by typed prefix,
+    //                                  show "zone_code - zone_name", on select
+    //                                  fill zip + city).
+    //   - no zones exist            → clear both the state dropdown and the
+    //                                  zip suggestions.
     // ============================================================
     (function() {
-        const zipInput = document.getElementById('consignee_zip_code');
-        const cityInput = document.getElementById('consignee_city');
-        const stateSelect = document.querySelector('select[name="consignee_state"]');
-        const destSelect = document.querySelector('select[name="delivery_destination"]');
+        const zipInput    = document.getElementById('consignee_zip_code');
+        const cityInput    = document.getElementById('consignee_city');
+        const stateSelect  = document.querySelector('select[name="consignee_state"]');
+        const destSelect   = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
 
-        if (!zipInput) return;
+        if (!destSelect) return;
 
-        // Returns true when the selected delivery destination is UK
-        function isUkDestination() {
-            if (!destSelect) return false;
-            return destSelect.value === 'UK - United Kingdom';
+        // ---- State of the current destination's zones ----
+        let currentZones      = [];   // [{zone_code, zone_name}, ...]
+        let currentCategory   = null;  // 'state' | 'zipcode' | null
+        let currentDestName   = '';    // human-readable destination name (for preview)
+
+        // ---- Zipcode suggestion dropdown element ----
+        let zipDropdown = document.createElement('div');
+        zipDropdown.id = 'zip-suggestion-dropdown';
+        zipDropdown.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #ced4da;border-radius:4px;max-height:220px;overflow-y:auto;display:none;box-shadow:0 4px 10px rgba(0,0,0,.12);width:auto;min-width:260px;';
+        document.body.appendChild(zipDropdown);
+
+        // ---------------------------------------------------------------
+        // Helpers to read the selected destination's name / country code.
+        // The option value is now the numeric destination_id, so the
+        // human-readable name lives in the data-name attribute.
+        // ---------------------------------------------------------------
+        function getSelectedOption() {
+            if (!destSelect) return null;
+            return destSelect.options[destSelect.selectedIndex] || null;
         }
 
-        // Extract country code from delivery_destination value (e.g., "US- United State of America" → "us")
+        function getDestinationName() {
+            const opt = getSelectedOption();
+            if (opt && opt.dataset.name) return opt.dataset.name;
+            return destSelect ? (destSelect.value || '') : '';
+        }
+
+        function getDestinationCode() {
+            const opt = getSelectedOption();
+            return (opt && opt.dataset.code) ? opt.dataset.code : '';
+        }
+
         function getCountryCode() {
-            if (!destSelect) return 'us'; // default to US
-            const val = destSelect.value || '';
-            const match = val.match(/^([A-Za-z]{2})/);
+            const opt = getSelectedOption();
+            if (opt && opt.dataset.countryCode) return opt.dataset.countryCode.toLowerCase();
+            // Fallback: derive from the name (e.g. "US- United State of America" → "us")
+            const name = getDestinationName();
+            const match = name.match(/^([A-Za-z]{2})/);
             return match ? match[1].toLowerCase() : 'us';
         }
 
-        // Debounce helper
+        function isUkDestination() {
+            return getDestinationCode().toUpperCase() === 'UK' ||
+                   getDestinationName().toUpperCase().indexOf('UK') === 0;
+        }
+
+        // ---------------------------------------------------------------
+        // Populate the consignee_state dropdown with the given zones.
+        // ---------------------------------------------------------------
+        function populateStateDropdown(zones) {
+            if (!stateSelect) return;
+            stateSelect.innerHTML = '';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- Select State --';
+            stateSelect.appendChild(placeholder);
+
+            zones.forEach(function(z) {
+                const opt = document.createElement('option');
+                opt.value = z.zone_code;
+                opt.textContent = z.zone_name + ' (Zone ' + z.zone_code + ')';
+                stateSelect.appendChild(opt);
+            });
+            stateSelect.disabled = false;
+        }
+
+        // ---------------------------------------------------------------
+        // Clear + disable the consignee_state dropdown.
+        // ---------------------------------------------------------------
+        function clearStateDropdown() {
+            if (!stateSelect) return;
+            stateSelect.innerHTML = '';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- Select State --';
+            stateSelect.appendChild(placeholder);
+            stateSelect.value = '';
+            stateSelect.disabled = true;
+        }
+
+        // ---------------------------------------------------------------
+        // Populate the consignee_state dropdown from the public
+        // countries-states-cities JSON (dr5hn/countries-states-cities-database).
+        //
+        // For "zipcode"-category destinations the zone table only holds
+        // postcode/area data (no state info), so we fetch the full states
+        // list once, cache it, and filter by the selected destination's
+        // ISO country code (data-country-code attribute, e.g. "GB", "CA").
+        // The zip input keeps its zone-table suggestions and the city field
+        // remains freely typeable.
+        // ---------------------------------------------------------------
+        let statesApiCache = null;        // raw JSON array (cached after first fetch)
+        let statesApiLoading = false;
+
+        function populateStateDropdownFromApi(countryCode) {
+            if (!stateSelect) return;
+            let cc = (countryCode || '').toUpperCase();
+
+            // -----------------------------------------------------------
+            // The destinations table stores some country codes as 3-letter
+            // ISO codes (e.g. Australia = "AUS"), but the public
+            // countries-states-cities API (dr5hn) uses 2-letter ISO codes
+            // (e.g. "AU"). Map the common 3-letter codes to their 2-letter
+            // equivalents so the state filter actually matches.
+            // -----------------------------------------------------------
+            const iso3to2 = {
+                'AUS': 'AU', 'USA': 'US', 'GBR': 'GB', 'CAN': 'CA',
+                'IND': 'IN', 'DEU': 'DE', 'FRA': 'FR', 'ITA': 'IT',
+                'ESP': 'ES', 'NLD': 'NL', 'BEL': 'BE', 'PRT': 'PT',
+                'SWE': 'SE', 'NOR': 'NO', 'DNK': 'DK', 'FIN': 'FI',
+                'POL': 'PL', 'AUT': 'AT', 'CHE': 'CH', 'IRL': 'IE',
+                'NZL': 'NZ', 'ZAF': 'ZA', 'SGP': 'SG', 'HKG': 'HK',
+                'JPN': 'JP', 'KOR': 'KR', 'CHN': 'CN', 'BRA': 'BR',
+                'MEX': 'MX', 'ARG': 'AR', 'RUS': 'RU', 'TUR': 'TR',
+                'ARE': 'AE', 'SAU': 'SA', 'THA': 'TH', 'MYS': 'MY',
+                'IDN': 'ID', 'PHL': 'PH', 'VNM': 'VN', 'EGY': 'EG',
+                'NGA': 'NG', 'KEN': 'KE', 'GHA': 'GH', 'PAK': 'PK',
+                'BGD': 'BD', 'LKA': 'LK', 'NPL': 'NP', 'BTN': 'BT',
+                'FJI': 'FJ', 'PNG': 'PG', 'CYP': 'CY', 'MLT': 'MT',
+                'LUX': 'LU', 'CZE': 'CZ', 'SVK': 'SK', 'HUN': 'HU',
+                'ROU': 'RO', 'BGR': 'BG', 'GRC': 'GR', 'HRV': 'HR',
+                'SVN': 'SI', 'EST': 'EE', 'LVA': 'LV', 'LTU': 'LT',
+                'ISL': 'IS', 'ALB': 'AL', 'SRB': 'RS', 'BIH': 'BA',
+                'MNE': 'ME', 'MKD': 'MK', 'CRI': 'CR', 'PAN': 'PA',
+                'DOM': 'DO', 'GTM': 'GT', 'ECU': 'EC', 'PER': 'PE',
+                'CHL': 'CL', 'COL': 'CO', 'VEN': 'VE', 'URY': 'UY',
+                'PRY': 'PY', 'BOL': 'BO', 'JAM': 'JM', 'TTO': 'TT',
+                'LBN': 'LB', 'JOR': 'JO', 'ISR': 'IL', 'QAT': 'QA',
+                'KWT': 'KW', 'BHR': 'BH', 'OMN': 'OM', 'YEM': 'YE',
+                'IRQ': 'IQ', 'IRN': 'IR', 'AFG': 'AF', 'UZB': 'UZ',
+                'KAZ': 'KZ', 'AZE': 'AZ', 'GEO': 'GE', 'ARM': 'AM',
+                'BLR': 'BY', 'UKR': 'UA', 'MDA': 'MD'
+            };
+            if (iso3to2[cc]) {
+                cc = iso3to2[cc];
+            }
+
+            // Show a loading placeholder while we fetch / filter.
+            stateSelect.innerHTML = '';
+            const loadingOpt = document.createElement('option');
+            loadingOpt.value = '';
+            loadingOpt.textContent = 'Loading states...';
+            stateSelect.appendChild(loadingOpt);
+            stateSelect.disabled = false;
+
+            function renderStates(states) {
+                stateSelect.innerHTML = '';
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '-- Select State --';
+                stateSelect.appendChild(placeholder);
+
+                states.forEach(function(s) {
+                    const opt = document.createElement('option');
+                    // Some countries (e.g. Australia) have state_code = null
+                    // in the API but DO have iso2 (e.g. "QLD", "NSW"). Use
+                    // state_code first, then iso2 as the display code.
+                    const code = s.state_code || s.iso2 || '';
+                    // Use the FULL state name as the option value so the
+                    // submitted consignee_state is e.g. "Queensland" (not the
+                    // short code "QLD"). The code is only shown in the label.
+                    opt.value = s.name || code || '';
+                    // Show the code in parens when available so the user sees
+                    // e.g. "Queensland (QLD)" / "Ontario (ON)".
+                    opt.textContent = s.name + (code ? ' (' + code + ')' : '');
+                    stateSelect.appendChild(opt);
+                });
+                stateSelect.disabled = false;
+            }
+
+            function applyFromCache() {
+                if (!statesApiCache) {
+                    stateSelect.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '-- Select State --';
+                    stateSelect.appendChild(opt);
+                    stateSelect.disabled = false;
+                    return;
+                }
+                const filtered = statesApiCache.filter(function(s) {
+                    return (s.country_code || '').toUpperCase() === cc;
+                });
+                renderStates(filtered);
+            }
+
+            if (statesApiCache) {
+                applyFromCache();
+                return;
+            }
+
+            // If a fetch is already in-flight, poll until it completes.
+            if (statesApiLoading) {
+                const wait = setInterval(function() {
+                    if (statesApiCache) {
+                        clearInterval(wait);
+                        applyFromCache();
+                    }
+                }, 150);
+                return;
+            }
+
+            statesApiLoading = true;
+            fetch('https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/json/states.json')
+                .then(function(r) { if (!r.ok) throw new Error('States API fetch failed'); return r.json(); })
+                .then(function(data) {
+                    statesApiCache = Array.isArray(data) ? data : [];
+                    statesApiLoading = false;
+                    applyFromCache();
+                })
+                .catch(function(err) {
+                    console.log('States API error:', err.message);
+                    statesApiLoading = false;
+                    stateSelect.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '-- Select State --';
+                    stateSelect.appendChild(opt);
+                    stateSelect.disabled = false;
+                });
+        }
+
+        // ---------------------------------------------------------------
+        // Clear the zip input + city (used when switching destinations).
+        // ---------------------------------------------------------------
+        function clearZipFields() {
+            if (zipInput) {
+                zipInput.value = '';
+                delete zipInput.dataset.autofilled;
+            }
+            if (cityInput) {
+                cityInput.value = '';
+                delete cityInput.dataset.autofilled;
+            }
+            hideZipDropdown();
+        }
+
+        // ---------------------------------------------------------------
+        // Reset ALL consignee location fields (zip + city + state) to
+        // blank. Called the moment the destination changes so the user
+        // starts fresh — the zip and city inputs are cleared and the
+        // state dropdown's selected value is reset to its placeholder.
+        //
+        // The state dropdown's option list is repopulated afterwards by
+        // the async zones-by-destination fetch (or the states.json API),
+        // but resetting the selected value here guarantees the previous
+        // destination's state does not linger. If Select2 is initialised
+        // on the state select we trigger its "change" event so the
+        // widget visually re-renders the placeholder immediately.
+        // ---------------------------------------------------------------
+        function resetConsigneeLocationFields() {
+            clearZipFields();
+            if (stateSelect) {
+                stateSelect.value = '';
+                if (typeof $ !== 'undefined' && $(stateSelect).hasClass('select2-hidden-accessible')) {
+                    $(stateSelect).trigger('change');
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Zipcode suggestion dropdown: show / hide / position / render.
+        // ---------------------------------------------------------------
+        function positionZipDropdown() {
+            if (!zipInput) return;
+            const rect = zipInput.getBoundingClientRect();
+            zipDropdown.style.left = (rect.left + window.scrollX) + 'px';
+            zipDropdown.style.top  = (rect.bottom + window.scrollY) + 'px';
+            zipDropdown.style.minWidth = rect.width + 'px';
+        }
+
+        function hideZipDropdown() {
+            zipDropdown.style.display = 'none';
+            zipDropdown.innerHTML = '';
+        }
+
+        function showZipSuggestions(query) {
+            if (!currentCategory || currentCategory !== 'zipcode' || !zipInput) {
+                hideZipDropdown();
+                return;
+            }
+            const q = (query || '').trim().toUpperCase();
+            // Filter zones whose zone_code (postcode) starts with the typed text.
+            // If the query is empty, show the first 20 zones as a hint.
+            let matches = [];
+            if (q.length === 0) {
+                matches = currentZones.slice(0, 20);
+            } else {
+                matches = currentZones.filter(function(z) {
+                    return (z.zone_code || '').toUpperCase().indexOf(q) === 0 ||
+                           (z.zone_name || '').toUpperCase().indexOf(q) !== -1;
+                });
+                matches = matches.slice(0, 30);
+            }
+
+            if (matches.length === 0) {
+                hideZipDropdown();
+                return;
+            }
+
+            zipDropdown.innerHTML = '';
+            matches.forEach(function(z) {
+                const item = document.createElement('div');
+                item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f1f1;';
+                item.innerHTML = '<strong>' + escapeHtml(z.zone_code) + '</strong> &nbsp;<span style="color:#6c757d;">' + escapeHtml(z.zone_name) + '</span>';
+                item.addEventListener('mousedown', function(e) {
+                    e.preventDefault(); // prevent blur before click
+                    selectZipSuggestion(z);
+                });
+                item.addEventListener('mouseover', function() {
+                    item.style.background = '#f0f6ff';
+                });
+                item.addEventListener('mouseout', function() {
+                    item.style.background = '#fff';
+                });
+                zipDropdown.appendChild(item);
+            });
+
+            positionZipDropdown();
+            zipDropdown.style.display = 'block';
+        }
+
+        function selectZipSuggestion(z) {
+            if (zipInput) {
+                zipInput.value = z.zone_code;
+                zipInput.dataset.autofilled = 'true';
+                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (cityInput) {
+                cityInput.value = z.zone_name;
+                cityInput.dataset.autofilled = 'true';
+                cityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            hideZipDropdown();
+
+            // -----------------------------------------------------------
+            // Auto-populate the consignee state from the zone_name.
+            // Australia zone_names are in the format "City, State" (e.g.
+            // "Mount Samson, Queensland", "Grays Point, New South Wales").
+            // We parse the part after the last comma and match it against
+            // the state dropdown options.
+            //
+            // The state dropdown for zipcode-category destinations is
+            // populated asynchronously from the countries-states-cities API
+            // (dr5hn/countries-states-cities-database). The option text is
+            // "StateName (STATE_CODE)" e.g. "Queensland (QLD)". We strip the
+            // parenthetical code before comparing.
+            //
+            // Because the API fetch is async, the dropdown may still show
+            // "Loading states..." when the user picks a zipcode quickly. In
+            // that case we retry on a short interval until the options are
+            // available (or a timeout is reached).
+            // -----------------------------------------------------------
+            function applyStateFromZoneName(stateName) {
+                if (!stateSelect || !stateName) return false;
+                let matched = false;
+                for (let i = 0; i < stateSelect.options.length; i++) {
+                    const optText = (stateSelect.options[i].text || '').trim();
+                    // Strip any trailing parenthetical suffix:
+                    //   "Queensland (QLD)"  -> "Queensland"
+                    //   "Ontario (ON)"       -> "Ontario"
+                    //   "New South Wales (NSW)" -> "New South Wales"
+                    // Also handles the older "(Zone X)" format just in case.
+                    const cleanOptText = optText.replace(/\s*\([^)]*\)\s*$/i, '').trim();
+                    if (cleanOptText.toLowerCase() === stateName.toLowerCase()) {
+                        stateSelect.value = stateSelect.options[i].value;
+                        matched = true;
+                        break;
+                    }
+                }
+                // Fallback: "contains" match (handles minor label differences).
+                if (!matched) {
+                    for (let i = 0; i < stateSelect.options.length; i++) {
+                        const optText = (stateSelect.options[i].text || '').trim();
+                        const cleanOptText = optText.replace(/\s*\([^)]*\)\s*$/i, '').trim();
+                        if (cleanOptText.toLowerCase().indexOf(stateName.toLowerCase()) !== -1 ||
+                            stateName.toLowerCase().indexOf(cleanOptText.toLowerCase()) !== -1) {
+                            stateSelect.value = stateSelect.options[i].value;
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                if (matched) {
+                    stateSelect.dataset.autofilled = 'true';
+                    stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Refresh Select2 widget if initialised
+                    if (typeof $ !== 'undefined' && $(stateSelect).hasClass('select2-hidden-accessible')) {
+                        $(stateSelect).trigger('change');
+                    }
+                }
+                return matched;
+            }
+
+            if (stateSelect) {
+                const zoneName = (z.zone_name || '').trim();
+                const lastCommaIdx = zoneName.lastIndexOf(',');
+                if (lastCommaIdx !== -1) {
+                    const stateName = zoneName.substring(lastCommaIdx + 1).trim();
+                    if (stateName) {
+                        // Try immediately. If the states API hasn't finished
+                        // loading yet (dropdown shows "Loading states..." or
+                        // has no real options), retry on an interval.
+                        const matchedNow = applyStateFromZoneName(stateName);
+                        if (!matchedNow) {
+                            let attempts = 0;
+                            const maxAttempts = 20; // ~6 seconds max wait
+                            const waitState = setInterval(function() {
+                                attempts++;
+                                // Stop if the dropdown now has real state
+                                // options (more than just the placeholder /
+                                // loading text).
+                                const hasRealOptions = stateSelect.options.length > 1 &&
+                                    !/loading/i.test(stateSelect.options[0].text || '');
+                                if (hasRealOptions && applyStateFromZoneName(stateName)) {
+                                    clearInterval(waitState);
+                                } else if (attempts >= maxAttempts) {
+                                    clearInterval(waitState);
+                                }
+                            }, 300);
+                        }
+                    }
+                }
+            }
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
+        // ---------------------------------------------------------------
+        // Fetch zones for the selected destination_id and apply them.
+        // ---------------------------------------------------------------
+        function loadZonesForDestination() {
+            const destId = destSelect ? destSelect.value : '';
+            currentDestName = getDestinationName();
+
+            // Reset state
+            currentZones = [];
+            currentCategory = null;
+            // Blank zip + city + state immediately so the previous
+            // destination's values do not linger while the new zones load.
+            resetConsigneeLocationFields();
+
+            if (!destId) {
+                clearStateDropdown();
+                return;
+            }
+
+            fetch('{{ route("customer.zones-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data || !data.exists || !data.zones || data.zones.length === 0) {
+                    // No zones for this destination → populate the state
+                    // dropdown from the public states.json API filtered by
+                    // the selected destination's ISO country code, and let
+                    // the user type the zip + city freely.
+                    currentCategory = null;
+                    currentZones = [];
+                    populateStateDropdownFromApi(getCountryCode().toUpperCase());
+                    return;
+                }
+
+                currentZones = data.zones;
+                currentCategory = data.category;
+
+                if (currentCategory === 'state') {
+                    // Populate the state dropdown with the returned zones.
+                    populateStateDropdown(currentZones);
+                } else if (currentCategory === 'zipcode') {
+                    // The zone table only holds postcode/area data for this
+                    // destination (no state info), so populate the state
+                    // dropdown from the public states.json API filtered by
+                    // the selected destination's ISO country code. The zip
+                    // input keeps its zone-table suggestions and the city
+                    // field remains freely typeable.
+                    populateStateDropdownFromApi(getCountryCode().toUpperCase());
+                } else {
+                    // Unknown category → default to state dropdown behaviour.
+                    populateStateDropdown(currentZones);
+                }
+            })
+            .catch(function(err) {
+                console.log('Zones-by-destination error:', err.message);
+                // On error, still try to populate the state dropdown from the
+                // states.json API so the user can continue filling the form.
+                currentCategory = null;
+                currentZones = [];
+                populateStateDropdownFromApi(getCountryCode().toUpperCase());
+            });
+        }
+
+        // ---------------------------------------------------------------
+        // Wire up the destination change event.
+        //
+        // IMPORTANT: the delivery_destination select is a Select2 widget
+        // (data-toggle="select2"). Select2 fires its "change" event via
+        // jQuery's .trigger('change'), which does NOT invoke listeners
+        // bound with the native addEventListener API — only jQuery-bound
+        // handlers ($(el).on('change', ...)) receive it. Binding with
+        // addEventListener therefore meant loadZonesForDestination never
+        // fired when the user picked a new country, so the new country's
+        // state dropdown / zip suggestions never loaded. We bind with
+        // jQuery here so the handler fires for both Select2 and plain
+        // selects. A native addEventListener fallback is kept for the
+        // rare case jQuery/Select2 is unavailable.
+        // ---------------------------------------------------------------
+        if (typeof $ !== 'undefined') {
+            $(destSelect).on('change', loadZonesForDestination);
+        } else {
+            destSelect.addEventListener('change', loadZonesForDestination);
+        }
+
+        // ---------------------------------------------------------------
+        // Zip input behaviour:
+        //  - zipcode category → show suggestions from the zone table.
+        //  - state   category → keep the old external-API auto-fill
+        //    (postcodes.io for UK, zippopotam.us for others) so that
+        //    city/state are still auto-completed for US states.
+        // ---------------------------------------------------------------
         let debounceTimer = null;
         function debounce(fn, delay) {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(fn, delay);
         }
 
-        // ---- UK lookup via postcodes.io ----
+        // ---- External API lookups (kept for state-category destinations) ----
         function lookupUkPostcode(postcode) {
-            // postcodes.io accepts the postcode with or without spaces.
             const url = 'https://api.postcodes.io/postcodes/' + encodeURIComponent(postcode);
-
             fetch(url)
-                .then(function(response) {
-                    if (!response.ok) throw new Error('Postcode lookup failed');
-                    return response.json();
-                })
+                .then(function(r) { if (!r.ok) throw new Error('Postcode lookup failed'); return r.json(); })
                 .then(function(data) {
-                    if (!data || data.status !== 200 || !data.result) {
-                        throw new Error('Postcode not found');
-                    }
+                    if (!data || data.status !== 200 || !data.result) throw new Error('Postcode not found');
                     const result = data.result;
-                    // City = admin_district, State = region
                     const city = result.admin_district || result.nuts || '';
                     const region = result.region || result.country || '';
-
                     if (cityInput) {
                         cityInput.value = city;
                         cityInput.dataset.autofilled = 'true';
                         cityInput.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                     if (stateSelect) {
-                        // Try to match the region against an existing zone option;
-                        // if none matches, leave the dropdown unchanged so the user can pick.
                         const options = stateSelect.options;
                         let matched = false;
                         for (let i = 0; i < options.length; i++) {
@@ -10349,39 +11048,25 @@ if (rateRadio && rateRadio.dataset.rate) {
                                 break;
                             }
                         }
-                        if (!matched) {
-                            stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
+                        if (!matched) stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 })
-                .catch(function(err) {
-                    console.log('UK postcode auto-fill error:', err.message);
-                });
+                .catch(function(err) { console.log('UK postcode auto-fill error:', err.message); });
         }
 
-        // ---- Non-UK lookup via zippopotam.us ----
         function lookupZippopotam(zip) {
             const countryCode = getCountryCode();
             const url = 'https://api.zippopotam.us/' + countryCode + '/' + zip;
-
             fetch(url)
-                .then(function(response) {
-                    if (!response.ok) throw new Error('ZIP lookup failed');
-                    return response.json();
-                })
+                .then(function(r) { if (!r.ok) throw new Error('ZIP lookup failed'); return r.json(); })
                 .then(function(data) {
-                    // Auto-fill City from "place name"
                     if (data.places && data.places.length > 0 && cityInput) {
                         cityInput.value = data.places[0]['place name'] || '';
                         cityInput.dataset.autofilled = 'true';
-                        // Trigger change event for any listeners
                         cityInput.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-
-                    // Auto-select State from "state abbreviation" matching zone_code
                     if (data.places && data.places.length > 0 && stateSelect) {
                         const stateAbbr = data.places[0]['state abbreviation'] || '';
-                        // Find the option whose value matches the state abbreviation
                         const options = stateSelect.options;
                         for (let i = 0; i < options.length; i++) {
                             if (options[i].value === stateAbbr) {
@@ -10392,45 +11077,100 @@ if (rateRadio && rateRadio.dataset.rate) {
                         }
                     }
                 })
-                .catch(function(err) {
-                    // Silently fail - user can still manually fill city/state
-                    console.log('ZIP auto-fill error:', err.message);
-                });
+                .catch(function(err) { console.log('ZIP auto-fill error:', err.message); });
         }
 
-        zipInput.addEventListener('input', function() {
-            const zip = zipInput.value.trim();
-            const uk = isUkDestination();
-            // UK postcodes can be short (e.g. "M1") up to 8 chars with space.
-            const minLen = uk ? 2 : 5;
-            if (zip.length < minLen) {
-                // Clear auto-filled fields if ZIP is too short
-                if (cityInput && cityInput.dataset.autofilled === 'true') {
-                    cityInput.value = '';
-                    cityInput.dataset.autofilled = 'false';
-                }
-                return;
-            }
-            debounce(function() {
-                if (uk) {
-                    lookupUkPostcode(zip);
-                } else {
-                    lookupZippopotam(zip);
-                }
-            }, 500);
-        });
-
-        // Re-run lookup when destination changes (so UK↔non-UK switches API)
-        if (destSelect) {
-            destSelect.addEventListener('change', function() {
+        if (zipInput) {
+            zipInput.addEventListener('input', function() {
                 const zip = zipInput.value.trim();
-                if (zip.length === 0) return;
-                if (isUkDestination() && zip.length >= 2) {
-                    lookupUkPostcode(zip);
-                } else if (!isUkDestination() && zip.length >= 5) {
-                    lookupZippopotam(zip);
+
+                // Zipcode-category destinations → show zone-table suggestions.
+                if (currentCategory === 'zipcode') {
+                    debounce(function() { showZipSuggestions(zip); }, 200);
+                    return;
+                }
+
+                // State-category destinations → external API auto-fill (legacy).
+                const uk = isUkDestination();
+                const minLen = uk ? 2 : 5;
+                if (zip.length < minLen) {
+                    if (cityInput && cityInput.dataset.autofilled === 'true') {
+                        cityInput.value = '';
+                        cityInput.dataset.autofilled = 'false';
+                    }
+                    return;
+                }
+                debounce(function() {
+                    if (uk) lookupUkPostcode(zip);
+                    else lookupZippopotam(zip);
+                }, 500);
+            });
+
+            zipInput.addEventListener('focus', function() {
+                if (currentCategory === 'zipcode' && zipInput.value.trim().length === 0) {
+                    showZipSuggestions('');
                 }
             });
+
+            zipInput.addEventListener('blur', function() {
+                setTimeout(hideZipDropdown, 180);
+            });
+
+            // Keyboard navigation for the suggestion dropdown.
+            zipInput.addEventListener('keydown', function(e) {
+                if (currentCategory !== 'zipcode') return;
+                if (zipDropdown.style.display !== 'block') return;
+                const items = zipDropdown.querySelectorAll('div');
+                if (items.length === 0) return;
+                let activeIndex = -1;
+                items.forEach(function(it, idx) {
+                    if (it.style.background && it.style.background.indexOf('f0f6ff') !== -1) activeIndex = idx;
+                });
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    activeIndex = (activeIndex + 1) % items.length;
+                    items.forEach(function(it, idx) { it.style.background = idx === activeIndex ? '#f0f6ff' : '#fff'; });
+                    items[activeIndex].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    activeIndex = (activeIndex - 1 + items.length) % items.length;
+                    items.forEach(function(it, idx) { it.style.background = idx === activeIndex ? '#f0f6ff' : '#fff'; });
+                    items[activeIndex].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    if (activeIndex >= 0) {
+                        e.preventDefault();
+                        items[activeIndex].dispatchEvent(new Event('mousedown'));
+                    }
+                } else if (e.key === 'Escape') {
+                    hideZipDropdown();
+                }
+            });
+        }
+
+        // Reposition / hide the dropdown on scroll & resize.
+        document.addEventListener('scroll', function() {
+            if (zipDropdown.style.display === 'block') positionZipDropdown();
+        }, true);
+        window.addEventListener('resize', function() {
+            if (zipDropdown.style.display === 'block') positionZipDropdown();
+        });
+
+        // ---------------------------------------------------------------
+        // Expose helpers globally so the preview JS can read the
+        // destination name from the data-name attribute.
+        // ---------------------------------------------------------------
+        window.getDestinationName = getDestinationName;
+        window.getDestinationCode  = getDestinationCode;
+
+        // ---------------------------------------------------------------
+        // Initial load: if a destination is pre-selected (e.g. old() value),
+        // fetch its zones immediately.
+        // ---------------------------------------------------------------
+        if (destSelect.value) {
+            // Defer slightly so select2 has finished rendering.
+            setTimeout(loadZonesForDestination, 100);
+        } else {
+            clearStateDropdown();
         }
     })();
     </script>

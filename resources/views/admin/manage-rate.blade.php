@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/daterangepicker/daterangepicker.css') }}">
     <link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.dataTables.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/3.2.0/css/buttons.dataTables.css" />
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
@@ -72,6 +73,19 @@
         .rate-display {
             font-weight: 500;
         }
+        /* Truncate long zone name lists (comma-separated) to a single line
+           with an ellipsis. The full list is shown in the native tooltip. */
+        .zone-name-cell {
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: top;
+        }
+        .zone-name-cell:hover {
+            color: #007bff;
+        }
         .customer-select-wrapper {
             max-width: 350px;
         }
@@ -112,6 +126,15 @@
                         <h4 class="mb-1">Manage Rate</h4>
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
+                        <button type="button" class="btn btn-success" id="defaultExportExcel">
+                            <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
+                        </button>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRateModal">
+                            <i class="ti ti-plus me-1"></i>Add Rate
+                        </button>
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
+                            <i class="ti ti-upload me-1"></i>Bulk Upload
+                        </button>
                         <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></a>
                         <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Collapse" data-bs-original-title="Collapse" id="collapse-header"><i class="ti ti-transition-top"></i></a>
                     </div>
@@ -122,6 +145,18 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-body">
+                                @if(session('success'))
+                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                        <i class="ti ti-circle-check me-1"></i>{{ session('success') }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                @endif
+                                @if(session('error'))
+                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                        <i class="ti ti-alert-circle me-1"></i>{{ session('error') }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                @endif
                                 <ul class="nav nav-tabs mb-4" id="rateTabs" role="tablist">
                                     <li class="nav-item" role="presentation">
                                         <button class="nav-link active" id="default-rate-tab" data-bs-toggle="tab" data-bs-target="#default-rate-pane" type="button" role="tab">
@@ -139,6 +174,30 @@
 
                                     <!-- Default Rate Tab -->
                                     <div class="tab-pane fade show active" id="default-rate-pane" role="tabpanel">
+                                        <!-- Filters -->
+                                        <div class="row mb-3 g-2 align-items-end">
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-bold">Country</label>
+                                                <select class="form-select" id="defaultCountryFilter">
+                                                    <option value="">— All Countries —</option>
+                                                    @foreach($destinations as $dest)
+                                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-bold">Service</label>
+                                                <select class="form-select" id="defaultServiceFilter">
+                                                    <option value="">— All Services —</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 text-md-end">
+                                                <label class="form-label fw-bold d-block">&nbsp;</label>
+                                                <button type="button" class="btn btn-outline-secondary" id="defaultClearFilter">
+                                                    <i class="ti ti-filter-x me-1"></i>Clear Filters
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div class="table-responsive">
                                             <table class="table table-hover" id="defaultRateTable">
                                                 <thead>
@@ -146,28 +205,63 @@
                                                         <th>#</th>
                                                         <th>Network</th>
                                                         <th>Service Code</th>
-                                                        <th>Type</th>
                                                         <th>Method</th>
                                                         <th>TAT</th>
                                                         <th>Weight Start (gm)</th>
                                                         <th>Weight End (gm)</th>
-                                                        <th>Zone No</th>
+                                                        <th>Zone Name</th>
+                                                        <th>Zone Category</th>
                                                         <th>Price (₹)</th>
                                                         <th>Default</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach($defaultRates as $key => $rate)
-                                                    <tr>
+                                                    <tr data-country="{{ $rate->service->country ?? '' }}" data-service-id="{{ $rate->service_id }}">
                                                         <td>{{ $key + 1 }}</td>
                                                         <td>{{ $rate->service->network ?? '—' }}</td>
                                                         <td>{{ $rate->service->service_code ?? '—' }}</td>
-                                                        <td>{{ $rate->service->type ?? '—' }}</td>
                                                         <td>{{ $rate->service->method ?? '—' }}</td>
                                                         <td>{{ $rate->service->tat ?? '—' }}</td>
                                                         <td>{{ $rate->wt_range_start }}</td>
                                                         <td>{{ $rate->wt_range_end }}</td>
-                                                        <td>{{ $rate->zone_no }}</td>
+                                                        @php
+                                                            // Resolve zone name & category for this rate.
+                                                            // courier_rates.zone_no matches zone.zone_number_testing.
+                                                            // The service's country maps to a destination_id which
+                                                            // indexes the pre-built $zoneLookup map.
+                                                            $zoneName = '—';
+                                                            $zoneCategory = '—';
+                                                            $rateCountry = $rate->service->country ?? '';
+                                                            $destId = $countryToDestinationId[strtolower(trim($rateCountry))] ?? null;
+                                                            if ($destId && isset($zoneLookup[$destId])) {
+                                                                $zoneNo = (int) $rate->zone_no;
+                                                                if (isset($zoneLookup[$destId][$zoneNo])) {
+                                                                    $zoneName = $zoneLookup[$destId][$zoneNo]['names'];
+                                                                    $zoneCategory = $zoneLookup[$destId][$zoneNo]['category'];
+                                                                }
+                                                            }
+                                                        @endphp
+                                                        <td>
+                                                            @php
+                                                                $zoneNameWords = preg_split('/[\s,]+/', trim($zoneName));
+                                                                if (count($zoneNameWords) > 7) {
+                                                                    $truncatedZoneName = implode(' ', array_slice($zoneNameWords, 0, 7)) . ' ...';
+                                                                } else {
+                                                                    $truncatedZoneName = $zoneName;
+                                                                }
+                                                            @endphp
+                                                            <span class="zone-name-cell" title="{{ $zoneName }}">{{ $truncatedZoneName }}</span>
+                                                        </td>
+                                                        <td>
+                                                            @if($zoneCategory === 'state')
+                                                                <span class="badge bg-info">State</span>
+                                                            @elseif($zoneCategory === 'zipcode')
+                                                                <span class="badge bg-warning">Zipcode</span>
+                                                            @else
+                                                                <span class="text-muted">{{ $zoneCategory }}</span>
+                                                            @endif
+                                                        </td>
                                                         <td>
                                                             @if($rate->is_default)
                                                                 <span class="rate-display" id="rate-display-{{ $rate->id }}">₹ {{ number_format($rate->price, 2) }}</span>
@@ -196,8 +290,8 @@
 
                                     <!-- Customer Rate Tab -->
                                     <div class="tab-pane fade" id="customer-rate-pane" role="tabpanel">
-                                        <div class="row mb-3">
-                                            <div class="col-md-4 customer-select-wrapper">
+                                        <div class="row mb-3 g-2 align-items-end">
+                                            <div class="col-md-3 customer-select-wrapper">
                                                 <label class="form-label fw-bold">Select Customer</label>
                                                 <select class="form-select" id="customerSelect">
                                                     <option value="">— Select Customer —</option>
@@ -205,6 +299,32 @@
                                                         <option value="{{ $customer->id }}">{{ $customer->first_name }} {{ $customer->last_name }} ({{ $customer->email ?? $customer->phone_number ?? 'N/A' }})</option>
                                                     @endforeach
                                                 </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-bold">Country</label>
+                                                <select class="form-select" id="customerCountryFilter">
+                                                    <option value="">— All Countries —</option>
+                                                    @foreach($destinations as $dest)
+                                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-bold">Service</label>
+                                                <select class="form-select" id="customerServiceFilter">
+                                                    <option value="">— All Services —</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button type="button" class="btn btn-outline-secondary w-100" id="customerClearFilter" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear Filters">
+                                                    <i class="ti ti-filter-x"></i>
+                                                </button>
+                                            </div>
+                                            <div class="col-md-2 text-md-end">
+                                                <label class="form-label fw-bold d-block">&nbsp;</label>
+                                                <button type="button" class="btn btn-success w-100" id="customerExportExcel">
+                                                    <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
+                                                </button>
                                             </div>
                                         </div>
                                         <div class="table-responsive" id="customerRatesTable" style="display:none;">
@@ -214,12 +334,12 @@
                                                         <th>#</th>
                                                         <th>Network</th>
                                                         <th>Service Code</th>
-                                                        <th>Type</th>
                                                         <th>Method</th>
                                                         <th>TAT</th>
                                                         <th>Weight Start (gm)</th>
                                                         <th>Weight End (gm)</th>
-                                                        <th>Zone No</th>
+                                                        <th>Zone Name</th>
+                                                        <th>Zone Category</th>
                                                         <th>Price (₹)</th>
                                                         <th>Default</th>
                                                     </tr>
@@ -247,12 +367,176 @@
 
     </div>
 
+    <!-- Add Rate Modal -->
+    <div class="modal fade" id="addRateModal" tabindex="-1" aria-labelledby="addRateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addRateModalLabel">
+                        <i class="ti ti-plus me-1"></i>Add Default Rate
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="addRateForm">
+                    @csrf
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <!-- Country -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
+                                <select class="form-select" id="addRateCountry" required>
+                                    <option value="">— Select Country —</option>
+                                    @foreach($destinations as $dest)
+                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">From the destinations table. Determines the available zones below.</small>
+                            </div>
+                            <!-- Service (independent of country — shows all services) -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
+                                <select class="form-select" id="addRateService" required>
+                                    <option value="">— Select Service —</option>
+                                </select>
+                                <small class="text-muted">All services are listed regardless of the selected country.</small>
+                            </div>
+                            <!-- Weight Start -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Weight Start (gm) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.001" min="0" class="form-control" id="addRateWtStart" name="wt_range_start" required>
+                            </div>
+                            <!-- Weight End -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Weight End (gm) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.001" min="0" class="form-control" id="addRateWtEnd" name="wt_range_end" required>
+                            </div>
+                            <!-- Zone No -->
+                            <div class="col-md-4" id="addRateZoneSection">
+                                <label class="form-label fw-bold">Zone No <span class="text-danger">*</span></label>
+                                <select class="form-select" id="addRateZoneNo" name="zone_no" required>
+                                    <option value="">— Select Country First —</option>
+                                </select>
+                                <!-- <small class="text-muted" id="addRateZoneHint"></small> -->
+                            </div>
+                            <!-- Price -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Price (₹) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" min="0" class="form-control" id="addRatePrice" name="price" required>
+                            </div>
+                            <!-- Fuel Charge -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Fuel Charge (₹)</label>
+                                <input type="number" step="0.01" min="0" class="form-control" id="addRateFuelCharge" name="fuel_charge" placeholder="0.00">
+                            </div>
+                            <!-- Fuel Percentage -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Fuel %</label>
+                                <input type="number" step="0.01" min="0" class="form-control" id="addRateFuelPct" name="fuel_percentage" placeholder="0.00">
+                            </div>
+                            <!-- GST Percentage -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">GST %</label>
+                                <input type="number" step="0.01" min="0" class="form-control" id="addRateGstPct" name="gst_percentage" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="alert alert-info mt-3 mb-0 py-2">
+                            <i class="ti ti-info-circle me-1"></i>
+                            This creates a <strong>default rate</strong> (applies to all customers). Fuel/GST fields are optional and default to 0.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="addRateSubmitBtn">
+                            <i class="ti ti-device-floppy me-1"></i>Save Rate
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Upload Rate Modal -->
+    <div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-labelledby="bulkUploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bulkUploadModalLabel">
+                        <i class="ti ti-file-spreadsheet me-1"></i>Bulk Upload Default Rates (Excel)
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2">
+                        <i class="ti ti-info-circle me-1"></i>
+                        Upload an Excel (.xlsx/.xls) or CSV file to add many default rates at once. The file must have a header row with <strong>Weight Start</strong>, <strong>Weight End</strong> and <strong>Price</strong> (required), and optionally <strong>Zone No</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, <strong>GST %</strong>. <strong>Tip:</strong> select a Service below first, then click <em>Download Sample</em> — the sample will include the existing rates for that service so you can see what's already there. Rates that already exist (same service + weight range + zone) are automatically skipped.
+                    </div>
+                    <form id="bulkUploadForm" method="POST" action="{{ route('admin.manage-rate.upload') }}" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row g-3">
+                            <!-- Country (used to populate available zones) -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Country</label>
+                                <select class="form-select" id="bulkCountry">
+                                    <option value="">— All Countries —</option>
+                                    @foreach($destinations as $dest)
+                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">Determines the available zones below.</small>
+                            </div>
+                            <!-- Service (required) -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
+                                <select class="form-select" id="bulkService" name="service_id" required>
+                                    <option value="">— Select Service —</option>
+                                </select>
+                                <small class="text-muted">All services are listed.</small>
+                            </div>
+                            <!-- Zone No (optional) -->
+                            <div class="col-md-4" id="bulkZoneSection">
+                                <label class="form-label fw-bold">Zone No</label>
+                                <select class="form-select" id="bulkZoneNo" name="zone_no">
+                                    <option value="">— Select Country First —</option>
+                                </select>
+                                <small class="text-muted">Optional. Used if the file has no Zone No column.</small>
+                            </div>
+                            <!-- File -->
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Excel File <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" name="rate_file" accept=".xlsx,.xls,.csv" required>
+                                <small class="text-muted d-block">Max 5 MB. .xlsx, .xls or .csv</small>
+                            </div>
+                            <!-- Download Sample -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold d-block">&nbsp;</label>
+                                <a href="{{ route('admin.manage-rate.sample') }}" class="btn btn-outline-success w-100" id="bulkDownloadSampleBtn">
+                                    <i class="ti ti-download me-1"></i>Download Sample
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="bulkUploadSubmitBtn">
+                        <i class="ti ti-upload me-1"></i>Upload Rates
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- jQuery -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
     <!-- Bootstrap JS -->
     <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}" type="text/javascript"></script>
     <!-- Datatable JS -->
     <script src="https://cdn.datatables.net/2.3.8/js/dataTables.js"></script>
+    <!-- JSZip (required for Excel export) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- DataTables Buttons JS -->
+    <script src="https://cdn.datatables.net/buttons/3.2.0/js/dataTables.buttons.js"></script>
+    <script src="https://cdn.datatables.net/buttons/3.2.0/js/buttons.html5.js"></script>
     <!-- Slimscroll JS -->
     <script src="{{ asset('assets/plugins/slimscroll/slimscroll.min.js') }}" type="text/javascript"></script>
     <!-- Simplebar JS -->
@@ -268,14 +552,103 @@
     <script src="{{ asset('assets/js/script.js') }}" type="text/javascript"></script>
 
     <script>
+        @php
+            $servicesForJs = $services->map(function($s) {
+                return [
+                    'id' => $s->id,
+                    'network' => $s->network,
+                    'method' => $s->method,
+                    'country' => $s->country ?? '',
+                ];
+            })->values();
+        @endphp
+
         var defaultRateTable;
         var customerRateTable;
+        var loadedCustomerRates = [];
+        var allServices = @json($servicesForJs);
+        var zoneLookup = @json($zoneLookup);
+        var countryToDestinationId = @json($countryToDestinationId);
+
+        // Resolve zone name & category for a given (country, zoneNo) pair.
+        // Returns { names: string, category: string } or null if not found.
+        function getZoneInfo(country, zoneNo) {
+            if (!country || zoneNo === null || zoneNo === undefined) return null;
+            var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
+            if (!destId) return null;
+            var zoneMap = zoneLookup[destId];
+            if (!zoneMap) return null;
+            return zoneMap[(parseInt(zoneNo, 10))] || null;
+        }
+
+        // Populate a country <select> with unique countries from allServices
+        function populateCountryDropdown(selectEl) {
+            var countries = [];
+            allServices.forEach(function(s) {
+                if (s.country && countries.indexOf(s.country) === -1) {
+                    countries.push(s.country);
+                }
+            });
+            countries.sort();
+            countries.forEach(function(c) {
+                var opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                selectEl.appendChild(opt);
+            });
+        }
+
+        // Populate a service <select>, optionally filtered by country
+        function populateServiceDropdown(selectEl, country) {
+            while (selectEl.options.length > 1) {
+                selectEl.remove(1);
+            }
+            allServices.forEach(function(s) {
+                if (!country || s.country === country) {
+                    var opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.network + ' — ' + s.method;
+                    selectEl.appendChild(opt);
+                }
+            });
+        }
 
         $(document).ready(function() {
             // Initialize Default Rate DataTable
+            // dom: 'frtip' — the built-in Buttons are NOT shown (no 'B'); they
+            // are triggered programmatically by the custom Export buttons in
+            // the filter row. This keeps the UI clean.
             defaultRateTable = $('#defaultRateTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 50,
+                dom: 'frtip',
+                buttons: [
+                    {
+                        extend: 'excelHtml5',
+                        text: 'Export Excel',
+                        title: 'Default Rates',
+                        exportOptions: {
+                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                            // Strip HTML from the Price column (which contains
+                            // edit/save/cancel icons) so Excel shows only the
+                            // numeric price value.
+                            format: {
+                                body: function(data, row, column) {
+                                    if (column === 9) {
+                                        // Price column — extract the ₹ value
+                                        return $('<div>').html(data).find('.rate-display').first().text()
+                                            || $('<div>').html(data).text().replace(/[^\d.]/g, '');
+                                    }
+                                    if (column === 10) {
+                                        // Default column — "Yes"/"No" badge
+                                        return $('<div>').html(data).text().trim();
+                                    }
+                                    return data;
+                                }
+                            }
+                        }
+                    }
+                ],
                 language: {
                     search: "Search:",
                     lengthMenu: "Show _MENU_ entries per page",
@@ -288,22 +661,39 @@
             customerRateTable = $('#customerRatesDataTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 50,
-                language: {
-                    search: "Search:",
-                    lengthMenu: "Show _MENU_ entries per page",
-                    info: "Showing _START_ to _END_ of _TOTAL_ entries",
-                    emptyTable: "No rates found for this customer.",
-                },
+                dom: 'frtip',
+                buttons: [
+                    {
+                        extend: 'excelHtml5',
+                        text: 'Export Excel',
+                        title: 'Customer Rates',
+                        exportOptions: {
+                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                            format: {
+                                body: function(data, row, column) {
+                                    if (column === 9) {
+                                        return $('<div>').html(data).find('.rate-display').first().text()
+                                            || $('<div>').html(data).text().replace(/[^\d.]/g, '');
+                                    }
+                                    if (column === 10) {
+                                        return $('<div>').html(data).text().trim();
+                                    }
+                                    return data;
+                                }
+                            }
+                        }
+                    }
+                ],
                 columns: [
                     { title: '#' },
                     { title: 'Network' },
                     { title: 'Service Code' },
-                    { title: 'Type' },
                     { title: 'Method' },
                     { title: 'TAT' },
                     { title: 'Weight Start (gm)' },
                     { title: 'Weight End (gm)' },
-                    { title: 'Zone No' },
+                    { title: 'Zone Name' },
+                    { title: 'Zone Category' },
                     { title: 'Price (₹)', orderable: false },
                     { title: 'Default', orderable: false }
                 ]
@@ -318,12 +708,455 @@
             // Customer selection change — delegated Select2 events for robustness
             $(document).on('select2:select', '#customerSelect', function(e) {
                 var customerId = e.params.data.id;
+                // Reset filters when customer changes
+                document.getElementById('customerCountryFilter').value = '';
+                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+                document.getElementById('customerServiceFilter').value = '';
                 loadCustomerRates(customerId);
             });
             $(document).on('select2:clear', '#customerSelect', function() {
+                loadedCustomerRates = [];
                 customerRateTable.clear().draw();
                 $('#customerRatesTable').hide();
                 $('#noCustomerSelected').show();
+                // Reset filters
+                document.getElementById('customerCountryFilter').value = '';
+                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+                document.getElementById('customerServiceFilter').value = '';
+            });
+
+            // === Country & Service Filters Setup ===
+
+            // The country filter dropdowns (defaultCountryFilter &
+            // customerCountryFilter) are rendered server-side from the
+            // destinations table, so no JS population is needed here.
+
+            // Populate service dropdowns (all services initially)
+            populateServiceDropdown(document.getElementById('defaultServiceFilter'), '');
+            populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+
+            // DataTables custom search plugin for Default Rate table
+            // (global plugin — guarded by table ID so it only affects defaultRateTable)
+            $.fn.dataTable.ext.search.push(function(settings, searchData, index) {
+                if (settings.nTable.id !== 'defaultRateTable') {
+                    return true;
+                }
+                var countryFilter = document.getElementById('defaultCountryFilter').value;
+                var serviceFilter = document.getElementById('defaultServiceFilter').value;
+                if (!countryFilter && !serviceFilter) {
+                    return true;
+                }
+                var rowNode = settings.aoData[index].nTr;
+                if (!rowNode) return true;
+                var rowCountry = rowNode.getAttribute('data-country') || '';
+                var rowServiceId = rowNode.getAttribute('data-service-id') || '';
+                if (countryFilter && rowCountry !== countryFilter) return false;
+                if (serviceFilter && rowServiceId !== serviceFilter) return false;
+                return true;
+            });
+
+            // Default rate filter change handlers
+            $('#defaultCountryFilter').on('change', function() {
+                populateServiceDropdown(document.getElementById('defaultServiceFilter'), this.value);
+                document.getElementById('defaultServiceFilter').value = '';
+                defaultRateTable.draw();
+            });
+            $('#defaultServiceFilter').on('change', function() {
+                defaultRateTable.draw();
+            });
+            $('#defaultClearFilter').on('click', function() {
+                document.getElementById('defaultCountryFilter').value = '';
+                populateServiceDropdown(document.getElementById('defaultServiceFilter'), '');
+                document.getElementById('defaultServiceFilter').value = '';
+                defaultRateTable.draw();
+            });
+
+            // Customer rate filter change handlers
+            $('#customerCountryFilter').on('change', function() {
+                populateServiceDropdown(document.getElementById('customerServiceFilter'), this.value);
+                document.getElementById('customerServiceFilter').value = '';
+                renderFilteredCustomerRates();
+            });
+            $('#customerServiceFilter').on('change', function() {
+                renderFilteredCustomerRates();
+            });
+            $('#customerClearFilter').on('click', function() {
+                document.getElementById('customerCountryFilter').value = '';
+                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+                document.getElementById('customerServiceFilter').value = '';
+                renderFilteredCustomerRates();
+            });
+
+            // === Export Excel button handlers ===
+            // The custom buttons in the filter rows trigger the DataTables
+            // built-in excelHtml5 button (index 0), which exports only the
+            // rows currently visible after filtering/searching.
+            $('#defaultExportExcel').on('click', function() {
+                defaultRateTable.button(0).trigger();
+            });
+            $('#customerExportExcel').on('click', function() {
+                if (loadedCustomerRates.length === 0) {
+                    alert('Please select a customer first to export their rates.');
+                    return;
+                }
+                customerRateTable.button(0).trigger();
+            });
+
+            // === Add Rate Modal Setup ===
+            // The country dropdown in the Add Rate modal is rendered server-side
+            // from the destinations table (so it shows ALL countries, including
+            // those added via the Add Country page — not just the ones that
+            // already have courier services). No JS population needed here.
+
+            // The Service dropdown is INDEPENDENT of the country selection — it
+            // lists every courier service so the admin can pair any country
+            // with any service. Populate it once with all services.
+            populateServiceDropdown(document.getElementById('addRateService'), '');
+
+            // Initialize Select2 on the Zone No dropdown so the admin can
+            // type to filter zone suggestions. The dropdown is rendered
+            // inside the modal (dropdownParent) to avoid Bootstrap 5 modal
+            // focus-stealing conflicts that break the search input.
+            initZoneSelect2(document.getElementById('addRateZoneNo'), '— Select Country First —');
+
+            // When the country changes, repopulate ONLY the zone dropdown
+            // (zone numbers with their names for the selected country). The
+            // service dropdown is left untouched so it remains independent.
+            $('#addRateCountry').on('change', function() {
+                var country = this.value;
+                populateZoneDropdown(document.getElementById('addRateZoneNo'), country);
+                updateAddRateZoneHint();
+            });
+
+            // Populate the Zone No dropdown with ONLY the zones that actually
+            // exist for the given country (from the zone table). If the
+            // country has no zones at all, the entire Zone No section is
+            // hidden so the admin is not prompted to pick a zone. If no
+            // country is selected, the section is shown with a placeholder.
+            function populateZoneDropdown(selectEl, country) {
+                var zoneSection = document.getElementById('addRateZoneSection');
+
+                // Remove all existing options
+                while (selectEl.options.length > 0) {
+                    selectEl.remove(0);
+                }
+
+                if (!country) {
+                    var ph = document.createElement('option');
+                    ph.value = '';
+                    ph.textContent = '— Select Country First —';
+                    selectEl.appendChild(ph);
+                    initZoneSelect2(selectEl, '— Select Country First —');
+                    // Show the section so the admin knows to pick a country.
+                    zoneSection.style.display = '';
+                    return;
+                }
+
+                // Look up the destination_id for this country
+                var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
+                var zoneMap = destId ? zoneLookup[destId] : null;
+
+                // Collect only the zone numbers that actually exist for this
+                // country. zoneMap is an object keyed by zone number (as a
+                // string from JSON), so parse and sort the numeric keys.
+                var zoneKeys = [];
+                if (zoneMap) {
+                    zoneKeys = Object.keys(zoneMap)
+                        .map(function(k) { return parseInt(k, 10); })
+                        .filter(function(n) { return !isNaN(n); })
+                        .sort(function(a, b) { return a - b; });
+                }
+
+                // If the country has no zones at all, hide the entire Zone No
+                // section so the admin is not asked to pick a zone.
+                if (zoneKeys.length === 0) {
+                    zoneSection.style.display = 'none';
+                    // Clear any previous selection and reset Select2.
+                    var none = document.createElement('option');
+                    none.value = '';
+                    none.textContent = '— No zones —';
+                    selectEl.appendChild(none);
+                    initZoneSelect2(selectEl, '— No zones —');
+                    return;
+                }
+
+                // Show the section (it may have been hidden for a previous
+                // country that had no zones).
+                zoneSection.style.display = '';
+
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '— Select Zone —';
+                selectEl.appendChild(placeholder);
+
+                // Add ONE option per zone number that exists for this country.
+                // If Australia has 4 zones, exactly 4 options appear. Each
+                // option is labeled "Zone N (count entries)" so the admin can
+                // see how many states/postal codes belong to that zone. The
+                // option value is the zone number, which is what gets submitted.
+                zoneKeys.forEach(function(z) {
+                    var info = zoneMap[z] || {};
+                    var count = info.count || 0;
+                    var category = info.category || 'state';
+                    var label = 'Zone ' + z;
+                    if (count > 0) {
+                        label += ' (' + count + ' ' + (category === 'zipcode' ? 'Records Avl' : (category === 'city' ? 'cities' : 'states')) + ')';
+                    }
+                    var opt = document.createElement('option');
+                    opt.value = z;
+                    opt.textContent = label;
+                    selectEl.appendChild(opt);
+                });
+                initZoneSelect2(selectEl, '— Select Zone —');
+            }
+
+            // (Re)initialize Select2 on a zone dropdown so the admin can
+            // type to filter zone suggestions. Select2 must be destroyed
+            // first if it was already initialized, otherwise duplicate
+            // search boxes appear. The dropdown is rendered inside the
+            // Add Rate modal (dropdownParent) to prevent Bootstrap 5's
+            // modal focus enforcement from breaking the search input.
+            function initZoneSelect2(selectEl, placeholderText) {
+                if ($(selectEl).hasClass('select2-hidden-accessible')) {
+                    $(selectEl).select2('destroy');
+                }
+                $(selectEl).select2({
+                    placeholder: placeholderText,
+                    allowClear: true,
+                    width: '100%',
+                    dropdownParent: $('#addRateModal')
+                });
+            }
+
+            // When the zone number changes, show a hint describing the zone
+            // (state names for state-category zones, zipcode count otherwise).
+            // Use delegated Select2 events because initZoneSelect2 destroys
+            // and re-creates the Select2 instance on every country change,
+            // which would drop a directly-bound handler.
+            $(document).on('select2:select', '#addRateZoneNo', updateAddRateZoneHint);
+            $(document).on('select2:clear', '#addRateZoneNo', function() {
+                document.getElementById('addRateZoneHint').textContent = '';
+            });
+
+            function updateAddRateZoneHint() {
+                var hintEl = document.getElementById('addRateZoneHint');
+                var country = document.getElementById('addRateCountry').value;
+                var zoneNo = document.getElementById('addRateZoneNo').value;
+                if (!country || zoneNo === '') {
+                    hintEl.textContent = '';
+                    return;
+                }
+                var info = getZoneInfo(country, parseInt(zoneNo, 10));
+                if (info) {
+                    hintEl.textContent = info.names + ' (' + info.category + ')';
+                } else {
+                    hintEl.textContent = 'No zone data for this country/zone.';
+                }
+            }
+
+            // Handle Add Rate form submission via AJAX.
+            $('#addRateForm').on('submit', function(e) {
+                e.preventDefault();
+                var submitBtn = document.getElementById('addRateSubmitBtn');
+                var serviceId = document.getElementById('addRateService').value;
+                var wtStart = document.getElementById('addRateWtStart').value;
+                var wtEnd = document.getElementById('addRateWtEnd').value;
+                var zoneSection = document.getElementById('addRateZoneSection');
+                var zoneSectionVisible = zoneSection && zoneSection.style.display !== 'none';
+                var zoneNo = zoneSectionVisible ? document.getElementById('addRateZoneNo').value : '0';
+                var price = document.getElementById('addRatePrice').value;
+
+                // Client-side validation
+                if (!serviceId) { alert('Please select a service.'); return; }
+                if (!wtStart || !wtEnd || parseFloat(wtEnd) <= parseFloat(wtStart)) {
+                    alert('Weight End must be greater than Weight Start.');
+                    return;
+                }
+                if (zoneSectionVisible && zoneNo === '') { alert('Please select a zone number.'); return; }
+                if (!price || parseFloat(price) < 0) { alert('Please enter a valid price.'); return; }
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+                $.ajax({
+                    url: '{{ url("/admin/manage-rate/add") }}',
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        service_id: serviceId,
+                        wt_range_start: wtStart,
+                        wt_range_end: wtEnd,
+                        zone_no: zoneNo,
+                        price: price,
+                        fuel_charge: document.getElementById('addRateFuelCharge').value || 0,
+                        fuel_percentage: document.getElementById('addRateFuelPct').value || 0,
+                        gst_percentage: document.getElementById('addRateGstPct').value || 0,
+                    },
+                    success: function(response) {
+                        alert(response.message || 'Rate added successfully.');
+                        // Close modal and reset form
+                        var modal = bootstrap.Modal.getInstance(document.getElementById('addRateModal'));
+                        if (modal) modal.hide();
+                        document.getElementById('addRateForm').reset();
+                        // Reload the page so the new rate appears in the table
+                        location.reload();
+                    },
+                    error: function(xhr) {
+                        var msg = 'Failed to add rate. Please try again.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        } else if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                            var errs = xhr.responseJSON.errors;
+                            msg = Object.values(errs).flat().join('\n');
+                        }
+                        alert(msg);
+                    },
+                    complete: function() {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="ti ti-device-floppy me-1"></i>Save Rate';
+                    }
+                });
+            });
+
+            // Reset the service & zone dropdowns when the modal is hidden so
+            // the next open starts clean. populateZoneDropdown re-inits
+            // Select2 with a fresh placeholder, clearing any selection.
+            document.getElementById('addRateModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('addRateForm').reset();
+                populateServiceDropdown(document.getElementById('addRateService'), '');
+                populateZoneDropdown(document.getElementById('addRateZoneNo'), '');
+                document.getElementById('addRateZoneHint').textContent = '';
+            });
+
+            // ===== Bulk Upload Rate Modal =====
+
+            // (Re)initialize Select2 on the bulk zone dropdown inside the
+            // bulk upload modal (dropdownParent points to #bulkUploadModal
+            // so Bootstrap 5 modal focus enforcement doesn't break search).
+            function initBulkZoneSelect2(selectEl, placeholderText) {
+                if ($(selectEl).hasClass('select2-hidden-accessible')) {
+                    $(selectEl).select2('destroy');
+                }
+                $(selectEl).select2({
+                    placeholder: placeholderText,
+                    allowClear: true,
+                    width: '100%',
+                    dropdownParent: $('#bulkUploadModal')
+                });
+            }
+
+            // Populate the bulk zone dropdown based on the selected country.
+            // Mirrors populateZoneDropdown but targets #bulkZoneSection and
+            // allows an "All Zones" option (zone is optional here).
+            function populateBulkZoneDropdown(selectEl, country) {
+                var zoneSection = document.getElementById('bulkZoneSection');
+
+                while (selectEl.options.length > 0) {
+                    selectEl.remove(0);
+                }
+
+                if (!country) {
+                    var ph = document.createElement('option');
+                    ph.value = '';
+                    ph.textContent = '— Select Country First —';
+                    selectEl.appendChild(ph);
+                    initBulkZoneSelect2(selectEl, '— Select Country First —');
+                    zoneSection.style.display = '';
+                    return;
+                }
+
+                var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
+                var zoneMap = destId ? zoneLookup[destId] : null;
+
+                var zoneKeys = [];
+                if (zoneMap) {
+                    zoneKeys = Object.keys(zoneMap)
+                        .map(function(k) { return parseInt(k, 10); })
+                        .filter(function(n) { return !isNaN(n); })
+                        .sort(function(a, b) { return a - b; });
+                }
+
+                if (zoneKeys.length === 0) {
+                    zoneSection.style.display = 'none';
+                    var none = document.createElement('option');
+                    none.value = '';
+                    none.textContent = '— No zones —';
+                    selectEl.appendChild(none);
+                    initBulkZoneSelect2(selectEl, '— No zones —');
+                    return;
+                }
+
+                zoneSection.style.display = '';
+
+                // First option is "All Zones" so leaving it blank means the
+                // file's own Zone No column (if present) is used.
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '— All Zones (use file column) —';
+                selectEl.appendChild(placeholder);
+
+                zoneKeys.forEach(function(z) {
+                    var info = zoneMap[z] || {};
+                    var count = info.count || 0;
+                    var category = info.category || 'state';
+                    var label = 'Zone ' + z;
+                    if (count > 0) {
+                        label += ' (' + count + ' ' + (category === 'zipcode' ? 'Records Avl' : (category === 'city' ? 'cities' : 'states')) + ')';
+                    }
+                    var opt = document.createElement('option');
+                    opt.value = z;
+                    opt.textContent = label;
+                    selectEl.appendChild(opt);
+                });
+                initBulkZoneSelect2(selectEl, '— All Zones (use file column) —');
+            }
+
+            // When the bulk modal is shown, populate the service dropdown.
+            document.getElementById('bulkUploadModal').addEventListener('shown.bs.modal', function() {
+                populateServiceDropdown(document.getElementById('bulkService'), '');
+                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), '');
+            });
+
+            // Country change → repopulate zone dropdown.
+            document.getElementById('bulkCountry').addEventListener('change', function() {
+                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), this.value);
+            });
+
+            // Download Sample: append selected service_id and zone_no so the
+            // sample includes existing rates for that service/zone.
+            document.getElementById('bulkDownloadSampleBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                var serviceId = document.getElementById('bulkService').value;
+                var zoneNo = document.getElementById('bulkZoneNo').value;
+                var base = "{{ route('admin.manage-rate.sample') }}";
+                var params = [];
+                if (serviceId) params.push('service_id=' + encodeURIComponent(serviceId));
+                if (zoneNo) params.push('zone_no=' + encodeURIComponent(zoneNo));
+                var url = base;
+                if (params.length) url += (base.indexOf('?') === -1 ? '?' : '&') + params.join('&');
+                window.location.href = url;
+            });
+
+            // Submit the bulk upload form (regular POST — the controller
+            // redirects back with flash success/error messages). Show a
+            // loading state while the file is being processed.
+            document.getElementById('bulkUploadSubmitBtn').addEventListener('click', function() {
+                var form = document.getElementById('bulkUploadForm');
+                var serviceId = document.getElementById('bulkService').value;
+                var fileInput = form.querySelector('input[name="rate_file"]');
+                if (!serviceId) { alert('Please select a service.'); return; }
+                if (!fileInput.files || !fileInput.files.length) { alert('Please choose an Excel/CSV file.'); return; }
+                var btn = this;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading...';
+                form.submit();
+            });
+
+            // Reset bulk modal dropdowns when hidden so the next open starts clean.
+            document.getElementById('bulkUploadModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('bulkUploadForm').reset();
+                populateServiceDropdown(document.getElementById('bulkService'), '');
+                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), '');
             });
         });
 
@@ -381,50 +1214,15 @@
         }
 
         // Load customer rates via AJAX
+        // Load customer rates via AJAX and store them for filtering
         function loadCustomerRates(customerId) {
             $.ajax({
                 url: '{{ url("/admin/manage-rate/get-customer-rates") }}',
                 type: 'GET',
                 data: { customer_id: customerId },
                 success: function(response) {
-                    var rows = [];
-
-                    if (response.rates.length > 0) {
-                        $.each(response.rates, function(index, rate) {
-                            var isDefault = rate.is_default ? true : false;
-                            var defaultBadge = isDefault
-                                ? '<span class="badge bg-success">Yes</span>'
-                                : '<span class="badge bg-secondary">No</span>';
-
-                            // All customer rates (default and non-default) are editable
-                            var priceCell =
-                                '<span class="rate-display" id="cust-rate-display-' + rate.id + '">₹ ' + parseFloat(rate.price).toFixed(2) + '</span>' +
-                                '<input type="number" step="0.01" min="0" class="rate-input d-none" id="cust-rate-input-' + rate.id + '" value="' + rate.price + '" data-rate-id="' + rate.id + '" data-original="' + rate.price + '">' +
-                                '<i class="ti ti-edit edit-icon" id="cust-edit-icon-' + rate.id + '" onclick="editCustomerRate(' + rate.id + ')"></i>' +
-                                '<i class="ti ti-device-floppy save-icon d-none" id="cust-save-icon-' + rate.id + '" onclick="saveCustomerRate(' + rate.id + ')"></i>' +
-                                '<i class="ti ti-x cancel-icon d-none" id="cust-cancel-icon-' + rate.id + '" onclick="cancelCustomerEdit(' + rate.id + ')"></i>';
-
-                            rows.push([
-                                index + 1,
-                                rate.service ? rate.service.network : '—',
-                                rate.service ? rate.service.service_code : '—',
-                                rate.service ? rate.service.type : '—',
-                                rate.service ? rate.service.method : '—',
-                                rate.service ? rate.service.tat : '—',
-                                rate.wt_range_start,
-                                rate.wt_range_end,
-                                rate.zone_no,
-                                priceCell,
-                                defaultBadge
-                            ]);
-                        });
-                    }
-
-                    customerRateTable
-                        .clear()
-                        .rows.add(rows)
-                        .draw();
-
+                    loadedCustomerRates = response.rates || [];
+                    renderFilteredCustomerRates();
                     $('#customerRatesTable').show();
                     $('#noCustomerSelected').hide();
                 },
@@ -432,6 +1230,83 @@
                     alert('Failed to load customer rates.');
                 }
             });
+        }
+
+        // Render customer rates table, applying country & service filters
+        function renderFilteredCustomerRates() {
+            var countryFilter = document.getElementById('customerCountryFilter').value;
+            var serviceFilter = document.getElementById('customerServiceFilter').value;
+            var rows = [];
+            var idx = 1;
+
+            loadedCustomerRates.forEach(function(rate) {
+                var rateCountry = rate.service ? (rate.service.country || '') : '';
+                var rateServiceId = rate.service_id ? String(rate.service_id) : '';
+
+                // Apply filters
+                if (countryFilter && rateCountry !== countryFilter) return;
+                if (serviceFilter && rateServiceId !== serviceFilter) return;
+
+                var isDefault = rate.is_default ? true : false;
+                var defaultBadge = isDefault
+                    ? '<span class="badge bg-success">Yes</span>'
+                    : '<span class="badge bg-secondary">No</span>';
+
+                // All customer rates (default and non-default) are editable
+                var priceCell =
+                    '<span class="rate-display" id="cust-rate-display-' + rate.id + '">₹ ' + parseFloat(rate.price).toFixed(2) + '</span>' +
+                    '<input type="number" step="0.01" min="0" class="rate-input d-none" id="cust-rate-input-' + rate.id + '" value="' + rate.price + '" data-rate-id="' + rate.id + '" data-original="' + rate.price + '">' +
+                    '<i class="ti ti-edit edit-icon" id="cust-edit-icon-' + rate.id + '" onclick="editCustomerRate(' + rate.id + ')"></i>' +
+                    '<i class="ti ti-device-floppy save-icon d-none" id="cust-save-icon-' + rate.id + '" onclick="saveCustomerRate(' + rate.id + ')"></i>' +
+                    '<i class="ti ti-x cancel-icon d-none" id="cust-cancel-icon-' + rate.id + '" onclick="cancelCustomerEdit(' + rate.id + ')"></i>';
+
+                // Resolve zone name & category for this customer rate.
+                var rateCountry = rate.service ? (rate.service.country || '') : '';
+                var zoneInfo = getZoneInfo(rateCountry, rate.zone_no);
+                var zoneNameCell = zoneInfo ? zoneInfo.names : '—';
+                // Truncate the zone name list to 7 words with "..." and keep
+                // the full list in a tooltip.
+                if (zoneNameCell !== '—') {
+                    var zoneWords = zoneNameCell.split(/[\s,]+/).filter(function(w) { return w.length > 0; });
+                    if (zoneWords.length > 7) {
+                        zoneNameCell = '<span class="zone-name-cell" title="' + $('<div>').text(zoneNameCell).html() + '">' +
+                            zoneWords.slice(0, 7).join(' ') + ' ...</span>';
+                    } else {
+                        zoneNameCell = '<span class="zone-name-cell" title="' + $('<div>').text(zoneNameCell).html() + '">' + zoneNameCell + '</span>';
+                    }
+                }
+                var zoneCategoryCell;
+                if (zoneInfo) {
+                    if (zoneInfo.category === 'state') {
+                        zoneCategoryCell = '<span class="badge bg-info">State</span>';
+                    } else if (zoneInfo.category === 'zipcode') {
+                        zoneCategoryCell = '<span class="badge bg-warning">Zipcode</span>';
+                    } else {
+                        zoneCategoryCell = '<span class="text-muted">' + zoneInfo.category + '</span>';
+                    }
+                } else {
+                    zoneCategoryCell = '—';
+                }
+
+                rows.push([
+                    idx++,
+                    rate.service ? rate.service.network : '—',
+                    rate.service ? rate.service.service_code : '—',
+                    rate.service ? rate.service.method : '—',
+                    rate.service ? rate.service.tat : '—',
+                    rate.wt_range_start,
+                    rate.wt_range_end,
+                    zoneNameCell,
+                    zoneCategoryCell,
+                    priceCell,
+                    defaultBadge
+                ]);
+            });
+
+            customerRateTable
+                .clear()
+                .rows.add(rows)
+                .draw();
         }
 
         // Inline edit for Customer Rate

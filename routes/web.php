@@ -529,6 +529,21 @@ Route::prefix('admin')->group(function () {
     Route::get('/manage-rate/get-customer-rates', [AdminController::class, 'getCustomerRates'])->name('admin.manage-rate.get-customer-rates');
     Route::post('/manage-rate/update/{id}', [AdminController::class, 'updateRate'])->name('admin.manage-rate.update');
     Route::post('/manage-rate/update-customer/{id}', [AdminController::class, 'updateCustomerRate'])->name('admin.manage-rate.update-customer');
+    Route::post('/manage-rate/add', [AdminController::class, 'addRate'])->name('admin.manage-rate.add');
+    Route::get('/manage-rate/sample', [AdminController::class, 'downloadRateSample'])->name('admin.manage-rate.sample');
+    Route::post('/manage-rate/upload', [AdminController::class, 'uploadRateExcel'])->name('admin.manage-rate.upload');
+
+    // Add Zone & Add Country Routes
+    Route::get('/add-zone', [AdminController::class, 'addZone'])->name('admin.add-zone');
+    Route::post('/add-zone', [AdminController::class, 'storeZone'])->name('admin.add-zone.store');
+    Route::get('/add-zone/sample', [AdminController::class, 'downloadZoneSample'])->name('admin.add-zone.sample');
+    Route::post('/add-zone/upload', [AdminController::class, 'uploadZoneExcel'])->name('admin.add-zone.upload');
+    Route::get('/add-country', [AdminController::class, 'addCountry'])->name('admin.add-country');
+    Route::post('/add-country', [AdminController::class, 'storeCountry'])->name('admin.add-country.store');
+
+    // Courier Services Routes (enable/disable services that show rates to customers)
+    Route::get('/services', [AdminController::class, 'services'])->name('admin.services');
+    Route::post('/services/{id}/toggle-status', [AdminController::class, 'toggleServiceStatus'])->name('admin.services.toggle-status');
 
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');
@@ -580,6 +595,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/logout', [customerController::class, 'logout'])->name('logout');
     Route::get('/companies', [customerController::class, 'companies'])->name('companies');
     Route::get('/create-shipment', [customerController::class, 'createShipment'])->name('create-shipment');
+    Route::get('/zones-by-destination', [customerController::class, 'getZonesByDestination'])->name('zones-by-destination');
     Route::get('/csb5-form', [customerController::class, 'csb5Form'])->name('csb5-form');
     Route::post('/csb5-form', [customerController::class, 'storeCsb5Form'])->name('csb5-form.store');
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');

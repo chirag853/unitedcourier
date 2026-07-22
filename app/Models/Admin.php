@@ -71,6 +71,11 @@ class Admin extends Authenticatable
                 'icon' => 'ti-currency-rupee',
                 'routes' => ['manage-rate*'],
             ],
+            'services' => [
+                'label' => 'Courier Services',
+                'icon' => 'ti-truck',
+                'routes' => ['services', 'services/*/toggle-status'],
+            ],
             'admin_management' => [
                 'label' => 'Admin Management',
                 'icon' => 'ti-user-cog',
@@ -154,13 +159,23 @@ class Admin extends Authenticatable
 
     /**
      * Simple wildcard route pattern matcher.
-     * Supports '*' as a trailing wildcard (e.g. 'manage-rate*' matches 'manage-rate', 'manage-rate/edit').
+     * Supports '*' as a wildcard anywhere in the pattern (trailing, middle, or
+     * multiple), where '*' matches any sequence of characters (including none).
+     *
+     * Examples (asterisk = wildcard):
+     *   'manage-rate' + trailing asterisk        -> 'manage-rate', 'manage-rate/edit'
+     *   'change-' + trailing asterisk            -> 'change-logo', 'change-banner'
+     *   'services' + middle asterisk + '/toggle-status' -> 'services/5/toggle-status'
+     *   'customer' + middle asterisk + '/toggle-status' -> 'customer/12/toggle-status'
      */
     protected function matchRoutePattern(string $pattern, string $routeUri): bool
     {
-        if (str_ends_with($pattern, '*')) {
-            $prefix = rtrim($pattern, '*');
-            return $routeUri === $prefix || str_starts_with($routeUri, $prefix);
+        if (str_contains($pattern, '*')) {
+            // Convert the pattern into a regex: escape regex meta-chars, then
+            // turn the (now-escaped) asterisk wildcards into '.*' and anchor it.
+            $regex = '/^' . str_replace('\*', '.*', preg_quote($pattern, '/')) . '$/';
+
+            return (bool) preg_match($regex, $routeUri);
         }
 
         return $pattern === $routeUri;
