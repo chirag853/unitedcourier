@@ -1305,38 +1305,42 @@ class AdminController extends Controller
             // Delete the actual image file if it exists
             $currentContent = $content->content;
             if (preg_match('/website_images\/(.+)/i', $currentContent, $matches)) {
-                $imagePath = public_path('public/website_images/' . $matches[1]);
+                // public_path() already points to the project's public/ directory,
+                // so we must NOT prepend another 'public/' here.
+                $imagePath = public_path('website_images/' . $matches[1]);
                 if (file_exists($imagePath)) {
                     unlink($imagePath);
                 }
             }
-            
+
             // Clear content field
             $content->update([
                 'content' => ''
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Image deleted successfully!'
             ]);
         }
-        
+
         // Handle file upload
         if ($request->hasFile('image_upload')) {
             $request->validate([
                 'image_upload' => 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:2048'
             ]);
-            
+
             $file = $request->file('image_upload');
             $filename = time() . '_' . $file->getClientOriginalName();
-            $path = $file->move(public_path('website_images'), $filename);
-            
-            // Update content with new image path
+            $file->move(public_path('website_images'), $filename);
+
+            // Store the path relative to the public/ directory (document root).
+            // asset('website_images/...') then resolves to http://domain/website_images/...
+            // correctly on both the admin table and the front-end home page.
             $content->update([
-                'content' => 'public/website_images/' . $filename
+                'content' => 'website_images/' . $filename
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Image uploaded and content updated successfully!'

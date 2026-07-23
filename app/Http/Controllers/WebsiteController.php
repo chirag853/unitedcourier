@@ -82,6 +82,13 @@ class WebsiteController extends Controller
         $shippingSolution3 = isset($shippingCardChunks[2]) ? $shippingCardChunks[2]->pluck('content', 'field_name')->toArray() : [];
         $shippingSolution4 = isset($shippingCardChunks[3]) ? $shippingCardChunks[3]->pluck('content', 'field_name')->toArray() : [];
 
+        // Build a single loopable array of shipping solution cards (each card's fields grouped by sort_order).
+        // Each card array contains: card_label, card_title, card_desc, card_point1, card_point2, card_cta, card_image.
+        // Used by the front-end "Tailor-Made Shipping Option" section to render nav + cards dynamically.
+        $shippingCards = $shippingCardChunks->map(function ($group) {
+            return $group->pluck('content', 'field_name')->toArray();
+        })->values()->toArray();
+
         // Also keep $shippingSolutions for backward compatibility with view header (lines 550-557)
         $shippingSolutions = $shippingCollection;
 
@@ -111,6 +118,7 @@ class WebsiteController extends Controller
             'serviceCard2',
             'serviceCard3',
             'shippingSolutions',
+            'shippingCards',
             'shippingSolution1',
             'shippingSolution2',
             'shippingSolution3',

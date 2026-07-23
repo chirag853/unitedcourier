@@ -62,19 +62,19 @@ Template Name: CRMS - Bootstrap Admin Template
 
 	// Mouse Over
 	$(document).on('mouseover', function(e) {
-	       e.stopPropagation();
-	       if ($('body').hasClass('mini-sidebar') && !$('body').hasClass('sidebar-click-collapsed') && $('#toggle_btn').is(':visible')) {
-	           var targ = $(e.target).closest('.sidebar, .header-left').length;
-	           if (targ) {
-	              	$('body').addClass('expand-menu');
-	               $('.subdrop + ul').slideDown();
-	           } else {
-	              	$('body').removeClass('expand-menu');
-	               $('.subdrop + ul').slideUp();
-	           }
-	           return false;
-	       }
-	   });
+        e.stopPropagation();
+        if ($('body').hasClass('mini-sidebar') && $('#toggle_btn').is(':visible')) {
+            var targ = $(e.target).closest('.sidebar, .header-left').length;
+            if (targ) {
+               	$('body').addClass('expand-menu');
+                $('.subdrop + ul').slideDown();
+            } else {
+               	$('body').removeClass('expand-menu');
+                $('.subdrop + ul').slideUp();
+            }
+            return false;
+        }
+    });
 
 	// Star Filled
 	$(document).ready(function() {
@@ -134,17 +134,16 @@ Template Name: CRMS - Bootstrap Admin Template
 		const isHidden = $html.attr('data-layout') === 'hidden';
 	
 		if (isMini) {
-			$body.removeClass('mini-sidebar sidebar-click-collapsed expand-menu');
+			$body.removeClass('mini-sidebar');
 			$(this).addClass('active');
 			localStorage.setItem('screenModeNightTokenState', 'night');
 			setTimeout(function () {
 				$(".header-left").addClass("active");
 			}, 100);
 		} else {
-			$body.addClass('mini-sidebar sidebar-click-collapsed').removeClass('expand-menu');
+			$body.addClass('mini-sidebar');
 			$(this).removeClass('active');
 			localStorage.removeItem('screenModeNightTokenState');
-			$('.subdrop + ul').slideUp();
 			setTimeout(function () {
 				$(".header-left").removeClass("active");
 			}, 100);

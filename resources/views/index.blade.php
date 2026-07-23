@@ -321,7 +321,7 @@
                     </div>
                     <div class="col-lg-5">
                         <div class="card-image-container">
-                            <img src="{{ asset('/website_images/air-freight.webp') }}" alt="Ocean Freight">
+                            <img src="{{ asset($serviceCard1['image'] ?? '/website_images/air-freight.webp') }}" alt="Ocean Freight">
                         </div>
                     </div>
                 </div>
@@ -364,7 +364,7 @@
                     </div>
                     <div class="col-lg-5">
                         <div class="card-image-container">
-                            <img src="{{ asset('/website_images/supply-chain.webp') }}">
+                            <img src="{{ asset($serviceCard2['image'] ?? '/website_images/supply-chain.webp') }}">
                         </div>
                     </div>
                 </div>
@@ -406,7 +406,7 @@
                     </div>
                     <div class="col-lg-5">
                         <div class="card-image-container">
-                            <img src="{{ asset('/website_images/warehousing.webp') }}" alt="Warehousing">
+                            <img src="{{ asset($serviceCard3['image'] ?? '/website_images/warehousing.webp') }}" alt="Warehousing">
                         </div>
                     </div>
                 </div>
@@ -561,105 +561,40 @@
         </div>
 
 
+        {{-- Dynamic toggle nav: labels come from the card_label field of each shipping solution card --}}
         <div class="sr-demo-toggle-nav">
-            <div class="sr-demo-nav-item sr-active" onclick="srShowTab(0, this)">B2B Shipments</div>
-            <div class="sr-demo-nav-item" onclick="srShowTab(2, this)">Marketplaces</div>
-            <div class="sr-demo-nav-item" onclick="srShowTab(1, this)">Dropshipping</div>
-            <div class="sr-demo-nav-item" onclick="srShowTab(3, this)">Friends & Family</div>
+            @foreach($shippingCards as $card)
+                <div class="sr-demo-nav-item {{ $loop->first ? 'sr-active' : '' }}"
+                    onclick="srShowTab({{ $loop->index }}, this)">
+                    {{ $card['card_label'] ?? '' }}
+                </div>
+            @endforeach
         </div>
 
+        {{-- Dynamic cards: each card is rendered from the shipping_solutions DB rows grouped by sort_order --}}
         <div class="sr-demo-card-wrapper">
-            <!-- Card 1: Engage 360 -->
-            <div class="sr-demo-product-card sr-active animate__animated animate__fadeInLeft" id="sr-card-0">
-                <div class="sr-demo-card-content">
-                    <h3 class="sr-demo-card-title">{{ $shippingSolution1['card_title'] ?? 'B2B Shipping Made Simple' }}
-                    </h3>
-                    <p class="sr-demo-card-description">
-                        {{ $shippingSolution1['card_desc'] ?? 'Move commercial shipments with confidence. We support exporters, manufacturers, distributors, and growing businesses with secure handling, flexible delivery options, documentation support, and competitive pricing for bulk volumes.' }}
-                    </p>
-                    <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li>
-                                <strong>{!! $shippingSolution1['card_point1'] ?? 'Fragile Goods' !!}</strong>
-
-                            <!-- {{ $shippingSolution1['card_point1'] ?? 'Secure handling for sensitive and high-volume shipments.' }} -->
-                        </li>
-                        <li><strong>{!! $shippingSolution1['card_point2'] ?? 'Bulk Shipments' !!}</strong>
-                            <!-- {{ $shippingSolution1['card_point2'] ?? 'Cost-effective solutions and customs clearance support.' }} -->
-                        </li>
-                    </ul>
-                    <a href="#" class="sr-demo-btn-live">{{ $shippingSolution1['card_cta'] ?? 'Start Shipping' }}</a>
+            @php
+                // Cycle through background classes to preserve visual variety across dynamic cards
+                $cardBgClasses = ['sr-bg-engage', 'sr-bg-shipping', 'sr-bg-checkout', 'sr-bg-checkout'];
+            @endphp
+            @foreach($shippingCards as $card)
+                <div class="sr-demo-product-card {{ $loop->first ? 'sr-active' : '' }} animate__animated animate__fadeInLeft"
+                    id="sr-card-{{ $loop->index }}">
+                    <div class="sr-demo-card-content">
+                        <h3 class="sr-demo-card-title">{{ $card['card_title'] ?? '' }}</h3>
+                        <p class="sr-demo-card-description">{{ $card['card_desc'] ?? '' }}</p>
+                        <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
+                            <li><strong>{!! $card['card_point1'] ?? '' !!}</strong></li>
+                            <li><strong>{!! $card['card_point2'] ?? '' !!}</strong></li>
+                        </ul>
+                        <a href="#" class="sr-demo-btn-live">{{ $card['card_cta'] ?? 'Start Shipping' }}</a>
+                    </div>
+                    <div class="sr-demo-card-visual {{ $cardBgClasses[$loop->index % count($cardBgClasses)] }}">
+                        <img src="{{ asset($card['card_image'] ?? '/website_images/b2b.webp') }}"
+                            class="sr-image img-fluid">
+                    </div>
                 </div>
-                <div class="sr-demo-card-visual sr-bg-engage">
-                    <img src="{{ asset('/website_images/marketplace.webp') }}" class="sr-image img-fluid">
-                </div>
-            </div>
-
-            <!-- Card 2: Shipping -->
-            <div class="sr-demo-product-card animate__animated animate__fadeInUp" id="sr-card-1">
-                <div class="sr-demo-card-content">
-                    <h3 class="sr-demo-card-title">{{ $shippingSolution2['card_title'] ?? 'Marketplace Shipping' }}</h3>
-                    <p class="sr-demo-card-description">
-                        {{ $shippingSolution2['card_desc'] ?? 'Connect your online store with our shipping platform and manage orders from leading marketplaces like Amazon, eBay, Etsy, Walmart, and more, with faster processing, real-time tracking, and reliable delivery support.' }}
-                    </p>
-                    <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{!! $shippingSolution2['card_point1'] ?? 'Real-Time Tracking' !!}</strong>
-                            <!-- {{ $shippingSolution2['card_point1'] ?? 'Complete visibility for every shipment.' }}</li> -->
-                        <li><strong>{!! $shippingSolution2['card_point2'] ?? 'Seller-Friendly Shipping' !!}</strong>
-                            <!-- {{ $shippingSolution2['card_point2'] ?? 'Built for marketplace sellers handling small packages daily and high volume' }} -->
-                        </li>
-                    </ul>
-                    <a href="#" class="sr-demo-btn-live">{{ $shippingSolution2['card_cta'] ?? 'Start Shipping' }}</a>
-                </div>
-                <div class="sr-demo-card-visual sr-bg-shipping">
-                    <img src="{{ asset('/website_images/dropshipping.webp') }}" class="sr-image img-fluid">
-                </div>
-
-
-            </div>
-
-            <!-- Card 3: Checkout -->
-            <div class="sr-demo-product-card animate__animated animate__fadeInRight" id="sr-card-2">
-                <div class="sr-demo-card-content">
-                    <h3 class="sr-demo-card-title">{{ $shippingSolution3['card_title'] ?? 'Dropshipping Solutions' }}
-                    </h3>
-                    <p class="sr-demo-card-description">
-                        {{ $shippingSolution3['card_desc'] ?? 'Launch and scale your Online business with reliable door-to-door Shipping. Whether you sell through Shopify, your own website, or a dropshipping store, we help you ship products directly to customers with speed, tracking, and complete reliability.' }}
-                    </p>
-                    <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{!! $shippingSolution3['card_point1'] ?? 'End-to-End Support' !!}</strong>
-                            <!-- {{ $shippingSolution3['card_point1'] ?? 'Manage multiple tasks with one easy-to-use dashboard' }} -->
-                        </li>
-                        <li><strong>{!! $shippingSolution3['card_point2'] ?? 'Automated Order flow' !!}</strong>
-                            <!-- {{ $shippingSolution3['card_point2'] ?? 'Manage. Process. Dispatch' }}</li> -->
-                    </ul>
-                    <a href="#" class="sr-demo-btn-live">{{ $shippingSolution3['card_cta'] ?? 'Start Shipping' }}</a>
-                </div>
-                <div class="sr-demo-card-visual sr-bg-checkout">
-                    <img src="{{ asset('/website_images/b2b.webp') }}" class="sr-image img-fluid">
-                </div>
-            </div>
-
-            <!-- Card 4: Checkout -->
-            <div class="sr-demo-product-card animate__animated animate__fadeInRight" id="sr-card-3">
-                <div class="sr-demo-card-content">
-                    <h3 class="sr-demo-card-title">{{ $shippingSolution4['card_title'] ?? 'Overseas Friends & Family' }}
-                    </h3>
-                    <p class="sr-demo-card-description">
-                        {{ $shippingSolution4['card_desc'] ?? 'Send personal packages to your loved ones worldwide with safe handling, timely delivery, and clear updates at every step.' }}
-                    </p>
-                    <ul style="margin-left:-12px; margin-top:-12px;" class="sr-demo-card-description">
-                        <li><strong>{!! $shippingSolution4['card_point1'] ?? 'International Delivery' !!}</strong>
-                            <!-- {{ $shippingSolution4['card_point1'] ?? 'Reliable shipping for gifts, documents, clothes, and personal items.' }} -->
-                        </li>
-                        <li><strong>{!! $shippingSolution4['card_point2'] ?? 'Live Updates' !!}</strong>
-                            <!-- {{ $shippingSolution4['card_point2'] ?? 'Stay informed from pickup to delivery.' }}</li> -->
-                    </ul>
-                    <a href="#" class="sr-demo-btn-live">{{ $shippingSolution4['card_cta'] ?? 'Book Shipment' }}</a>
-                </div>
-                <div class="sr-demo-card-visual sr-bg-checkout">
-                    <img src="{{ asset('/website_images/b2b.webp') }}" class="sr-image img-fluid">
-                </div>
-            </div>
+            @endforeach
         </div>
     </div>
 </section>

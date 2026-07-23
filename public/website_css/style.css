@@ -249,9 +249,9 @@
         }
 
         .menu-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 800;
-            color: #aaa;
+            color: #3e3e3e;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             display: block;
@@ -1952,7 +1952,7 @@
         }
 
         .footer-desc {
-            color: var(--text-light);
+            color: #fff;
             line-height: 1.8;
             margin-bottom: 30px;
             font-size: 0.95rem;
