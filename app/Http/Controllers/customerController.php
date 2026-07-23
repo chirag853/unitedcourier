@@ -2003,14 +2003,22 @@ class customerController extends Controller
             // Resolve shipping_method from service_id when the shipping_method
             // <select> dropdown is empty but a DDP/DDU radio button was selected.
             // The JS at line 8610 sends 'service_id' alongside FormData.
-            if (empty($validatedData['shipping_method'])) {
-                $serviceId = $request->input('service_id');
-                if ($serviceId) {
-                    $courierService = CourierService::find($serviceId);
-                    if ($courierService) {
-                        $validatedData['shipping_method'] = $courierService->method;
-                        \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
-                    }
+            $serviceId = $request->input('service_id');
+            if (empty($validatedData['shipping_method']) && $serviceId) {
+                $courierService = CourierService::find($serviceId);
+                if ($courierService) {
+                    $validatedData['shipping_method'] = $courierService->method;
+                    \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
+                }
+            }
+
+            // Ensure we have a service_id (courier_services.id) to persist on the
+            // shipper_info row. Prefer the value sent by the frontend; otherwise
+            // resolve it from the (possibly just-resolved) shipping_method.
+            if (!$serviceId && !empty($validatedData['shipping_method'])) {
+                $resolvedService = CourierService::whereRaw('LOWER(method) = ?', [strtolower($validatedData['shipping_method'])])->first();
+                if ($resolvedService) {
+                    $serviceId = $resolvedService->id;
                 }
             }
 
@@ -2090,6 +2098,7 @@ class customerController extends Controller
                 'kyc_type' => $validatedData['shipper_kyc_type'] ?? null,
                 'kyc_number' => $validatedData['shipper_kyc_number'] ?? null,
                 'service_rate_id' => $validatedData['service_rate_id'] ?? null,
+                'service_id' => $serviceId ?? null,
             ]);
 
             $shipperId = $shipper->id;
@@ -2547,6 +2556,7 @@ class customerController extends Controller
                         'kyc_type' => $gstType,
                         'kyc_number' => $gstIdNo,
                         'service_rate_id' => $rateDetails['rate_id'] ?? null,
+                        'service_id' => $courierService ? $courierService->id : null,
                     ]);
 
                     $shipperId = $shipper->id;
@@ -2938,6 +2948,17 @@ class customerController extends Controller
                     }
                 }
 
+                // Filter out rate cards whose total price (base + fuel + gst) is 0
+                // so 0-price services are not shown in the bulk-upload preview.
+                // Re-pick the first remaining rate as the default selection.
+                $allRates = array_values(array_filter($allRates, function ($r) {
+                    $base = floatval($r['price'] ?? 0);
+                    $fuel = floatval($r['fuel_charge'] ?? 0);
+                    $gst  = floatval($r['gst_amount'] ?? 0);
+                    return ($base + $fuel + $gst) > 0;
+                }));
+                $defaultRate = !empty($allRates) ? $allRates[0] : null;
+
                 $invoiceNo = $getCol($firstRow, 'invoiceno') ?: ('INV-' . $awbNo);
                 $invoiceValue = floatval($getCol($firstRow, 'invoicevalue') ?: 0);
 
@@ -3300,11 +3321,29 @@ class customerController extends Controller
                             [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
 
+                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                        if (empty($boxRate)) {
+                            $boxRate = \DB::select(
+                                "SELECT cr.*, cs.country, cs.service_code, cs.method
+                                FROM courier_rates cr
+                                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                                WHERE cr.customer_id = 0
+                                AND cr.service_id = ?
+                                AND cs.country = ?
+                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                                LIMIT 1",
+                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                            );
+                        }
+
                         // print_r($boxRate);
                         // exit;
                         
                         if(!empty($boxRate)){
                         	$boxRate = $boxRate[0];
+                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
 	                        // Calculate per-box amounts
 	                        $base = floatval($boxRate->price);
@@ -3341,7 +3380,7 @@ class customerController extends Controller
 
                    
                     $allRates[] = [
-                        // 'rate_id' => $firstMatchedRate->id,
+                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
                         'service_id' => $service->id,
                         'method' => $service->method,
                         'method_display' => $service->method . ' ' . $service->tat,
@@ -3395,10 +3434,28 @@ class customerController extends Controller
 				            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
 				        );
 
+				        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+				        if (empty($boxRate)) {
+				            $boxRate = \DB::select(
+				                "SELECT cr.*, cs.country, cs.service_code, cs.method
+				                FROM courier_rates cr
+				                INNER JOIN courier_services cs ON cr.service_id = cs.id
+				                WHERE cr.customer_id = 0
+				                AND cr.service_id = ?
+				                AND cs.country = ?
+				                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+				                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+				                ORDER BY cr.zone_no DESC, cr.wt_range_start
+				                LIMIT 1",
+				                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+				            );
+				        }
+
 				        // If no customer rate, try default
 				        
 						if(!empty($boxRate)){
 							$boxRate = $boxRate[0];
+							if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 				        
 				            // Calculate per-box amounts
 				            $base = floatval($boxRate->price);
@@ -3434,7 +3491,7 @@ class customerController extends Controller
 				    }
 
 				    $allRates[] = [
-				        // 'rate_id' => $firstMatchedRate->id,
+				        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
 				        'service_id' => $service->id,
 				        'method' => $service->method,
 				        'method_display' => $service->method . ' ' . $service->tat,
@@ -3488,10 +3545,28 @@ class customerController extends Controller
                             [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
 
+                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                        if (empty($boxRate)) {
+                            $boxRate = \DB::select(
+                                "SELECT cr.*, cs.country, cs.service_code, cs.method
+                                FROM courier_rates cr
+                                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                                WHERE cr.customer_id = 0
+                                AND cr.service_id = ?
+                                AND cs.country = ?
+                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                                LIMIT 1",
+                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                            );
+                        }
+
                         //print_r($boxRate);
                         
                         if(!empty($boxRate)){
                         	$boxRate = $boxRate[0];
+                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
 	                        // Calculate per-box amounts
 	                        $base = floatval($boxRate->price);
@@ -3528,7 +3603,7 @@ class customerController extends Controller
 
                    
                     $allRates[] = [
-                        // 'rate_id' => $firstMatchedRate->id,
+                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
                         'service_id' => $service->id,
                         'method' => $service->method,
                         'method_display' => $service->method . ' ' . $service->tat,
@@ -3586,10 +3661,28 @@ class customerController extends Controller
                             [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
 
+                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                        if (empty($boxRate)) {
+                            $boxRate = \DB::select(
+                                "SELECT cr.*, cs.country, cs.service_code, cs.method
+                                FROM courier_rates cr
+                                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                                WHERE cr.customer_id = 0
+                                AND cr.service_id = ?
+                                AND cs.country = ?
+                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                                LIMIT 1",
+                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                            );
+                        }
+
                         //print_r($boxRate);
                         
                         if(!empty($boxRate)){
                         	$boxRate = $boxRate[0];
+                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
 	                        // Calculate per-box amounts
 	                        $base = floatval($boxRate->price);
@@ -3626,7 +3719,7 @@ class customerController extends Controller
 
                    
                     $allRates[] = [
-                        // 'rate_id' => $firstMatchedRate->id,
+                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
                         'service_id' => $service->id,
                         'method' => $service->method,
                         'method_display' => $service->method . ' ' . $service->tat,
@@ -3660,8 +3753,19 @@ class customerController extends Controller
             }//end foreach
 
 
-            //print_r($allRates); 
+            //print_r($allRates);
             //exit;
+
+            // Filter out rate cards whose total price (base + fuel + gst) is 0.
+            // When no rate row matches the weight/zone the combined amounts stay
+            // 0 and the card would otherwise show "₹0.00" — hide those from the
+            // customer-facing rate list.
+            $allRates = array_values(array_filter($allRates, function ($r) {
+                $base = floatval($r['price'] ?? 0);
+                $fuel = floatval($r['fuel_charge'] ?? 0);
+                $gst  = floatval($r['gst_amount'] ?? 0);
+                return ($base + $fuel + $gst) > 0;
+            }));
 
             // 7. Build response
             $response = [
@@ -5239,12 +5343,16 @@ class customerController extends Controller
             $courierService = $this->findCourierService($shippingMethod, $shipper->id);
             $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
-            \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '"');
+            // Resolve the API provider: database-first (courier_services.api_provider)
+            // with a fallback to the legacy string-matching methods.
+            $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
 
-            // Route to appropriate API based on network
+            \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '" → api_provider="' . $apiProvider . '"');
+
+            // Route to appropriate API based on the resolved provider.
             // Priority 0: Overseas Logistic for UNITED CANADA DDP /
             //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
-            if ($this->isOverseasLogisticMethod($shippingMethod)) {
+            if ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                 // Call Overseas Logistic API
                 $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
                 if (!$overseasResult['success']) {
@@ -5324,7 +5432,7 @@ class customerController extends Controller
                     'overseas_response' => $apiResponse,
                     'request_payload' => $overseasResult['request_payload'] ?? null,
                 ]);
-            } elseif ($this->isPostShippingMethod($shippingMethod)) {
+            } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
                 // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
@@ -5409,7 +5517,7 @@ class customerController extends Controller
                     'postshipping_response' => $apiResponse,
                     'request_payload' => $postShippingResult['request_payload'] ?? null,
                 ]);
-            } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
+            } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                 // Call Flying Tigers API (UNITED ECO POST)
                 $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
                 if (!$flyingTigersResult['success']) {
@@ -5492,7 +5600,7 @@ class customerController extends Controller
                     'network' => 'Flying Tigers',
                     'flyingtigers_response' => $apiResponse,
                 ]);
-            } elseif ($network === 'ship global' || $network === 'shipglobal') {
+            } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                 // Call Ship Global API
                 $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
                 if (!$shipGlobalResult['success']) {
@@ -5721,11 +5829,15 @@ class customerController extends Controller
                     $courierService = $this->findCourierService($shippingMethod, $shipper->id);
                     $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
-                    \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '"');
+                    // Resolve the API provider: database-first (courier_services.api_provider)
+                    // with a fallback to the legacy string-matching methods.
+                    $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
+
+                    \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '" → api_provider="' . $apiProvider . '"');
 
                     // Priority 0: Overseas Logistic for UNITED CANADA DDP /
                     //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
-                    if ($this->isOverseasLogisticMethod($shippingMethod)) {
+                    if ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                         // Call Overseas Logistic API
                         $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
 
@@ -5790,7 +5902,7 @@ class customerController extends Controller
 
                         ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Overseas Logistic (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
-                    } elseif ($this->isPostShippingMethod($shippingMethod)) {
+                    } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
                         // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                         // Call PostShipping API
                         $postShippingResult = $this->callPostShippingApiFromDb($shipper);
@@ -5855,7 +5967,7 @@ class customerController extends Controller
 
                         ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via PostShipping (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
-                    } elseif ($this->isFlyingTigersMethod($shippingMethod)) {
+                    } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                         // Call Flying Tigers API (UNITED ECO POST)
                         $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
 
@@ -5934,7 +6046,7 @@ class customerController extends Controller
 
                         ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Flying Tigers (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
-                    } elseif ($network === 'ship global' || $network === 'shipglobal') {
+                    } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
                         $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
 
@@ -7569,7 +7681,8 @@ class customerController extends Controller
         // spaces so both the service_code and human-readable variants route
         // through the Overseas Logistic API.
         return str_contains($methodUpper, 'ARAMEX GPX')
-            || str_contains($methodUpper, 'DPEX_AU_EXPRESS');
+            || str_contains($methodUpper, 'DPEX_AU_EXPRESS')
+            || str_contains($methodUpper, 'DPEX AU EXPRESS');
     }
 
     /**
@@ -7586,6 +7699,69 @@ class customerController extends Controller
     {
         return $this->isCanadaOverseasMethod($shippingMethod)
             || $this->isAustraliaOverseasMethod($shippingMethod);
+    }
+
+    /**
+     * Resolve which external API provider should handle a shipment.
+     *
+     * Database-first with fallback:
+     *   1. If the matched CourierService has a non-empty `api_provider`
+     *      column, that value wins (e.g. "overseas", "postshipping",
+     *      "flyingtigers", "shipglobal", "ups").
+     *   2. Otherwise, fall back to the legacy string-matching methods so
+     *      existing services keep working until their rows are populated.
+     *
+     * This centralises the provider decision so both manifestShipment()
+     * and bulkManifestShipments() stay in sync, and lets admins control
+     * routing per-service from the courier_services table instead of
+     * editing controller code.
+     *
+     * @param string|null $shippingMethod
+     * @param \App\Models\ShipperInfo $shipper
+     * @param \App\Models\CourierService|null $courierService  Optional
+     *        pre-resolved service to avoid a redundant lookup.
+     * @return string  One of: overseas, postshipping, flyingtigers,
+     *                 shipglobal, ups.
+     */
+    private function resolveApiProvider($shippingMethod, $shipper, $courierService = null)
+    {
+        // Default provider when nothing else matches.
+        $fallback = 'ups';
+
+        // Reuse a pre-resolved service when the caller already has one;
+        // otherwise look it up now.
+        if (!$courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
+        if ($courierService) {
+            $provider = strtolower(trim($courierService->api_provider ?? ''));
+            if (!empty($provider)) {
+                return $provider;
+            }
+
+            // No explicit api_provider — derive the network for the
+            // shipglobal/ups fallback branches below.
+            $network = strtolower(trim($courierService->network ?? ''));
+        } else {
+            $network = '';
+        }
+
+        // Legacy fallback chain (mirrors the original if/elseif order).
+        if ($this->isOverseasLogisticMethod($shippingMethod)) {
+            return 'overseas';
+        }
+        if ($this->isPostShippingMethod($shippingMethod)) {
+            return 'postshipping';
+        }
+        if ($this->isFlyingTigersMethod($shippingMethod)) {
+            return 'flyingtigers';
+        }
+        if ($network === 'ship global' || $network === 'shipglobal') {
+            return 'shipglobal';
+        }
+
+        return $fallback;
     }
 
     /*
@@ -7794,8 +7970,32 @@ class customerController extends Controller
 
         // ---- Service details ----
         // Resolve the courier service to get the Service code (e.g. CANADA_YVR_SELF).
+        // The overseas payload is identical for every overseas service; only the
+        // Service field inside ServiceDetails changes per service. We now prefer
+        // the explicit shipper_info.service_id (stored at manifest time) to look
+        // up the courier_services row directly — this is more reliable than the
+        // fuzzy string matching below, which can pick the wrong service when
+        // several overseas services share similar method names.
         $shippingMethod = $this->resolveShippingMethod($shipper);
-        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        $courierService = null;
+
+        // 1) Preferred path: resolve directly from shipper_info.service_id.
+        if (!empty($shipper->service_id)) {
+            $serviceById = CourierService::find($shipper->service_id);
+            if ($serviceById && $this->isOverseasLogisticMethod($serviceById->method)) {
+                $courierService = $serviceById;
+                // Keep shipping_method in sync with the resolved service so the
+                // DutyTax / CSB logic below and any logging use the real method.
+                $shippingMethod = $serviceById->method;
+            }
+        }
+
+        // 2) Fallback: legacy fuzzy match (for older rows where service_id is NULL
+        //    or points at a non-overseas service).
+        if (!$courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
         $serviceCode    = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
         if (empty($serviceCode)) {
             // Fallback to a sensible default if the service code is missing.

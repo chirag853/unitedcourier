@@ -30,6 +30,7 @@ class ShipperInfo extends Model
         'kyc_type',
         'kyc_number',
         'service_rate_id',
+        'service_id',
         'status',
     ];
 

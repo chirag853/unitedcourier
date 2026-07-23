@@ -538,6 +538,7 @@ Route::prefix('admin')->group(function () {
     Route::post('/add-zone', [AdminController::class, 'storeZone'])->name('admin.add-zone.store');
     Route::get('/add-zone/sample', [AdminController::class, 'downloadZoneSample'])->name('admin.add-zone.sample');
     Route::post('/add-zone/upload', [AdminController::class, 'uploadZoneExcel'])->name('admin.add-zone.upload');
+    Route::get('/add-zone/skipped', [AdminController::class, 'downloadSkippedZones'])->name('admin.add-zone.skipped');
     Route::get('/add-country', [AdminController::class, 'addCountry'])->name('admin.add-country');
     Route::post('/add-country', [AdminController::class, 'storeCountry'])->name('admin.add-country.store');
 

@@ -27,6 +27,7 @@ class CourierService extends Model
         'real_name',
         'country',
         'status',
+        'api_provider',
     ];
 
     /**

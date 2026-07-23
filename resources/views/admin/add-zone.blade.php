@@ -86,6 +86,18 @@
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 @endif
+                @if(session('skipped_zone_rows'))
+                    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center justify-content-between" role="alert">
+                        <div class="me-2">
+                            <i class="ti ti-download me-1"></i>
+                            Some zone records were skipped during the last upload. You can download them below.
+                        </div>
+                        <a href="{{ route('admin.add-zone.skipped') }}" class="btn btn-sm btn-warning fw-bold text-nowrap">
+                            <i class="ti ti-download me-1"></i>Download Skipped Records
+                        </a>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                @endif
 
                 <div class="row">
                     <div class="col-12">
@@ -148,7 +160,7 @@
                                         </div>
                                         <div class="alert alert-info py-2">
                                             <i class="ti ti-info-circle me-1"></i>
-                                            Add one row per zone entry. For the "State" category, enter state names (e.g. Alabama, Texas). For "Zipcode", enter postal codes (e.g. 10001, 90210). For "City", enter city names.
+                                            Add one row per zone entry. For the "State" category, enter state names (e.g. Alabama, Texas). For "Zipcode", enter postal codes (e.g. 10001, 90210). For "City", enter city names. <strong>A single zone name can have multiple zone codes</strong> — to add more codes for the same name, just add another row with the same zone name and a different zone code. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country.
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-bordered" id="zoneEntriesTable">
@@ -196,7 +208,7 @@
                             <div class="card-body">
                                 <div class="alert alert-info">
                                     <i class="ti ti-info-circle me-1"></i>
-                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>Tip:</strong> select the Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. Zones that already exist are automatically skipped during upload. The Country, Zone Category and Zone Number you select below will be applied to <em>every</em> row in the file.
+                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>A single zone name can have multiple zone codes</strong> — repeat the same zone name on multiple rows with a different zone code each time. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country. <strong>Tip:</strong> select the Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. The Country, Zone Category and Zone Number you select below will be applied to <em>every</em> row in the file.
                                 </div>
                                 <form id="uploadZoneForm" method="POST" action="{{ route('admin.add-zone.upload') }}" enctype="multipart/form-data">
                                     @csrf

@@ -5810,7 +5810,10 @@ class AdminController extends Controller
         // can be hundreds of postal codes for zipcode-category zones) is
         // not truncated by MySQL's default 1024-byte limit.
         \DB::statement('SET SESSION group_concat_max_len = 1000000');
-        $zones = \App\Models\Zone::selectRaw('destination_id, zone_number_testing, zone_category, COUNT(*) as cnt, GROUP_CONCAT(zone_name SEPARATOR ", ") as names')
+        // A single zone_name may now have multiple zone_codes, so we
+        // GROUP_CONCAT DISTINCT zone_name to avoid the same name appearing
+        // several times in the comma-separated display / Select2 dropdown.
+        $zones = \App\Models\Zone::selectRaw('destination_id, zone_number_testing, zone_category, COUNT(*) as cnt, GROUP_CONCAT(DISTINCT zone_name SEPARATOR ", ") as names')
             ->groupBy('destination_id', 'zone_number_testing', 'zone_category')
             ->get();
 
@@ -6523,6 +6526,20 @@ class AdminController extends Controller
      * Each entry creates a new row in the `zone` table linked to the chosen
      * destination and category. zone_number_testing is set to the supplied
      * zone_number so the new zones are immediately usable by the rate system.
+     *
+     * A single zone_name is allowed to have MULTIPLE zone_codes (e.g. a state
+     * can be referenced by several codes). Therefore a repeated zone_name is
+     * NOT treated as a duplicate. A row is only skipped when its zone_code
+     * already exists or when the exact (zone_name + zone_code) pair already
+     * exists.
+     *
+     * CODE UNIQUENESS SCOPE:
+     *   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for every
+     *   category (state, zipcode, city). The same code may legitimately exist
+     *   in different countries (e.g. "AL" for Alabama (US) and Albania, or the
+     *   postcode prefix "SW1" in UK and another country). A code is only a
+     *   duplicate when it already exists within the same selected country +
+     *   category.
      */
     public function storeZone(Request $request)
     {
@@ -6538,40 +6555,75 @@ class AdminController extends Controller
         $created = 0;
         $skipped = 0;
 
-        // Pre-fetch existing zone names AND codes for this country + category
-        // (lower-cased keys for case-insensitive duplicate detection) so we
-        // can skip duplicates without running a query per entry.
+        // Pre-fetch existing zone codes AND (zone_name + zone_code) pairs for
+        // this country + category (lower-cased keys for case-insensitive
+        // duplicate detection) so we can skip duplicates without running a
+        // query per entry.
+        //
+        // A single zone_name may have multiple zone_codes, so we no longer
+        // build a name-only duplicate map. We track codes (which must stay
+        // unique) and exact (name + code) pairs (to avoid identical rows).
+        //
+        // CODE UNIQUENESS SCOPE:
+        //   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for
+        //   every category (state, zipcode, city). The same code may exist in
+        //   different countries; it is only a duplicate within the same
+        //   selected country + category.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
             ->get(['zone_name', 'zone_code']);
 
-        $existingNames = [];
-        $existingCodes  = [];
+        $existingCodes = [];
+        $existingPairs = [];
         foreach ($existingZones as $z) {
-            $n = trim((string) $z->zone_name);
-            if ($n !== '') {
-                $existingNames[strtolower($n)] = true;
-            }
-            $c = trim((string) $z->zone_code);
+            $n = strtolower(trim((string) $z->zone_name));
+            $c = strtolower(trim((string) $z->zone_code));
             if ($c !== '') {
-                $existingCodes[strtolower($c)] = true;
+                $existingCodes[$c] = true;
             }
+            $existingPairs[$n . '|' . $c] = true;
         }
 
-        // Track names/codes added within this same submission too.
-        $seenNames = [];
+        // Track codes AND (name + code) pairs added within this same
+        // submission too, so the same value appearing twice in the form is
+        // only inserted once.
         $seenCodes = [];
+        $seenPairs = [];
+
+        // Normalize the case of a zone name so that "DELHI", "Delhi" and
+        // "delhi" (or "MANGAWHAI", "Mangawhai", "mangawai") all collapse to a
+        // single consistent Title Case form ("Delhi", "Mangawhai"). This
+        // applies to EVERY category (state, zipcode, city) because the
+        // zone_name column always holds a place name, never a raw postcode.
+        // The actual postcode is stored in zone_code (handled below) and is
+        // always upper-cased. The `zone` table uses a case-insensitive
+        // collation (utf8mb4_general_ci) so the rate-system lookup still
+        // matches regardless of stored case.
+        $normalizeName = function ($value) {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            return mb_convert_case($value, MB_CASE_TITLE, 'UTF-8');
+        };
+        $normalizeCode = function ($value) {
+            $value = trim((string) $value);
+            return $value !== '' ? mb_strtoupper($value, 'UTF-8') : '';
+        };
 
         foreach ($validated['entries'] as $entry) {
-            $name = trim((string) $entry['zone_name']);
-            $code = trim((string) ($entry['zone_code'] ?? ''));
+            $name = $normalizeName($entry['zone_name']);
+            $code = $normalizeCode($entry['zone_code'] ?? '');
 
             $nameKey = strtolower($name);
             $codeKey = $code !== '' ? strtolower($code) : '';
+            $pairKey = $nameKey . '|' . $codeKey;
 
-            // Skip if the zone name OR zone code already exists in the
-            // database, or was already added earlier in this same submission.
-            if (isset($existingNames[$nameKey]) || isset($seenNames[$nameKey])) {
+            // A zone_name may have multiple zone_codes, so a repeated name is
+            // NOT a duplicate. Skip only when the exact (name + code) pair
+            // already exists, or when a non-empty zone_code already exists
+            // (codes must stay unique because the rate system looks them up).
+            if (isset($existingPairs[$pairKey]) || isset($seenPairs[$pairKey])) {
                 $skipped++;
                 continue;
             }
@@ -6588,7 +6640,7 @@ class AdminController extends Controller
                 'zone_name'           => $name,
                 'zone_code'           => $code,
             ]);
-            $seenNames[$nameKey] = true;
+            $seenPairs[$pairKey] = true;
             if ($codeKey !== '') {
                 $seenCodes[$codeKey] = true;
             }
@@ -6687,6 +6739,20 @@ class AdminController extends Controller
      * have a header row with "Zone Name" (required) and "Zone Code"
      * (optional). Each data row creates a new zone entry linked to the
      * chosen country + category + zone number.
+     *
+     * A single zone_name is allowed to have MULTIPLE zone_codes (e.g. a state
+     * can be referenced by several codes). Therefore a repeated zone_name is
+     * NOT treated as a duplicate. A row is only skipped when its zone_code
+     * already exists or when the exact (zone_name + zone_code) pair already
+     * exists.
+     *
+     * CODE UNIQUENESS SCOPE:
+     *   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for every
+     *   category (state, zipcode, city). The same code may legitimately exist
+     *   in different countries (e.g. "AL" for Alabama (US) and Albania, or the
+     *   postcode prefix "SW1" in UK and another country). A code is only a
+     *   duplicate when it already exists within the same selected country +
+     *   category.
      */
     public function uploadZoneExcel(Request $request)
     {
@@ -6768,59 +6834,115 @@ class AdminController extends Controller
         $duplicates = 0;
         $dataRows = array_slice($rows, 1);
 
-        // Pre-fetch all existing zone names AND zone codes for this country +
-        // category so we can skip duplicates without running a query per row.
-        // Keys are lower-cased values for case-insensitive comparison.
+        // Collect every row that is NOT inserted (empty, duplicate, or
+        // duplicate code) so the admin can download them afterwards and see
+        // exactly which rows were skipped and why. Each entry stores the
+        // original (raw) name + code from the file plus a human-readable
+        // reason. This array is flashed to the session at the end.
+        $skippedRows = [];
+
+        // Pre-fetch existing zone codes AND (zone_name + zone_code) pairs for
+        // this country + category so we can skip duplicates without running a
+        // query per row. Keys are lower-cased values for case-insensitive
+        // comparison.
+        //
+        // A single zone_name may have multiple zone_codes, so we no longer
+        // build a name-only duplicate map. We track codes (which must stay
+        // unique) and exact (name + code) pairs (to avoid identical rows).
+        //
+        // CODE UNIQUENESS SCOPE:
+        //   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for
+        //   every category (state, zipcode, city). The same code may exist in
+        //   different countries; it is only a duplicate within the same
+        //   selected country + category.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
             ->get(['zone_name', 'zone_code']);
 
-        $existingNames = [];
-        $existingCodes  = [];
+        $existingCodes = [];
+        $existingPairs = [];
         foreach ($existingZones as $z) {
-            $n = trim((string) $z->zone_name);
-            if ($n !== '') {
-                $existingNames[strtolower($n)] = true;
-            }
-            $c = trim((string) $z->zone_code);
+            $n = strtolower(trim((string) $z->zone_name));
+            $c = strtolower(trim((string) $z->zone_code));
             if ($c !== '') {
-                $existingCodes[strtolower($c)] = true;
+                $existingCodes[$c] = true;
             }
+            $existingPairs[$n . '|' . $c] = true;
         }
 
-        // Track zone names AND codes seen within this upload too, so the same
-        // value appearing twice in the same file is only inserted once.
-        $seenInUpload = [];
+        // Track codes AND (name + code) pairs seen within this upload too,
+        // so the same value appearing twice in the same file is only inserted
+        // once.
         $seenCodesInUpload = [];
+        $seenPairsInUpload = [];
+
+        // Normalize the case of a zone name so that "DELHI", "Delhi" and
+        // "delhi" (or "MANGAWHAI", "Mangawhai", "mangawai") all collapse to a
+        // single consistent Title Case form ("Delhi", "Mangawhai"). This
+        // applies to EVERY category (state, zipcode, city) because the
+        // zone_name column always holds a place name, never a raw postcode.
+        // The actual postcode is stored in zone_code (handled below) and is
+        // always upper-cased. The `zone` table uses a case-insensitive
+        // collation (utf8mb4_general_ci) so the rate-system lookup still
+        // matches regardless of stored case.
+        $normalizeName = function ($value) {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            return mb_convert_case($value, MB_CASE_TITLE, 'UTF-8');
+        };
+        $normalizeCode = function ($value) {
+            $value = trim((string) $value);
+            return $value !== '' ? mb_strtoupper($value, 'UTF-8') : '';
+        };
 
         foreach ($dataRows as $row) {
-            $zoneName = ($nameCol !== null && isset($row[$nameCol])) ? trim((string) $row[$nameCol]) : '';
-            $zoneCode = ($codeCol !== null && isset($row[$codeCol])) ? trim((string) $row[$codeCol]) : '';
+            $rawName = ($nameCol !== null && isset($row[$nameCol])) ? trim((string) $row[$nameCol]) : '';
+            $rawCode = ($codeCol !== null && isset($row[$codeCol])) ? trim((string) $row[$codeCol]) : '';
 
             // Skip completely empty rows (neither a name nor a code present).
-            if ($zoneName === '' && $zoneCode === '') {
+            if ($rawName === '' && $rawCode === '') {
                 $skipped++;
+                $skippedRows[] = [
+                    'zone_name' => $rawName,
+                    'zone_code' => $rawCode,
+                    'reason'    => 'Empty row (no zone name and no zone code)',
+                ];
                 continue;
             }
 
             // The `zone` table requires a zone_name. If the file only had a
             // "Zone Code" column (no Zone Name), fall back to using the code
-            // as the name so the row can still be imported.
-            $effectiveName = $zoneName !== '' ? $zoneName : $zoneCode;
+            // as the name so the row can still be imported. The fallback name
+            // is normalized the same way as a regular name.
+            $effectiveName = $rawName !== '' ? $normalizeName($rawName) : $normalizeName($rawCode);
+            $zoneCode      = $normalizeCode($rawCode);
 
             $nameKey = strtolower($effectiveName);
             $codeKey = $zoneCode !== '' ? strtolower($zoneCode) : '';
+            $pairKey = $nameKey . '|' . $codeKey;
 
-            // Skip if this zone name OR zone code already exists in the
-            // database for this country + category, or if it was already
-            // added earlier in this same upload. This prevents duplicate
-            // zone codes from being inserted.
-            if (isset($existingNames[$nameKey]) || isset($seenInUpload[$nameKey])) {
+            // A zone_name may have multiple zone_codes, so a repeated name is
+            // NOT a duplicate. Skip only when the exact (name + code) pair
+            // already exists, or when a non-empty zone_code already exists
+            // (codes must stay unique because the rate system looks them up).
+            if (isset($existingPairs[$pairKey]) || isset($seenPairsInUpload[$pairKey])) {
                 $duplicates++;
+                $skippedRows[] = [
+                    'zone_name' => $rawName,
+                    'zone_code' => $rawCode,
+                    'reason'    => 'Duplicate zone name + zone code pair already exists',
+                ];
                 continue;
             }
             if ($codeKey !== '' && (isset($existingCodes[$codeKey]) || isset($seenCodesInUpload[$codeKey]))) {
                 $duplicates++;
+                $skippedRows[] = [
+                    'zone_name' => $rawName,
+                    'zone_code' => $rawCode,
+                    'reason'    => 'Duplicate zone code already exists in this country',
+                ];
                 continue;
             }
 
@@ -6832,11 +6954,19 @@ class AdminController extends Controller
                 'zone_name'           => mb_substr($effectiveName, 0, 100),
                 'zone_code'           => mb_substr($zoneCode, 0, 10),
             ]);
-            $seenInUpload[$nameKey] = true;
+            $seenPairsInUpload[$pairKey] = true;
             if ($codeKey !== '') {
                 $seenCodesInUpload[$codeKey] = true;
             }
             $created++;
+        }
+
+        // Flash the skipped rows to the session so the admin can download
+        // them as an Excel file from the Add Zone page. Only flash when there
+        // is at least one skipped row, otherwise the download button is not
+        // shown.
+        if (!empty($skippedRows)) {
+            session()->flash('skipped_zone_rows', $skippedRows);
         }
 
         if ($created === 0) {
@@ -6846,6 +6976,9 @@ class AdminController extends Controller
             }
             if ($skipped > 0) {
                 $msg .= ' ' . $skipped . ' empty row(s) skipped.';
+            }
+            if (!empty($skippedRows)) {
+                $msg .= ' You can download the skipped records below.';
             }
             return redirect()
                 ->route('admin.add-zone')
@@ -6859,10 +6992,73 @@ class AdminController extends Controller
         if ($skipped > 0) {
             $msg .= ' ' . $skipped . ' empty row(s) skipped.';
         }
+        if (!empty($skippedRows)) {
+            $msg .= ' You can download the skipped records below.';
+        }
 
         return redirect()
             ->route('admin.add-zone')
             ->with('success', $msg);
+    }
+
+    /**
+     * Download the zones that were skipped during the last bulk Excel
+     * upload as an .xlsx file.
+     *
+     * When uploadZoneExcel() skips rows (empty rows, duplicate name+code
+     * pairs, or duplicate zone codes within the selected country), it
+     * flashes them to the session under 'skipped_zone_rows'. This method
+     * reads that flash data, builds an Excel with three columns
+     * (Zone Name, Zone Code, Reason) and streams it back as a download.
+     * The session key is forgotten afterwards so the same file is not
+     * downloaded again on a later visit.
+     */
+    public function downloadSkippedZones(Request $request)
+    {
+        $skippedRows = session('skipped_zone_rows');
+
+        if (empty($skippedRows)) {
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', 'There are no skipped records to download. Please upload a zone Excel file first.');
+        }
+
+        // Capture the data and clear the flash key so it cannot be
+        // downloaded again on a later visit.
+        session()->forget('skipped_zone_rows');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Header row
+        $sheet->setCellValue('A1', 'Zone Name');
+        $sheet->setCellValue('B1', 'Zone Code');
+        $sheet->setCellValue('C1', 'Reason');
+
+        $row = 2;
+        foreach ($skippedRows as $entry) {
+            $sheet->setCellValue('A' . $row, $entry['zone_name'] ?? '');
+            $sheet->setCellValue('B' . $row, $entry['zone_code'] ?? '');
+            $sheet->setCellValue('C' . $row, $entry['reason'] ?? '');
+            $row++;
+        }
+
+        // Bold the header row and auto-size columns
+        $sheet->getStyle('A1:C1')->getFont()->setBold(true);
+        $sheet->getColumnDimension('A')->setAutoSize(true);
+        $sheet->getColumnDimension('B')->setAutoSize(true);
+        $sheet->getColumnDimension('C')->setAutoSize(true);
+
+        $fileName = 'skipped-zones.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'max-age=0',
+        ]);
     }
 
     /**
