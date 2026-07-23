@@ -577,7 +577,7 @@
                 @foreach($testimonials as $testimonial)
                 <div class="testimonial-card">
                     <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                    <p class="testimonial-text">{{ $testimonial->content }}</p>
+                    <p class="testimonial-text">{!! $testimonial->content !!}</p>
                     <div class="user-info"> <img src="{{ asset($testimonial->customer_image ?? 'website_images/default-avatar.png') }}" class="img-fluid"> <h6>{{ $testimonial->customer_name ?? 'Name' }}</h6></div>
                 </div>
                 @endforeach

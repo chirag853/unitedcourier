@@ -2910,6 +2910,115 @@ class AdminController extends Controller
         }
     }
 
+    // Testimonials / Reviews Management Methods
+    public function testimonials()
+    {
+        // Common testimonials (shown on all pages) - flat list ordered by sort_order
+        $testimonials = \App\Models\Testimonial::orderBy('sort_order')->orderBy('id')->get();
+
+        return view('admin.testimonials', compact('testimonials'));
+    }
+
+    public function storeTestimonial(Request $request)
+    {
+        try {
+            $data = $request->only(['customer_name', 'content', 'customer_designation', 'rating', 'is_active', 'sort_order']);
+            $data['page'] = 'common';
+            $data['is_active'] = filter_var($data['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $data['rating'] = (int) ($data['rating'] ?? 5);
+            $data['sort_order'] = (int) ($data['sort_order'] ?? 0);
+
+            if ($request->hasFile('customer_image')) {
+                $file = $request->file('customer_image');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $file->move(public_path('website_images'), $filename);
+                // Store path relative to the public/ directory (document root).
+                $data['customer_image'] = 'website_images/' . $filename;
+            }
+
+            $testimonial = \App\Models\Testimonial::create($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Testimonial added successfully!',
+                'testimonial' => $testimonial
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function updateTestimonial(Request $request, $id)
+    {
+        try {
+            $testimonial = \App\Models\Testimonial::findOrFail($id);
+
+            $data = $request->only(['customer_name', 'content', 'customer_designation', 'rating', 'is_active', 'sort_order']);
+            $data['is_active'] = filter_var($data['is_active'] ?? $testimonial->is_active, FILTER_VALIDATE_BOOLEAN);
+            $data['rating'] = (int) ($data['rating'] ?? $testimonial->rating);
+            $data['sort_order'] = (int) ($data['sort_order'] ?? $testimonial->sort_order);
+
+            if ($request->hasFile('customer_image')) {
+                // Delete the old image file if it was stored in website_images.
+                if (!empty($testimonial->customer_image) && preg_match('/website_images\/(.+)/i', $testimonial->customer_image, $matches)) {
+                    $oldPath = public_path('website_images/' . $matches[1]);
+                    if (file_exists($oldPath)) {
+                        unlink($oldPath);
+                    }
+                }
+
+                $file = $request->file('customer_image');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $file->move(public_path('website_images'), $filename);
+                // Store path relative to the public/ directory (document root).
+                $data['customer_image'] = 'website_images/' . $filename;
+            }
+
+            $testimonial->update($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Testimonial updated successfully!',
+                'testimonial' => $testimonial
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function deleteTestimonial($id)
+    {
+        try {
+            $testimonial = \App\Models\Testimonial::findOrFail($id);
+
+            // Delete the image file if it was stored in website_images.
+            if (!empty($testimonial->customer_image) && preg_match('/website_images\/(.+)/i', $testimonial->customer_image, $matches)) {
+                $imagePath = public_path('website_images/' . $matches[1]);
+                if (file_exists($imagePath)) {
+                    unlink($imagePath);
+                }
+            }
+
+            $testimonial->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Testimonial deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
     // Blog Management Methods
     public function changeBlog()
     {

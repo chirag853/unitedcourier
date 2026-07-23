@@ -1,0 +1,330 @@
+:root {
+    --brand-gradient: linear-gradient(90deg, #4f46e5, #9333ea);
+    --text-dark: #1a1a1a;
+    --text-muted: #6b7280;
+    --bg-light: #f3f6ff;
+    --input-bg: #f8f9fc;
+    --input-border: #eef2f6;
+    --card-radius: 32px;
+}
+
+.form-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+}
+
+.gradient-text {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.kyc-card {
+    background: white;
+    border-radius: var(--card-radius);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.05);
+    padding: 48px;
+    width: 100%;
+    /* max-width: 850px; */
+    border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.form-header {
+    margin-bottom: 32px;
+}
+
+.form-header h2 {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+.form-header p {
+    color: var(--text-muted);
+    font-size: 15px;
+}
+
+.section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #adb5bd;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.section-title-alt {
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    margin-top: 10px;
+}
+
+/* Custom Input Groups from Screenshots */
+.input-wrapper {
+    position: relative;
+    margin-bottom: 24px;
+}
+
+.input-wrapper i {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+    font-size: 16px;
+}
+
+.input-custom {
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 16px;
+    padding: 16px 16px 16px 48px;
+    font-size: 15px;
+    width: 100%;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    color: #444;
+}
+
+.input-custom:focus {
+    background-color: #fff;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    outline: none;
+}
+
+/* Document Item Styling */
+.doc-item {
+    background: #fff;
+    border: 1px solid var(--input-border);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    transition: all 0.3s ease;
+}
+
+.doc-item.has-file {
+    border-color: #4f46e5;
+    background: #f5f3ff;
+}
+
+.doc-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.doc-name {
+    font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+}
+
+.file-status {
+    font-size: 13px;
+    color: #4f46e5;
+    font-weight: 600;
+    margin-top: 4px;
+    display: none;
+}
+
+.info-circle {
+    color: #4f46e5;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Radio/Check styling */
+.form-check-input {
+    width: 1.3em;
+    height: 1.3em;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.form-check-input:checked {
+    background-color: #4f46e5;
+    border-color: #4f46e5;
+}
+
+/* Actions */
+.btn-gradient {
+    background: var(--brand-gradient);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 16px 48px;
+    font-weight: 700;
+    font-size: 16px;
+    font-family: 'Inter', sans-serif;
+    transition: 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-gradient:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    color: #fff;
+}
+
+.btn-back {
+    background: #fff;
+    border: 1px solid #eef2f6;
+    color: #6b7280;
+    border-radius: 16px;
+    padding: 16px 40px;
+    font-weight: 700;
+    transition: 0.3s;
+}
+
+.btn-back:hover {
+    background: #f8f9fa;
+}
+
+.link-alt {
+    color: #4f46e5;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.link-alt:hover {
+    text-decoration: underline;
+}
+
+.text-danger-alt {
+    color: #ef4444;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    margin-left: 15px;
+}
+
+/* ============================================================
+   New CSB5 Form Elements
+   ============================================================ */
+
+/* Compact document items (used inside grid columns) */
+.doc-item.compact {
+    padding: 16px 18px;
+    border-radius: 16px;
+    margin-top: 0;
+    height: 100%;
+}
+
+.doc-item.compact .doc-name {
+    font-size: 14px;
+}
+
+.doc-item.compact .file-status {
+    font-size: 12px;
+}
+
+/* Select / Dropdown styling */
+.select-wrapper {
+    position: relative;
+}
+
+.select-wrapper i {
+    pointer-events: none;
+}
+
+.select-wrapper select.input-custom {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 40px;
+    cursor: pointer;
+    background-color: var(--input-bg);
+}
+
+.select-wrapper select.input-custom:invalid {
+    color: #adb5bd;
+}
+
+.select-wrapper select.input-custom option {
+    color: #444;
+}
+
+/* Custom dropdown arrow */
+.select-wrapper::after {
+    content: '\f078';
+    font-family: 'Font Awesome 6 Free', 'Font Awesome 5 Free';
+    font-weight: 900;
+    position: absolute;
+    right: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+    font-size: 12px;
+    pointer-events: none;
+}
+
+/* Verify button */
+.btn-verify {
+    background: #fff;
+    border: 1.5px solid #4f46e5;
+    color: #4f46e5;
+    border-radius: 12px;
+    padding: 8px 18px;
+    font-weight: 700;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    transition: 0.3s;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    letter-spacing: 0.3px;
+}
+
+.btn-verify:hover:not(:disabled) {
+    background: #4f46e5;
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.25);
+}
+
+.btn-verify:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #d1d5db;
+    color: #9ca3af;
+    background: #f9fafb;
+}
+
+/* Verified badge */
+.verified-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #ecfdf5;
+    color: #10b981;
+    border: 1px solid #a7f3d0;
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-weight: 700;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+}
+
+.verified-badge i {
+    font-size: 14px;
+}
+
+/* Ensure doc items inside columns align nicely */
+.row.g-3 > [class*='col-'] {
+    display: flex;
+    flex-direction: column;
+}
+
+.row.g-3 > [class*='col-'] > .doc-item.compact {
+    flex: 1 1 auto;
+}

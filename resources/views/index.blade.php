@@ -54,43 +54,37 @@
 
                 <div class="logo-slider">
                     <div class="logo-track">
-                        <!-- Original Logos -->
+                        @if($marketplaceLogos->count() > 0)
+                            <!-- Original Logos -->
+                            @foreach($marketplaceLogos as $card)
+                            <div class="logo-item">
+                                <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
+                            </div>
+                            @endforeach
 
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/ebay.webp') }}" alt="eBay">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/etsy.webp') }}" alt="etsy">
-                        </div>
-
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/amazon.webp') }}">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/shopify.webp') }}">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/walmart.webp') }}">
-                        </div>
-
-                        <!-- Cloned Logos (for seamless loop) -->
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/ebay.webp') }}" alt="eBay">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/etsy.webp') }}" alt="etsy">
-                        </div>
-
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/amazon.webp') }}">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/shopify.webp') }}">
-                        </div>
-                        <div class="logo-item">
-                            <img src="{{ asset('/website_images/walmart.webp') }}">
-                        </div>
-
+                            <!-- Cloned Logos (for seamless loop) -->
+                            @foreach($marketplaceLogos as $card)
+                            <div class="logo-item">
+                                <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
+                            </div>
+                            @endforeach
+                        @else
+                            <div class="logo-item">
+                                <img src="{{ asset('/website_images/ebay.webp') }}" alt="eBay">
+                            </div>
+                            <div class="logo-item">
+                                <img src="{{ asset('/website_images/etsy.webp') }}" alt="etsy">
+                            </div>
+                            <div class="logo-item">
+                                <img src="{{ asset('/website_images/amazon.webp') }}" alt="Amazon">
+                            </div>
+                            <div class="logo-item">
+                                <img src="{{ asset('/website_images/shopify.webp') }}" alt="Shopify">
+                            </div>
+                            <div class="logo-item">
+                                <img src="{{ asset('/website_images/walmart.webp') }}" alt="Walmart">
+                            </div>
+                        @endif
                     </div>
                 </div>
 
@@ -627,7 +621,7 @@
                 @foreach($testimonials as $testimonial)
                 <div class="testimonial-card">
                     <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                    <p class="testimonial-text">{{ $testimonial->content }}</p>
+                    <p class="testimonial-text">{!! $testimonial->content !!}</p>
                     <div class="user-info">
                         <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
                             alt="{{ $testimonial->customer_name }}">
@@ -644,7 +638,7 @@
                 @foreach($testimonials as $testimonial)
                 <div class="testimonial-card">
                     <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                    <p class="testimonial-text">{{ $testimonial->content }}</p>
+                    <p class="testimonial-text">{!! $testimonial->content !!}</p>
                     <div class="user-info">
                         <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
                             alt="{{ $testimonial->customer_name }}">

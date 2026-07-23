@@ -706,7 +706,7 @@
                 @forelse($testimonials as $testimonial)
                     <div class="testimonial-card">
                         <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                        <p class="testimonial-text">"{{ $testimonial->content }}"</p>
+                        <p class="testimonial-text">"{!! $testimonial->content !!}"</p>
                         <div class="user-info">
                             <img src="{{ asset($testimonial->customer_image ?? 'public/website_images/review-1.png') }}" class="img-fluid" alt="testimonial" />
                             <h6>{{ $testimonial->customer_name }}</h6>

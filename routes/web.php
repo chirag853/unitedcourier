@@ -439,6 +439,9 @@ Route::prefix('admin')->group(function () {
     Route::post('/store-faq', [AdminController::class, 'storeFaq'])->name('admin.store-faq');
     Route::put('/update-faq/{id}', [AdminController::class, 'updateFaq'])->name('admin.update-faq');
     Route::delete('/delete-faq/{id}', [AdminController::class, 'deleteFaq'])->name('admin.delete-faq');
+    Route::post('/store-testimonial', [AdminController::class, 'storeTestimonial'])->name('admin.store-testimonial');
+    Route::put('/update-testimonial/{id}', [AdminController::class, 'updateTestimonial'])->name('admin.update-testimonial');
+    Route::delete('/delete-testimonial/{id}', [AdminController::class, 'deleteTestimonial'])->name('admin.delete-testimonial');
     Route::get('/change-terms-and-conditions', [AdminController::class, 'changeTermsAndConditions'])->name('admin.change-terms-and-conditions');
     Route::post('/store-terms-and-conditions-content', [AdminController::class, 'storeTermsAndConditionsContent'])->name('admin.store-terms-and-conditions-content');
     Route::post('/update-terms-and-conditions-content/{id}', [AdminController::class, 'updateTermsAndConditionsContent'])->name('admin.update-terms-and-conditions-content');

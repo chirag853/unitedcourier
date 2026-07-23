@@ -144,6 +144,8 @@
                                         class="{{ request()->is('admin/change-faq-queries*') ? 'active' : '' }}">FAQ Queries</a></li>
                                 <li><a href="{{ url('/admin/faq') }}"
                                         class="{{ request()->is('admin/faq') ? 'active' : '' }}">FAQ Management</a></li>
+                                <li><a href="{{ url('/admin/testimonials') }}"
+                                        class="{{ request()->is('admin/testimonials') ? 'active' : '' }}">Testimonials / Reviews</a></li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
                             </ul>
                         </li>

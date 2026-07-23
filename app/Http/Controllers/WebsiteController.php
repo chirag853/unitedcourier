@@ -100,11 +100,11 @@ class WebsiteController extends Controller
         $testimonialHeading = HomePageContent::where('section', 'testimonial_heading')
             ->pluck('content', 'field_name');
 
-        // Testimonials from separate table
-        $testimonials = Testimonial::byPage('home')
-            ->active()
-            ->ordered()
-            ->get();
+        // Testimonials from separate table (common across all pages)
+        $testimonials = Testimonial::active()->ordered()->get();
+
+        // Worldwide Marketplaces logos from partnership_page table (section = ecosystem_global)
+        $marketplaceLogos = \App\Models\PartnershipPage::bySection('ecosystem_global')->active()->ordered()->get();
 
         // FAQ grouping - fetched from unified faq table
         $faqs = Faq::byPage('home')->active()->ordered()->get();
@@ -126,6 +126,7 @@ class WebsiteController extends Controller
             'servicesHeading',
             'testimonialHeading',
             'testimonials',
+            'marketplaceLogos',
             'faqs'
         ));
     }
@@ -145,7 +146,7 @@ class WebsiteController extends Controller
         $vision = $aboutContent->where('section_type', 'vision')->first();
         $journeyIntro = $aboutContent->where('section_type', 'journey_intro')->first();
         $milestones = $aboutContent->where('section_type', 'milestone')->sortBy('display_order')->values();
-        $testimonials = Testimonial::byPage('about')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqHeader = $aboutContent->where('section_type', 'faq_header')->first();
         $faqs = Faq::byPage('about')->active()->ordered()->get();
         $commonStats = $this->getCommonStats();
@@ -169,7 +170,7 @@ class WebsiteController extends Controller
     // service pages
     public function service(){
         $services = ServicePage::bySection('services')->active()->ordered()->get();
-        $testimonials = Testimonial::byPage('service')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqs = Faq::byPage('service')->active()->ordered()->get();
         $partners = ServicePage::bySection('partners')->active()->ordered()->get();
         $commonStats = $this->getCommonStats();
@@ -184,7 +185,7 @@ class WebsiteController extends Controller
         $features = VolumetricCalculatorPage::bySection('features')->where('page', 'volumetric-calculator')->ordered()->get();
         $trackCta = VolumetricCalculatorPage::bySection('track_cta')->where('page', 'volumetric-calculator')->first();
         $testimonialsHeader = VolumetricCalculatorPage::bySection('testimonials_header')->where('page', 'volumetric-calculator')->first();
-        $testimonials = Testimonial::byPage('volumetric-calculator')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqSidebar = VolumetricCalculatorPage::bySection('faq_sidebar')->where('page', 'volumetric-calculator')->first();
         $faqs = Faq::byPage('volumetric-calculator')->active()->ordered()->get();
         $calculator = VolumetricCalculatorPage::bySection('calculator')->where('page', 'volumetric-calculator')->first();
@@ -198,7 +199,7 @@ class WebsiteController extends Controller
     public function network(){
         $indiaOffices = NetworkOffice::india()->active()->ordered()->get();
         $overseasOffices = NetworkOffice::overseas()->active()->ordered()->get();
-        $testimonials = Testimonial::byPage('network')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqs = \App\Models\Faq::byPage('network')->active()->ordered()->get();
         
         return view('network', compact('indiaOffices', 'overseasOffices', 'testimonials', 'faqs'));
@@ -318,7 +319,7 @@ class WebsiteController extends Controller
         $overviewContent = WarehousingSolutionsPage::bySection('overview')->active()->first();
         $featuresHeaderContent = WarehousingSolutionsPage::bySection('features')->where('item_key', 'features_header')->active()->first();
         $featuresContent = WarehousingSolutionsPage::bySection('features')->where('item_key', '!=', 'features_header')->active()->ordered()->get();
-        $testimonials = Testimonial::byPage('warehousing')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqHeaderContent = WarehousingSolutionsPage::bySection('faq')->active()->ordered()->first();
         $faqContent = Faq::byPage('warehousing')->active()->ordered()->get();
         $ctaContent = WarehousingSolutionsPage::bySection('cta')->active()->first();
@@ -516,7 +517,7 @@ class WebsiteController extends Controller
         $features = BarcodeGeneratorPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
         $trackCta = BarcodeGeneratorPage::bySection('track_cta')->where('status', true)->first();
         $testimonialsHeader = BarcodeGeneratorPage::bySection('testimonials_header')->where('status', true)->first();
-        $testimonials = Testimonial::byPage('barcode-generator')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqHeader = BarcodeGeneratorPage::bySection('faq_header')->where('status', true)->first();
         $faqs = Faq::byPage('barcode-generator')->active()->ordered()->get();
         $faqContactSidebar = BarcodeGeneratorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
@@ -544,7 +545,7 @@ class WebsiteController extends Controller
         $features = ShippingRateCalculatorPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
         $trackCta = ShippingRateCalculatorPage::bySection('track_cta')->where('status', true)->first();
         $testimonialsHeader = ShippingRateCalculatorPage::bySection('testimonials_header')->where('status', true)->first();
-        $testimonials = Testimonial::byPage('shipping-rate-calculator')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqHeader = ShippingRateCalculatorPage::bySection('faq_header')->where('status', true)->first();
         $faqs = Faq::byPage('shipping-rate-calculator')->active()->ordered()->get();
         $faqContactSidebar = ShippingRateCalculatorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
@@ -581,7 +582,7 @@ class WebsiteController extends Controller
         $featuresHeading = HsnFinderPage::bySection('features_heading')->where('status', true)->first();
         $features = HsnFinderPage::bySection('features')->where('status', true)->orderBy('display_order')->get();
         $testimonialsHeader = HsnFinderPage::bySection('testimonials_header')->where('status', true)->first();
-        $testimonials = Testimonial::byPage('hsn-finder')->active()->ordered()->get();
+        $testimonials = Testimonial::active()->ordered()->get();
         $faqHeader = HsnFinderPage::bySection('faq_header')->where('status', true)->first();
         $faqs = Faq::byPage('hsn-finder')->active()->ordered()->get();
         $faqContactSidebar = HsnFinderPage::bySection('faq_contact_sidebar')->where('status', true)->first();
