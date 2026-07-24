@@ -3630,9 +3630,9 @@ class customerController extends Controller
 				// Australia uses the same box-wise rate calculation as Canada
 				// (both are zipcode-category destinations with zone_no-based
 				// rates). The query below is fully parameterized by
-				// $destinationCountry, so adding 'Australia' here makes the
+				// $destinationCountry, so adding 'AUS' here makes the
 				// ARAMEX GPX ALL IN service rates resolve correctly.
-				if ($destinationCountry === 'Canada' || $destinationCountry === 'Australia'){
+				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS'){
 					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
@@ -6808,10 +6808,11 @@ class customerController extends Controller
     }
 
     /**
-     * Normalize a delivery-destination string into a country code that matches
-     * the `country` column on the courier_services table.
+     * Normalize a delivery-destination string into the short country code
+     * that matches the `country` column on the courier_services table
+     * (which stores the same code as destinations.country_code).
      *
-     * Returns one of: "UK", "Canada", "US".
+     * Returns one of: "UK", "CA", "AUS", "US".
      *
      * The destination string can arrive in several formats depending on the
      * caller:
@@ -6819,10 +6820,11 @@ class customerController extends Controller
      *   - previewBulkUpload() Excel cell → "UK", "GB", "United Kingdom",
      *                                       "Great Britain", "Canada", "CA", ...
      *
-     * Anything that is not recognised as UK or Canada is treated as "US".
+     * Anything that is not recognised as UK, Canada or Australia is treated
+     * as "US".
      *
      * @param string|null $destination
-     * @return string  "UK" | "Canada" | "US"
+     * @return string  "UK" | "CA" | "AUS" | "US"
      */
     private function resolveDestinationCountry($destination)
     {
@@ -6852,11 +6854,12 @@ class customerController extends Controller
             || str_contains($destUpper, 'CANADA')
         );
         if ($isCanada) {
-            return 'Canada';
+            return 'CA';
         }
 
         // Australia detection — covers "Australia", "AU", "AUS",
-        // and any string containing "Australia".
+        // and any string containing "Australia". Returns "AUS" to match the
+        // destinations.country_code value used for Australia.
         $isAustralia = (
             $destUpper === 'AUSTRALIA'
             || $destUpper === 'AU'
@@ -6864,7 +6867,7 @@ class customerController extends Controller
             || str_contains($destUpper, 'AUSTRALIA')
         );
         if ($isAustralia) {
-            return 'Australia';
+            return 'AUS';
         }
 
         // Everything else (US, USA, United States, etc.) → US.

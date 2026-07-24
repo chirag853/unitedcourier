@@ -23,7 +23,7 @@ return new class extends Migration
                 $table->id();
                 $table->string('name');                 // e.g. "US- United State of America"
                 $table->string('code', 10)->unique();   // short code e.g. "US", "UK", "CA"
-                $table->string('country_code', 5)->nullable(); // ISO country code e.g. "US", "GB", "CA"
+                $table->string('country_code', 5)->nullable(); // short country code e.g. "US", "UK", "CA"
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
             });
@@ -44,7 +44,7 @@ return new class extends Migration
             [
                 'name'         => 'UK - United Kingdom',
                 'code'         => 'UK',
-                'country_code' => 'GB',
+                'country_code' => 'UK',
                 'is_active'    => true,
                 'created_at'   => $now,
                 'updated_at'   => $now,

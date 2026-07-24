@@ -9,11 +9,13 @@ return new class extends Migration
 {
     /**
      * Add a `country` column to the courier_services table and populate it
-     * based on the existing service-detection rules:
+     * with the short country codes (matching the `country_code` column on
+     * the `destinations` table) based on the existing service-detection
+     * rules:
      *
      *   - DPD (PostShipping) services  → "UK"
      *     (method contains both "DDP" and "UNITED AIR PREMIUM")
-     *   - Canada services              → "Canada"
+     *   - Canada services              → "CA"
      *     (network = "Canada" OR service_code starts with "CANADA-"
      *      OR method contains "UNITED CANADA")
      *   - All other services           → "US"
@@ -50,11 +52,11 @@ return new class extends Migration
                 || str_contains($methodUpper, 'UNITED CANADA');
 
             if ($isDpd) {
-                $country = 'UK';
+                $country = 'UK'; // short code for United Kingdom
             } elseif ($isCanada) {
-                $country = 'Canada';
+                $country = 'CA'; // ISO code for Canada
             } else {
-                $country = 'US';
+                $country = 'US'; // ISO code for United States
             }
 
             DB::table('courier_services')

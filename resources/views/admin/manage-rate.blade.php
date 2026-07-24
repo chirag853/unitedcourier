@@ -181,7 +181,7 @@
                                                 <select class="form-select" id="defaultCountryFilter">
                                                     <option value="">— All Countries —</option>
                                                     @foreach($destinations as $dest)
-                                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
@@ -392,13 +392,13 @@
                                 </select>
                                 <small class="text-muted">From the destinations table. Determines the available zones below.</small>
                             </div>
-                            <!-- Service (independent of country — shows all services) -->
+                            <!-- Service (filtered by the selected country) -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
                                 <select class="form-select" id="addRateService" required>
-                                    <option value="">— Select Service —</option>
+                                    <option value="">— Select Country First —</option>
                                 </select>
-                                <small class="text-muted">All services are listed regardless of the selected country.</small>
+                                <small class="text-muted">Only services for the selected country are listed.</small>
                             </div>
                             <!-- Weight Start -->
                             <div class="col-md-4">
@@ -484,13 +484,13 @@
                                 </select>
                                 <small class="text-muted">Determines the available zones below.</small>
                             </div>
-                            <!-- Service (required) -->
+                            <!-- Service (required, filtered by selected country) -->
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
                                 <select class="form-select" id="bulkService" name="service_id" required>
-                                    <option value="">— Select Service —</option>
+                                    <option value="">— Select Country First —</option>
                                 </select>
-                                <small class="text-muted">All services are listed.</small>
+                                <small class="text-muted">Only services for the selected country are listed. Leave country as "All Countries" to see every service.</small>
                             </div>
                             <!-- Zone No (optional) -->
                             <div class="col-md-4" id="bulkZoneSection">
@@ -569,6 +569,27 @@
         var allServices = @json($servicesForJs);
         var zoneLookup = @json($zoneLookup);
         var countryToDestinationId = @json($countryToDestinationId);
+        // Maps a destination NAME (the value used by the country <select>
+        // in the Add Rate / Bulk Upload modals) to the matching
+        // courier_services.country value (the short code, e.g. "US", "UK",
+        // "CA", "AUS"). Used to filter the service dropdown by country.
+        var destNameToServiceCountry = @json($destNameToServiceCountry);
+
+        // Resolve the courier_services.country value for a given country
+        // <select> value. The Add Rate / Bulk Upload modals use the
+        // destination NAME as the option value, while the filter dropdowns
+        // use the service country directly. This helper handles both:
+        //   - If the value is a destination name, look it up in
+        //     destNameToServiceCountry.
+        //   - Otherwise (already a service-country string like "US"),
+        //     return it as-is so the filter dropdowns keep working.
+        function resolveServiceCountry(countryValue) {
+            if (!countryValue) return '';
+            if (destNameToServiceCountry[countryValue]) {
+                return destNameToServiceCountry[countryValue];
+            }
+            return countryValue;
+        }
 
         // Resolve zone name & category for a given (country, zoneNo) pair.
         // Returns { names: string, category: string } or null if not found.
@@ -808,9 +829,10 @@
             // those added via the Add Country page — not just the ones that
             // already have courier services). No JS population needed here.
 
-            // The Service dropdown is INDEPENDENT of the country selection — it
-            // lists every courier service so the admin can pair any country
-            // with any service. Populate it once with all services.
+            // The Service dropdown is FILTERED by the selected country: only
+            // courier services whose `country` matches the selected country are
+            // listed. On modal open no country is selected yet, so we start with
+            // an empty service dropdown (the placeholder only).
             populateServiceDropdown(document.getElementById('addRateService'), '');
 
             // Initialize Select2 on the Zone No dropdown so the admin can
@@ -819,11 +841,16 @@
             // focus-stealing conflicts that break the search input.
             initZoneSelect2(document.getElementById('addRateZoneNo'), '— Select Country First —');
 
-            // When the country changes, repopulate ONLY the zone dropdown
-            // (zone numbers with their names for the selected country). The
-            // service dropdown is left untouched so it remains independent.
+            // When the country changes, repopulate BOTH the service dropdown
+            // (only services for that country) and the zone dropdown (zone
+            // numbers with their names for the selected country). The service
+            // selection is cleared so a stale service from a previous country
+            // is never submitted.
             $('#addRateCountry').on('change', function() {
                 var country = this.value;
+                var serviceCountry = resolveServiceCountry(country);
+                populateServiceDropdown(document.getElementById('addRateService'), serviceCountry);
+                document.getElementById('addRateService').value = '';
                 populateZoneDropdown(document.getElementById('addRateZoneNo'), country);
                 updateAddRateZoneHint();
             });
@@ -1111,15 +1138,25 @@
                 initBulkZoneSelect2(selectEl, '— All Zones (use file column) —');
             }
 
-            // When the bulk modal is shown, populate the service dropdown.
+            // When the bulk modal is shown, start with an empty service
+            // dropdown (placeholder only). Services are filtered by the
+            // selected country, so they appear once a country is chosen.
             document.getElementById('bulkUploadModal').addEventListener('shown.bs.modal', function() {
                 populateServiceDropdown(document.getElementById('bulkService'), '');
                 populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), '');
             });
 
-            // Country change → repopulate zone dropdown.
+            // Country change → repopulate BOTH the service dropdown (only
+            // services for that country) and the zone dropdown. The service
+            // selection is cleared so a stale service from a previous country
+            // is never submitted. When no country is selected ("All Countries"),
+            // all services are listed.
             document.getElementById('bulkCountry').addEventListener('change', function() {
-                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), this.value);
+                var country = this.value;
+                var serviceCountry = resolveServiceCountry(country);
+                populateServiceDropdown(document.getElementById('bulkService'), serviceCountry);
+                document.getElementById('bulkService').value = '';
+                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), country);
             });
 
             // Download Sample: append selected service_id and zone_no so the

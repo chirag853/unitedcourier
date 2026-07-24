@@ -10579,7 +10579,7 @@ if (rateRadio && rateRadio.dataset.rate) {
         // For "zipcode"-category destinations the zone table only holds
         // postcode/area data (no state info), so we fetch the full states
         // list once, cache it, and filter by the selected destination's
-        // ISO country code (data-country-code attribute, e.g. "GB", "CA").
+        // country code (data-country-code attribute, e.g. "UK", "CA").
         // The zip input keeps its zone-table suggestions and the city field
         // remains freely typeable.
         // ---------------------------------------------------------------
@@ -10592,13 +10592,14 @@ if (rateRadio && rateRadio.dataset.rate) {
 
             // -----------------------------------------------------------
             // The destinations table stores some country codes as 3-letter
-            // ISO codes (e.g. Australia = "AUS"), but the public
-            // countries-states-cities API (dr5hn) uses 2-letter ISO codes
-            // (e.g. "AU"). Map the common 3-letter codes to their 2-letter
+            // ISO codes (e.g. Australia = "AUS") or non-standard short codes
+            // (e.g. UK = "UK"), but the public countries-states-cities API
+            // (dr5hn) uses 2-letter ISO codes (e.g. "AU", "GB"). Map the
+            // common 3-letter and non-standard codes to their 2-letter
             // equivalents so the state filter actually matches.
             // -----------------------------------------------------------
             const iso3to2 = {
-                'AUS': 'AU', 'USA': 'US', 'GBR': 'GB', 'CAN': 'CA',
+                'AUS': 'AU', 'USA': 'US', 'GBR': 'GB', 'UK': 'GB', 'CAN': 'CA',
                 'IND': 'IN', 'DEU': 'DE', 'FRA': 'FR', 'ITA': 'IT',
                 'ESP': 'ES', 'NLD': 'NL', 'BEL': 'BE', 'PRT': 'PT',
                 'SWE': 'SE', 'NOR': 'NO', 'DNK': 'DK', 'FIN': 'FI',

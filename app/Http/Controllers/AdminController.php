@@ -5950,11 +5950,12 @@ class AdminController extends Controller
         }
 
         // Map CourierService.country -> Destination.id so we can look up
-        // zones for a given rate's service. The destinations table uses
-        // different name/code formats (e.g. "US", "UK", "CA", "AUS") while
-        // courier_services.country uses "US", "UK", "Canada", "Australia".
-        // We build a lookup that tries several match strategies so the
-        // mapping stays correct regardless of which format is used.
+        // zones for a given rate's service. courier_services.country now
+        // stores the same short code as destinations.country_code
+        // (e.g. "US", "UK", "CA", "AUS"). We build a lookup that tries several
+        // match strategies (code, country_code, name, plus legacy friendly
+        // names) so the mapping stays correct regardless of which format is
+        // used.
         $destinations = \App\Models\Destination::orderBy('name')->get();
         $countryToDestId = [];
         foreach ($destinations as $dest) {
@@ -5992,7 +5993,41 @@ class AdminController extends Controller
             }
         }
 
-        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations'));
+        // ------------------------------------------------------------------
+        // Map each destination NAME (the value used by the country <select>
+        // in the Add Rate / Bulk Upload modals) to the matching
+        // courier_services.country value (the short code, e.g. "US", "UK",
+        // "CA", "AUS"). This lets the service dropdown be filtered by the
+        // selected country: when the admin picks a country, only the
+        // courier services whose `country` matches are listed.
+        //
+        // We reuse countryToDestinationId (which already resolves every
+        // friendly-name/code variant to a destination_id) by inverting it:
+        // for each distinct courier_services.country, look up its
+        // destination_id, then map every destination's name -> that
+        // service-country string.
+        // ------------------------------------------------------------------
+        $serviceCountries = \App\Models\CourierService::distinct()
+            ->pluck('country')
+            ->filter()
+            ->unique()
+            ->values();
+        $destIdToServiceCountry = [];
+        foreach ($serviceCountries as $sc) {
+            $key = strtolower(trim((string) $sc));
+            $destId = $countryToDestinationId[$key] ?? null;
+            if ($destId) {
+                $destIdToServiceCountry[$destId] = $sc;
+            }
+        }
+        $destNameToServiceCountry = [];
+        foreach ($destinations as $dest) {
+            if (isset($destIdToServiceCountry[$dest->id])) {
+                $destNameToServiceCountry[$dest->name] = $destIdToServiceCountry[$dest->id];
+            }
+        }
+
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry'));
     }
 
     /**
@@ -7180,12 +7215,26 @@ class AdminController extends Controller
      * A simple form where the admin enters a country name. The new country
      * is added to the `destinations` table so it can be selected when adding
      * zones or rates.
+     *
+     * The admin can also pick one or more existing courier services (from the
+     * courier_services table) to clone for the new country. Cloning a service
+     * creates a brand-new courier_services row whose `country` column is set
+     * to the new country's short code, so the service becomes available for
+     * rate calculation against that destination — without touching the
+     * original service row.
      */
     public function addCountry()
     {
         $destinations = \App\Models\Destination::orderBy('name')->get();
 
-        return view('admin.add-country', compact('destinations'));
+        // Load every courier service so the admin can pick which ones to make
+        // available for the new country. We order by country then method so the
+        // list is grouped logically in the dropdown.
+        $courierServices = \App\Models\CourierService::orderBy('country')
+            ->orderBy('method')
+            ->get();
+
+        return view('admin.add-country', compact('destinations', 'courierServices'));
     }
 
     /**
@@ -7193,14 +7242,24 @@ class AdminController extends Controller
      *
      * The admin supplies a country name. We auto-derive a short code from the
      * name if one is not provided, and default is_active to true.
+     *
+     * Optionally the admin can select one or more existing courier services
+     * (from the courier_services table) to "add" to the new country. Each
+     * selected service is CLONED into a brand-new courier_services row whose
+     * `country` column is set to the new country's short code — so the service
+     * becomes available for rate calculation against that destination. The
+     * original service row is left untouched (it keeps its own country).
      */
     public function storeCountry(Request $request)
     {
         $validated = $request->validate([
-            'name'         => 'required|string|max:150|unique:destinations,name',
-            'code'         => 'nullable|string|max:10|unique:destinations,code',
-            'country_code' => 'nullable|string|max:5',
-            'is_active'    => 'nullable|boolean',
+            'name'           => 'required|string|max:150|unique:destinations,name',
+            'code'           => 'nullable|string|max:10|unique:destinations,code',
+            'country_code'   => 'nullable|string|max:5',
+            'is_active'      => 'nullable|boolean',
+            // Optional list of courier_services IDs to clone for this country.
+            'service_ids'    => 'nullable|array',
+            'service_ids.*'  => 'integer|exists:courier_services,id',
         ]);
 
         // Auto-derive a short code from the name if none was provided.
@@ -7232,9 +7291,48 @@ class AdminController extends Controller
             'is_active'    => $validated['is_active'] ?? true,
         ]);
 
+        // -----------------------------------------------------------------
+        // Clone the selected courier services for the new country.
+        //
+        // Each selected service is duplicated into a new courier_services
+        // row. Every column is copied verbatim EXCEPT `country`, which is
+        // overwritten with the new country's ISO country code (falling back
+        // to the short code when no ISO code was supplied) so the cloned
+        // service is matched against this destination during rate
+        // calculation. The original service row is never modified.
+        // -----------------------------------------------------------------
+        $clonedCount = 0;
+        $serviceIds = $validated['service_ids'] ?? [];
+        if (!empty($serviceIds)) {
+            $services = \App\Models\CourierService::whereIn('id', $serviceIds)->get();
+
+            // Prefer the ISO country code; fall back to the short code when
+            // the admin did not provide an ISO code.
+            $serviceCountry = $validated['country_code'] !== null && $validated['country_code'] !== ''
+                ? $validated['country_code']
+                : $code;
+
+            foreach ($services as $service) {
+                // Build a fresh row from the source service's attributes.
+                $data = $service->getAttributes();
+
+                // Drop the primary key & country so we can set our own values.
+                unset($data['id']);
+                $data['country'] = $serviceCountry;
+
+                \App\Models\CourierService::create($data);
+                $clonedCount++;
+            }
+        }
+
+        $msg = 'Country "' . $validated['name'] . '" added successfully (code: ' . $code . ').';
+        if ($clonedCount > 0) {
+            $msg .= ' ' . $clonedCount . ' service(s) cloned for this country.';
+        }
+
         return redirect()
             ->route('admin.add-country')
-            ->with('success', 'Country "' . $validated['name'] . '" added successfully (code: ' . $code . ').');
+            ->with('success', $msg);
     }
 
     public function myProfile()

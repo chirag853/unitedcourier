@@ -226,12 +226,12 @@
                                 <i class="ti ti-currency-rupee"></i><span>Manage Rate</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="{{ url('/admin/manage-rate') }}"
-                                        class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
-                                <li><a href="{{ url('/admin/add-zone') }}"
-                                        class="{{ request()->is('admin/add-zone') ? 'active' : '' }}">Add Zone</a></li>
                                 <li><a href="{{ url('/admin/add-country') }}"
                                         class="{{ request()->is('admin/add-country') ? 'active' : '' }}">Add Country</a></li>
+                                <li><a href="{{ url('/admin/add-zone') }}"
+                                        class="{{ request()->is('admin/add-zone') ? 'active' : '' }}">Add Zone</a></li>
+                                <li><a href="{{ url('/admin/manage-rate') }}"
+                                        class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
                             </ul>
                         </li>
                         @endif
