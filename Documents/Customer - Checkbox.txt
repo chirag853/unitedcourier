@@ -1,0 +1,31 @@
+23july
+========================================================
+1. Add New Rate - Customer - Checkbox
+2. sERVICE DROP DOWN IN COUNTRY
+2. Rate will be entered after enabled/creating the services
+2. Update rate by csv file and need to select customer via checkbox
+
+3. Date wise Rate entered if date cross then disable the rate then new rate enter
+
+
+  1 Jan 2026 - 31 Dec 2026
+  1 Jan 2026 - 25 July 2026 (end) | 26 July 2026 - 31 Dec 2026
+
+
+4. All filter works
+5. Shipping Form with CSV IV AND CSV V
+6. Overseas Service List - implemented count
+7. Ship Universal API
+8. DHL, FEDEX API
+
+
+========================================================
+24july
+
+1. All Customer 
+2. Need to select multiple customer at a time to update rates
+3. Rakesh Sir - approved the kyc and enable to customer to create shipment
+4. Customer ID - UWC_AAdharID_DparvindarBID . if old data entered then New Customer ID - UWC_AAdharID_(OLD Data count + DBID)
+5. Old Customer - Password - algo via 
+
+    
