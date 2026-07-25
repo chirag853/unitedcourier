@@ -92,6 +92,132 @@
         #customerRatesTable_wrapper {
             display: none;
         }
+        .customer-rate-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .customer-rate-actions .btn {
+            flex: 1 1 150px;
+            min-height: 42px;
+            white-space: nowrap;
+        }
+        /* Customer multi-select dropdown with checkboxes inside */
+        .customer-dropdown {
+            position: relative;
+            width: 100%;
+        }
+        .customer-dropdown-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.375rem 0.75rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: #fff;
+            text-align: left;
+            cursor: pointer;
+            font-size: 14px;
+            min-height: 38px;
+        }
+        .customer-dropdown-toggle:hover {
+            border-color: #007bff;
+        }
+        .customer-dropdown-toggle:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+        .customer-dropdown-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #6c757d;
+        }
+        .customer-dropdown-toggle i {
+            margin-left: 8px;
+            transition: transform 0.2s;
+            color: #6c757d;
+            flex-shrink: 0;
+        }
+        .customer-dropdown.open .customer-dropdown-toggle i {
+            transform: rotate(180deg);
+        }
+        .customer-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1050;
+            max-height: 320px;
+            overflow: hidden;
+            flex-direction: column;
+        }
+        .customer-dropdown.open .customer-dropdown-menu {
+            display: flex;
+        }
+        .customer-dropdown-search {
+            padding: 8px;
+            border-bottom: 1px solid #dee2e6;
+            background: #fff;
+            flex-shrink: 0;
+        }
+        .customer-dropdown-actions {
+            padding: 6px 10px;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .customer-dropdown-actions button {
+            font-size: 12px;
+            padding: 2px 8px;
+        }
+        .customer-dropdown-list {
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 6px 4px;
+        }
+        .customer-checkbox-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2px;
+            padding: 5px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .customer-checkbox-item:hover {
+            background: #f0f6ff;
+        }
+        .customer-checkbox-item input[type="checkbox"] {
+            flex-shrink: 0;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        .customer-checkbox-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .customer-checkbox-item:last-child { margin-bottom: 0; }
+        .customer-checkbox-no-result {
+            padding: 10px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 13px;
+        }
     </style>
 </head>
 
@@ -211,7 +337,7 @@
                                                         <th>Weight End (gm)</th>
                                                         <th>Zone Name</th>
                                                         <th>Zone Category</th>
-                                                        <th>Price (₹)</th>
+                                                        <th>Price</th>
                                                         <th>Default</th>
                                                     </tr>
                                                 </thead>
@@ -264,13 +390,13 @@
                                                         </td>
                                                         <td>
                                                             @if($rate->is_default)
-                                                                <span class="rate-display" id="rate-display-{{ $rate->id }}">₹ {{ number_format($rate->price, 2) }}</span>
+                                                                <span class="rate-display" id="rate-display-{{ $rate->id }}">{{ number_format($rate->price, 2) }}</span>
                                                                 <input type="number" step="0.01" min="0" class="rate-input d-none" id="rate-input-{{ $rate->id }}" value="{{ $rate->price }}" data-rate-id="{{ $rate->id }}" data-original="{{ $rate->price }}">
                                                                 <i class="ti ti-edit edit-icon" id="edit-icon-{{ $rate->id }}" onclick="editRate({{ $rate->id }})"></i>
                                                                 <i class="ti ti-device-floppy save-icon d-none" id="save-icon-{{ $rate->id }}" onclick="saveRate({{ $rate->id }})"></i>
                                                                 <i class="ti ti-x cancel-icon d-none" id="cancel-icon-{{ $rate->id }}" onclick="cancelEdit({{ $rate->id }})"></i>
                                                             @else
-                                                                <span class="rate-display text-muted">₹ {{ number_format($rate->price, 2) }}</span>
+                                                                <span class="rate-display text-muted">{{ number_format($rate->price, 2) }}</span>
                                                                 <i class="ti ti-lock text-muted ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Non-default rate — cannot be edited"></i>
                                                             @endif
                                                         </td>
@@ -292,20 +418,38 @@
                                     <div class="tab-pane fade" id="customer-rate-pane" role="tabpanel">
                                         <div class="row mb-3 g-2 align-items-end">
                                             <div class="col-md-3 customer-select-wrapper">
-                                                <label class="form-label fw-bold">Select Customer</label>
-                                                <select class="form-select" id="customerSelect">
-                                                    <option value="">— Select Customer —</option>
-                                                    @foreach($customers as $customer)
-                                                        <option value="{{ $customer->id }}">{{ $customer->first_name }} {{ $customer->last_name }} ({{ $customer->email ?? $customer->phone_number ?? 'N/A' }})</option>
-                                                    @endforeach
-                                                </select>
+                                                <label class="form-label fw-bold">Select Customers</label>
+                                                <div class="customer-dropdown" id="customerDropdown">
+                                                    <button type="button" class="customer-dropdown-toggle" id="customerDropdownToggle">
+                                                        <span class="customer-dropdown-text" id="customerDropdownText">— Select Customers —</span>
+                                                        <i class="ti ti-chevron-down"></i>
+                                                    </button>
+                                                    <div class="customer-dropdown-menu" id="customerDropdownMenu">
+                                                        <div class="customer-dropdown-search">
+                                                            <input type="text" class="form-control form-control-sm" id="customerDropdownSearch" placeholder="Search customers...">
+                                                        </div>
+                                                        <div class="customer-dropdown-actions">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="customerDropdownSelectAll">Select All</button>
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="customerDropdownClearAll">Clear</button>
+                                                        </div>
+                                                        <div class="customer-dropdown-list" id="customerCheckboxList">
+                                                            @foreach($customers as $customer)
+                                                                <label class="customer-checkbox-item" title="{{ $customer->first_name }} {{ $customer->last_name }}">
+                                                                    <input type="checkbox" class="customer-checkbox" value="{{ $customer->id }}">
+                                                                    <span class="customer-checkbox-label">{{ $customer->first_name }} {{ $customer->last_name }} ({{ $customer->email ?? $customer->phone_number ?? 'N/A' }})</span>
+                                                                </label>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted" id="selectedCustomerCount">0 customers selected</small>
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label fw-bold">Country</label>
                                                 <select class="form-select" id="customerCountryFilter">
                                                     <option value="">— All Countries —</option>
                                                     @foreach($destinations as $dest)
-                                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
@@ -320,11 +464,19 @@
                                                     <i class="ti ti-filter-x"></i>
                                                 </button>
                                             </div>
-                                            <div class="col-md-2 text-md-end">
+                                            <div class="col-12 text-md-end">
                                                 <label class="form-label fw-bold d-block">&nbsp;</label>
-                                                <button type="button" class="btn btn-success w-100" id="customerExportExcel">
-                                                    <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
-                                                </button>
+                                                <div class="customer-rate-actions">
+                                                    <button type="button" class="btn btn-success" id="customerExportExcel">
+                                                        <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
+                                                    </button>
+                                                    <button type="button" class="btn btn-primary" id="customerEndDateBtn" title="Change end date for ALL rates of the selected customer">
+                                                        <i class="ti ti-calendar-event me-1"></i>End Date
+                                                    </button>
+                                                    <button type="button" class="btn btn-warning" id="customerNewRateBtn" title="Upload updated rates for the selected customer">
+                                                        <i class="ti ti-refresh me-1"></i>Update New Rate
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="table-responsive" id="customerRatesTable" style="display:none;">
@@ -338,10 +490,12 @@
                                                         <th>TAT</th>
                                                         <th>Weight Start (gm)</th>
                                                         <th>Weight End (gm)</th>
-                                                        <th>Zone Name</th>
+                                                        <th>Zone No</th>
                                                         <th>Zone Category</th>
-                                                        <th>Price (₹)</th>
+                                                        <th>Price</th>
                                                         <th>Default</th>
+                                                        <th>Start Date</th>
+                                                        <th>End Date</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="customerRatesBody">
@@ -383,11 +537,11 @@
                         <div class="row g-3">
                             <!-- Country -->
                             <div class="col-md-6">
-                                <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bold">Country</label>
                                 <select class="form-select" id="addRateCountry" required>
                                     <option value="">— Select Country —</option>
                                     @foreach($destinations as $dest)
-                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                     @endforeach
                                 </select>
                                 <small class="text-muted">From the destinations table. Determines the available zones below.</small>
@@ -420,7 +574,7 @@
                             </div>
                             <!-- Price -->
                             <div class="col-md-4">
-                                <label class="form-label fw-bold">Price (₹) <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bold">Price <span class="text-danger">*</span></label>
                                 <input type="number" step="0.01" min="0" class="form-control" id="addRatePrice" name="price" required>
                             </div>
                             <!-- Fuel Charge -->
@@ -479,7 +633,7 @@
                                 <select class="form-select" id="bulkCountry">
                                     <option value="">— All Countries —</option>
                                     @foreach($destinations as $dest)
-                                        <option value="{{ $dest->name }}">{{ $dest->name }}</option>
+                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                     @endforeach
                                 </select>
                                 <small class="text-muted">Determines the available zones below.</small>
@@ -526,6 +680,69 @@
         </div>
     </div>
 
+    <!-- Update New Customer Rate Modal -->
+    <div class="modal fade" id="updateNewRateModal" tabindex="-1" aria-labelledby="updateNewRateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="updateNewRateModalLabel">
+                        <i class="ti ti-refresh me-1"></i>Update New Rate
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="updateNewRateForm" enctype="multipart/form-data">
+                    @csrf
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Customers</label>
+                                <input type="text" class="form-control" id="updateNewRateCustomer" readonly>
+                                <input type="hidden" id="updateNewRateCustomerIds" name="customer_ids">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Country</label>
+                                <select class="form-select" id="updateNewRateCountry">
+                                    <option value="">— All Countries —</option>
+                                    @foreach($destinations as $dest)
+                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Service</label>
+                                <select class="form-select" id="updateNewRateService" name="service_id">
+                                    <option value="">— All Services —</option>
+                                </select>
+                                <small class="text-muted">Leave All Services selected to update every service included in the downloaded Excel file.</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Start Date</label>
+                                <input type="date" class="form-control" id="updateNewRateStartDate" name="start_date" readonly required>
+                                <small class="text-muted">Automatically set to one day after the customer's current end date.</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="updateNewRateEndDate" name="end_date" required>
+                                <small class="text-muted">End date cannot be earlier than the start date.</small>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Upload Updated Rate <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" name="rate_file" accept=".xlsx,.xls,.csv" required>
+                                <small class="text-muted">Upload the Excel file downloaded from this customer's rate table. Update the Price column, then upload it here.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning" id="updateNewRateSubmitBtn">
+                            <i class="ti ti-upload me-1"></i>Update Rate
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- jQuery -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
     <!-- Bootstrap JS -->
@@ -550,6 +767,8 @@
     <script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}" type="text/javascript"></script>
     <!-- Theme JS -->
     <script src="{{ asset('assets/js/script.js') }}" type="text/javascript"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
         @php
@@ -566,23 +785,32 @@
         var defaultRateTable;
         var customerRateTable;
         var loadedCustomerRates = [];
+        // Currently selected customer ID + details (used by the end_date popup)
+        var currentSelectedCustomerId = null;
+        var selectedCustomerIds = [];
+        var currentCustomerInfo = null;
+        var currentCustomerEndDate = null;
         var allServices = @json($servicesForJs);
         var zoneLookup = @json($zoneLookup);
         var countryToDestinationId = @json($countryToDestinationId);
-        // Maps a destination NAME (the value used by the country <select>
-        // in the Add Rate / Bulk Upload modals) to the matching
-        // courier_services.country value (the short code, e.g. "US", "UK",
-        // "CA", "AUS"). Used to filter the service dropdown by country.
+        // Maps a destination NAME to the matching courier_services.country
+        // value (the short code, e.g. "US", "UK", "CA", "AUS"). Kept for
+        // backward compatibility — all country <select> dropdowns now use
+        // the destination country_code as the option value (matching the
+        // courier_services.country short code), so this lookup is rarely
+        // needed. Used to filter the service dropdown by country.
         var destNameToServiceCountry = @json($destNameToServiceCountry);
 
         // Resolve the courier_services.country value for a given country
-        // <select> value. The Add Rate / Bulk Upload modals use the
-        // destination NAME as the option value, while the filter dropdowns
-        // use the service country directly. This helper handles both:
-        //   - If the value is a destination name, look it up in
+        // <select> value. All country dropdowns (default filter, customer
+        // filter, Add Rate modal, Bulk Upload modal) now use the
+        // destination country_code as the option value, which is the same
+        // short code stored in courier_services.country. This helper
+        // handles both cases for safety:
+        //   - If the value is a destination name (legacy), look it up in
         //     destNameToServiceCountry.
         //   - Otherwise (already a service-country string like "US"),
-        //     return it as-is so the filter dropdowns keep working.
+        //     return it as-is so the service dropdown filters correctly.
         function resolveServiceCountry(countryValue) {
             if (!countryValue) return '';
             if (destNameToServiceCountry[countryValue]) {
@@ -600,6 +828,19 @@
             var zoneMap = zoneLookup[destId];
             if (!zoneMap) return null;
             return zoneMap[(parseInt(zoneNo, 10))] || null;
+        }
+
+        // Format a date string (YYYY-MM-DD) into a readable DD-MM-YYYY
+        // format for display in the table and Excel export. Returns an
+        // empty string if the input is empty/invalid.
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            var normalizedDate = String(dateStr).trim().substring(0, 10);
+            var match = normalizedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) {
+                return match[3] + '-' + match[2] + '-' + match[1];
+            }
+            return String(dateStr);
         }
 
         // Populate a country <select> with unique countries from allServices
@@ -656,7 +897,7 @@
                             format: {
                                 body: function(data, row, column) {
                                     if (column === 9) {
-                                        // Price column — extract the ₹ value
+                                        // Price column — export only the numeric value.
                                         return $('<div>').html(data).find('.rate-display').first().text()
                                             || $('<div>').html(data).text().replace(/[^\d.]/g, '');
                                     }
@@ -688,15 +929,36 @@
                         extend: 'excelHtml5',
                         text: 'Export Excel',
                         title: 'Customer Rates',
+                        // Show the selected customer's name and ID at the
+                        // top of the exported Excel sheet (above the title).
+                        messageTop: function() {
+                            var info = currentCustomerInfo || {};
+                            var name = info.full_name
+                                || ((info.first_name || '') + ' ' + (info.last_name || '')).trim()
+                                || '—';
+                            var id = currentSelectedCustomerId || '—';
+                            return 'Customer Name: ' + name + '    |    Customer ID: ' + id;
+                        },
                         exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                             format: {
                                 body: function(data, row, column) {
+                                    if (column === 7) {
+                                        // Zone No column — extract the zone
+                                        // number text (strip HTML/badges).
+                                        return $('<div>').html(data).text().trim();
+                                    }
                                     if (column === 9) {
                                         return $('<div>').html(data).find('.rate-display').first().text()
                                             || $('<div>').html(data).text().replace(/[^\d.]/g, '');
                                     }
                                     if (column === 10) {
+                                        return $('<div>').html(data).text().trim();
+                                    }
+                                    if (column === 11) {
+                                        return $('<div>').html(data).text().trim();
+                                    }
+                                    if (column === 12) {
                                         return $('<div>').html(data).text().trim();
                                     }
                                     return data;
@@ -713,37 +975,108 @@
                     { title: 'TAT' },
                     { title: 'Weight Start (gm)' },
                     { title: 'Weight End (gm)' },
-                    { title: 'Zone Name' },
+                    { title: 'Zone No' },
                     { title: 'Zone Category' },
-                    { title: 'Price (₹)', orderable: false },
-                    { title: 'Default', orderable: false }
+                    { title: 'Price', orderable: false },
+                    { title: 'Default', orderable: false },
+                    { title: 'Start Date', orderable: false },
+                    { title: 'End Date', orderable: false }
                 ]
             });
 
-            // Initialize Select2 for customer dropdown
-            $('#customerSelect').select2({
-                placeholder: '— Select Customer —',
-                allowClear: true
-            });
+            // Customer checkbox selection. The first selected customer is used
+            // for the on-screen preview; export and upload use every selected ID.
+            $(document).on('change', '.customer-checkbox', function() {
+                selectedCustomerIds = $('.customer-checkbox:checked').map(function() {
+                    return String(this.value);
+                }).get();
+                var countText = selectedCustomerIds.length + (selectedCustomerIds.length === 1 ? ' customer selected' : ' customers selected');
+                $('#selectedCustomerCount').text(countText);
+                updateCustomerDropdownText();
 
-            // Customer selection change — delegated Select2 events for robustness
-            $(document).on('select2:select', '#customerSelect', function(e) {
-                var customerId = e.params.data.id;
                 // Reset filters when customer changes
                 document.getElementById('customerCountryFilter').value = '';
                 populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
                 document.getElementById('customerServiceFilter').value = '';
-                loadCustomerRates(customerId);
+                if (selectedCustomerIds.length) {
+                    loadCustomerRates(selectedCustomerIds[0]);
+                } else {
+                    loadedCustomerRates = [];
+                    currentSelectedCustomerId = null;
+                    currentCustomerInfo = null;
+                    currentCustomerEndDate = null;
+                    customerRateTable.clear().draw();
+                    $('#customerRatesTable').hide();
+                    $('#noCustomerSelected').show();
+                }
             });
-            $(document).on('select2:clear', '#customerSelect', function() {
-                loadedCustomerRates = [];
-                customerRateTable.clear().draw();
-                $('#customerRatesTable').hide();
-                $('#noCustomerSelected').show();
-                // Reset filters
-                document.getElementById('customerCountryFilter').value = '';
-                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
-                document.getElementById('customerServiceFilter').value = '';
+
+            // === Customer dropdown (checkboxes inside a dropdown) ===
+            // Toggle open/close when the dropdown button is clicked.
+            $('#customerDropdownToggle').on('click', function(e) {
+                e.stopPropagation();
+                $('#customerDropdown').toggleClass('open');
+            });
+
+            // Close the dropdown when clicking outside of it.
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#customerDropdown').length) {
+                    $('#customerDropdown').removeClass('open');
+                }
+            });
+
+            // Prevent clicks inside the dropdown menu from bubbling up
+            // and closing the dropdown (the toggle handles its own stop).
+            $('#customerDropdownMenu').on('click', function(e) {
+                e.stopPropagation();
+            });
+
+            // Update the dropdown toggle text to reflect the current selection.
+            function updateCustomerDropdownText() {
+                var n = selectedCustomerIds.length;
+                var textEl = $('#customerDropdownText');
+                if (n === 0) {
+                    textEl.text('— Select Customers —').css('color', '#6c757d');
+                } else if (n === 1) {
+                    var checked = $('.customer-checkbox:checked').first();
+                    var label = checked.closest('.customer-checkbox-item').find('.customer-checkbox-label').text();
+                    textEl.text(label || '1 customer selected').css('color', '#495057');
+                } else {
+                    textEl.text(n + ' customers selected').css('color', '#495057');
+                }
+            }
+
+            // Search filter for the customer dropdown — hides non-matching rows.
+            $('#customerDropdownSearch').on('input', function() {
+                var term = $(this).val().toLowerCase().trim();
+                var visibleCount = 0;
+                $('#customerCheckboxList .customer-checkbox-item').each(function() {
+                    var label = $(this).find('.customer-checkbox-label').text().toLowerCase();
+                    var match = label.indexOf(term) !== -1;
+                    $(this).toggle(match);
+                    if (match) visibleCount++;
+                });
+                var noResult = $('#customerCheckboxNoResult');
+                if (visibleCount === 0) {
+                    if (noResult.length === 0) {
+                        $('#customerCheckboxList').append('<div class="customer-checkbox-no-result" id="customerCheckboxNoResult">No customers match your search.</div>');
+                    }
+                } else {
+                    noResult.remove();
+                }
+            });
+
+            // Select All / Clear All buttons inside the dropdown. These set
+            // the checkboxes then trigger a single change so the rates reload
+            // happens only once (the change handler rebuilds the full list of
+            // checked IDs from every checkbox regardless of visibility).
+            $('#customerDropdownSelectAll').on('click', function() {
+                $('#customerCheckboxList .customer-checkbox-item').filter(':visible').find('.customer-checkbox').prop('checked', true);
+                $('.customer-checkbox').first().trigger('change');
+            });
+            $('#customerDropdownClearAll').on('click', function() {
+                $('.customer-checkbox').prop('checked', false);
+                $('.customer-checkbox').first().trigger('change');
             });
 
             // === Country & Service Filters Setup ===
@@ -816,11 +1149,122 @@
                 defaultRateTable.button(0).trigger();
             });
             $('#customerExportExcel').on('click', function() {
-                if (loadedCustomerRates.length === 0) {
+                if (selectedCustomerIds.length === 0) {
                     alert('Please select a customer first to export their rates.');
                     return;
                 }
-                customerRateTable.button(0).trigger();
+                var params = new URLSearchParams();
+                selectedCustomerIds.forEach(function(id) { params.append('customer_ids[]', id); });
+                var country = $('#customerCountryFilter').val();
+                var serviceId = $('#customerServiceFilter').val();
+                if (country) params.set('country', country);
+                if (serviceId) params.set('service_id', serviceId);
+                window.location.href = '{{ route("admin.manage-rate.export-customer-rates") }}?' + params.toString();
+            });
+
+            function addDaysToDate(dateValue, days) {
+                var parts = String(dateValue || '').substring(0, 10).split('-');
+                var date = parts.length === 3 && parts[0].length === 4
+                    ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+                    : new Date();
+                date.setHours(0, 0, 0, 0);
+                date.setDate(date.getDate() + days);
+                return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+            }
+
+            function openUpdateNewRateModal() {
+                if (selectedCustomerIds.length === 0 || loadedCustomerRates.length === 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Customer Selected',
+                        text: 'Please select a customer first.',
+                    });
+                    return;
+                }
+
+                var info = currentCustomerInfo || {};
+                var customerName = info.full_name || ((info.first_name || '') + ' ' + (info.last_name || '')).trim();
+                var selectedCountry = document.getElementById('customerCountryFilter').value || '';
+                var selectedService = document.getElementById('customerServiceFilter').value || '';
+
+                $('#updateNewRateCustomer').val(selectedCustomerIds.length + ' customers selected');
+                $('#updateNewRateCustomerIds').val(selectedCustomerIds.join(','));
+                $('#updateNewRateCountry').val(selectedCountry);
+                populateServiceDropdown(document.getElementById('updateNewRateService'), selectedCountry);
+                $('#updateNewRateService').val(selectedService);
+
+                var startDate = addDaysToDate(currentCustomerEndDate || new Date().toISOString().slice(0, 10), 1);
+                $('#updateNewRateStartDate').val(startDate);
+                $('#updateNewRateEndDate').attr('min', startDate).val(addDaysToDate(startDate, 365));
+                $('#updateNewRateModal').modal('show');
+            }
+
+            $('#customerNewRateBtn').on('click', openUpdateNewRateModal);
+            $('#updateNewRateCountry').on('change', function() {
+                populateServiceDropdown(document.getElementById('updateNewRateService'), this.value);
+                $('#updateNewRateService').val('').trigger('change');
+            });
+
+            $('#updateNewRateForm').on('submit', function(event) {
+                event.preventDefault();
+                var startDate = $('#updateNewRateStartDate').val();
+                var endDate = $('#updateNewRateEndDate').val();
+                if (!endDate || endDate < startDate) {
+                    Swal.fire({ icon: 'warning', title: 'Invalid End Date', text: 'End date cannot be earlier than the start date.' });
+                    return;
+                }
+
+                var formData = new FormData(this);
+                formData.delete('customer_ids');
+                selectedCustomerIds.forEach(function(id) { formData.append('customer_ids[]', id); });
+                var submitButton = $('#updateNewRateSubmitBtn');
+                submitButton.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Updating...');
+
+                $.ajax({
+                    url: '{{ route("admin.manage-rate.update-new-rate") }}',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        $('#updateNewRateModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Rates Updated',
+                            text: response.message || 'Customer rates updated successfully.',
+                            timer: 2200,
+                            showConfirmButton: false
+                        });
+                        loadCustomerRates(currentSelectedCustomerId);
+                    },
+                    error: function(xhr) {
+                        var response = xhr.responseJSON || {};
+                        var message = response.message || 'The rate file could not be processed.';
+                        if (response.errors) {
+                            message = Object.values(response.errors).flat().join('\n');
+                        }
+                        Swal.fire({ icon: 'error', title: 'Update Failed', text: message });
+                    },
+                    complete: function() {
+                        submitButton.prop('disabled', false).html('<i class="ti ti-upload me-1"></i>Update Rate');
+                    }
+                });
+            });
+
+            // === Common End Date button handler ===
+            // Opens the end_date popup for the currently selected customer
+            // (same popup used by the per-row End Date cells). Requires a
+            // customer to be selected first.
+            $('#customerEndDateBtn').on('click', function() {
+                if (!currentSelectedCustomerId) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Customer Selected',
+                        text: 'Please select a customer first to change their end date.',
+                    });
+                    return;
+                }
+                openEndDatePopup(currentSelectedCustomerId, currentCustomerEndDate);
             });
 
             // === Add Rate Modal Setup ===
@@ -1209,7 +1653,7 @@
         function cancelEdit(rateId) {
             var original = $('#rate-input-' + rateId).data('original');
             $('#rate-input-' + rateId).val(original).addClass('d-none');
-            $('#rate-display-' + rateId).text('₹ ' + parseFloat(original).toFixed(2)).removeClass('d-none');
+                    $('#rate-display-' + rateId).text(parseFloat(original).toFixed(2)).removeClass('d-none');
             $('#edit-icon-' + rateId).removeClass('d-none');
             $('#save-icon-' + rateId).addClass('d-none');
             $('#cancel-icon-' + rateId).addClass('d-none');
@@ -1230,7 +1674,7 @@
                     price: price
                 },
                 success: function(response) {
-                    $('#rate-display-' + rateId).text('₹ ' + parseFloat(price).toFixed(2)).removeClass('d-none');
+                    $('#rate-display-' + rateId).text(parseFloat(price).toFixed(2)).removeClass('d-none');
                     $('#rate-input-' + rateId).data('original', price).addClass('d-none');
                     $('#edit-icon-' + rateId).removeClass('d-none');
                     $('#save-icon-' + rateId).addClass('d-none');
@@ -1259,6 +1703,11 @@
                 data: { customer_id: customerId },
                 success: function(response) {
                     loadedCustomerRates = response.rates || [];
+                    // Store the selected customer ID + details for the
+                    // end_date popup.
+                    currentSelectedCustomerId = customerId;
+                    currentCustomerInfo = response.customer || null;
+                    currentCustomerEndDate = response.current_end_date || null;
                     renderFilteredCustomerRates();
                     $('#customerRatesTable').show();
                     $('#noCustomerSelected').hide();
@@ -1291,7 +1740,7 @@
 
                 // All customer rates (default and non-default) are editable
                 var priceCell =
-                    '<span class="rate-display" id="cust-rate-display-' + rate.id + '">₹ ' + parseFloat(rate.price).toFixed(2) + '</span>' +
+                    '<span class="rate-display" id="cust-rate-display-' + rate.id + '">' + parseFloat(rate.price).toFixed(2) + '</span>' +
                     '<input type="number" step="0.01" min="0" class="rate-input d-none" id="cust-rate-input-' + rate.id + '" value="' + rate.price + '" data-rate-id="' + rate.id + '" data-original="' + rate.price + '">' +
                     '<i class="ti ti-edit edit-icon" id="cust-edit-icon-' + rate.id + '" onclick="editCustomerRate(' + rate.id + ')"></i>' +
                     '<i class="ti ti-device-floppy save-icon d-none" id="cust-save-icon-' + rate.id + '" onclick="saveCustomerRate(' + rate.id + ')"></i>' +
@@ -1300,30 +1749,54 @@
                 // Resolve zone name & category for this customer rate.
                 var rateCountry = rate.service ? (rate.service.country || '') : '';
                 var zoneInfo = getZoneInfo(rateCountry, rate.zone_no);
-                var zoneNameCell = zoneInfo ? zoneInfo.names : '—';
-                // Truncate the zone name list to 7 words with "..." and keep
-                // the full list in a tooltip.
-                if (zoneNameCell !== '—') {
-                    var zoneWords = zoneNameCell.split(/[\s,]+/).filter(function(w) { return w.length > 0; });
-                    if (zoneWords.length > 7) {
-                        zoneNameCell = '<span class="zone-name-cell" title="' + $('<div>').text(zoneNameCell).html() + '">' +
-                            zoneWords.slice(0, 7).join(' ') + ' ...</span>';
-                    } else {
-                        zoneNameCell = '<span class="zone-name-cell" title="' + $('<div>').text(zoneNameCell).html() + '">' + zoneNameCell + '</span>';
-                    }
+                var zoneFullName = zoneInfo ? zoneInfo.names : '';
+                // Show the ZONE NUMBER in the cell (as requested), with the
+                // full zone name kept in a tooltip for reference.
+                var zoneNoVal = (rate.zone_no !== null && rate.zone_no !== undefined && rate.zone_no !== '')
+                    ? rate.zone_no : '—';
+                var zoneNameCell;
+                if (zoneFullName) {
+                    zoneNameCell = '<span class="zone-name-cell" title="' + $('<div>').text(zoneFullName).html() + '">' +
+                        $('<div>').text(zoneNoVal).html() + '</span>';
+                } else {
+                    zoneNameCell = '<span class="zone-name-cell">' + $('<div>').text(zoneNoVal).html() + '</span>';
                 }
                 var zoneCategoryCell;
                 if (zoneInfo) {
                     if (zoneInfo.category === 'state') {
-                        zoneCategoryCell = '<span class="badge bg-info">State</span>';
+                        zoneCategoryCell = 'State';
                     } else if (zoneInfo.category === 'zipcode') {
-                        zoneCategoryCell = '<span class="badge bg-warning">Zipcode</span>';
+                        zoneCategoryCell = 'Zipcode';
                     } else {
-                        zoneCategoryCell = '<span class="text-muted">' + zoneInfo.category + '</span>';
+                        zoneCategoryCell = zoneInfo.category;
                     }
                 } else {
                     zoneCategoryCell = '—';
                 }
+
+                // Start Date cell — read-only display of the rate start_date.
+                // Formatted as DD-MM-YYYY for readability.
+                var startDateVal = rate.start_date || '';
+                var startDateDisplay = startDateVal ? formatDate(startDateVal) : '—';
+                var startDateCell =
+                    '<span class="badge bg-secondary start-date-cell">'
+                    + '<i class="ti ti-calendar me-1"></i>' + startDateDisplay
+                    + '</span>';
+
+                // End Date cell — clickable to open the customer end_date popup.
+                // Formatted as DD-MM-YYYY for readability; the raw value is
+                // kept in data-end-date for the popup.
+                var endDateVal = rate.end_date || '';
+                var endDateDisplay = endDateVal ? formatDate(endDateVal) : '—';
+                var endDateCell =
+                    '<span class="badge bg-primary cursor-pointer end-date-cell" '
+                    + 'style="cursor:pointer;" '
+                    + 'data-customer-id="' + (currentSelectedCustomerId || '') + '" '
+                    + 'data-end-date="' + endDateVal + '" '
+                    + 'onclick="openEndDatePopup(' + (currentSelectedCustomerId || 0) + ', \'' + endDateVal + '\')" '
+                    + 'title="Click to change end date for this customer">'
+                    + '<i class="ti ti-calendar-event me-1"></i>' + endDateDisplay
+                    + '</span>';
 
                 rows.push([
                     idx++,
@@ -1336,7 +1809,9 @@
                     zoneNameCell,
                     zoneCategoryCell,
                     priceCell,
-                    defaultBadge
+                    defaultBadge,
+                    startDateCell,
+                    endDateCell
                 ]);
             });
 
@@ -1358,7 +1833,7 @@
         function cancelCustomerEdit(rateId) {
             var original = $('#cust-rate-input-' + rateId).data('original');
             $('#cust-rate-input-' + rateId).val(original).addClass('d-none');
-            $('#cust-rate-display-' + rateId).text('₹ ' + parseFloat(original).toFixed(2)).removeClass('d-none');
+            $('#cust-rate-display-' + rateId).text(parseFloat(original).toFixed(2)).removeClass('d-none');
             $('#cust-edit-icon-' + rateId).removeClass('d-none');
             $('#cust-save-icon-' + rateId).addClass('d-none');
             $('#cust-cancel-icon-' + rateId).addClass('d-none');
@@ -1379,7 +1854,7 @@
                     price: price
                 },
                 success: function(response) {
-                    $('#cust-rate-display-' + rateId).text('₹ ' + parseFloat(price).toFixed(2)).removeClass('d-none');
+                    $('#cust-rate-display-' + rateId).text(parseFloat(price).toFixed(2)).removeClass('d-none');
                     $('#cust-rate-input-' + rateId).data('original', price).addClass('d-none');
                     $('#cust-edit-icon-' + rateId).removeClass('d-none');
                     $('#cust-save-icon-' + rateId).addClass('d-none');
@@ -1397,6 +1872,149 @@
                     }
                 }
             });
+        }
+
+        // ============================================================
+        // End Date popup — opens when admin clicks the End Date cell
+        // for a selected customer. Shows the customer's details and an
+        // editable date input. On save, updates end_date for ALL rates
+        // of that customer at once via AJAX.
+        // ============================================================
+        function openEndDatePopup(customerId, currentEndDate) {
+            if (!customerId) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Customer Selected',
+                    text: 'Please select a customer first.',
+                });
+                return;
+            }
+
+            // Use the stored customer info (loaded with the rates) when
+            // possible; fall back to a minimal placeholder otherwise.
+            var info = currentCustomerInfo || {};
+            var fullName = info.full_name
+                || ((info.first_name || '') + ' ' + (info.last_name || '')).trim()
+                || 'Customer #' + customerId;
+            var email = info.email || '—';
+            var phone = info.phone_number || '—';
+            // Default the editable date to TOMORROW (today + 1 day) so the
+            // admin sees the next day's date pre-filled, as requested.
+            // The selected date is also FORCED to be at least tomorrow — the
+            // admin can never pick today or any past date.
+            var tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            var endDateValue = tomorrow.toISOString().split('T')[0];
+            var minDate = endDateValue; // tomorrow is the minimum allowed date
+
+            // Build the popup HTML: customer details + editable date input
+            var popupHtml =
+                '<div style="text-align:left;">'
+                + '<div style="margin-bottom:16px;padding:12px;border:1px solid #e9ecef;border-radius:8px;background:#f8f9fa;">'
+                + '<h6 style="margin:0 0 8px 0;font-weight:600;color:#333;">Customer Details</h6>'
+                + '<p style="margin:4px 0;font-size:14px;"><strong>Name:</strong> ' + escapeHtml(fullName) + '</p>'
+                + '<p style="margin:4px 0;font-size:14px;"><strong>Email:</strong> ' + escapeHtml(email) + '</p>'
+                + '<p style="margin:4px 0;font-size:14px;"><strong>Phone:</strong> ' + escapeHtml(phone) + '</p>'
+                + '</div>'
+                + '<div style="margin-bottom:8px;">'
+                + '<label for="swalEndDateInput" style="display:block;font-weight:600;margin-bottom:6px;">End Date</label>'
+                + '<input type="date" id="swalEndDateInput" class="swal2-input" value="' + endDateValue + '" min="' + minDate + '" style="width:100%;margin:0;">'
+                + '<small style="color:#6c757d;display:block;margin-top:6px;">The end date must be <strong>tomorrow or later</strong> (today + 1). This will update the end date for <strong>all</strong> rates of this customer.</small>'
+                + '</div>'
+                + '</div>';
+
+            Swal.fire({
+                title: 'Change End Date',
+                html: popupHtml,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Update End Date',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#6c757d',
+                focusConfirm: false,
+                preConfirm: function() {
+                    var newDate = document.getElementById('swalEndDateInput').value;
+                    if (!newDate) {
+                        Swal.showValidationMessage('Please select a valid end date.');
+                        return false;
+                    }
+                    // Enforce that the selected date is at least tomorrow.
+                    if (newDate < minDate) {
+                        Swal.showValidationMessage('The end date must be tomorrow (' + minDate + ') or a later date.');
+                        return false;
+                    }
+                    return newDate;
+                }
+            }).then(function(result) {
+                if (!result.isConfirmed) {
+                    return;
+                }
+                var newEndDate = result.value;
+
+                // AJAX POST to update end_date for ALL rates of this customer
+                $.ajax({
+                    url: '{{ url("/admin/manage-rate/update-customer-end-date") }}/' + customerId,
+                    type: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        end_date: newEndDate
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Update the stored value so the next popup
+                            // shows the new date immediately.
+                            currentCustomerEndDate = newEndDate;
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Updated!',
+                                text: response.message || 'End date updated successfully.',
+                                timer: 1800,
+                                showConfirmButton: false
+                            });
+                            // Reload the customer rates table to reflect
+                            // the new end_date on every row.
+                            if (currentSelectedCustomerId) {
+                                loadCustomerRates(currentSelectedCustomerId);
+                            }
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Failed',
+                                text: response.message || 'Failed to update end date.'
+                            });
+                        }
+                    },
+                    error: function(xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            ? xhr.responseJSON.message
+                            : 'Failed to update end date. Please try again.';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: msg
+                        });
+                    }
+                });
+            });
+        }
+
+        // Small helper to escape HTML so customer details are safe to inject
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            // Build HTML entities via concatenation so the named entities
+            // are not decoded when the blade file is saved.
+            var amp = '&' + 'amp;';
+            var lt = '&' + 'lt;';
+            var gt = '&' + 'gt;';
+            var quot = '&' + 'quot;';
+            var apos = '&' + '#039;';
+            return String(str)
+                .replace(/&/g, amp)
+                .replace(/</g, lt)
+                .replace(/>/g, gt)
+                .replace(/"/g, quot)
+                .replace(/'/g, apos);
         }
     </script>
 

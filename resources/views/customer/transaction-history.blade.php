@@ -492,7 +492,7 @@
             // FLATPICKR DATE PICKERS
             // =============================================
             fpFrom = flatpickr('#dateFrom', {
-                dateFormat: 'Y-m-d',
+                dateFormat: 'd-m-Y',
                 allowInput: true,
                 maxDate: 'today',
                 onChange: function (selectedDates, dateStr) {
@@ -504,7 +504,7 @@
             });
 
             fpTo = flatpickr('#dateTo', {
-                dateFormat: 'Y-m-d',
+                dateFormat: 'd-m-Y',
                 allowInput: true,
                 maxDate: 'today',
                 onChange: function (selectedDates, dateStr) {

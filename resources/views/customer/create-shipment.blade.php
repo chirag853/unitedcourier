@@ -9684,6 +9684,35 @@
                     }
                     return;
                 }
+                // ===== Shipper state validation: max 2 words =====
+                // The shipper state field must not contain more than 2 words
+                // (e.g. "Gujarat", "New South Wales" are valid, but
+                // "Some Very Long State Name" is not). Block submission here
+                // so the user is informed BEFORE the shipment is created.
+                (function() {
+                    const stateEl = document.querySelector('[name="shipper_state"]');
+                    const stateVal = stateEl ? (stateEl.value || '').trim() : '';
+                    if (stateVal !== '') {
+                        const wordCount = stateVal.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+                        if (wordCount > 2) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Invalid Shipper State',
+                                html: 'Shipper state must not exceed <strong>2 words</strong>.<br>The provided state <strong>"' + stateVal + '"</strong> contains <strong>' + wordCount + ' words</strong>.<br>Please enter a shorter state name and try again.',
+                                confirmButtonColor: '#dc3545'
+                            });
+                            // Re-open the Shipper Info accordion so the user can fix the error
+                            const basicCollapse = document.getElementById('basic');
+                            if (basicCollapse && window.bootstrap) {
+                                bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
+                            } else if (window.$ && window.$('#basic')) {
+                                window.$('#basic').collapse('show');
+                            }
+                            if (stateEl) { stateEl.focus(); }
+                            return;
+                        }
+                    }
+                })();
                 // ===== Shipper state validation for Overseas Logistic methods =====
                 // The Overseas Logistic API (UNITED CANADA DDP / E-COMMERCE and
                 // ARAMEX GPX / Australia) requires the shipper state to be a

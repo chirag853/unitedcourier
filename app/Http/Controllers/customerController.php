@@ -2022,6 +2022,31 @@ class customerController extends Controller
                 }
             }
 
+            // ------------------------------------------------------------
+            // SHIPPER STATE — MAX 2 WORDS VALIDATION
+            // The shipper state field must not contain more than 2 words
+            // (e.g. "Gujarat", "New South Wales" are valid, but
+            // "Some Very Long State Name" is not). Block shipment creation
+            // here so the user is informed BEFORE the shipment is saved.
+            // ------------------------------------------------------------
+            $shipperStateForWordCount = trim((string)($validatedData['shipper_state'] ?? ''));
+            if ($shipperStateForWordCount !== '' && str_word_count($shipperStateForWordCount) > 2) {
+                $wordCountMessage = 'Shipper state must not exceed 2 words. The provided state "' . $shipperStateForWordCount . '" contains ' . str_word_count($shipperStateForWordCount) . ' words. Please enter a shorter state name and try again.';
+                if (!$request->expectsJson()) {
+                    return back()
+                        ->withErrors(['shipper_state' => $wordCountMessage])
+                        ->withInput()
+                        ->with('error', $wordCountMessage);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => $wordCountMessage,
+                    'errors' => [
+                        'shipper_state' => [$wordCountMessage]
+                    ]
+                ], 422);
+            }
+
             // ============================================================
             // OVERSEAS LOGISTIC — SHIPPER STATE VALIDATION
             // The Overseas Logistic API (used for UNITED CANADA DDP /
@@ -3632,7 +3657,7 @@ class customerController extends Controller
 				// rates). The query below is fully parameterized by
 				// $destinationCountry, so adding 'AUS' here makes the
 				// ARAMEX GPX ALL IN service rates resolve correctly.
-				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS'){
+				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ') {
 					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
@@ -6869,6 +6894,22 @@ class customerController extends Controller
         if ($isAustralia) {
             return 'AUS';
         }
+
+
+        // i want to add newzealand as well so i am adding it here
+        // New Zealand detection — covers "New Zealand", "NZ", "NZL",
+        // and any string containing "New Zealand". Returns "NZ" to match the
+        // destinations.country_code value used for New Zealand.
+        $isNewZealand = (
+            $destUpper === 'NEW ZEALAND'
+            || $destUpper === 'NZ'
+            || $destUpper === 'NZL'
+            || str_contains($destUpper, 'NEW ZEALAND')
+        );
+        if ($isNewZealand) {
+            return 'NZ';
+        }
+
 
         // Everything else (US, USA, United States, etc.) → US.
         return 'US';

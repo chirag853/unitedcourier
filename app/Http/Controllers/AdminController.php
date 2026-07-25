@@ -5994,12 +5994,13 @@ class AdminController extends Controller
         }
 
         // ------------------------------------------------------------------
-        // Map each destination NAME (the value used by the country <select>
-        // in the Add Rate / Bulk Upload modals) to the matching
-        // courier_services.country value (the short code, e.g. "US", "UK",
-        // "CA", "AUS"). This lets the service dropdown be filtered by the
-        // selected country: when the admin picks a country, only the
-        // courier services whose `country` matches are listed.
+        // Map each destination NAME to the matching courier_services.country
+        // value (the short code, e.g. "US", "UK", "CA", "AUS"). Kept for
+        // backward compatibility — all country <select> dropdowns in the
+        // manage-rate view now use the destination country_code as the
+        // option value (matching the courier_services.country short code),
+        // so this name-based lookup is rarely needed. It still lets the
+        // service dropdown be filtered by the selected country.
         //
         // We reuse countryToDestinationId (which already resolves every
         // friendly-name/code variant to a destination_id) by inverting it:
@@ -6101,7 +6102,118 @@ class AdminController extends Controller
             ->orderBy('wt_range_start')
             ->get();
 
-        return response()->json(['rates' => $rates]);
+        // Include customer details (name, email, phone) and the current
+        // end_date (taken from the first rate, since all rates for a
+        // customer share the same end_date) so the manage-rate page can
+        // show them in the end_date popup.
+        $customer = \App\Models\Customer::find($customerId);
+        $customerInfo = null;
+        $currentEndDate = null;
+        if ($customer) {
+            $customerInfo = [
+                'id'            => $customer->id,
+                'first_name'    => $customer->first_name,
+                'last_name'     => $customer->last_name,
+                'email'         => $customer->email,
+                'phone_number'  => $customer->phone_number,
+                'full_name'     => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+            ];
+            $firstRate = $rates->first();
+            if ($firstRate && $firstRate->end_date) {
+                $currentEndDate = $firstRate->end_date instanceof \DateTime
+                    ? $firstRate->end_date->format('Y-m-d')
+                    : (string) $firstRate->end_date;
+            }
+        }
+
+        return response()->json([
+            'rates'           => $rates,
+            'customer'        => $customerInfo,
+            'current_end_date' => $currentEndDate,
+        ]);
+    }
+
+    /**
+     * Export rates for one or more selected customers in the upload format.
+     */
+    public function exportCustomerRates(Request $request)
+    {
+        $customerIds = array_values(array_filter(array_map('intval', (array) $request->input('customer_ids', []))));
+        if (empty($customerIds)) {
+            abort(422, 'Please select at least one customer.');
+        }
+
+        $serviceId = $request->input('service_id');
+        $country = trim((string) $request->input('country', ''));
+        $query = \App\Models\CourierRate::with(['service', 'customer'])
+            ->whereIn('customer_id', $customerIds)
+            ->orderBy('customer_id')
+            ->orderBy('service_id')
+            ->orderBy('zone_no')
+            ->orderBy('wt_range_start');
+        if ($serviceId !== null && $serviceId !== '') {
+            $query->where('service_id', (int) $serviceId);
+        }
+        if ($country !== '') {
+            $query->whereHas('service', function ($serviceQuery) use ($country) {
+                $serviceQuery->where('country', $country);
+            });
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = ['Customer ID', 'Customer Name', 'Network', 'Service Code', 'Method', 'TAT', 'Weight Start (gm)', 'Weight End (gm)', 'Zone No', 'Zone Category', 'Price', 'Default', 'Start Date', 'End Date'];
+
+        // PhpSpreadsheet 2.x+ removed setCellValueByColumnAndRow(), so we
+        // build column letters (A, B, C, ...) and use coordinate-based addressing.
+        $columnLetters = [];
+        for ($i = 0; $i < count($headers); $i++) {
+            $columnLetters[$i] = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $sheet->setCellValue($columnLetters[$i] . '1', $headers[$i]);
+        }
+
+        $rowNumber = 2;
+        foreach ($query->get() as $rate) {
+            $service = $rate->service;
+            $customer = $rate->customer;
+            $startDate = $rate->start_date
+                ? ($rate->start_date instanceof \DateTime ? $rate->start_date->format('Y-m-d') : (string) $rate->start_date)
+                : '';
+            $endDate = $rate->end_date
+                ? ($rate->end_date instanceof \DateTime ? $rate->end_date->format('Y-m-d') : (string) $rate->end_date)
+                : '';
+            $values = [
+                $rate->customer_id,
+                trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+                $service->network ?? '',
+                $service->service_code ?? '',
+                $service->method ?? '',
+                $service->tat ?? '',
+                $rate->wt_range_start,
+                $rate->wt_range_end,
+                $rate->zone_no,
+                '',
+                $rate->price,
+                $rate->is_default ? 'Yes' : 'No',
+                $startDate,
+                $endDate,
+            ];
+            foreach ($values as $index => $value) {
+                $sheet->setCellValue($columnLetters[$index] . $rowNumber, $value);
+            }
+            $rowNumber++;
+        }
+
+        $lastColumn = $columnLetters[count($columnLetters) - 1];
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach ($columnLetters as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+        $fileName = 'customer-rates-' . date('Y-m-d-His') . '.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
     public function updateRate(Request $request, $id)
@@ -6148,6 +6260,291 @@ class AdminController extends Controller
         $rate->save();
 
         return response()->json(['success' => true, 'message' => 'Customer rate updated successfully.']);
+    }
+
+    /**
+     * Update the end_date for ALL courier_rates rows belonging to a given
+     * customer at once.
+     *
+     * Called from the manage-rate page when the admin clicks on the
+     * end_date cell of any customer rate row — a popup shows the customer
+     * details and an editable end_date input; on save this endpoint
+     * bulk-updates every rate row for that customer.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $customerId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateCustomerEndDate(Request $request, $customerId)
+    {
+        $validated = $request->validate([
+            'end_date' => ['required', 'date'],
+        ]);
+
+        // Enforce that the end_date is at least tomorrow (today + 1 day).
+        // The admin must never be able to set an end_date of today or earlier.
+        $tomorrow = \Carbon\Carbon::tomorrow()->toDateString();
+        if ($validated['end_date'] < $tomorrow) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The end date must be tomorrow (' . $tomorrow . ') or a later date.',
+            ], 422);
+        }
+
+        $customer = \App\Models\Customer::find($customerId);
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer not found.',
+            ], 404);
+        }
+
+        $updated = \App\Models\CourierRate::where('customer_id', $customerId)
+            ->update(['end_date' => $validated['end_date']]);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'End date updated successfully for ' . $updated . ' rate(s) of ' . trim($customer->first_name . ' ' . $customer->last_name) . '.',
+            'updated'  => $updated,
+            'end_date' => $validated['end_date'],
+        ]);
+    }
+
+    /**
+     * Apply a downloaded customer-rate Excel sheet as a new dated rate set.
+     * Rows are matched by service, weight range and zone number.
+     */
+    public function updateNewCustomerRate(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_ids' => 'required|array|min:1',
+            'customer_ids.*' => 'integer|exists:customers,id',
+            'service_id'  => 'nullable|integer|exists:courier_services,id',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+            'rate_file'   => 'required|file|mimes:xlsx,xls,csv|max:5120',
+        ]);
+
+        $filePath = $request->file('rate_file')->getRealPath();
+
+        try {
+            $inputFileType = \PhpOffice\PhpSpreadsheet\IOFactory::identify($filePath);
+            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
+            $reader->setReadDataOnly(true);
+            $spreadsheet = $reader->load($filePath);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not read the uploaded file. Please upload the Excel file downloaded from customer rates.',
+            ], 422);
+        }
+
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        if (count($rows) < 2) {
+            return response()->json(['success' => false, 'message' => 'The uploaded file has no data rows.'], 422);
+        }
+
+        $normalizeHeader = function ($value) {
+            return preg_replace('/\s+/', ' ', strtolower(trim((string) $value)));
+        };
+
+        // DataTables Excel exports can contain a title, customer details and
+        // blank rows before the actual column header. Find that header row
+        // instead of assuming it is always the first row.
+        $headerRowIndex = null;
+        $header = [];
+        foreach (array_slice($rows, 0, 10, true) as $rowIndex => $candidateRow) {
+            $candidateHeader = array_map($normalizeHeader, $candidateRow);
+            $hasWeightStart = in_array('weight start', $candidateHeader, true)
+                || in_array('weight start (gm)', $candidateHeader, true)
+                || in_array('wt start', $candidateHeader, true)
+                || in_array('wt_range_start', $candidateHeader, true);
+            $hasWeightEnd = in_array('weight end', $candidateHeader, true)
+                || in_array('weight end (gm)', $candidateHeader, true)
+                || in_array('wt end', $candidateHeader, true)
+                || in_array('wt_range_end', $candidateHeader, true);
+            $hasZoneNo = in_array('zone no', $candidateHeader, true)
+                || in_array('zone_no', $candidateHeader, true)
+                || in_array('zone number', $candidateHeader, true)
+                || in_array('zone', $candidateHeader, true);
+            $hasPrice = in_array('price', $candidateHeader, true)
+                || in_array('rate', $candidateHeader, true)
+                || in_array('amount', $candidateHeader, true)
+                || in_array('cost', $candidateHeader, true);
+
+            if ($hasWeightStart && $hasWeightEnd && $hasZoneNo && $hasPrice) {
+                $headerRowIndex = $rowIndex;
+                $header = $candidateHeader;
+                break;
+            }
+        }
+
+        if ($headerRowIndex === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not find the rate table header. Please upload the downloaded customer rates Excel file.',
+            ], 422);
+        }
+
+        $findColumn = function (array $names) use ($header) {
+            foreach ($header as $index => $value) {
+                if (in_array($value, $names, true)) {
+                    return $index;
+                }
+            }
+            return null;
+        };
+
+        $wtStartCol = $findColumn(['weight start', 'weight start (gm)', 'wt start', 'wt_range_start']);
+        $wtEndCol   = $findColumn(['weight end', 'weight end (gm)', 'wt end', 'wt_range_end']);
+        $zoneNoCol  = $findColumn(['zone no', 'zone_no', 'zone number', 'zone']);
+        $priceCol   = $findColumn(['price', 'rate', 'amount', 'cost']);
+        $customerIdCol = $findColumn(['customer id', 'customer_id', 'customerid']);
+        $serviceCodeCol = $findColumn(['service code', 'service_code', 'servicecode']);
+        $networkCol = $findColumn(['network']);
+        $methodCol = $findColumn(['method']);
+
+        if ($wtStartCol === null || $wtEndCol === null || $zoneNoCol === null || $priceCol === null || $customerIdCol === null
+            || (!$validated['service_id'] && $serviceCodeCol === null && $networkCol === null && $methodCol === null)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The file must contain Customer ID, Weight Start, Weight End, Zone No and Price. When All Services is selected, it must also contain Service Code, Network or Method.',
+            ], 422);
+        }
+
+        $updated = 0;
+        $skipped = 0;
+        $notFound = 0;
+
+        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $serviceCodeCol, $networkCol, $methodCol, $validated, &$updated, &$skipped, &$notFound) {
+            $normalizeValue = function ($value) {
+                return strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
+            };
+            $normalizeNumber = function ($value) {
+                return rtrim(rtrim(number_format((float) $value, 6, '.', ''), '0'), '.');
+            };
+
+            // Load the customer's rates once. Querying the database inside
+            // the Excel-row loop makes large exports hit the request timeout.
+            $existingRates = \App\Models\CourierRate::with('service')
+                ->whereIn('customer_id', $validated['customer_ids'])
+                ->when($validated['service_id'], function ($query) use ($validated) {
+                    $query->where('service_id', $validated['service_id']);
+                })
+                ->get();
+            $rateLookup = [];
+            foreach ($existingRates as $existingRate) {
+                $weightKey = $normalizeNumber($existingRate->wt_range_start) . '|'
+                    . $normalizeNumber($existingRate->wt_range_end) . '|'
+                    . (int) $existingRate->zone_no;
+                $rateLookup['id:' . $existingRate->customer_id . '|' . $existingRate->service_id . '|' . $weightKey] = $existingRate;
+
+                if (!$validated['service_id'] && $existingRate->service) {
+                    $service = $existingRate->service;
+                    foreach ([$service->service_code, $service->scode] as $code) {
+                        $code = $normalizeValue($code);
+                        if ($code !== '') {
+                            $rateLookup['code:' . $existingRate->customer_id . '|' . $code . '|' . $weightKey] = $existingRate;
+                        }
+                    }
+                    $network = $normalizeValue($service->network);
+                    $method = $normalizeValue($service->method);
+                    if ($network !== '' && $method !== '') {
+                        $rateLookup['method:' . $existingRate->customer_id . '|' . $network . '|' . $method . '|' . $weightKey] = $existingRate;
+                    }
+                }
+            }
+            $pendingUpdates = [];
+
+            foreach (array_slice($rows, $headerRowIndex + 1) as $row) {
+                $wtStart = isset($row[$wtStartCol]) ? trim((string) $row[$wtStartCol]) : '';
+                $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
+                $zoneNo  = isset($row[$zoneNoCol]) ? trim((string) $row[$zoneNoCol]) : '';
+                $price   = isset($row[$priceCol]) ? trim((string) $row[$priceCol]) : '';
+                $customerId = isset($row[$customerIdCol]) ? (int) trim((string) $row[$customerIdCol]) : 0;
+                $serviceCode = $serviceCodeCol !== null && isset($row[$serviceCodeCol]) ? trim((string) $row[$serviceCodeCol]) : '';
+                $network = $networkCol !== null && isset($row[$networkCol]) ? trim((string) $row[$networkCol]) : '';
+                $method = $methodCol !== null && isset($row[$methodCol]) ? trim((string) $row[$methodCol]) : '';
+
+                if ($wtStart === '' && $wtEnd === '' && $zoneNo === '' && $price === '') {
+                    continue;
+                }
+                if (!is_numeric($wtStart) || !is_numeric($wtEnd) || !is_numeric($zoneNo) || !is_numeric($price)
+                    || (float) $wtEnd <= (float) $wtStart || (int) $zoneNo < 0 || (int) $zoneNo > 13) {
+                    $skipped++;
+                    continue;
+                }
+                // NOTE: $validated['customer_ids'] comes from the request as
+                // an array of STRINGS (e.g. ["3","17"]), while $customerId is
+                // cast to int above. Using strict comparison (true) here made
+                // in_array(3, ["3","17"], true) return false, causing EVERY
+                // row to be skipped with "No matching customer rates found".
+                // Cast the validated IDs to int so the comparison is reliable.
+                $validatedCustomerIds = array_map('intval', $validated['customer_ids']);
+                if (!in_array($customerId, $validatedCustomerIds, true)
+                    || (!$validated['service_id'] && $serviceCode === '' && ($network === '' || $method === ''))) {
+                    $skipped++;
+                    continue;
+                }
+
+                $weightKey = $normalizeNumber($wtStart) . '|'
+                    . $normalizeNumber($wtEnd) . '|' . (int) $zoneNo;
+                $rate = null;
+                if ($validated['service_id']) {
+                    $rate = $rateLookup['id:' . $customerId . '|' . $validated['service_id'] . '|' . $weightKey] ?? null;
+                } else {
+                    $uploadedCode = $normalizeValue($serviceCode);
+                    $rate = $uploadedCode !== ''
+                        ? ($rateLookup['code:' . $customerId . '|' . $uploadedCode . '|' . $weightKey] ?? null)
+                        : null;
+                    if (!$rate && $network !== '' && $method !== '') {
+                        $rate = $rateLookup['method:' . $customerId . '|' . $normalizeValue($network) . '|' . $normalizeValue($method) . '|' . $weightKey] ?? null;
+                    }
+                }
+
+                if (!$rate) {
+                    $notFound++;
+                    continue;
+                }
+
+                $pendingUpdates[$rate->id] = [
+                    'id'         => $rate->id,
+                    'price'      => $price,
+                    'start_date' => $validated['start_date'],
+                    'end_date'   => $validated['end_date'],
+                    'updated_at' => now(),
+                ];
+            }
+
+            $updated = count($pendingUpdates);
+
+            foreach (array_chunk(array_values($pendingUpdates), 500) as $chunk) {
+                \DB::table('courier_rates')->upsert(
+                    $chunk,
+                    ['id'],
+                    ['price', 'start_date', 'end_date', 'updated_at']
+                );
+            }
+        });
+
+        if ($updated === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No matching customer rates were found in the uploaded file.',
+                'skipped' => $skipped,
+                'not_found' => $notFound,
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $updated . ' rate(s) updated successfully.'
+                . ($notFound ? ' ' . $notFound . ' row(s) did not match an existing rate.' : '')
+                . ($skipped ? ' ' . $skipped . ' invalid row(s) skipped.' : ''),
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'not_found' => $notFound,
+        ]);
     }
 
     /**
@@ -6203,6 +6600,8 @@ class AdminController extends Controller
                 'gst_percentage'  => $validated['gst_percentage'] ?? 0,
                 'gst_amount'      => 0,
                 'is_default'      => true,
+                'start_date'      => '2026-01-01',
+                'end_date'        => '2026-12-31',
             ]);
 
             // Propagate the new default rate to every customer so they inherit
@@ -6239,6 +6638,8 @@ class AdminController extends Controller
                             'gst_percentage'  => $validated['gst_percentage'] ?? 0,
                             'gst_amount'      => 0,
                             'is_default'      => true,
+                            'start_date'      => '2026-01-01',
+                            'end_date'        => '2026-12-31',
                             'created_at'      => $now,
                             'updated_at'      => $now,
                         ];
@@ -6572,6 +6973,8 @@ class AdminController extends Controller
                 'gst_percentage'  => ($gstPct !== '' && is_numeric($gstPct)) ? $gstPct : 0,
                 'gst_amount'      => 0,
                 'is_default'      => true,
+                'start_date'      => '2026-01-01',
+                'end_date'        => '2026-12-31',
             ]);
             $seenInUpload[$key] = true;
             $created++;
@@ -6601,6 +7004,8 @@ class AdminController extends Controller
                             'gst_percentage'  => ($gstPct !== '' && is_numeric($gstPct)) ? $gstPct : 0,
                             'gst_amount'      => 0,
                             'is_default'      => true,
+                            'start_date'      => '2026-01-01',
+                            'end_date'        => '2026-12-31',
                             'created_at'      => $now,
                             'updated_at'      => $now,
                         ];

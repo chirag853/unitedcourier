@@ -530,8 +530,11 @@ Route::prefix('admin')->group(function () {
     // Manage Rate Routes
     Route::get('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate');
     Route::get('/manage-rate/get-customer-rates', [AdminController::class, 'getCustomerRates'])->name('admin.manage-rate.get-customer-rates');
+    Route::get('/manage-rate/export-customer-rates', [AdminController::class, 'exportCustomerRates'])->name('admin.manage-rate.export-customer-rates');
     Route::post('/manage-rate/update/{id}', [AdminController::class, 'updateRate'])->name('admin.manage-rate.update');
     Route::post('/manage-rate/update-customer/{id}', [AdminController::class, 'updateCustomerRate'])->name('admin.manage-rate.update-customer');
+    Route::post('/manage-rate/update-customer-end-date/{id}', [AdminController::class, 'updateCustomerEndDate'])->name('admin.manage-rate.update-customer-end-date');
+    Route::post('/manage-rate/update-new-rate', [AdminController::class, 'updateNewCustomerRate'])->name('admin.manage-rate.update-new-rate');
     Route::post('/manage-rate/add', [AdminController::class, 'addRate'])->name('admin.manage-rate.add');
     Route::get('/manage-rate/sample', [AdminController::class, 'downloadRateSample'])->name('admin.manage-rate.sample');
     Route::post('/manage-rate/upload', [AdminController::class, 'uploadRateExcel'])->name('admin.manage-rate.upload');

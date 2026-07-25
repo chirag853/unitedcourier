@@ -23,6 +23,8 @@ class CourierRate extends Model
         'gst_percentage',
         'gst_amount',
         'is_default',
+        'start_date',
+        'end_date',
     ];
 
     protected $casts = [
@@ -34,6 +36,8 @@ class CourierRate extends Model
         'gst_percentage' => 'decimal:2',
         'gst_amount' => 'decimal:2',
         'is_default' => 'boolean',
+        'start_date' => 'date',
+        'end_date' => 'date',
     ];
 
     /**
