@@ -16,6 +16,8 @@ use App\Models\ShipperInfo;
 use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+
 
 class AdminController extends Controller
 {
@@ -7991,8 +7993,16 @@ class AdminController extends Controller
             $row++;
         }
 
-        foreach (range('A', 'AG') as $columnID) {
-            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        // foreach (range('A', 'AG') as $columnID) {
+        //     $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        // }
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+
+        for ($i = 1; $i <= count($headers); $i++) {
+            $sheet->getColumnDimension(
+                Coordinate::stringFromColumnIndex($i)
+            )->setAutoSize(true);
         }
 
         $fileName = 'kyc_records_' . $status . '_' . now()->format('Y-m-d_H-i-s') . '.xlsx';

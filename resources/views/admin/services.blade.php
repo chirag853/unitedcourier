@@ -176,7 +176,7 @@
                 <div class="card">
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table id="servicesTable" class="table table-hover datatable" style="width:100%">
+                            <table id="servicesTable" class="table table-hover" style="width:100%">
                                 <thead>
                                     <tr>
                                         <th>ID</th>
@@ -236,21 +236,29 @@
     </div>
 
     <!-- Scripts -->
-    <script src="{{ asset('assets/js/jquery-3.6.0.min.js') }}"></script>
-    <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ asset('assets/js/feather.min.js') }}"></script>
-    <script src="{{ asset('assets/plugins/slimscrollbar/slimscrollbar.jquery.min.js') }}"></script>
-    <script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}"></script>
+    <script src="{{ asset('js/jquery-3.7.1.min.js') }}" type="text/javascript"></script>
+    <script src="{{ asset('js/bootstrap.bundle.min.js') }}" type="text/javascript"></script>
+    <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}" type="text/javascript"></script>
+    <script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}" type="text/javascript"></script>
     <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
-    <script src="{{ asset('assets/js/theme.js') }}"></script>
+    <!-- Main JS (initialises sidebar dropdowns, toggle, etc.) -->
+    <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
 
     <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
-        // Initialise DataTable
+        // Initialise DataTable.
+        // `destroy: true` makes this safe even if the table was already
+        // initialised elsewhere (e.g. by a generic .datatable handler) —
+        // DataTables will tear down the previous instance and rebuild
+        // with these options instead of throwing "Cannot reinitialise DataTable".
         $(function () {
+            if ($.fn.DataTable.isDataTable('#servicesTable')) {
+                $('#servicesTable').DataTable().clear().destroy();
+            }
             $('#servicesTable').DataTable({
+                destroy: true,
                 order: [[1, 'asc'], [2, 'asc']],
                 pageLength: 25,
                 columnDefs: [
