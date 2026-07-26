@@ -26,6 +26,7 @@ class Customer extends Authenticatable
         'pan_verified',
         'csb_status',
         'status',
+        'can_create_shipment',
     ];
 
     protected $hidden = [
@@ -39,6 +40,7 @@ class Customer extends Authenticatable
         'pan_verified' => 'boolean',
         'csb_status' => 'integer',
         'status' => 'boolean',
+        'can_create_shipment' => 'boolean',
     ];
 
     public function getAuthPassword()

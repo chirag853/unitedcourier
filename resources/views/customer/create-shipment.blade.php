@@ -83,6 +83,15 @@
         <div class="page-wrapper">
             <!-- Start Content -->
             <div class="content">
+                @if(isset($canCreateShipment) && !$canCreateShipment)
+                    <div class="alert alert-danger d-flex align-items-center mb-4" role="alert" style="border-left: 4px solid #dc3545;">
+                        <i class="ti ti-alert-triangle me-2 fs-4"></i>
+                        <div>
+                            <strong>You do not have the right to create shipments.</strong>
+                            Please contact <strong>United Courier Worldwide</strong> to enable shipment creation for your account.
+                        </div>
+                    </div>
+                @endif
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
@@ -6962,6 +6971,37 @@
                                                         </div>
                                                     </div>
                                                     </div>
+                                                    <!-- Package Totals -->
+                                                    <div class="package-totals mt-3 p-3 rounded"
+                                                        style="background:#f8f9fa; border:1px solid #e9ecef;">
+                                                        <div class="row align-items-end">
+                                                            <div class="col-md-4">
+                                                                <div class="mb-0">
+                                                                    <label class="form-label fw-semibold mb-1">Total Dead Wt (Kg)</label>
+                                                                    <input type="text" class="form-control fw-bold"
+                                                                        id="totalDeadWeight" readonly
+                                                                        placeholder="0.00">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <div class="mb-0">
+                                                                    <label class="form-label fw-semibold mb-1">Total VOL WT (Kg)</label>
+                                                                    <input type="text" class="form-control fw-bold"
+                                                                        id="totalVolumetricWeight" readonly
+                                                                        placeholder="0.00">
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <div class="mb-0">
+                                                                    <label class="form-label fw-semibold mb-1">Total Chg. Wt (Kg)</label>
+                                                                    <input type="text" class="form-control fw-bold"
+                                                                        id="totalChargeableWeight" readonly
+                                                                        placeholder="0.00">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- /Package Totals -->
                                                 </div>
                                             </div>
                                         </div>
@@ -7223,6 +7263,8 @@
                                             if (window.validatePackageCard) window.validatePackageCard(card);
                                             // Validate total weight against 68 kg limit
                                             if (window.checkWeightLimit) window.checkWeightLimit();
+                                            // Update totals row
+                                            if (window.updatePackageTotals) window.updatePackageTotals();
                                         });
 
                                         document.getElementById('numberOfBoxes').addEventListener('input', function() {
@@ -7233,7 +7275,33 @@
                                             // Validate all package cards after row count change
                                             if (window.validateAllPackages) window.validateAllPackages();
                                             if (window.checkWeightLimit) window.checkWeightLimit();
+                                            // Update totals row after box count change
+                                            if (window.updatePackageTotals) window.updatePackageTotals();
                                         });
+
+                                        // Recalculate the Package Dimension totals row
+                                        // (Total Dead Wt = sum of actual weights,
+                                        //  Total VOL WT = sum of volumetric weights,
+                                        //  Total Chg. Wt = sum of chargeable weights).
+                                        window.updatePackageTotals = function() {
+                                            let totalDead = 0;
+                                            let totalVol = 0;
+                                            let totalChg = 0;
+                                            document.querySelectorAll('.rowContaineraddmore').forEach(function(card) {
+                                                const actualWt = parseFloat(card.querySelector('[name$="[actual_weight_kg]"]')?.value) || 0;
+                                                const volWt = parseFloat(card.querySelector('[name$="[volumetric_weight]"]')?.value) || 0;
+                                                const chgWt = parseFloat(card.querySelector('[name$="[chargeable_weight]"]')?.value) || 0;
+                                                totalDead += actualWt;
+                                                totalVol += volWt;
+                                                totalChg += chgWt;
+                                            });
+                                            const deadEl = document.getElementById('totalDeadWeight');
+                                            const volEl = document.getElementById('totalVolumetricWeight');
+                                            const chgEl = document.getElementById('totalChargeableWeight');
+                                            if (deadEl) deadEl.value = totalDead.toFixed(2);
+                                            if (volEl) volEl.value = totalVol.toFixed(2);
+                                            if (chgEl) chgEl.value = totalChg.toFixed(2);
+                                        };
 
                                         // Initialize on DOM ready
                                         document.addEventListener('DOMContentLoaded', function() {
@@ -7241,6 +7309,8 @@
                                             if (numBoxes > 1) {
                                                 syncPackageRows();
                                             }
+                                            // Compute initial totals (e.g. when old input is present after a validation error)
+                                            if (window.updatePackageTotals) window.updatePackageTotals();
                                         });
                                         </script>
                                         <!-- CSB INFO -->
@@ -8108,11 +8178,17 @@
                                     </div>
                                     <!-- /Access -->
                                     <div class="mt-4 d-flex align-items-center justify-content-end">
-                                        <button type="reset" class="btn btn-light me-2">Reset</button>
-                                        <button type="button" class="btn btn-primary" id="previewOrderBtn" disabled>
-                                            <i class="ti ti-eye me-1"></i> Preview Order
-                                        </button>
-                                        <button type="submit" class="btn btn-primary d-none" id="hiddenSubmitBtn">Create Now</button>
+                                        <button type="reset" class="btn btn-light me-2" @if(isset($canCreateShipment) && !$canCreateShipment) disabled @endif>Reset</button>
+                                        @if(isset($canCreateShipment) && !$canCreateShipment)
+                                            <button type="button" class="btn btn-secondary" disabled title="Shipment creation is disabled for your account">
+                                                <i class="ti ti-ban me-1"></i> Shipment Disabled
+                                            </button>
+                                        @else
+                                            <button type="button" class="btn btn-primary" id="previewOrderBtn" disabled>
+                                                <i class="ti ti-eye me-1"></i> Preview Order
+                                            </button>
+                                            <button type="submit" class="btn btn-primary d-none" id="hiddenSubmitBtn">Create Now</button>
+                                        @endif
                                     </div>
                                 </form>
                             </div>

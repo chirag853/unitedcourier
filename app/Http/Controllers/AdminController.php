@@ -6311,6 +6311,54 @@ class AdminController extends Controller
     }
 
     /**
+     * Bulk-update the end_date for ALL courier_rates rows belonging to
+     * MULTIPLE customers at once.
+     *
+     * Called from the manage-rate page when the admin has selected several
+     * customers in the dropdown and clicks the "End Date" button — a popup
+     * shows how many customers are selected and an editable end_date input;
+     * on save this endpoint bulk-updates every rate row for every selected
+     * customer to the same end_date.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateMultipleCustomersEndDate(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_ids'   => ['required', 'array', 'min:1'],
+            'customer_ids.*' => ['required', 'integer'],
+            'end_date'       => ['required', 'date'],
+        ]);
+
+        // Enforce that the end_date is at least tomorrow (today + 1 day).
+        $tomorrow = \Carbon\Carbon::tomorrow()->toDateString();
+        if ($validated['end_date'] < $tomorrow) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The end date must be tomorrow (' . $tomorrow . ') or a later date.',
+            ], 422);
+        }
+
+        // Cast all submitted IDs to integers (HTTP requests send strings).
+        $customerIds = array_map('intval', $validated['customer_ids']);
+
+        // Bulk-update every rate row for every selected customer in one query.
+        $updated = \App\Models\CourierRate::whereIn('customer_id', $customerIds)
+            ->update(['end_date' => $validated['end_date']]);
+
+        $customerCount = count($customerIds);
+
+        return response()->json([
+            'success'        => true,
+            'message'        => 'End date updated successfully for ' . $updated . ' rate(s) across ' . $customerCount . ' customer(s).',
+            'updated'        => $updated,
+            'customer_count' => $customerCount,
+            'end_date'       => $validated['end_date'],
+        ]);
+    }
+
+    /**
      * Apply a downloaded customer-rate Excel sheet as a new dated rate set.
      * Rows are matched by service, weight range and zone number.
      */
@@ -7826,6 +7874,30 @@ class AdminController extends Controller
 
         return redirect()->back()
             ->with('success', "Account for {$customerName} has been {$action} successfully.");
+    }
+
+    /**
+     * Enable or disable a customer's ability to create shipments.
+     *
+     * This is INDEPENDENT from the account `status` toggle:
+     *  - status               -> can the customer log in at all
+     *  - can_create_shipment  -> can the customer create new shipments
+     *
+     * When disabled, the customer sees a warning banner on the create-shipment
+     * page and the storeShipment endpoint rejects the request.
+     */
+    public function toggleShipmentAccess($id)
+    {
+        $customer = Customer::findOrFail($id);
+
+        $customer->can_create_shipment = !$customer->can_create_shipment;
+        $customer->save();
+
+        $action = $customer->can_create_shipment ? 'enabled' : 'disabled';
+        $customerName = $customer->first_name . ' ' . $customer->last_name;
+
+        return redirect()->back()
+            ->with('success', "Shipment creation for {$customerName} has been {$action} successfully.");
     }
 
     /**

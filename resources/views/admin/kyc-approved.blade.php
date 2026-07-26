@@ -133,6 +133,32 @@
             background-color: #15803d;
             color: #fff;
         }
+        /* Shipment access toggle (independent from account status) */
+        .btn-toggle-shipment {
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-toggle-shipment.is-enabled {
+            background-color: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #1d4ed8;
+        }
+        .btn-toggle-shipment.is-enabled:hover {
+            background-color: #1d4ed8;
+            color: #fff;
+        }
+        .btn-toggle-shipment.is-disabled {
+            background-color: #fef3c7;
+            color: #b45309;
+            border: 1px solid #b45309;
+        }
+        .btn-toggle-shipment.is-disabled:hover {
+            background-color: #b45309;
+            color: #fff;
+        }
         .status-pill {
             display: inline-block;
             padding: 2px 10px;
@@ -229,6 +255,7 @@
                                                 <th>Password</th>
                                                 <th>Approved At</th>
                                                 <th>Account Status</th>
+                                                <th>Shipment Access</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -281,6 +308,16 @@
                                                         <span class="status-pill inactive">Deactivated</span>
                                                     @endif
                                                 </td>
+                                                <td>
+                                                    @php
+                                                        $canShip = isset($kyc->customer->can_create_shipment) ? (bool) $kyc->customer->can_create_shipment : true;
+                                                    @endphp
+                                                    @if($canShip)
+                                                        <span class="status-pill active">Enabled</span>
+                                                    @else
+                                                        <span class="status-pill inactive">Disabled</span>
+                                                    @endif
+                                                </td>
                                                 <td class="action-cell">
                                                     <div class="d-flex flex-wrap gap-1">
                                                         @if($customerId)
@@ -302,6 +339,21 @@
                                                                 @endif
                                                             </form>
                                                         @endif
+                                                        @php
+                                                            $canShip = isset($kyc->customer->can_create_shipment) ? (bool) $kyc->customer->can_create_shipment : true;
+                                                        @endphp
+                                                        <form action="{{ route('admin.customer.toggle-shipment-access', $customerId) }}" method="POST" class="d-inline toggle-shipment-form">
+                                                            @csrf
+                                                            @if($canShip)
+                                                                <button type="submit" class="btn-toggle-shipment is-enabled" title="Disable shipment creation for this customer">
+                                                                    <i class="ti ti-package-off me-1"></i>Disable Shipment
+                                                                </button>
+                                                            @else
+                                                                <button type="submit" class="btn-toggle-shipment is-disabled" title="Enable shipment creation for this customer">
+                                                                    <i class="ti ti-package me-1"></i>Enable Shipment
+                                                                </button>
+                                                            @endif
+                                                        </form>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -412,7 +464,7 @@
                     emptyTable: "No approved KYC submissions found.",
                 },
                 columnDefs: [
-                    { orderable: false, targets: [10, 11] }
+                    { orderable: false, targets: [10, 11, 12] }
                 ]
             });
 
@@ -429,6 +481,35 @@
                 var icon = isDeactivate ? 'warning' : 'question';
                 var confirmColor = isDeactivate ? '#b91c1c' : '#15803d';
                 var confirmText = isDeactivate ? 'Yes, Deactivate' : 'Yes, Activate';
+                Swal.fire({
+                    title: title,
+                    text: text,
+                    icon: icon,
+                    showCancelButton: true,
+                    confirmButtonColor: confirmColor,
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: confirmText,
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            });
+
+            // SweetAlert2 confirmation for Enable/Disable shipment creation
+            $('.toggle-shipment-form').on('submit', function(e) {
+                e.preventDefault();
+                var form = this;
+                var btn = $(form).find('button[type="submit"]');
+                var isDisable = btn.hasClass('is-enabled');
+                var title = isDisable ? 'Disable Shipment Creation?' : 'Enable Shipment Creation?';
+                var text = isDisable
+                    ? "This customer will no longer be able to create new shipments. They will see a warning on the create-shipment page. You can re-enable it later."
+                    : "This will allow the customer to create new shipments again.";
+                var icon = isDisable ? 'warning' : 'question';
+                var confirmColor = isDisable ? '#b45309' : '#1d4ed8';
+                var confirmText = isDisable ? 'Yes, Disable' : 'Yes, Enable';
                 Swal.fire({
                     title: title,
                     text: text,

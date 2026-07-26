@@ -64,7 +64,7 @@ class Admin extends Authenticatable
             'customer' => [
                 'label' => 'Customer & Shipments',
                 'icon' => 'ti-users',
-                'routes' => ['companies', 'kyc-pending*', 'kyc-approved*', 'customer-profile*', 'kyc-export*', 'customer/*/toggle-status', 'assign-delivery', 'receive-shipment', 'generate-label', 'ready-to-dispatch'],
+                'routes' => ['companies', 'kyc-pending*', 'kyc-approved*', 'customer-profile*', 'kyc-export*', 'customer/*/toggle-status', 'customer/*/toggle-shipment-access', 'assign-delivery', 'receive-shipment', 'generate-label', 'ready-to-dispatch'],
             ],
             'manage_rate' => [
                 'label' => 'Manage Rate',

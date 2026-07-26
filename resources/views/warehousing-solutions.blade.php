@@ -562,7 +562,8 @@
                     <div class="about-image-grid">
                         <div class="world-map-placeholder">
                             <!-- <img src="{{ data_get($overviewContent, 'content.image', 'images/map-pattern.png') }}" class="img-fluid"> -->
-                            <img src="{{ asset('assets/images/map-pattern.png') }}" class="img-fluid">
+                            <!-- <img src="{{ asset('assets/images/map-pattern.png') }}" class="img-fluid"> -->
+                            <img src="{{ asset('website_images/warehousing.webp') }}" class="img-fluid">
                         </div>
                     </div>
                 </div>

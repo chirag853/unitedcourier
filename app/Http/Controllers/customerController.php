@@ -728,7 +728,8 @@ class customerController extends Controller
         $courierServices = \App\Models\CourierService::where('status', 1)->get();
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
         $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
-        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones', 'destinations'));
+        $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
+        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones', 'destinations', 'canCreateShipment'));
     }
 
     /**
@@ -1686,6 +1687,21 @@ class customerController extends Controller
     public function storeShipment(Request $request)
     {
         try {
+            // Block shipment creation if the admin has disabled it for this customer.
+            $customer = auth()->guard('customer')->user();
+            if ($customer && !$customer->can_create_shipment) {
+                $message = 'You do not have the right to create shipments. Please contact United Courier Worldwide.';
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $message,
+                    ], 403);
+                }
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', $message);
+            }
+
             // Validate the request data
             $validatedData = $request->validate([
                 // Shipper Info

@@ -1252,19 +1252,19 @@
             });
 
             // === Common End Date button handler ===
-            // Opens the end_date popup for the currently selected customer
-            // (same popup used by the per-row End Date cells). Requires a
-            // customer to be selected first.
+            // Opens the end_date popup for ALL selected customers.
+            // Shows each customer's details (ID, Name, Email, Phone) in the popup
+            // and updates the end_date for all of them at once.
             $('#customerEndDateBtn').on('click', function() {
-                if (!currentSelectedCustomerId) {
+                if (selectedCustomerIds.length === 0) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'No Customer Selected',
-                        text: 'Please select a customer first to change their end date.',
+                        text: 'Please select at least one customer to change their end date.',
                     });
                     return;
                 }
-                openEndDatePopup(currentSelectedCustomerId, currentCustomerEndDate);
+                openEndDatePopupForMultiple(selectedCustomerIds);
             });
 
             // === Add Rate Modal Setup ===
@@ -1898,6 +1898,7 @@
                 || 'Customer #' + customerId;
             var email = info.email || '—';
             var phone = info.phone_number || '—';
+            var custId = info.id || customerId;
             // Default the editable date to TOMORROW (today + 1 day) so the
             // admin sees the next day's date pre-filled, as requested.
             // The selected date is also FORCED to be at least tomorrow — the
@@ -1912,6 +1913,7 @@
                 '<div style="text-align:left;">'
                 + '<div style="margin-bottom:16px;padding:12px;border:1px solid #e9ecef;border-radius:8px;background:#f8f9fa;">'
                 + '<h6 style="margin:0 0 8px 0;font-weight:600;color:#333;">Customer Details</h6>'
+                + '<p style="margin:4px 0;font-size:14px;"><strong>ID:</strong> ' + escapeHtml(String(custId)) + '</p>'
                 + '<p style="margin:4px 0;font-size:14px;"><strong>Name:</strong> ' + escapeHtml(fullName) + '</p>'
                 + '<p style="margin:4px 0;font-size:14px;"><strong>Email:</strong> ' + escapeHtml(email) + '</p>'
                 + '<p style="margin:4px 0;font-size:14px;"><strong>Phone:</strong> ' + escapeHtml(phone) + '</p>'
@@ -1996,6 +1998,131 @@
                         });
                     }
                 });
+            });
+        }
+
+        // ============================================================
+        // End Date popup for MULTIPLE selected customers.
+        // Shows ALL selected customers' details in a scrollable list
+        // and updates end_date for all of them at once via AJAX.
+        // ============================================================
+        function openEndDatePopupForMultiple(customerIds) {
+            if (!customerIds || customerIds.length === 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Customer Selected',
+                    text: 'Please select at least one customer.',
+                });
+                return;
+            }
+
+            // Default the editable date to TOMORROW
+            var tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            var endDateValue = tomorrow.toISOString().split('T')[0];
+            var minDate = endDateValue;
+
+            // Build customer list HTML from the checkbox labels (which have name + email/phone)
+            var customerListHtml = '';
+            customerIds.forEach(function(cid) {
+                var cb = document.querySelector('.customer-checkbox[value="' + cid + '"]');
+                if (cb) {
+                    var labelEl = cb.closest('label');
+                    var labelText = labelEl ? labelEl.querySelector('.customer-checkbox-label').textContent.trim() : ('Customer #' + cid);
+                    customerListHtml += '<div style="padding:6px 8px;margin:2px 0;background:#fff;border-radius:4px;border:1px solid #dee2e6;font-size:13px;">'
+                        + '<strong>#' + escapeHtml(String(cid)) + '</strong> — ' + escapeHtml(labelText)
+                        + '</div>';
+                } else {
+                    customerListHtml += '<div style="padding:6px 8px;margin:2px 0;background:#fff;border-radius:4px;border:1px solid #dee2e6;font-size:13px;">'
+                        + '<strong>#' + escapeHtml(String(cid)) + '</strong></div>';
+                }
+            });
+
+            var popupHtml =
+                '<div style="text-align:left;">'
+                + '<div style="margin-bottom:16px;padding:12px;border:1px solid #e9ecef;border-radius:8px;background:#f8f9fa;">'
+                + '<h6 style="margin:0 0 8px 0;font-weight:600;color:#333;">Selected Customers (' + customerIds.length + ')</h6>'
+                + '<div style="max-height:200px;overflow-y:auto;">'
+                + customerListHtml
+                + '</div>'
+                + '</div>'
+                + '<div style="margin-bottom:8px;">'
+                + '<label for="swalEndDateInput" style="display:block;font-weight:600;margin-bottom:6px;">End Date</label>'
+                + '<input type="date" id="swalEndDateInput" class="swal2-input" value="' + endDateValue + '" min="' + minDate + '" style="width:100%;margin:0;">'
+                + '<small style="color:#6c757d;display:block;margin-top:6px;">The end date must be <strong>tomorrow or later</strong>. This will update the end date for <strong>all ' + customerIds.length + ' selected customers</strong>.</small>'
+                + '</div>'
+                + '</div>';
+
+            Swal.fire({
+                title: 'Change End Date',
+                html: popupHtml,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Update End Date',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#6c757d',
+                focusConfirm: false,
+                preConfirm: function() {
+                    var newDate = document.getElementById('swalEndDateInput').value;
+                    if (!newDate) {
+                        Swal.showValidationMessage('Please select a valid end date.');
+                        return false;
+                    }
+                    if (newDate < minDate) {
+                        Swal.showValidationMessage('The end date must be tomorrow (' + minDate + ') or a later date.');
+                        return false;
+                    }
+                    return newDate;
+                }
+            }).then(function(result) {
+                if (!result.isConfirmed) {
+                    return;
+                }
+                var newEndDate = result.value;
+
+                // Update end_date for ALL selected customers one by one
+                var updatePromises = customerIds.map(function(cid) {
+                    return $.ajax({
+                        url: '{{ url("/admin/manage-rate/update-customer-end-date") }}/' + cid,
+                        type: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            end_date: newEndDate
+                        }
+                    });
+                });
+
+                Promise.all(updatePromises)
+                    .then(function(responses) {
+                        var allSuccess = responses.every(function(r) { return r.success; });
+                        if (allSuccess) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Updated!',
+                                text: 'End date updated for ' + customerIds.length + ' customer(s).',
+                                timer: 1800,
+                                showConfirmButton: false
+                            });
+                            // Reload the customer rates table
+                            if (currentSelectedCustomerId) {
+                                loadCustomerRates(currentSelectedCustomerId);
+                            }
+                        } else {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Partial Success',
+                                text: 'Some updates may have failed. Please check the rates.'
+                            });
+                        }
+                    })
+                    .catch(function() {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'Failed to update end date for some customers. Please try again.'
+                        });
+                    });
             });
         }
 
