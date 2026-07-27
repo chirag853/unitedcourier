@@ -330,11 +330,11 @@
         $kycRecord = \App\Models\KycDetail::where('customer_id', $customerId)->first();
         @endphp
 
-        <!-- Sidenav Menu Start (hidden while KYC stepper is showing) -->
-        @if($kycExists)
+        <!-- Sidenav Menu Start (hidden until KYC is approved) -->
+        @if($kycExists && $kycRecord && $kycRecord->kyc_status == 'approved')
         @include('customer.partials.sidebar')
         @else
-        {{-- Sidebar is hidden during KYC stepper: hide toggle buttons + make content full width --}}
+        {{-- Sidebar is hidden while KYC is not yet approved (stepper / progress): hide toggle buttons + make content full width --}}
         <style>
             #mobile_btn, #toggle_btn2 { display: none !important; }
             .page-wrapper { margin-left: 0 !important; }
