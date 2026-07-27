@@ -84,14 +84,36 @@
             <!-- Start Content -->
             <div class="content">
                 @if(isset($canCreateShipment) && !$canCreateShipment)
-                    <div class="alert alert-danger d-flex align-items-center mb-4" role="alert" style="border-left: 4px solid #dc3545;">
-                        <i class="ti ti-alert-triangle me-2 fs-4"></i>
-                        <div>
-                            <strong>You do not have the right to create shipments.</strong>
-                            Please contact <strong>United Courier Worldwide</strong> to enable shipment creation for your account.
+                    <div class="card border-0 rounded-0 shadow-sm mb-4" style="border-left: 4px solid #dc3545;">
+                        <div class="card-body p-4 p-md-5 text-center">
+                            <div class="d-flex flex-column align-items-center">
+                                <div class="mb-3 d-flex align-items-center justify-content-center"
+                                    style="width: 72px; height: 72px; border-radius: 50%; background: #fdecea;">
+                                    <i class="bi bi-lock-fill" style="font-size: 36px; color: #dc3545;"></i>
+                                </div>
+                                <h4 class="fw-bold mb-2" style="color: #dc3545;">Shipment Creation is Disabled</h4>
+                                <p class="text-muted mb-3" style="max-width: 540px;">
+                                    You do not have the right to create shipments. Your account needs to be enabled by our team before you can start shipping.
+                                </p>
+                                <div class="alert alert-warning d-inline-flex align-items-center mb-3" style="gap: 8px;">
+                                    <i class="ti ti-info-circle"></i>
+                                    <span>Please contact <strong>United Courier Worldwide</strong> to enable shipment creation for your account.</span>
+                                </div>
+                                <div class="d-flex flex-wrap justify-content-center gap-2">
+                                    <a href="mailto:support@unitedcourierworldwide.com" class="btn btn-primary">
+                                        <i class="ti ti-mail me-1"></i> Contact Support
+                                    </a>
+                                    <a href="{{ route('customer.dashboard') }}" class="btn btn-outline-secondary">
+                                        <i class="ti ti-arrow-left me-1"></i> Back to Dashboard
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 @endif
+                @if(isset($canCreateShipment) && !$canCreateShipment)
+                    {{-- When shipment creation is disabled, hide the page header and form/sections below --}}
+                @else
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
@@ -8233,6 +8255,7 @@
                     </div>
                 </div>
                 <!-- card end -->
+                @endif
             </div>
             <!-- End Content -->
             <!-- Start Footer -->
@@ -9444,6 +9467,83 @@
         }
         // Run once on load to set hint/placeholder for the pre-selected type
         window.validateShipperKycNumber();
+    });
+
+    // ===== "Shipper Details (Same as Customer)" checkbox =====
+    // When checked, auto-fill the shipper fields with the logged-in customer's data.
+    @php
+        $kycForPrefill = $customer->kycDetail ?? null;
+        $customerPrefill = [
+            'company_names'  => $kycForPrefill->organization_name ?? trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+            'contact_person' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+            'address_line1'  => $kycForPrefill->billing_address ?? '',
+            'address_line2'  => '',
+            'address_line3'  => '',
+            'pincode'        => '',
+            'city'           => '',
+            'state'          => '',
+            'phone_number'   => $customer->phone_number ?? '',
+            'emails'         => $customer->email ?? '',
+        ];
+    @endphp
+    document.addEventListener('DOMContentLoaded', function () {
+        const sameAsCustomer = document.getElementById('sameAsCustomer');
+        if (!sameAsCustomer) return;
+
+        const customerData = @json($customerPrefill);
+
+        // Remember user-entered values so unchecking restores them
+        const savedValues = {};
+
+        function setField(name, value) {
+            const el = document.querySelector('[name="' + name + '"]');
+            if (!el) return;
+            // Try intl-tel-input aware update for phone field
+            if (el.classList.contains('phone') && window.intlTelInput && el.dataset.intlTelInputId !== undefined) {
+                const iti = window.intlTelInputGlobals?.getInstance(el);
+                if (iti) { iti.setNumber(value); return; }
+            }
+            el.value = value;
+        }
+
+        function getField(name) {
+            const el = document.querySelector('[name="' + name + '"]');
+            if (!el) return '';
+            if (el.classList.contains('phone') && window.intlTelInput && el.dataset.intlTelInputId !== undefined) {
+                const iti = window.intlTelInputGlobals?.getInstance(el);
+                if (iti) return iti.getNumber();
+            }
+            return el.value;
+        }
+
+        const fieldNames = [
+            'shipper_company_names', 'shipper_contact_person',
+            'shipper_address_line1', 'shipper_address_line2', 'shipper_address_line3',
+            'shipper_pincode', 'shipper_city', 'shipper_state',
+            'shipper_phone_number', 'shipper_emails'
+        ];
+
+        sameAsCustomer.addEventListener('change', function () {
+            if (this.checked) {
+                // Save current values then pre-fill from customer data
+                fieldNames.forEach(function (n) { savedValues[n] = getField(n); });
+                setField('shipper_company_names', customerData.company_names || '');
+                setField('shipper_contact_person', customerData.contact_person || '');
+                setField('shipper_address_line1', customerData.address_line1 || '');
+                setField('shipper_address_line2', customerData.address_line2 || '');
+                setField('shipper_address_line3', customerData.address_line3 || '');
+                setField('shipper_pincode', customerData.pincode || '');
+                setField('shipper_city', customerData.city || '');
+                setField('shipper_state', customerData.state || '');
+                setField('shipper_phone_number', customerData.phone_number || '');
+                setField('shipper_emails', customerData.emails || '');
+            } else {
+                // Restore previously entered values
+                fieldNames.forEach(function (n) {
+                    if (savedValues[n] !== undefined) setField(n, savedValues[n]);
+                });
+            }
+        });
     });
 
     // Handle Next button click to open Consignee Info accordion
