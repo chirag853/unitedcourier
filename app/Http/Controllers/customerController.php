@@ -816,13 +816,28 @@ class customerController extends Controller
     public function kycSubmit(Request $request)
     {
         try {
-            // Validate the request
+            // Normalize boolean-ish fields that arrive as strings via FormData
+            foreach (['gst_verified', 'otp_verified', 'aadhar_verified', 'pan_verified', 'terms_accepted'] as $boolField) {
+                if ($request->has($boolField)) {
+                    $val = $request->input($boolField);
+                    if (is_string($val)) {
+                        $request->merge([$boolField => in_array(strtolower($val), ['1', 'true', 'yes', 'on'], true)]);
+                    }
+                }
+            }
+
+            // Validate the request (text fields + file fields)
             $validated = $request->validate([
                 'gst_number' => 'nullable|string|size:15|regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
-                'gst_verified' => 'boolean',
-                'otp_verified' => 'boolean',
+                'gst_verified' => 'nullable|boolean',
+                'otp_verified' => 'nullable|boolean',
                 'aadhar_number' => 'nullable|string|max:20',
-                'aadhar_verified' => 'boolean',
+                'aadhar_verified' => 'nullable|boolean',
+                'aadhar_address' => 'nullable|string|max:1000',
+                'pan_number' => 'nullable|string|max:20',
+                'pan_holder_name' => 'nullable|string|max:255',
+                'pan_dob' => 'nullable|string|max:20',
+                'pan_verified' => 'nullable|boolean',
                 'organization_name' => 'nullable|string|max:255',
                 'authorized_signatory' => 'nullable|string|max:255',
                 'signature' => 'nullable|string',
@@ -830,8 +845,13 @@ class customerController extends Controller
                 'billing_gst' => 'nullable|string|max:15',
                 'billing_contact' => 'nullable|string|max:20',
                 'billing_email' => 'nullable|string|email|max:255',
-                'terms_accepted' => 'boolean',
+                'terms_accepted' => 'nullable|boolean',
                 'terms_accepted_at' => 'nullable|date',
+                // File uploads
+                'aadhar_front_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'aadhar_back_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'pan_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'signature_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
             ], [
                 'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
                 'gst_number.size' => 'The GST number must be exactly 15 characters.',
@@ -839,15 +859,78 @@ class customerController extends Controller
 
             // Get current customer
             $customer = auth()->guard('customer')->user();
-            
+
+            // Ensure upload directories exist
+            $uploadDirs = [
+                'uploads/aadhar_front_documents',
+                'uploads/aadhar_back_documents',
+                'uploads/pan_documents',
+                'uploads/signature_documents',
+            ];
+            foreach ($uploadDirs as $dir) {
+                $path = public_path($dir);
+                if (!file_exists($path)) {
+                    mkdir($path, 0755, true);
+                }
+            }
+
+            // Handle Aadhaar front document upload
+            $aadharFrontPath = null;
+            if ($request->hasFile('aadhar_front_document')) {
+                $file = $request->file('aadhar_front_document');
+                $filename = time() . '_aadhar_front_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/aadhar_front_documents'), $filename);
+                $aadharFrontPath = 'uploads/aadhar_front_documents/' . $filename;
+            }
+
+            // Handle Aadhaar back document upload
+            $aadharBackPath = null;
+            if ($request->hasFile('aadhar_back_document')) {
+                $file = $request->file('aadhar_back_document');
+                $filename = time() . '_aadhar_back_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/aadhar_back_documents'), $filename);
+                $aadharBackPath = 'uploads/aadhar_back_documents/' . $filename;
+            }
+
+            // Handle PAN document upload
+            $panDocumentPath = null;
+            if ($request->hasFile('pan_document')) {
+                $file = $request->file('pan_document');
+                $filename = time() . '_pan_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/pan_documents'), $filename);
+                $panDocumentPath = 'uploads/pan_documents/' . $filename;
+            }
+
+            // Handle signature document upload
+            $signaturePath = null;
+            if ($request->hasFile('signature_document')) {
+                $file = $request->file('signature_document');
+                $filename = time() . '_signature_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/signature_documents'), $filename);
+                $signaturePath = 'uploads/signature_documents/' . $filename;
+            }
+
+            // Normalize PAN number to uppercase
+            $panNumber = $request->pan_number ? strtoupper(preg_replace('/\s+/', '', $request->pan_number)) : null;
+
             // Prepare KYC data
             $kycData = [
                 'customer_id' => $customer->id,
+                'kyc_type' => 'personal',
                 'gst_number' => $request->gst_number,
                 'gst_verified' => $request->gst_verified ?? false,
                 'otp_verified' => $request->otp_verified ?? false,
                 'aadhar_number' => $request->aadhar_number,
                 'aadhar_verified' => $request->aadhar_verified ?? false,
+                'aadhar_address' => $request->aadhar_address,
+                'aadhar_front_document' => $aadharFrontPath,
+                'aadhar_back_document' => $aadharBackPath,
+                'pan_number' => $panNumber,
+                'pan_holder_name' => $request->pan_holder_name,
+                'pan_dob' => $request->pan_dob,
+                'pan_document' => $panDocumentPath,
+                'pan_verified' => $request->pan_verified ?? false,
+                'signature_document' => $signaturePath,
                 'organization_name' => $request->organization_name,
                 'authorized_signatory' => $request->authorized_signatory,
                 'signature' => $request->signature,

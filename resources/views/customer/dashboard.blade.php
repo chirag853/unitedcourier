@@ -2497,6 +2497,7 @@
                         handleFilePreview('aadharFrontFileInput', 'aadharFrontUploadPlaceholder', 'aadharFrontPreview', 'aadharFrontFileName', 'aadhar_front_file');
                         handleFilePreview('aadharBackFileInput', 'aadharBackUploadPlaceholder', 'aadharBackPreview', 'aadharBackFileName', 'aadhar_back_file');
                         handleFilePreview('panFileInput', 'panUploadPlaceholder', 'panPreview', 'panFileName', 'pan_file');
+                        handleFilePreview('signatureFileInput', 'signatureUploadPlaceholder', 'signaturePreview', 'signatureFileName', 'signature_file');
                         // Business KYC document previews
                         handleFilePreview('bizGstCertFileInput', 'bizGstCertUploadPlaceholder', 'bizGstCertPreview', 'bizGstCertFileName', 'gst_certificate_file');
                         handleFilePreview('bizIecFileInput', 'bizIecUploadPlaceholder', 'bizIecPreview', 'bizIecFileName', 'iec_file');
@@ -2895,14 +2896,43 @@
                             submitBtn.disabled = true;
                         }
 
-                        // Submit via AJAX
+                        // Build FormData so that File objects are transmitted correctly
+                        const formData = new FormData();
+                        // Append all text fields (skip File objects, append them separately)
+                        Object.keys(kycData).forEach(function (key) {
+                            const value = kycData[key];
+                            if (value === null || value === undefined) return;
+                            if (value instanceof File) return; // handled below
+                            // Convert booleans to 1/0 (FormData stringifies, and Laravel's
+                            // boolean rule rejects the string "false")
+                            if (typeof value === 'boolean') {
+                                formData.append(key, value ? 1 : 0);
+                            } else {
+                                formData.append(key, value);
+                            }
+                        });
+                        // Append file uploads (if present)
+                        if (kycData.aadhar_front_file instanceof File) {
+                            formData.append('aadhar_front_document', kycData.aadhar_front_file);
+                        }
+                        if (kycData.aadhar_back_file instanceof File) {
+                            formData.append('aadhar_back_document', kycData.aadhar_back_file);
+                        }
+                        if (kycData.pan_file instanceof File) {
+                            formData.append('pan_document', kycData.pan_file);
+                        }
+                        if (kycData.signature_file instanceof File) {
+                            formData.append('signature_document', kycData.signature_file);
+                        }
+
+                        // Submit via AJAX (multipart/form-data — do NOT set Content-Type manually)
                         fetch('{{ route("customer.kyc.submit") }}', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json'
                                 },
-                                body: JSON.stringify(kycData)
+                                body: formData
                             })
                             .then(response => response.json())
                             .then(data => {
