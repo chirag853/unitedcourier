@@ -652,6 +652,16 @@
                                                             $docBase = asset('uploads/');
                                                             $customerId = $kyc->customer->id ?? null;
                                                             $isActive = isset($kyc->customer->status) ? (bool) $kyc->customer->status : true;
+                                                            // Strip a leading "uploads/" (or "uploads\") from stored paths so the
+                                                            // final URL doesn't become ".../uploads/uploads/...".
+                                                            $docUrl = function ($path) use ($docBase) {
+                                                                if (!$path) return '';
+                                                                $clean = ltrim($path, '/\\');
+                                                                if (str_starts_with(strtolower($clean), 'uploads/')) {
+                                                                    $clean = substr($clean, strlen('uploads/'));
+                                                                }
+                                                                return $docBase . '/' . $clean;
+                                                            };
                                                         @endphp
                                                         @if($customerId)
                                                             <a href="{{ route('admin.customer-profile', $customerId) }}" class="btn-profile" title="View customer profile, login credentials & full KYC">
@@ -680,30 +690,30 @@
                                                             data-pan-holder-name="{{ $kyc->pan_holder_name ?? '' }}"
                                                             data-pan-dob="{{ $kyc->pan_dob ? $kyc->pan_dob->format('d M Y') : '' }}"
                                                             data-pan-verified="{{ $kyc->pan_verified ? '1' : '0' }}"
-                                                            data-aadhar-front-doc="{{ $kyc->aadhar_front_document ? $docBase . '/' . ltrim($kyc->aadhar_front_document, '/') : '' }}"
-                                                            data-aadhar-back-doc="{{ $kyc->aadhar_back_document ? $docBase . '/' . ltrim($kyc->aadhar_back_document, '/') : '' }}"
-                                                            data-pan-doc="{{ $kyc->pan_document ? $docBase . '/' . ltrim($kyc->pan_document, '/') : '' }}"
-                                                            data-signature-doc="{{ $kyc->signature_document ? $docBase . '/' . ltrim($kyc->signature_document, '/') : '' }}"
-                                                            data-merchant-agreement-doc="{{ $kyc->merchant_agreement ? $docBase . '/' . ltrim($kyc->merchant_agreement, '/') : '' }}"
+                                                            data-aadhar-front-doc="{{ $docUrl($kyc->aadhar_front_document) }}"
+                                                            data-aadhar-back-doc="{{ $docUrl($kyc->aadhar_back_document) }}"
+                                                            data-pan-doc="{{ $docUrl($kyc->pan_document) }}"
+                                                            data-signature-doc="{{ $docUrl($kyc->signature_document) }}"
+                                                            data-merchant-agreement-doc="{{ $docUrl($kyc->merchant_agreement) }}"
                                                             data-billing-address="{{ $kyc->billing_address ?? '' }}"
                                                             data-billing-gst="{{ $kyc->billing_gst ?? '' }}"
                                                             data-billing-contact="{{ $kyc->billing_contact ?? '' }}"
                                                             data-billing-email="{{ $kyc->billing_email ?? '' }}"
                                                             data-csb-ad-code="{{ $csb->ad_code ?? '' }}"
-                                                            data-csb-ad-code-doc="{{ $csb && $csb->ad_code_document ? $docBase . '/' . ltrim($csb->ad_code_document, '/') : '' }}"
+                                                            data-csb-ad-code-doc="{{ $docUrl($csb->ad_code_document ?? null) }}"
                                                             data-csb-iec-number="{{ $csb->iec_number ?? '' }}"
-                                                            data-csb-iec-doc="{{ $csb && $csb->iec_document ? $docBase . '/' . ltrim($csb->iec_document, '/') : '' }}"
+                                                            data-csb-iec-doc="{{ $docUrl($csb->iec_document ?? null) }}"
                                                             data-csb-gst-cert-number="{{ $csb->gst_certificate_number ?? '' }}"
-                                                            data-csb-gst-cert-doc="{{ $csb && $csb->gst_certificate_document ? $docBase . '/' . ltrim($csb->gst_certificate_document, '/') : '' }}"
-                                                            data-csb-gst-doc="{{ $csb && $csb->gst_document ? $docBase . '/' . ltrim($csb->gst_document, '/') : '' }}"
-                                                            data-csb-lut-doc="{{ $csb && $csb->lut_document ? $docBase . '/' . ltrim($csb->lut_document, '/') : '' }}"
+                                                            data-csb-gst-cert-doc="{{ $docUrl($csb->gst_certificate_document ?? null) }}"
+                                                            data-csb-gst-doc="{{ $docUrl($csb->gst_document ?? null) }}"
+                                                            data-csb-lut-doc="{{ $docUrl($csb->lut_document ?? null) }}"
                                                             data-csb-lut-expiry="{{ $csb && $csb->lut_expiry_date ? $csb->lut_expiry_date->format('d M Y') : '' }}"
                                                             data-csb-lut-bond-year="{{ $csb->lut_bond_year ?? '' }}"
                                                             data-csb-bank-account="{{ $csb->bank_account_number ?? '' }}"
                                                             data-csb-bank-type="{{ $csb->bank_type ?? '' }}"
-                                                            data-csb-aadhar-doc="{{ $csb && $csb->aadhar_document ? $docBase . '/' . ltrim($csb->aadhar_document, '/') : '' }}"
-                                                            data-csb-signature-doc="{{ $csb && $csb->signature_document ? $docBase . '/' . ltrim($csb->signature_document, '/') : '' }}"
-                                                            data-csb-merchant-agreement-doc="{{ $csb && $csb->merchant_agreement ? $docBase . '/' . ltrim($csb->merchant_agreement, '/') : '' }}"
+                                                            data-csb-aadhar-doc="{{ $docUrl($csb->aadhar_document ?? null) }}"
+                                                            data-csb-signature-doc="{{ $docUrl($csb->signature_document ?? null) }}"
+                                                            data-csb-merchant-agreement-doc="{{ $docUrl($csb->merchant_agreement ?? null) }}"
                                                             title="View KYC Details">
                                                             <i class="ti ti-eye me-1"></i>View KYC
                                                         </button>
