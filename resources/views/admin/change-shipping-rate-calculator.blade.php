@@ -138,6 +138,7 @@
                                                 <th>ID</th>
                                                 <th>Section Type</th>
                                                 <th>Title</th>
+                                                <th>Image</th>
                                                 <th>Content Preview</th>
                                                 <th>Display Order</th>
                                                 <th>Status</th>
@@ -153,6 +154,13 @@
                                                     </td>
                                                     <td>
                                                         <strong>{{ $content->title ?? ($content->page_badge_text ?? '-') }}</strong>
+                                                    </td>
+                                                    <td>
+                                                        @if(!empty($content->image))
+                                                            <img src="{{ asset($content->image) }}" alt="image" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid #eee;">
+                                                        @else
+                                                            <span class="text-muted">—</span>
+                                                        @endif
                                                     </td>
                                                     <td>
                                                         <div class="content-preview">
@@ -173,10 +181,11 @@
                                                     </td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" 
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#editModal" 
-                                                                onclick="editContent({{ $content->id }}, '{{ $content->section_type }}', '{{ addslashes($content->title ?? '') }}', '{{ addslashes($content->subtitle ?? '') }}', '{{ addslashes($content->description ?? '') }}', '{{ addslashes($content->page_badge_text ?? '') }}', '{{ addslashes($content->page_button_text ?? '') }}', '{{ addslashes($content->page_icon_class ?? '') }}', '{{ addslashes($content->page_tag ?? '') }}', '{{ addslashes($content->page_label ?? '') }}', '{{ addslashes($content->page_placeholder ?? '') }}', '{{ addslashes($content->link ?? '') }}', {{ $content->display_order }}, {{ $content->status ? 'true' : 'false' }})">
+                                                            <button type="button" class="btn btn-sm btn-primary action-btn"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#editModal"
+                                                                data-image="{{ $content->image ?? '' }}"
+                                                                onclick="editContent({{ $content->id }}, '{{ $content->section_type }}', '{{ addslashes($content->title ?? '') }}', '{{ addslashes($content->subtitle ?? '') }}', '{{ addslashes($content->description ?? '') }}', '{{ addslashes($content->page_badge_text ?? '') }}', '{{ addslashes($content->page_button_text ?? '') }}', '{{ addslashes($content->page_icon_class ?? '') }}', '{{ addslashes($content->page_tag ?? '') }}', '{{ addslashes($content->page_label ?? '') }}', '{{ addslashes($content->page_placeholder ?? '') }}', '{{ addslashes($content->link ?? '') }}', {{ $content->display_order }}, {{ $content->status ? 'true' : 'false' }}, this.getAttribute('data-image'))">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">
@@ -187,7 +196,7 @@
                                                 </tr>
                                             @empty
                                                 <tr>
-                                                    <td colspan="7" class="text-center py-4">
+                                                    <td colspan="8" class="text-center py-4">
                                                         <p class="text-muted">No shipping rate calculator content found. The page is empty.</p>
                                                     </td>
                                                 </tr>
@@ -219,7 +228,7 @@
                     <h5 class="modal-title">Edit Shipping Rate Calculator Content</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="editForm" method="POST">
+                <form id="editForm" method="POST" enctype="multipart/form-data">
                     @csrf
                     @method('POST')
                     <div class="modal-body">
@@ -250,6 +259,18 @@
                         <div class="mb-3">
                             <label class="form-label">Description</label>
                             <textarea class="form-control" id="edit_description" name="description" rows="4"></textarea>
+                        </div>
+
+                        <div class="mb-3" id="image_field_wrapper" style="display:none;">
+                            <label class="form-label">Image</label>
+                            <input type="file" class="form-control" id="edit_image" name="image" accept="image/*">
+                            <small class="text-muted d-block mt-1">Upload a new image to replace the current one (optional). Allowed: jpg, png, gif, svg, webp (max 10MB).</small>
+                            <div id="current_image_preview" class="mt-2" style="display:none;">
+                                <label class="form-label small text-muted mb-1">Current Image:</label>
+                                <div>
+                                    <img id="current_image_img" src="" alt="current image" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 1px solid #eee;">
+                                </div>
+                            </div>
                         </div>
 
                         <div class="row">
@@ -377,12 +398,15 @@
 
                 var form = $(this);
                 var url = form.attr('action');
-                var formData = form.serialize();
+                // Use FormData so file uploads (image) are sent correctly.
+                var formData = new FormData(form[0]);
 
                 $.ajax({
                     url: url,
                     type: 'POST',
                     data: formData,
+                    processData: false,  // tell jQuery not to process the data
+                    contentType: false,  // tell jQuery not to set contentType
                     beforeSend: function() {
                         $('button[type="submit"]', form).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Saving...');
                     },
@@ -428,7 +452,7 @@
         });
 
         // Edit content function
-        function editContent(id, sectionType, title, subtitle, description, badgeText, buttonText, iconClass, tag, label, placeholder, link, displayOrder, status) {
+        function editContent(id, sectionType, title, subtitle, description, badgeText, buttonText, iconClass, tag, label, placeholder, link, displayOrder, status, image) {
             $('#edit_id').val(id);
             $('#view_section_type').val(sectionType);
             $('#edit_section_type').val(sectionType);
@@ -444,7 +468,26 @@
             $('#edit_link').val(link);
             $('#edit_display_order').val(displayOrder);
             $('#edit_status').prop('checked', status === true || status === 'true' || status === 1);
-            
+
+            // Show the image upload field ONLY for sections that use an image (hero).
+            if (sectionType === 'hero') {
+                $('#image_field_wrapper').show();
+            } else {
+                $('#image_field_wrapper').hide();
+            }
+
+            // Reset the file input (so a previously selected file doesn't persist)
+            $('#edit_image').val('');
+
+            // Show current image preview if one exists
+            if (image) {
+                $('#current_image_img').attr('src', '{{ url("/") }}/' + image);
+                $('#current_image_preview').show();
+            } else {
+                $('#current_image_img').attr('src', '');
+                $('#current_image_preview').hide();
+            }
+
             // Set form action
             $('#editForm').attr('action', '{{ url("/admin/update-shipping-rate-calculator-content") }}/' + id);
         }

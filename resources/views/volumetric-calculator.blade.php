@@ -204,7 +204,7 @@
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div class="">
-                        <img src="{{ asset('/website_images/image.png') }}" class="img-fluid"
+                        <img src="{{ asset($heroData->data['image'] ?? 'website_images/image.png') }}" class="img-fluid"
                             style="max-width: 100%; height: auto;">
                     </div>
                 </div>

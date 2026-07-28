@@ -156,6 +156,10 @@ Route::prefix('admin')->group(function () {
     
     Route::post('/upload-blog-image', [WebsiteAdminController::class, 'uploadBlogImage'])->name('admin.upload-blog-image');
     Route::post('/upload-multiple-blog-images', [WebsiteAdminController::class, 'uploadMultipleBlogImages'])->name('admin.upload-multiple-blog-images');
+    Route::post('/upload-e-commerce-image', [WebsiteAdminController::class, 'uploadEcommerceImage'])->name('admin.upload-e-commerce-image');
+    Route::post('/upload-warehousing-image', [WebsiteAdminController::class, 'uploadWarehousingImage'])->name('admin.upload-warehousing-image');
+    Route::post('/upload-volumetric-image', [WebsiteAdminController::class, 'uploadVolumetricImage'])->name('admin.upload-volumetric-image');
+    Route::post('/upload-shipping-rate-image', [WebsiteAdminController::class, 'uploadShippingRateImage'])->name('admin.upload-shipping-rate-image');
     Route::get('/create-blog', [WebsiteAdminController::class, 'createBlog'])->name('admin.create-blog');
     Route::get('/edit-blog/{id}', [WebsiteAdminController::class, 'editBlog'])->name('admin.edit-blog');
     

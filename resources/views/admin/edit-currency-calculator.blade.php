@@ -102,7 +102,7 @@
                 </div>
                 @endif
 
-                <form id="currencyCalculatorForm" method="POST" @if(!$currencyCalculator->id) enctype="multipart/form-data" @endif>
+                <form id="currencyCalculatorForm" method="POST" enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" id="currencyCalculatorId" name="id" value="{{ $currencyCalculator->id }}">
 
@@ -191,20 +191,26 @@
                                     </div>
                                 </div>
 
-                                <!-- Image Display (Read-Only) -->
+                                <!-- Image Upload / Display -->
                                 <div class="card">
                                     <div class="card-header">
                                         <h5 class="card-title">Image</h5>
                                     </div>
                                     <div class="card-body">
                                         @if($currencyCalculator->image)
-                                        <div class="text-center">
+                                        <div class="text-center mb-3">
                                             <img src="{{ asset($currencyCalculator->image) }}" class="preview-img" alt="Content image">
-                                            <p class="text-muted mt-2 mb-0"><small>Image path: {{ $currencyCalculator->image }}</small></p>
+                                            <p class="text-muted mt-2 mb-0"><small>Current image: {{ $currencyCalculator->image }}</small></p>
                                         </div>
-                                        @else
-                                        <p class="text-muted mb-0">No image set</p>
                                         @endif
+                                        <div class="mb-3">
+                                            <label for="image" class="form-label">{{ $currencyCalculator->image ? 'Replace Image (optional)' : 'Upload Image' }}</label>
+                                            <input type="file" class="form-control" id="currencyCalculatorPageImageFile"
+                                                name="image" accept="image/*"
+                                                onchange="previewImage(this, 'currencyCalculatorPageImagePreview')">
+                                            <small class="text-muted d-block mt-1">Allowed: jpg, png, gif, svg, webp (max 10MB). Leave empty to keep current image.</small>
+                                            <div id="currencyCalculatorPageImagePreview" class="mt-2"></div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -246,26 +252,21 @@
                                         <h5 class="card-title">Image</h5>
                                     </div>
                                     <div class="card-body">
-                                        @if($currencyCalculator->id)
-                                            {{-- Edit mode: read-only display --}}
-                                            @if($currencyCalculator->image)
-                                            <div class="text-center">
+                                        @if($currencyCalculator->id && $currencyCalculator->image)
+                                            {{-- Edit mode: show current image + allow replacement --}}
+                                            <div class="text-center mb-3">
                                                 <img src="{{ asset($currencyCalculator->image) }}" class="preview-img" alt="{{ $currencyCalculator->title }}">
-                                                <p class="text-muted mt-2 mb-0"><small>Image cannot be edited</small></p>
-                                            </div>
-                                            @else
-                                            <p class="text-muted mb-0">No image available</p>
-                                            @endif
-                                        @else
-                                            {{-- Create mode: upload field --}}
-                                            <div class="mb-3">
-                                                <label for="image" class="form-label">Upload Image</label>
-                                                <input type="file" class="form-control" id="currencyCalculatorImageFile"
-                                                    name="image" accept="image/*"
-                                                    onchange="previewImage(this, 'currencyCalculatorImagePreview')">
-                                                <div id="currencyCalculatorImagePreview" class="mt-2"></div>
+                                                <p class="text-muted mt-2 mb-0"><small>Current image: {{ $currencyCalculator->image }}</small></p>
                                             </div>
                                         @endif
+                                        <div class="mb-3">
+                                            <label for="image" class="form-label">{{ $currencyCalculator->id ? 'Replace Image (optional)' : 'Upload Image' }}</label>
+                                            <input type="file" class="form-control" id="currencyCalculatorImageFile"
+                                                name="image" accept="image/*"
+                                                onchange="previewImage(this, 'currencyCalculatorImagePreview')">
+                                            <small class="text-muted d-block mt-1">Allowed: jpg, png, gif, svg, webp (max 10MB). Leave empty to keep current image.</small>
+                                            <div id="currencyCalculatorImagePreview" class="mt-2"></div>
+                                        </div>
                                     </div>
                                 </div>
 

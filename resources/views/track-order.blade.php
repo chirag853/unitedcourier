@@ -451,8 +451,13 @@
                     </div>
                 </div>
                 <div class="col-lg-6 animate-on-scroll show animate__animated animate__fadeInLeft" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
-                    @if(!empty($aboutData['link']))
-                    <iframe style="border-radius:20px" width="95%" height="300" src="{{ $aboutData['link'] }}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                    @php
+                        // Video URL is stored under "video_url" in extra_content.
+                        // Fall back to "link" for backward compatibility with older rows.
+                        $videoUrl = $aboutData['video_url'] ?? $aboutData['link'] ?? null;
+                    @endphp
+                    @if(!empty($videoUrl))
+                    <iframe style="border-radius:20px" width="95%" height="300" src="{{ $videoUrl }}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
                     @else
                     <iframe style="border-radius:20px" width="95%" height="300" src="https://www.youtube.com/embed/tOvpjmnh5h4?si=-O5MSnO7OXm2Wspk" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
                     @endif

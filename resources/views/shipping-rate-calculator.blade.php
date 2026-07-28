@@ -200,12 +200,7 @@
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div class="">
-                        @if($heroContent && $heroContent->image)
-                            <!-- <img src="{{ asset($heroContent->image) }}" class="img-fluid"> -->
-                            <img src="{{ asset('website_images/shipping_rate_calculator.png') }}" class="img-fluid">
-                        @else
-                            <img src="{{ asset('website_images/shipping_rate_calculator.png') }}" class="img-fluid">
-                        @endif
+                        <img src="{{ asset($heroContent->image ?? 'website_images/shipping_rate_calculator.png') }}" class="img-fluid">
                     </div>
                 </div>
             </div>

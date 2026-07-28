@@ -446,10 +446,12 @@ class WebsiteAdminController extends Controller
                         'description' => $request->input('content.description'),
                         'button_text' => $request->input('content.button_text'),
                         'button_url' => $request->input('content.button_url'),
+                        'image' => $request->input('content.image'),
                     ];
                     $updateData['data_title'] = $request->input('content.title');
                     $updateData['data_description'] = $request->input('content.description');
                     $updateData['data_button_text'] = $request->input('content.button_text');
+                    $updateData['data_image'] = $request->input('content.image');
                     $updateData['data_extra'] = json_encode([
                         'badge_text' => $request->input('content.badge_text'),
                         'button_url' => $request->input('content.button_url'),
@@ -2342,6 +2344,29 @@ class WebsiteAdminController extends Controller
                 $ebook->content = $request->json_fields ?? [];
                 $ebook->status = $request->status ?? 'Active';
                 $ebook->sort_order = $request->sort_order ?? 0;
+
+                // Handle image file upload (page content row)
+                if ($request->hasFile('image')) {
+                    $request->validate([
+                        'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp,bmp,tiff|max:10240',
+                    ]);
+                    $image = $request->file('image');
+                    $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
+                    $uploadPath = public_path('website_images');
+                    if (!file_exists($uploadPath)) {
+                        mkdir($uploadPath, 0755, true);
+                    }
+                    // Delete previous image if it lived in website_images
+                    if (!empty($ebook->image) && preg_match('#website_images/(.+)#i', $ebook->image, $matches)) {
+                        $oldPath = public_path('website_images/' . $matches[1]);
+                        if (file_exists($oldPath)) {
+                            @unlink($oldPath);
+                        }
+                    }
+                    $image->move($uploadPath, $imageName);
+                    $ebook->image = 'website_images/' . $imageName;
+                }
+
                 $ebook->save();
 
                 return response()->json([
@@ -2559,6 +2584,29 @@ class WebsiteAdminController extends Controller
                 $currencyCalculator->content = $request->json_fields ?? [];
                 $currencyCalculator->status = $request->status ?? 'Active';
                 $currencyCalculator->sort_order = $request->sort_order ?? 0;
+
+                // Handle image file upload (page content row)
+                if ($request->hasFile('image')) {
+                    $request->validate([
+                        'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp,bmp,tiff|max:10240',
+                    ]);
+                    $image = $request->file('image');
+                    $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
+                    $uploadPath = public_path('website_images');
+                    if (!file_exists($uploadPath)) {
+                        mkdir($uploadPath, 0755, true);
+                    }
+                    // Delete previous image if it lived in website_images
+                    if (!empty($currencyCalculator->image) && preg_match('#website_images/(.+)#i', $currencyCalculator->image, $matches)) {
+                        $oldPath = public_path('website_images/' . $matches[1]);
+                        if (file_exists($oldPath)) {
+                            @unlink($oldPath);
+                        }
+                    }
+                    $image->move($uploadPath, $imageName);
+                    $currencyCalculator->image = 'website_images/' . $imageName;
+                }
+
                 $currencyCalculator->save();
 
                 return response()->json([
@@ -3426,6 +3474,189 @@ class WebsiteAdminController extends Controller
 
     // ------------------------------------------------------------------
 
+    /**
+     * Upload an image for the E-commerce Logistics Solutions admin page.
+     * Saves to public/website_images and returns the absolute URL.
+     */
+    public function uploadEcommerceImage(Request $request)
+    {
+        try {
+            if (!$request->hasFile('upload')) {
+                return response()->json([
+                    'uploaded' => false,
+                    'error' => ['message' => 'No file uploaded.']
+                ]);
+            }
+
+            $request->validate([
+                'upload' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
+            ]);
+
+            $file = $request->file('upload');
+            $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+            $uploadPath = public_path('assets/images');
+
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+
+            $file->move($uploadPath, $fileName);
+
+            // Store path relative to public/assets/ (the frontend prepends "assets/")
+            $url = 'images/' . $fileName;
+
+            return response()->json([
+                'uploaded' => true,
+                'url' => $url
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'uploaded' => false,
+                'error' => ['message' => 'Error uploading image: ' . $e->getMessage()]
+            ]);
+        }
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Upload an image for the Warehousing Solutions admin page.
+     * Saves to public/assets/images and returns the path relative to public/
+     * (e.g. "assets/images/photo.jpg") since the frontend renders it directly.
+     */
+    public function uploadWarehousingImage(Request $request)
+    {
+        try {
+            if (!$request->hasFile('upload')) {
+                return response()->json([
+                    'uploaded' => false,
+                    'error' => ['message' => 'No file uploaded.']
+                ]);
+            }
+
+            $request->validate([
+                'upload' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
+            ]);
+
+            $file = $request->file('upload');
+            $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+            $uploadPath = public_path('assets/images');
+
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+
+            $file->move($uploadPath, $fileName);
+
+            // Path relative to public/ (frontend renders this directly)
+            $url = 'assets/images/' . $fileName;
+
+            return response()->json([
+                'uploaded' => true,
+                'url' => $url
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'uploaded' => false,
+                'error' => ['message' => 'Error uploading image: ' . $e->getMessage()]
+            ]);
+        }
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Upload an image for the Volumetric Calculator admin page.
+     * Saves to public/assets/images and returns the path relative to public/
+     * (e.g. "assets/images/photo.jpg") since the frontend renders it directly.
+     */
+    public function uploadVolumetricImage(Request $request)
+    {
+        try {
+            if (!$request->hasFile('upload')) {
+                return response()->json([
+                    'uploaded' => false,
+                    'error' => ['message' => 'No file uploaded.']
+                ]);
+            }
+
+            $request->validate([
+                'upload' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
+            ]);
+
+            $file = $request->file('upload');
+            $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+            $uploadPath = public_path('assets/images');
+
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+
+            $file->move($uploadPath, $fileName);
+
+            // Path relative to public/ (frontend renders this directly)
+            $url = 'assets/images/' . $fileName;
+
+            return response()->json([
+                'uploaded' => true,
+                'url' => $url
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'uploaded' => false,
+                'error' => ['message' => 'Error uploading image: ' . $e->getMessage()]
+            ]);
+        }
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Upload an image for the Shipping Rate Calculator admin page.
+     * Saves to public/assets/images and returns the path relative to public/
+     * (e.g. "assets/images/photo.jpg") since the frontend renders it directly.
+     */
+    public function uploadShippingRateImage(Request $request)
+    {
+        try {
+            if (!$request->hasFile('upload')) {
+                return response()->json([
+                    'uploaded' => false,
+                    'error' => ['message' => 'No file uploaded.']
+                ]);
+            }
+
+            $request->validate([
+                'upload' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
+            ]);
+
+            $file = $request->file('upload');
+            $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+            $uploadPath = public_path('assets/images');
+
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+
+            $file->move($uploadPath, $fileName);
+
+            // Path relative to public/ (frontend renders this directly)
+            $url = 'assets/images/' . $fileName;
+
+            return response()->json([
+                'uploaded' => true,
+                'url' => $url
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'uploaded' => false,
+                'error' => ['message' => 'Error uploading image: ' . $e->getMessage()]
+            ]);
+        }
+    }
+
+    // ------------------------------------------------------------------
+
     public function deleteExpressAirFreightSolutionsContent($id)
     {
         $content = \App\Models\ExpressAirFreightSolutionsPage::findOrFail($id);
@@ -3530,6 +3761,39 @@ class WebsiteAdminController extends Controller
                 'display_order' => $request->display_order ?? 0,
                 'status' => $request->has('status') ? true : false,
             ];
+
+            // Handle image upload (file) — preferred over a plain text path.
+            if ($request->hasFile('image')) {
+                $request->validate([
+                    'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp,bmp,tiff|max:10240',
+                ]);
+
+                $image = $request->file('image');
+                $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
+                $uploadPath = public_path('website_images');
+
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+
+                // Delete the previous image file if it lived in website_images.
+                if (!empty($content->image) && preg_match('#website_images/(.+)#i', $content->image, $matches)) {
+                    $oldPath = public_path('website_images/' . $matches[1]);
+                    if (file_exists($oldPath)) {
+                        @unlink($oldPath);
+                    }
+                }
+
+                $image->move($uploadPath, $imageName);
+
+                // Store path relative to the public/ directory (document root)
+                // so that asset('website_images/...') resolves correctly on
+                // both the admin table and the front-end page.
+                $updateData['image'] = 'website_images/' . $imageName;
+            } elseif ($request->filled('image')) {
+                // Allow a plain text path to be set as well (backwards compatible).
+                $updateData['image'] = $request->image;
+            }
 
             $content->update($updateData);
 

@@ -289,6 +289,15 @@
                                         <label for="heroButtonUrl" class="form-label">Button URL</label>
                                         <input type="text" class="form-control" id="heroButtonUrl" name="content[button_url]" placeholder="#calculator">
                                     </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Hero Image</label>
+                                        <input type="hidden" id="heroImage" name="content[image]">
+                                        <button type="button" class="btn btn-primary btn-upload-image" data-target="heroImage" data-preview="heroImagePreview">
+                                            <i class="ti ti-upload"></i> Upload Image
+                                        </button>
+                                        <input type="file" class="d-none image-file-input" data-target="heroImage" data-preview="heroImagePreview" accept="image/*">
+                                        <img id="heroImagePreview" class="img-thumbnail mt-2" style="max-height:120px; display:none;">
+                                    </div>
                                 </div>
 
                                 <div id="featuresHeaderFields" style="display:none;">
@@ -494,6 +503,8 @@
                     document.getElementById('heroDescription').value = content.description || '';
                     document.getElementById('heroButtonText').value = content.button_text || '';
                     document.getElementById('heroButtonUrl').value = content.button_url || '';
+                    document.getElementById('heroImage').value = content.image || '';
+                    showImagePreview('heroImagePreview', content.image || '');
                     break;
                 case 'features_header':
                     toggleSectionFields('featuresHeaderFields', true);
@@ -603,6 +614,87 @@
         if (modal) {
             modal.hide();
         }
+    });
+
+    // ------------------------------------------------------------------
+    // Image upload helpers (hero image)
+    // ------------------------------------------------------------------
+    function resolveImageUrl(path) {
+        if (!path) return '';
+        let src = String(path).trim();
+        if (!src) return '';
+        if (/^https?:\/\//i.test(src) || src.startsWith('//')) return src;
+        if (src.startsWith('/')) return BASE_URL + src;
+        return BASE_URL + '/' + src;
+    }
+
+    function showImagePreview(previewId, path) {
+        const preview = document.getElementById(previewId);
+        if (!preview) return;
+        if (!path) {
+            preview.style.display = 'none';
+            preview.removeAttribute('src');
+            return;
+        }
+        preview.src = resolveImageUrl(path);
+        preview.style.display = 'block';
+    }
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-upload-image');
+        if (!btn) return;
+        const targetId = btn.getAttribute('data-target');
+        const previewId = btn.getAttribute('data-preview');
+        const fileInput = document.querySelector('.image-file-input[data-target="' + targetId + '"][data-preview="' + previewId + '"]');
+        if (fileInput) fileInput.click();
+    });
+
+    document.addEventListener('change', function(e) {
+        const fileInput = e.target.closest('.image-file-input');
+        if (!fileInput) return;
+        const targetId = fileInput.getAttribute('data-target');
+        const previewId = fileInput.getAttribute('data-preview');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const btn = document.querySelector('.btn-upload-image[data-target="' + targetId + '"]');
+        const originalHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i> Uploading...';
+            btn.disabled = true;
+        }
+
+        const formData = new FormData();
+        formData.append('upload', file);
+
+        fetch(`${BASE_URL}/admin/upload-volumetric-image`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.uploaded) {
+                const input = document.getElementById(targetId);
+                if (input) input.value = data.url;
+                showImagePreview(previewId, data.url);
+            } else {
+                alert('Upload failed: ' + (data.error?.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Upload error:', error);
+            alert('Network error during upload.');
+        })
+        .finally(() => {
+            if (btn) {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+            fileInput.value = '';
+        });
     });
 
     function deleteContent(id) {

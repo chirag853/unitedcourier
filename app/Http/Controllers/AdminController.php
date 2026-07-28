@@ -1303,7 +1303,93 @@ class AdminController extends Controller
                     'status' => 'nullable|in:Active,Inactive',
                 ]);
 
-                $trackOrder->content = $request->json_fields ?? [];
+                $jsonFields = $request->json_fields ?? [];
+
+                // Reverse mapping of getContentAttribute(): json_fields key => db column.
+                // The accessor rebuilds the "content" array from these individual columns
+                // (it ignores the raw content JSON), and the frontend reads the columns
+                // directly. So we must persist edits back to the columns — otherwise the
+                // DB content JSON changes but the frontend never reflects the update.
+                $fieldColumnMap = [
+                    'title'       => 'title',
+                    'description' => 'description',
+                    'image'       => 'image',
+                    'link'        => 'link',
+                    'icon_svg'    => 'icon_svg',
+                    'icon_class'  => 'icon_class',
+                    'color_class' => 'color_scheme',
+                    'badge_text'  => 'badge_text',
+                    'button_text' => 'button_text',
+                    'button_url'  => 'button_url',
+                    'btn_text'    => 'btn_text',
+                    'subtitle'    => 'subtitle',
+                    'paragraphs'  => 'paragraphs',
+                    'question'    => 'question',
+                    'answer'      => 'answer',
+                    'name'        => 'name',
+                    'avatar'      => 'avatar_url',
+                    'rating'      => 'rating',
+                    'text'        => 'text_content',
+                    'value'       => 'stat_value',
+                    'label'       => 'stat_label',
+                    'suffix'      => 'stat_suffix',
+                    'logo_url'    => 'logo_url',
+                    'alt'         => 'alt_text',
+                ];
+
+                // Array fields are stored as newline-separated text.
+                // Both "check_list" (frontend key) and "checklist" (legacy about-row key)
+                // map to the same check_list_text column so the frontend's
+                // $aboutData['check_list'] lookup resolves correctly.
+                $arrayFieldMap = [
+                    'list_items' => 'list_items_text',
+                    'check_list' => 'check_list_text',
+                    'checklist'  => 'check_list_text',
+                ];
+
+                // Preserve existing extra_content keys, then update with submitted extras
+                $extraContent = [];
+                if (!empty($trackOrder->extra_content)) {
+                    $decoded = json_decode($trackOrder->extra_content, true);
+                    if (is_array($decoded)) {
+                        $extraContent = $decoded;
+                    }
+                }
+
+                foreach ($jsonFields as $key => $value) {
+                    if (array_key_exists($key, $fieldColumnMap)) {
+                        $column = $fieldColumnMap[$key];
+                        $trackOrder->{$column} = ($value === '' ? null : $value);
+                    } elseif (array_key_exists($key, $arrayFieldMap)) {
+                        $column = $arrayFieldMap[$key];
+                        $trackOrder->{$column} = is_array($value)
+                            ? implode("\n", $value)
+                            : ($value === '' ? null : $value);
+                        // Remove any legacy copy of this array key from extra_content
+                        // so the accessor's array_merge doesn't reintroduce a stale
+                        // value (e.g. legacy "checklist" vs frontend "check_list").
+                        unset($extraContent[$key]);
+                    } else {
+                        // Unmapped keys live in extra_content JSON
+                        if ($value === '' || $value === null) {
+                            unset($extraContent[$key]);
+                        } else {
+                            $extraContent[$key] = $value;
+                        }
+                    }
+                }
+
+                // Also drop legacy array keys that may already exist in extra_content
+                // from older saves but are now backed by their own text columns.
+                foreach (array_keys($arrayFieldMap) as $legacyKey) {
+                    unset($extraContent[$legacyKey]);
+                }
+
+                $trackOrder->extra_content = !empty($extraContent) ? json_encode($extraContent) : null;
+
+                // Keep the content column in sync as JSON (backward compatibility)
+                $trackOrder->content = json_encode($jsonFields);
+
                 $trackOrder->status = $request->status ?? 'Active';
                 $trackOrder->sort_order = $request->sort_order ?? 0;
                 $trackOrder->save();

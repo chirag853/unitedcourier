@@ -312,7 +312,12 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="heroImage" class="form-label">Image</label>
-                                        <input type="text" class="form-control" id="heroImage" name="content[image]" placeholder="Image path (e.g., images/warehousing.webp)">
+                                        <input type="hidden" id="heroImage" name="content[image]">
+                                        <button type="button" class="btn btn-outline-secondary btn-upload-image" data-target="heroImage" data-preview="heroImagePreview">
+                                            <i class="ti ti-upload"></i> Upload Image
+                                        </button>
+                                        <input type="file" class="d-none image-file-input" data-target="heroImage" data-preview="heroImagePreview" accept="image/*">
+                                        <img id="heroImagePreview" class="img-thumbnail mt-2" style="max-height:120px; display:none;" alt="preview">
                                     </div>
                                     <div class="mb-3">
                                         <label for="heroListItems" class="form-label">List Items (comma-separated)</label>
@@ -385,7 +390,12 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="overviewImage" class="form-label">Image</label>
-                                        <input type="text" class="form-control" id="overviewImage" name="content[image]" placeholder="Image path (e.g., images/map-pattern.png)">
+                                        <input type="hidden" id="overviewImage" name="content[image]">
+                                        <button type="button" class="btn btn-outline-secondary btn-upload-image" data-target="overviewImage" data-preview="overviewImagePreview">
+                                            <i class="ti ti-upload"></i> Upload Image
+                                        </button>
+                                        <input type="file" class="d-none image-file-input" data-target="overviewImage" data-preview="overviewImagePreview" accept="image/*">
+                                        <img id="overviewImagePreview" class="img-thumbnail mt-2" style="max-height:120px; display:none;" alt="preview">
                                     </div>
                                     <div class="mb-3">
                                         <label for="overviewListItems" class="form-label">List Items (comma-separated)</label>
@@ -790,6 +800,89 @@
 
         return formData;
     }
+
+    // ---- Image upload handling ----
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-upload-image');
+        if (!btn) return;
+        const targetId = btn.getAttribute('data-target');
+        const fileInput = document.querySelector(`.image-file-input[data-target="${targetId}"]`);
+        if (fileInput) fileInput.click();
+    });
+
+    document.addEventListener('change', function (e) {
+        const fileInput = e.target.closest('.image-file-input');
+        if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+
+        const targetId = fileInput.getAttribute('data-target');
+        const previewId = fileInput.getAttribute('data-preview');
+        const targetInput = document.getElementById(targetId);
+        const previewImg = document.getElementById(previewId);
+        const btn = document.querySelector(`.btn-upload-image[data-target="${targetId}"]`);
+        const originalBtnHtml = btn ? btn.innerHTML : '';
+
+        const fd = new FormData();
+        fd.append('upload', fileInput.files[0]);
+        fd.append('_token', '{{ csrf_token() }}');
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i> Uploading...';
+        }
+
+        fetch(`${BASE_URL}/admin/upload-warehousing-image`, {
+            method: 'POST',
+            body: fd
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.uploaded && data.url) {
+                if (targetInput) targetInput.value = data.url;
+                if (previewImg) {
+                    previewImg.src = resolveImageUrl(data.url);
+                    previewImg.style.display = 'block';
+                }
+            } else {
+                alert('Upload failed: ' + ((data.error && data.error.message) || data.message || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('An error occurred while uploading the image.');
+        })
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+            }
+            fileInput.value = '';
+        });
+    });
+
+    // Resolve a stored image path (relative or absolute) to a full URL for preview.
+    // Stored values are relative to public/ (e.g. "assets/images/photo.jpg").
+    function resolveImageUrl(path) {
+        if (!path) return '';
+        let src = String(path).trim();
+        if (!src) return '';
+        if (/^https?:\/\//i.test(src) || src.startsWith('//')) return src;
+        if (src.startsWith('/')) return BASE_URL + src;
+        return BASE_URL + '/' + src;
+    }
+
+    // Show preview for existing image paths on edit
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.image-file-input').forEach(fi => {
+            const targetId = fi.getAttribute('data-target');
+            const previewId = fi.getAttribute('data-preview');
+            const targetInput = document.getElementById(targetId);
+            const previewImg = document.getElementById(previewId);
+            if (targetInput && previewImg && targetInput.value) {
+                previewImg.src = resolveImageUrl(targetInput.value);
+                previewImg.style.display = 'block';
+            }
+        });
+    });
 
     function deleteContent(id) {
         if (confirm('Are you sure you want to delete this content?')) {

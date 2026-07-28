@@ -137,19 +137,35 @@
                                     <div class="card-body">
                                         @if($trackOrder->content && is_array($trackOrder->content))
                                             @foreach($trackOrder->content as $key => $value)
+                                            @php
+                                                // Normalize array values (e.g. checklist, list_items) into
+                                                // newline-separated text so they can be edited in a textarea.
+                                                $isListField = in_array($key, ['checklist', 'check_list', 'list_items', 'list'], true);
+                                                if (is_array($value)) {
+                                                    $value = implode("\n", array_map(fn($v) => is_array($v) ? json_encode($v) : (string) $v, $value));
+                                                } else {
+                                                    $value = (string) $value;
+                                                }
+                                                $oldVal = old('json_fields.' . $key, $value);
+                                                if (is_array($oldVal)) {
+                                                    $oldVal = implode("\n", array_map(fn($v) => is_array($v) ? json_encode($v) : (string) $v, $oldVal));
+                                                } else {
+                                                    $oldVal = (string) $oldVal;
+                                                }
+                                            @endphp
                                             <div class="mb-3">
                                                 <label for="json_{{ $key }}" class="form-label">{{ ucwords(str_replace('_', ' ', $key)) }}</label>
-                                                @if(is_string($value) && (strlen($value) > 100 || str_contains($value, "\n")))
-                                                <textarea class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" rows="4">{{ old('json_fields.' . $key, $value) }}</textarea>
+                                                @if($isListField || (is_string($value) && (strlen($value) > 100 || str_contains($value, "\n"))))
+                                                <textarea class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" rows="4">{{ $oldVal }}</textarea>
                                                 @elseif(is_string($value) && (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')))
                                                 <div class="input-group">
-                                                    <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ old('json_fields.' . $key, $value) }}" placeholder="https://...">
+                                                    <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ $oldVal }}" placeholder="https://...">
                                                     @if($value)
                                                     <a href="{{ $value }}" target="_blank" class="btn btn-outline-primary"><i class="ti ti-external-link"></i></a>
                                                     @endif
                                                 </div>
                                                 @else
-                                                <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ old('json_fields.' . $key, $value) }}">
+                                                <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ $oldVal }}">
                                                 @endif
                                             </div>
                                             @endforeach

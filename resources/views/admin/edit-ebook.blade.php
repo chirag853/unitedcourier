@@ -159,20 +159,26 @@
                                     </div>
                                 </div>
 
-                                <!-- Image Display -->
+                                <!-- Image Upload / Display -->
                                 <div class="card">
                                     <div class="card-header">
                                         <h5 class="card-title">Image</h5>
                                     </div>
                                     <div class="card-body">
                                         @if($ebook->image)
-                                        <div class="text-center">
+                                        <div class="text-center mb-3">
                                             <img src="{{ asset($ebook->image) }}" class="ebook-preview-img" alt="Content image">
-                                            <p class="text-muted mt-2 mb-0"><small>Image path: {{ $ebook->image }}</small></p>
+                                            <p class="text-muted mt-2 mb-0"><small>Current image: {{ $ebook->image }}</small></p>
                                         </div>
-                                        @else
-                                        <p class="text-muted mb-0">No image set</p>
                                         @endif
+                                        <div class="mb-3">
+                                            <label for="image" class="form-label">{{ $ebook->image ? 'Replace Image (optional)' : 'Upload Image' }}</label>
+                                            <input type="file" class="form-control" id="ebookPageImageFile"
+                                                name="image" accept="image/*"
+                                                onchange="previewImage(this, 'ebookPageImagePreview')">
+                                            <small class="text-muted d-block mt-1">Allowed: jpg, png, gif, svg, webp (max 10MB). Leave empty to keep current image.</small>
+                                            <div id="ebookPageImagePreview" class="mt-2"></div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -228,26 +234,21 @@
                                         <h5 class="card-title">Image</h5>
                                     </div>
                                     <div class="card-body">
-                                        @if($ebook->id)
-                                            {{-- Edit mode: read-only display --}}
-                                            @if($ebook->image)
-                                            <div class="text-center">
+                                        @if($ebook->id && $ebook->image)
+                                            {{-- Edit mode: show current image + allow replacement --}}
+                                            <div class="text-center mb-3">
                                                 <img src="{{ asset($ebook->image) }}" class="ebook-preview-img" alt="{{ $ebook->title }}">
-                                                <p class="text-muted mt-2 mb-0"><small>Image cannot be edited</small></p>
-                                            </div>
-                                            @else
-                                            <p class="text-muted mb-0">No image available</p>
-                                            @endif
-                                        @else
-                                            {{-- Create mode: upload field --}}
-                                            <div class="mb-3">
-                                                <label for="image" class="form-label">Upload Cover Image</label>
-                                                <input type="file" class="form-control" id="ebookImageFile"
-                                                    name="image" accept="image/*"
-                                                    onchange="previewImage(this, 'ebookImagePreview')">
-                                                <div id="ebookImagePreview" class="mt-2"></div>
+                                                <p class="text-muted mt-2 mb-0"><small>Current image: {{ $ebook->image }}</small></p>
                                             </div>
                                         @endif
+                                        <div class="mb-3">
+                                            <label for="image" class="form-label">{{ $ebook->id ? 'Replace Cover Image (optional)' : 'Upload Cover Image' }}</label>
+                                            <input type="file" class="form-control" id="ebookImageFile"
+                                                name="image" accept="image/*"
+                                                onchange="previewImage(this, 'ebookImagePreview')">
+                                            <small class="text-muted d-block mt-1">Allowed: jpg, png, gif, svg, webp (max 10MB). Leave empty to keep current image.</small>
+                                            <div id="ebookImagePreview" class="mt-2"></div>
+                                        </div>
                                     </div>
                                 </div>
 

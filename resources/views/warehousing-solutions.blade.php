@@ -504,17 +504,10 @@
             </div>
 
             <!-- Right Image -->
-            <!-- <div class="col-md-6 text-center">
-                <div class="hero-graphic">
-                    <div style="width: 400px; height: 400px;" class="plane-circle">
-                        <img src="{{ data_get($heroContent, 'content.image', 'images/warehousing.webp') }}" class="img-fluid" style="border-radius: 40px;">
-                    </div>
-                </div>
-            </div> -->
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div style="width: 400px; height: 400px;" class="plane-circle">
-                        <img src="{{ asset('assets/images/warehousing.webp') }}" class="img-fluid" style="border-radius: 40px;">
+                        <img src="{{ asset(data_get($heroContent, 'content.image', 'assets/images/warehousing.webp')) }}" class="img-fluid" style="border-radius: 40px;">
                         <!-- Stat pills -->
                         <div class="stat-pill pill-1">
                             <div class="sp-icon" style="background:rgba(26,115,232,.1);color:var(--primary)"><i
@@ -561,9 +554,7 @@
             <div class="col-lg-6 animate-on-scroll" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
                     <div class="about-image-grid">
                         <div class="world-map-placeholder">
-                            <!-- <img src="{{ data_get($overviewContent, 'content.image', 'images/map-pattern.png') }}" class="img-fluid"> -->
-                            <!-- <img src="{{ asset('assets/images/map-pattern.png') }}" class="img-fluid"> -->
-                            <img src="{{ asset('website_images/warehousing.webp') }}" class="img-fluid">
+                            <img src="{{ asset(data_get($overviewContent, 'content.image', 'assets/images/map-pattern.png')) }}" class="img-fluid">
                         </div>
                     </div>
                 </div>
