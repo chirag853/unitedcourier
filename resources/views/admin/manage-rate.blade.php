@@ -330,12 +330,13 @@
                                                     <tr>
                                                         <th>#</th>
                                                         <th>Network</th>
+                                                        <th>Country</th>
                                                         <th>Service Code</th>
                                                         <th>Method</th>
                                                         <th>TAT</th>
                                                         <th>Weight Start (gm)</th>
                                                         <th>Weight End (gm)</th>
-                                                        <th>Zone Name</th>
+                                                        <th>Zone No</th>
                                                         <th>Zone Category</th>
                                                         <th>Price</th>
                                                         <th>Default</th>
@@ -346,39 +347,28 @@
                                                     <tr data-country="{{ $rate->service->country ?? '' }}" data-service-id="{{ $rate->service_id }}">
                                                         <td>{{ $key + 1 }}</td>
                                                         <td>{{ $rate->service->network ?? '—' }}</td>
+                                                        <td>{{ $rate->service->country ?? '—' }}</td>
                                                         <td>{{ $rate->service->service_code ?? '—' }}</td>
                                                         <td>{{ $rate->service->method ?? '—' }}</td>
                                                         <td>{{ $rate->service->tat ?? '—' }}</td>
                                                         <td>{{ $rate->wt_range_start }}</td>
                                                         <td>{{ $rate->wt_range_end }}</td>
+                                                        <td>{{ $rate->zone_no }}</td>
                                                         @php
-                                                            // Resolve zone name & category for this rate.
+                                                            // Resolve zone category for this rate.
                                                             // courier_rates.zone_no matches zone.zone_number_testing.
                                                             // The service's country maps to a destination_id which
                                                             // indexes the pre-built $zoneLookup map.
-                                                            $zoneName = '—';
                                                             $zoneCategory = '—';
                                                             $rateCountry = $rate->service->country ?? '';
                                                             $destId = $countryToDestinationId[strtolower(trim($rateCountry))] ?? null;
                                                             if ($destId && isset($zoneLookup[$destId])) {
                                                                 $zoneNo = (int) $rate->zone_no;
                                                                 if (isset($zoneLookup[$destId][$zoneNo])) {
-                                                                    $zoneName = $zoneLookup[$destId][$zoneNo]['names'];
                                                                     $zoneCategory = $zoneLookup[$destId][$zoneNo]['category'];
                                                                 }
                                                             }
                                                         @endphp
-                                                        <td>
-                                                            @php
-                                                                $zoneNameWords = preg_split('/[\s,]+/', trim($zoneName));
-                                                                if (count($zoneNameWords) > 7) {
-                                                                    $truncatedZoneName = implode(' ', array_slice($zoneNameWords, 0, 7)) . ' ...';
-                                                                } else {
-                                                                    $truncatedZoneName = $zoneName;
-                                                                }
-                                                            @endphp
-                                                            <span class="zone-name-cell" title="{{ $zoneName }}">{{ $truncatedZoneName }}</span>
-                                                        </td>
                                                         <td>
                                                             @if($zoneCategory === 'state')
                                                                 <span class="badge bg-info">State</span>
@@ -485,6 +475,7 @@
                                                     <tr>
                                                         <th>#</th>
                                                         <th>Network</th>
+                                                        <th>Country</th>
                                                         <th>Service Code</th>
                                                         <th>Method</th>
                                                         <th>TAT</th>
@@ -890,22 +881,24 @@
                         text: 'Export Excel',
                         title: 'Default Rates',
                         exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-                            // Strip HTML from the Price column (which contains
-                            // edit/save/cancel icons) so Excel shows only the
-                            // numeric price value.
+                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                            // Strip HTML from all exported cells so the Excel
+                            // file contains plain text values (e.g. the Zone
+                            // Category column renders a <span> badge — without
+                            // stripping, those HTML tags would leak into the
+                            // exported spreadsheet).
                             format: {
                                 body: function(data, row, column) {
-                                    if (column === 9) {
+                                    if (column === 10) {
                                         // Price column — export only the numeric value.
                                         return $('<div>').html(data).find('.rate-display').first().text()
                                             || $('<div>').html(data).text().replace(/[^\d.]/g, '');
                                     }
-                                    if (column === 10) {
-                                        // Default column — "Yes"/"No" badge
-                                        return $('<div>').html(data).text().trim();
-                                    }
-                                    return data;
+                                    // All other columns (including Zone No at
+                                    // index 8 and Zone Category at index 9) —
+                                    // strip any HTML tags and return the plain
+                                    // text.
+                                    return $('<div>').html(data).text().trim();
                                 }
                             }
                         }
@@ -940,25 +933,25 @@
                             return 'Customer Name: ' + name + '    |    Customer ID: ' + id;
                         },
                         exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
                             format: {
                                 body: function(data, row, column) {
-                                    if (column === 7) {
+                                    if (column === 8) {
                                         // Zone No column — extract the zone
                                         // number text (strip HTML/badges).
                                         return $('<div>').html(data).text().trim();
                                     }
-                                    if (column === 9) {
+                                    if (column === 10) {
                                         return $('<div>').html(data).find('.rate-display').first().text()
                                             || $('<div>').html(data).text().replace(/[^\d.]/g, '');
-                                    }
-                                    if (column === 10) {
-                                        return $('<div>').html(data).text().trim();
                                     }
                                     if (column === 11) {
                                         return $('<div>').html(data).text().trim();
                                     }
                                     if (column === 12) {
+                                        return $('<div>').html(data).text().trim();
+                                    }
+                                    if (column === 13) {
                                         return $('<div>').html(data).text().trim();
                                     }
                                     return data;
@@ -970,6 +963,7 @@
                 columns: [
                     { title: '#' },
                     { title: 'Network' },
+                    { title: 'Country' },
                     { title: 'Service Code' },
                     { title: 'Method' },
                     { title: 'TAT' },
@@ -1801,6 +1795,7 @@
                 rows.push([
                     idx++,
                     rate.service ? rate.service.network : '—',
+                    rate.service ? (rate.service.country || '—') : '—',
                     rate.service ? rate.service.service_code : '—',
                     rate.service ? rate.service.method : '—',
                     rate.service ? rate.service.tat : '—',

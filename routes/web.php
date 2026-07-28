@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\customerController;
 use App\Http\Controllers\WebsiteController;
+use App\Http\Controllers\WebsiteAdminController;
 
 Route::get('/', [WebsiteController::class, 'index'])->name('home');
 
@@ -148,24 +149,24 @@ Route::prefix('admin')->group(function () {
     Route::get('/pages', [AdminController::class, 'pages'])->name('admin.pages');
     
     // Blog Management Routes
-    Route::get('/change-blog', [AdminController::class, 'changeBlog'])->name('admin.change-blog');
-    Route::post('/store-blog', [AdminController::class, 'storeBlog'])->name('admin.store-blog');
-    Route::post('/update-blog/{id}', [AdminController::class, 'updateBlog'])->name('admin.update-blog');
-    Route::delete('/delete-blog/{id}', [AdminController::class, 'deleteBlog'])->name('admin.delete-blog');
+    Route::get('/change-blog', [WebsiteAdminController::class, 'changeBlog'])->name('admin.change-blog');
+    Route::post('/store-blog', [WebsiteAdminController::class, 'storeBlog'])->name('admin.store-blog');
+    Route::post('/update-blog/{id}', [WebsiteAdminController::class, 'updateBlog'])->name('admin.update-blog');
+    Route::delete('/delete-blog/{id}', [WebsiteAdminController::class, 'deleteBlog'])->name('admin.delete-blog');
     
-    Route::post('/upload-blog-image', [AdminController::class, 'uploadBlogImage'])->name('admin.upload-blog-image');
-    Route::post('/upload-multiple-blog-images', [AdminController::class, 'uploadMultipleBlogImages'])->name('admin.upload-multiple-blog-images');
-    Route::get('/create-blog', [AdminController::class, 'createBlog'])->name('admin.create-blog');
-    Route::get('/edit-blog/{id}', [AdminController::class, 'editBlog'])->name('admin.edit-blog');
+    Route::post('/upload-blog-image', [WebsiteAdminController::class, 'uploadBlogImage'])->name('admin.upload-blog-image');
+    Route::post('/upload-multiple-blog-images', [WebsiteAdminController::class, 'uploadMultipleBlogImages'])->name('admin.upload-multiple-blog-images');
+    Route::get('/create-blog', [WebsiteAdminController::class, 'createBlog'])->name('admin.create-blog');
+    Route::get('/edit-blog/{id}', [WebsiteAdminController::class, 'editBlog'])->name('admin.edit-blog');
     
     // E-Book Management Routes
-    Route::get('/change-ebook', [AdminController::class, 'changeEbook'])->name('admin.change-ebook');
-    Route::post('/store-ebook', [AdminController::class, 'storeEbook'])->name('admin.store-ebook');
-    Route::post('/update-ebook/{id}', [AdminController::class, 'updateEbook'])->name('admin.update-ebook');
-    Route::delete('/delete-ebook/{id}', [AdminController::class, 'deleteEbook'])->name('admin.delete-ebook');
-    Route::get('/create-ebook', [AdminController::class, 'createEbook'])->name('admin.create-ebook');
-    Route::get('/edit-ebook/{id}', [AdminController::class, 'editEbook'])->name('admin.edit-ebook');
-    Route::get('/get-ebook/{id}', [AdminController::class, 'getEbook'])->name('admin.get-ebook');
+    Route::get('/change-ebook', [WebsiteAdminController::class, 'changeEbook'])->name('admin.change-ebook');
+    Route::post('/store-ebook', [WebsiteAdminController::class, 'storeEbook'])->name('admin.store-ebook');
+    Route::post('/update-ebook/{id}', [WebsiteAdminController::class, 'updateEbook'])->name('admin.update-ebook');
+    Route::delete('/delete-ebook/{id}', [WebsiteAdminController::class, 'deleteEbook'])->name('admin.delete-ebook');
+    Route::get('/create-ebook', [WebsiteAdminController::class, 'createEbook'])->name('admin.create-ebook');
+    Route::get('/edit-ebook/{id}', [WebsiteAdminController::class, 'editEbook'])->name('admin.edit-ebook');
+    Route::get('/get-ebook/{id}', [WebsiteAdminController::class, 'getEbook'])->name('admin.get-ebook');
     
     // Track Order Page Management Routes
     Route::get('/change-track-order', [AdminController::class, 'changeTrackOrder'])->name('admin.change-track-order');
@@ -186,56 +187,56 @@ Route::prefix('admin')->group(function () {
     Route::get('/get-webinar/{id}', [AdminController::class, 'getWebinar'])->name('admin.get-webinar');
     
     // Partnership Page Management Routes
-    Route::get('/change-partnership', [AdminController::class, 'changePartnership'])->name('admin.change-partnership');
-    Route::post('/store-partnership', [AdminController::class, 'storePartnership'])->name('admin.store-partnership');
-    Route::post('/update-partnership/{id}', [AdminController::class, 'updatePartnership'])->name('admin.update-partnership');
-    Route::delete('/delete-partnership/{id}', [AdminController::class, 'deletePartnership'])->name('admin.delete-partnership');
-    Route::get('/create-partnership', [AdminController::class, 'createPartnership'])->name('admin.create-partnership');
-    Route::get('/edit-partnership/{id}', [AdminController::class, 'editPartnership'])->name('admin.edit-partnership');
-    Route::get('/get-partnership/{id}', [AdminController::class, 'getPartnership'])->name('admin.get-partnership');
+    Route::get('/change-partnership', [WebsiteAdminController::class, 'changePartnership'])->name('admin.change-partnership');
+    Route::post('/store-partnership', [WebsiteAdminController::class, 'storePartnership'])->name('admin.store-partnership');
+    Route::post('/update-partnership/{id}', [WebsiteAdminController::class, 'updatePartnership'])->name('admin.update-partnership');
+    Route::delete('/delete-partnership/{id}', [WebsiteAdminController::class, 'deletePartnership'])->name('admin.delete-partnership');
+    Route::get('/create-partnership', [WebsiteAdminController::class, 'createPartnership'])->name('admin.create-partnership');
+    Route::get('/edit-partnership/{id}', [WebsiteAdminController::class, 'editPartnership'])->name('admin.edit-partnership');
+    Route::get('/get-partnership/{id}', [WebsiteAdminController::class, 'getPartnership'])->name('admin.get-partnership');
     
     // Edit All Partnership Content
-    Route::get('/edit-all-partnership', [AdminController::class, 'editAllPartnership'])->name('admin.edit-all-partnership');
-    Route::post('/update-all-partnership', [AdminController::class, 'updateAllPartnership'])->name('admin.update-all-partnership');
+    Route::get('/edit-all-partnership', [WebsiteAdminController::class, 'editAllPartnership'])->name('admin.edit-all-partnership');
+    Route::post('/update-all-partnership', [WebsiteAdminController::class, 'updateAllPartnership'])->name('admin.update-all-partnership');
 
     // Document Download Page Management Routes
-    Route::get('/change-document-download', [AdminController::class, 'changeDocumentDownload'])->name('admin.change-document-download');
-    Route::post('/store-document-download', [AdminController::class, 'storeDocumentDownload'])->name('admin.store-document-download');
-    Route::post('/update-document-download/{id}', [AdminController::class, 'updateDocumentDownload'])->name('admin.update-document-download');
-    Route::delete('/delete-document-download/{id}', [AdminController::class, 'deleteDocumentDownload'])->name('admin.delete-document-download');
-    Route::get('/create-document-download', [AdminController::class, 'createDocumentDownload'])->name('admin.create-document-download');
-    Route::get('/edit-document-download/{id}', [AdminController::class, 'editDocumentDownload'])->name('admin.edit-document-download');
-    Route::get('/get-document-download/{id}', [AdminController::class, 'getDocumentDownload'])->name('admin.get-document-download');
-    Route::get('/edit-all-document-download', [AdminController::class, 'editAllDocumentDownload'])->name('admin.edit-all-document-download');
-    Route::post('/update-all-document-download', [AdminController::class, 'updateAllDocumentDownload'])->name('admin.update-all-document-download');
-    Route::post('/update-document-download-page-meta', [AdminController::class, 'updateDocumentDownloadPageMeta'])->name('admin.update-document-download-page-meta');
+    Route::get('/change-document-download', [WebsiteAdminController::class, 'changeDocumentDownload'])->name('admin.change-document-download');
+    Route::post('/store-document-download', [WebsiteAdminController::class, 'storeDocumentDownload'])->name('admin.store-document-download');
+    Route::post('/update-document-download/{id}', [WebsiteAdminController::class, 'updateDocumentDownload'])->name('admin.update-document-download');
+    Route::delete('/delete-document-download/{id}', [WebsiteAdminController::class, 'deleteDocumentDownload'])->name('admin.delete-document-download');
+    Route::get('/create-document-download', [WebsiteAdminController::class, 'createDocumentDownload'])->name('admin.create-document-download');
+    Route::get('/edit-document-download/{id}', [WebsiteAdminController::class, 'editDocumentDownload'])->name('admin.edit-document-download');
+    Route::get('/get-document-download/{id}', [WebsiteAdminController::class, 'getDocumentDownload'])->name('admin.get-document-download');
+    Route::get('/edit-all-document-download', [WebsiteAdminController::class, 'editAllDocumentDownload'])->name('admin.edit-all-document-download');
+    Route::post('/update-all-document-download', [WebsiteAdminController::class, 'updateAllDocumentDownload'])->name('admin.update-all-document-download');
+    Route::post('/update-document-download-page-meta', [WebsiteAdminController::class, 'updateDocumentDownloadPageMeta'])->name('admin.update-document-download-page-meta');
     
     // Currency Calculator Page Management Routes
-    Route::get('/change-currency-calculator', [AdminController::class, 'changeCurrencyCalculator'])->name('admin.change-currency-calculator');
-    Route::post('/store-currency-calculator', [AdminController::class, 'storeCurrencyCalculator'])->name('admin.store-currency-calculator');
-    Route::post('/update-currency-calculator/{id}', [AdminController::class, 'updateCurrencyCalculator'])->name('admin.update-currency-calculator');
-    Route::delete('/delete-currency-calculator/{id}', [AdminController::class, 'deleteCurrencyCalculator'])->name('admin.delete-currency-calculator');
-    Route::get('/create-currency-calculator', [AdminController::class, 'createCurrencyCalculator'])->name('admin.create-currency-calculator');
-    Route::get('/edit-currency-calculator/{id}', [AdminController::class, 'editCurrencyCalculator'])->name('admin.edit-currency-calculator');
-    Route::get('/get-currency-calculator/{id}', [AdminController::class, 'getCurrencyCalculator'])->name('admin.get-currency-calculator');
+    Route::get('/change-currency-calculator', [WebsiteAdminController::class, 'changeCurrencyCalculator'])->name('admin.change-currency-calculator');
+    Route::post('/store-currency-calculator', [WebsiteAdminController::class, 'storeCurrencyCalculator'])->name('admin.store-currency-calculator');
+    Route::post('/update-currency-calculator/{id}', [WebsiteAdminController::class, 'updateCurrencyCalculator'])->name('admin.update-currency-calculator');
+    Route::delete('/delete-currency-calculator/{id}', [WebsiteAdminController::class, 'deleteCurrencyCalculator'])->name('admin.delete-currency-calculator');
+    Route::get('/create-currency-calculator', [WebsiteAdminController::class, 'createCurrencyCalculator'])->name('admin.create-currency-calculator');
+    Route::get('/edit-currency-calculator/{id}', [WebsiteAdminController::class, 'editCurrencyCalculator'])->name('admin.edit-currency-calculator');
+    Route::get('/get-currency-calculator/{id}', [WebsiteAdminController::class, 'getCurrencyCalculator'])->name('admin.get-currency-calculator');
     
     // World Weather Page Management Routes
-    Route::get('/change-world-weather', [AdminController::class, 'changeWorldWeather'])->name('admin.change-world-weather');
-    Route::post('/store-world-weather', [AdminController::class, 'storeWorldWeather'])->name('admin.store-world-weather');
-    Route::post('/update-world-weather/{id}', [AdminController::class, 'updateWorldWeather'])->name('admin.update-world-weather');
-    Route::delete('/delete-world-weather/{id}', [AdminController::class, 'deleteWorldWeather'])->name('admin.delete-world-weather');
-    Route::get('/create-world-weather', [AdminController::class, 'createWorldWeather'])->name('admin.create-world-weather');
-    Route::get('/edit-world-weather/{id}', [AdminController::class, 'editWorldWeather'])->name('admin.edit-world-weather');
-    Route::get('/get-world-weather/{id}', [AdminController::class, 'getWorldWeather'])->name('admin.get-world-weather');
+    Route::get('/change-world-weather', [WebsiteAdminController::class, 'changeWorldWeather'])->name('admin.change-world-weather');
+    Route::post('/store-world-weather', [WebsiteAdminController::class, 'storeWorldWeather'])->name('admin.store-world-weather');
+    Route::post('/update-world-weather/{id}', [WebsiteAdminController::class, 'updateWorldWeather'])->name('admin.update-world-weather');
+    Route::delete('/delete-world-weather/{id}', [WebsiteAdminController::class, 'deleteWorldWeather'])->name('admin.delete-world-weather');
+    Route::get('/create-world-weather', [WebsiteAdminController::class, 'createWorldWeather'])->name('admin.create-world-weather');
+    Route::get('/edit-world-weather/{id}', [WebsiteAdminController::class, 'editWorldWeather'])->name('admin.edit-world-weather');
+    Route::get('/get-world-weather/{id}', [WebsiteAdminController::class, 'getWorldWeather'])->name('admin.get-world-weather');
     
     // World Time Page Management Routes
-    Route::get('/change-world-time', [AdminController::class, 'changeWorldTime'])->name('admin.change-world-time');
-    Route::post('/store-world-time', [AdminController::class, 'storeWorldTime'])->name('admin.store-world-time');
-    Route::post('/update-world-time/{id}', [AdminController::class, 'updateWorldTime'])->name('admin.update-world-time');
-    Route::delete('/delete-world-time/{id}', [AdminController::class, 'deleteWorldTime'])->name('admin.delete-world-time');
-    Route::get('/create-world-time', [AdminController::class, 'createWorldTime'])->name('admin.create-world-time');
-    Route::get('/edit-world-time/{id}', [AdminController::class, 'editWorldTime'])->name('admin.edit-world-time');
-    Route::get('/get-world-time/{id}', [AdminController::class, 'getWorldTime'])->name('admin.get-world-time');
+    Route::get('/change-world-time', [WebsiteAdminController::class, 'changeWorldTime'])->name('admin.change-world-time');
+    Route::post('/store-world-time', [WebsiteAdminController::class, 'storeWorldTime'])->name('admin.store-world-time');
+    Route::post('/update-world-time/{id}', [WebsiteAdminController::class, 'updateWorldTime'])->name('admin.update-world-time');
+    Route::delete('/delete-world-time/{id}', [WebsiteAdminController::class, 'deleteWorldTime'])->name('admin.delete-world-time');
+    Route::get('/create-world-time', [WebsiteAdminController::class, 'createWorldTime'])->name('admin.create-world-time');
+    Route::get('/edit-world-time/{id}', [WebsiteAdminController::class, 'editWorldTime'])->name('admin.edit-world-time');
+    Route::get('/get-world-time/{id}', [WebsiteAdminController::class, 'getWorldTime'])->name('admin.get-world-time');
     
     Route::get('/blog-categories', [AdminController::class, 'blogCategories'])->name('admin.blog-categories');
     Route::get('/blog-comments', [AdminController::class, 'blogComments'])->name('admin.blog-comments');
@@ -243,9 +244,9 @@ Route::prefix('admin')->group(function () {
     Route::get('/countries', [AdminController::class, 'countries'])->name('admin.countries');
     Route::get('/states', [AdminController::class, 'states'])->name('admin.states');
     Route::get('/cities', [AdminController::class, 'cities'])->name('admin.cities');
-    Route::get('/get-blog/{id}', [AdminController::class, 'getBlog'])->name('admin.get-blog');
-    Route::get('/testimonials', [AdminController::class, 'testimonials'])->name('admin.testimonials');
-    Route::get('/faq', [AdminController::class, 'faq'])->name('admin.faq');
+    Route::get('/get-blog/{id}', [WebsiteAdminController::class, 'getBlog'])->name('admin.get-blog');
+    Route::get('/testimonials', [WebsiteAdminController::class, 'testimonials'])->name('admin.testimonials');
+    Route::get('/faq', [WebsiteAdminController::class, 'faq'])->name('admin.faq');
     
     // Support Routes
     Route::get('/contact-messages', [AdminController::class, 'contactMessages'])->name('admin.contact-messages');
@@ -410,109 +411,109 @@ Route::prefix('admin')->group(function () {
     Route::get('/form-kyc', [AdminController::class, 'formKyc'])->name('admin.form-kyc');
     
     // Website Management Routes
-    Route::get('/change-about-us', [AdminController::class, 'changeAboutUs'])->name('admin.change-about-us');
-    Route::post('/update-about-us', [AdminController::class, 'updateAboutUs'])->name('admin.update-about-us');
-    Route::get('/get-about-content', [AdminController::class, 'getAboutContent'])->name('admin.get-about-content');
-    Route::post('/update-about-content/{id}', [AdminController::class, 'updateAboutContent'])->name('admin.update-about-content');
-    Route::delete('/delete-about-content/{id}', [AdminController::class, 'deleteAboutContent'])->name('admin.delete-about-content');
+    Route::get('/change-about-us', [WebsiteAdminController::class, 'changeAboutUs'])->name('admin.change-about-us');
+    Route::post('/update-about-us', [WebsiteAdminController::class, 'updateAboutUs'])->name('admin.update-about-us');
+    Route::get('/get-about-content', [WebsiteAdminController::class, 'getAboutContent'])->name('admin.get-about-content');
+    Route::post('/update-about-content/{id}', [WebsiteAdminController::class, 'updateAboutContent'])->name('admin.update-about-content');
+    Route::delete('/delete-about-content/{id}', [WebsiteAdminController::class, 'deleteAboutContent'])->name('admin.delete-about-content');
     
     // Home Page Management Routes
-    Route::get('/change-home', [AdminController::class, 'changeHome'])->name('admin.change-home');
-    Route::get('/update-home', [AdminController::class, 'updateHome'])->name('admin.update-home');
-    Route::get('/get-home-content/{id}', [AdminController::class, 'getHomeContent'])->name('admin.get-home-content');
-    Route::post('/update-home-content/{id}', [AdminController::class, 'updateHomeContent'])->name('admin.update-home-content');
-    Route::post('/update-multiple-home-content', [AdminController::class, 'updateMultipleHomeContent'])->name('admin.update-multiple-home-content');
+    Route::get('/change-home', [WebsiteAdminController::class, 'changeHome'])->name('admin.change-home');
+    Route::get('/update-home', [WebsiteAdminController::class, 'updateHome'])->name('admin.update-home');
+    Route::get('/get-home-content/{id}', [WebsiteAdminController::class, 'getHomeContent'])->name('admin.get-home-content');
+    Route::post('/update-home-content/{id}', [WebsiteAdminController::class, 'updateHomeContent'])->name('admin.update-home-content');
+    Route::post('/update-multiple-home-content', [WebsiteAdminController::class, 'updateMultipleHomeContent'])->name('admin.update-multiple-home-content');
     
     // Service Page Management Routes
-    Route::post('/update-service-content/{id}', [AdminController::class, 'updateServiceContent'])->name('admin.update-service-content');
+    Route::post('/update-service-content/{id}', [WebsiteAdminController::class, 'updateServiceContent'])->name('admin.update-service-content');
     Route::delete('/delete-service-content/{id}', [AdminController::class, 'deleteServiceContent'])->name('admin.delete-service-content');
-    Route::get('/change-volumetric-calculator', [AdminController::class, 'volumetricCalculator'])->name('admin.change-volumetric-calculator');
-    Route::get('/get-volumetric-calculator-content/{id}', [AdminController::class, 'getVolumetricCalculatorContent'])->name('admin.get-volumetric-calculator-content');
-    Route::post('/update-volumetric-calculator-content/{id}', [AdminController::class, 'updateVolumetricCalculatorContent'])->name('admin.update-volumetric-calculator-content');
-    Route::delete('/delete-volumetric-calculator-content/{id}', [AdminController::class, 'deleteVolumetricCalculatorContent'])->name('admin.delete-volumetric-calculator-content');
+    Route::get('/change-volumetric-calculator', [WebsiteAdminController::class, 'volumetricCalculator'])->name('admin.change-volumetric-calculator');
+    Route::get('/get-volumetric-calculator-content/{id}', [WebsiteAdminController::class, 'getVolumetricCalculatorContent'])->name('admin.get-volumetric-calculator-content');
+    Route::post('/update-volumetric-calculator-content/{id}', [WebsiteAdminController::class, 'updateVolumetricCalculatorContent'])->name('admin.update-volumetric-calculator-content');
+    Route::delete('/delete-volumetric-calculator-content/{id}', [WebsiteAdminController::class, 'deleteVolumetricCalculatorContent'])->name('admin.delete-volumetric-calculator-content');
     
     // Network Page Management Routes
-    Route::get('/change-network', [AdminController::class, 'changeNetwork'])->name('admin.change-network');
-    Route::put('/update-network-office/{id}', [AdminController::class, 'updateNetworkOffice'])->name('admin.update-network-office');
-    Route::post('/store-network-office', [AdminController::class, 'storeNetworkOffice'])->name('admin.store-network-office');
-    Route::delete('/delete-network-office/{id}', [AdminController::class, 'deleteNetworkOffice'])->name('admin.delete-network-office');
-    Route::post('/store-faq', [AdminController::class, 'storeFaq'])->name('admin.store-faq');
-    Route::put('/update-faq/{id}', [AdminController::class, 'updateFaq'])->name('admin.update-faq');
-    Route::delete('/delete-faq/{id}', [AdminController::class, 'deleteFaq'])->name('admin.delete-faq');
-    Route::post('/store-testimonial', [AdminController::class, 'storeTestimonial'])->name('admin.store-testimonial');
-    Route::put('/update-testimonial/{id}', [AdminController::class, 'updateTestimonial'])->name('admin.update-testimonial');
-    Route::delete('/delete-testimonial/{id}', [AdminController::class, 'deleteTestimonial'])->name('admin.delete-testimonial');
-    Route::get('/change-terms-and-conditions', [AdminController::class, 'changeTermsAndConditions'])->name('admin.change-terms-and-conditions');
-    Route::post('/store-terms-and-conditions-content', [AdminController::class, 'storeTermsAndConditionsContent'])->name('admin.store-terms-and-conditions-content');
-    Route::post('/update-terms-and-conditions-content/{id}', [AdminController::class, 'updateTermsAndConditionsContent'])->name('admin.update-terms-and-conditions-content');
-    Route::delete('/delete-terms-and-conditions-content/{id}', [AdminController::class, 'deleteTermsAndConditionsContent'])->name('admin.delete-terms-and-conditions-content');
+    Route::get('/change-network', [WebsiteAdminController::class, 'changeNetwork'])->name('admin.change-network');
+    Route::put('/update-network-office/{id}', [WebsiteAdminController::class, 'updateNetworkOffice'])->name('admin.update-network-office');
+    Route::post('/store-network-office', [WebsiteAdminController::class, 'storeNetworkOffice'])->name('admin.store-network-office');
+    Route::delete('/delete-network-office/{id}', [WebsiteAdminController::class, 'deleteNetworkOffice'])->name('admin.delete-network-office');
+    Route::post('/store-faq', [WebsiteAdminController::class, 'storeFaq'])->name('admin.store-faq');
+    Route::put('/update-faq/{id}', [WebsiteAdminController::class, 'updateFaq'])->name('admin.update-faq');
+    Route::delete('/delete-faq/{id}', [WebsiteAdminController::class, 'deleteFaq'])->name('admin.delete-faq');
+    Route::post('/store-testimonial', [WebsiteAdminController::class, 'storeTestimonial'])->name('admin.store-testimonial');
+    Route::put('/update-testimonial/{id}', [WebsiteAdminController::class, 'updateTestimonial'])->name('admin.update-testimonial');
+    Route::delete('/delete-testimonial/{id}', [WebsiteAdminController::class, 'deleteTestimonial'])->name('admin.delete-testimonial');
+    Route::get('/change-terms-and-conditions', [WebsiteAdminController::class, 'changeTermsAndConditions'])->name('admin.change-terms-and-conditions');
+    Route::post('/store-terms-and-conditions-content', [WebsiteAdminController::class, 'storeTermsAndConditionsContent'])->name('admin.store-terms-and-conditions-content');
+    Route::post('/update-terms-and-conditions-content/{id}', [WebsiteAdminController::class, 'updateTermsAndConditionsContent'])->name('admin.update-terms-and-conditions-content');
+    Route::delete('/delete-terms-and-conditions-content/{id}', [WebsiteAdminController::class, 'deleteTermsAndConditionsContent'])->name('admin.delete-terms-and-conditions-content');
     
     // Privacy Policy Page Management Routes
-    Route::get('/change-privacy-policy', [AdminController::class, 'changePrivacyPolicy'])->name('admin.change-privacy-policy');
-    Route::post('/store-privacy-policy-content', [AdminController::class, 'storePrivacyPolicyContent'])->name('admin.store-privacy-policy-content');
-    Route::post('/update-privacy-policy-content/{id}', [AdminController::class, 'updatePrivacyPolicyContent'])->name('admin.update-privacy-policy-content');
-    Route::delete('/delete-privacy-policy-content/{id}', [AdminController::class, 'deletePrivacyPolicyContent'])->name('admin.delete-privacy-policy-content');
+    Route::get('/change-privacy-policy', [WebsiteAdminController::class, 'changePrivacyPolicy'])->name('admin.change-privacy-policy');
+    Route::post('/store-privacy-policy-content', [WebsiteAdminController::class, 'storePrivacyPolicyContent'])->name('admin.store-privacy-policy-content');
+    Route::post('/update-privacy-policy-content/{id}', [WebsiteAdminController::class, 'updatePrivacyPolicyContent'])->name('admin.update-privacy-policy-content');
+    Route::delete('/delete-privacy-policy-content/{id}', [WebsiteAdminController::class, 'deletePrivacyPolicyContent'])->name('admin.delete-privacy-policy-content');
     
     // Refund & Cancellation Policy Page Management Routes
-    Route::get('/change-refund-and-cancellation-policy', [AdminController::class, 'changeRefundAndCancellationPolicy'])->name('admin.change-refund-and-cancellation-policy');
-    Route::post('/update-refund-and-cancellation-policy-content/{id}', [AdminController::class, 'updateRefundAndCancellationPolicyContent'])->name('admin.update-refund-and-cancellation-policy-content');
-    Route::delete('/delete-refund-and-cancellation-policy-content/{id}', [AdminController::class, 'deleteRefundAndCancellationPolicyContent'])->name('admin.delete-refund-and-cancellation-policy-content');
+    Route::get('/change-refund-and-cancellation-policy', [WebsiteAdminController::class, 'changeRefundAndCancellationPolicy'])->name('admin.change-refund-and-cancellation-policy');
+    Route::post('/update-refund-and-cancellation-policy-content/{id}', [WebsiteAdminController::class, 'updateRefundAndCancellationPolicyContent'])->name('admin.update-refund-and-cancellation-policy-content');
+    Route::delete('/delete-refund-and-cancellation-policy-content/{id}', [WebsiteAdminController::class, 'deleteRefundAndCancellationPolicyContent'])->name('admin.delete-refund-and-cancellation-policy-content');
 
     // Contact Page Management Routes
-    Route::get('/change-contact-page', [AdminController::class, 'changeContactPage'])->name('admin.change-contact-page');
-    Route::post('/update-contact-page-content/{id}', [AdminController::class, 'updateContactPageContent'])->name('admin.update-contact-page-content');
-    Route::delete('/delete-contact-page-content/{id}', [AdminController::class, 'deleteContactPageContent'])->name('admin.delete-contact-page-content');
+    Route::get('/change-contact-page', [WebsiteAdminController::class, 'changeContactPage'])->name('admin.change-contact-page');
+    Route::post('/update-contact-page-content/{id}', [WebsiteAdminController::class, 'updateContactPageContent'])->name('admin.update-contact-page-content');
+    Route::delete('/delete-contact-page-content/{id}', [WebsiteAdminController::class, 'deleteContactPageContent'])->name('admin.delete-contact-page-content');
 
     // Warehousing Solutions Page Management Routes
-    Route::get('/change-warehousing-solutions', [AdminController::class, 'changeWarehousingSolutions'])->name('admin.change-warehousing-solutions');
-    Route::post('/store-warehousing-solutions-content', [AdminController::class, 'storeWarehousingSolutionsContent'])->name('admin.store-warehousing-solutions-content');
-    Route::post('/update-warehousing-solutions-content/{id}', [AdminController::class, 'updateWarehousingSolutionsContent'])->name('admin.update-warehousing-solutions-content');
-    Route::delete('/delete-warehousing-solutions-content/{id}', [AdminController::class, 'deleteWarehousingSolutionsContent'])->name('admin.delete-warehousing-solutions-content');
+    Route::get('/change-warehousing-solutions', [WebsiteAdminController::class, 'changeWarehousingSolutions'])->name('admin.change-warehousing-solutions');
+    Route::post('/store-warehousing-solutions-content', [WebsiteAdminController::class, 'storeWarehousingSolutionsContent'])->name('admin.store-warehousing-solutions-content');
+    Route::post('/update-warehousing-solutions-content/{id}', [WebsiteAdminController::class, 'updateWarehousingSolutionsContent'])->name('admin.update-warehousing-solutions-content');
+    Route::delete('/delete-warehousing-solutions-content/{id}', [WebsiteAdminController::class, 'deleteWarehousingSolutionsContent'])->name('admin.delete-warehousing-solutions-content');
 
     // E-Commerce Logistics Solutions Page Management Routes
-    Route::get('/change-e-commerce-logistics-solutions', [AdminController::class, 'changeEcommerceLogisticsSolutions'])->name('admin.change-e-commerce-logistics-solutions');
-    Route::get('/get-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'getEcommerceLogisticsSolutionsContent'])->name('admin.get-e-commerce-logistics-solutions-content');
-    Route::post('/store-e-commerce-logistics-solutions-content', [AdminController::class, 'storeEcommerceLogisticsSolutionsContent'])->name('admin.store-e-commerce-logistics-solutions-content');
-    Route::post('/update-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'updateEcommerceLogisticsSolutionsContent'])->name('admin.update-e-commerce-logistics-solutions-content');
-    Route::delete('/delete-e-commerce-logistics-solutions-content/{id}', [AdminController::class, 'deleteEcommerceLogisticsSolutionsContent'])->name('admin.delete-e-commerce-logistics-solutions-content');
+    Route::get('/change-e-commerce-logistics-solutions', [WebsiteAdminController::class, 'changeEcommerceLogisticsSolutions'])->name('admin.change-e-commerce-logistics-solutions');
+    Route::get('/get-e-commerce-logistics-solutions-content/{id}', [WebsiteAdminController::class, 'getEcommerceLogisticsSolutionsContent'])->name('admin.get-e-commerce-logistics-solutions-content');
+    Route::post('/store-e-commerce-logistics-solutions-content', [WebsiteAdminController::class, 'storeEcommerceLogisticsSolutionsContent'])->name('admin.store-e-commerce-logistics-solutions-content');
+    Route::post('/update-e-commerce-logistics-solutions-content/{id}', [WebsiteAdminController::class, 'updateEcommerceLogisticsSolutionsContent'])->name('admin.update-e-commerce-logistics-solutions-content');
+    Route::delete('/delete-e-commerce-logistics-solutions-content/{id}', [WebsiteAdminController::class, 'deleteEcommerceLogisticsSolutionsContent'])->name('admin.delete-e-commerce-logistics-solutions-content');
 
     // Express Air Freight Solutions Page Management Routes
-    Route::get('/change-express-air-freight-solutions', [AdminController::class, 'changeExpressAirFreightSolutions'])->name('admin.change-express-air-freight-solutions');
-    Route::post('/store-express-air-freight-solutions-content', [AdminController::class, 'storeExpressAirFreightSolutionsContent'])->name('admin.store-express-air-freight-solutions-content');
-    Route::post('/update-express-air-freight-solutions-content/{id}', [AdminController::class, 'updateExpressAirFreightSolutionsContent'])->name('admin.update-express-air-freight-solutions-content');
-    Route::delete('/delete-express-air-freight-solutions-content/{id}', [AdminController::class, 'deleteExpressAirFreightSolutionsContent'])->name('admin.delete-express-air-freight-solutions-content');
+    Route::get('/change-express-air-freight-solutions', [WebsiteAdminController::class, 'changeExpressAirFreightSolutions'])->name('admin.change-express-air-freight-solutions');
+    Route::post('/store-express-air-freight-solutions-content', [WebsiteAdminController::class, 'storeExpressAirFreightSolutionsContent'])->name('admin.store-express-air-freight-solutions-content');
+    Route::post('/update-express-air-freight-solutions-content/{id}', [WebsiteAdminController::class, 'updateExpressAirFreightSolutionsContent'])->name('admin.update-express-air-freight-solutions-content');
+    Route::delete('/delete-express-air-freight-solutions-content/{id}', [WebsiteAdminController::class, 'deleteExpressAirFreightSolutionsContent'])->name('admin.delete-express-air-freight-solutions-content');
 
     // Barcode Generator Page Management Routes
-    Route::get('/change-barcode-generator', [AdminController::class, 'changeBarcodeGenerator'])->name('admin.change-barcode-generator');
-    Route::post('/update-barcode-generator-content/{id}', [AdminController::class, 'updateBarcodeGeneratorContent'])->name('admin.update-barcode-generator-content');
-    Route::delete('/delete-barcode-generator-content/{id}', [AdminController::class, 'deleteBarcodeGeneratorContent'])->name('admin.delete-barcode-generator-content');
+    Route::get('/change-barcode-generator', [WebsiteAdminController::class, 'changeBarcodeGenerator'])->name('admin.change-barcode-generator');
+    Route::post('/update-barcode-generator-content/{id}', [WebsiteAdminController::class, 'updateBarcodeGeneratorContent'])->name('admin.update-barcode-generator-content');
+    Route::delete('/delete-barcode-generator-content/{id}', [WebsiteAdminController::class, 'deleteBarcodeGeneratorContent'])->name('admin.delete-barcode-generator-content');
 
     // Shipping Rate Calculator Page Management Routes
-    Route::get('/change-shipping-rate-calculator', [AdminController::class, 'changeShippingRateCalculator'])->name('admin.change-shipping-rate-calculator');
-    Route::post('/update-shipping-rate-calculator-content/{id}', [AdminController::class, 'updateShippingRateCalculatorContent'])->name('admin.update-shipping-rate-calculator-content');
-    Route::delete('/delete-shipping-rate-calculator-content/{id}', [AdminController::class, 'deleteShippingRateCalculatorContent'])->name('admin.delete-shipping-rate-calculator-content');
+    Route::get('/change-shipping-rate-calculator', [WebsiteAdminController::class, 'changeShippingRateCalculator'])->name('admin.change-shipping-rate-calculator');
+    Route::post('/update-shipping-rate-calculator-content/{id}', [WebsiteAdminController::class, 'updateShippingRateCalculatorContent'])->name('admin.update-shipping-rate-calculator-content');
+    Route::delete('/delete-shipping-rate-calculator-content/{id}', [WebsiteAdminController::class, 'deleteShippingRateCalculatorContent'])->name('admin.delete-shipping-rate-calculator-content');
 
     // HSN Finder Page Management Routes
-    Route::get('/change-hsn-finder', [AdminController::class, 'changeHsnFinder'])->name('admin.change-hsn-finder');
-    Route::post('/update-hsn-finder-content/{id}', [AdminController::class, 'updateHsnFinderContent'])->name('admin.update-hsn-finder-content');
-    Route::delete('/delete-hsn-finder-content/{id}', [AdminController::class, 'deleteHsnFinderContent'])->name('admin.delete-hsn-finder-content');
+    Route::get('/change-hsn-finder', [WebsiteAdminController::class, 'changeHsnFinder'])->name('admin.change-hsn-finder');
+    Route::post('/update-hsn-finder-content/{id}', [WebsiteAdminController::class, 'updateHsnFinderContent'])->name('admin.update-hsn-finder-content');
+    Route::delete('/delete-hsn-finder-content/{id}', [WebsiteAdminController::class, 'deleteHsnFinderContent'])->name('admin.delete-hsn-finder-content');
 
     // Common Stats (Fact Number Section) Management Routes
-    Route::get('/change-common-stats', [AdminController::class, 'changeCommonStats'])->name('admin.change-common-stats');
-    Route::post('/update-common-stats/{id}', [AdminController::class, 'updateCommonStats'])->name('admin.update-common-stats');
-    Route::delete('/delete-common-stats/{id}', [AdminController::class, 'deleteCommonStats'])->name('admin.delete-common-stats');
+    Route::get('/change-common-stats', [WebsiteAdminController::class, 'changeCommonStats'])->name('admin.change-common-stats');
+    Route::post('/update-common-stats/{id}', [WebsiteAdminController::class, 'updateCommonStats'])->name('admin.update-common-stats');
+    Route::delete('/delete-common-stats/{id}', [WebsiteAdminController::class, 'deleteCommonStats'])->name('admin.delete-common-stats');
 
     // Partners Section (Logos) Management Routes
-    Route::get('/change-partner-logos', [AdminController::class, 'changePartnerLogos'])->name('admin.change-partner-logos');
-    Route::post('/store-partner-logo', [AdminController::class, 'storePartnerLogo'])->name('admin.store-partner-logo');
-    Route::post('/update-partner-logo/{id}', [AdminController::class, 'updatePartnerLogo'])->name('admin.update-partner-logo');
-    Route::delete('/delete-partner-logo/{id}', [AdminController::class, 'deletePartnerLogo'])->name('admin.delete-partner-logo');
+    Route::get('/change-partner-logos', [WebsiteAdminController::class, 'changePartnerLogos'])->name('admin.change-partner-logos');
+    Route::post('/store-partner-logo', [WebsiteAdminController::class, 'storePartnerLogo'])->name('admin.store-partner-logo');
+    Route::post('/update-partner-logo/{id}', [WebsiteAdminController::class, 'updatePartnerLogo'])->name('admin.update-partner-logo');
+    Route::delete('/delete-partner-logo/{id}', [WebsiteAdminController::class, 'deletePartnerLogo'])->name('admin.delete-partner-logo');
 
     // Subscribers Management Routes
-    Route::get('/change-subscribers', [AdminController::class, 'changeSubscribers'])->name('admin.change-subscribers');
+    Route::get('/change-subscribers', [WebsiteAdminController::class, 'changeSubscribers'])->name('admin.change-subscribers');
 
     // FAQ Queries Management Routes
-    Route::get('/change-faq-queries', [AdminController::class, 'changeFaqQueries'])->name('admin.change-faq-queries');
+    Route::get('/change-faq-queries', [WebsiteAdminController::class, 'changeFaqQueries'])->name('admin.change-faq-queries');
 
     // KYC Pending Management Routes
     Route::get('/kyc-pending', [AdminController::class, 'kycPending'])->name('admin.kyc-pending');
