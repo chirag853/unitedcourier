@@ -275,4 +275,4 @@
     </div>
 </section>
 
-@include('website_include/footer'); ?>
+@include('website_include/footer');

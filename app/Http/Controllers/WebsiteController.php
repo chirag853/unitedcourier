@@ -490,7 +490,12 @@ class WebsiteController extends Controller
     {
         // Keep the page hero record out of the document cards; it is rendered only in the hero section.
         $documents = \App\Models\DocumentDownloadPage::whereNull('section')->active()->ordered()->get();
-        $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->active()->first();
+
+        // Do not apply the status filter to page-level metadata. Some existing server
+        // databases contain a lowercase/legacy status value, which caused this query
+        // to return null and made the Blade template display its fallback content.
+        $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->first();
+
         return view('document-download', compact('documents', 'pageMeta'));
     }
 

@@ -204,10 +204,12 @@
 
 <!-- Hero section -->
 @php
-    $heroBadge = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['badge'] ?? 'Explore All Documents') : 'Explore All Documents';
-    $heroTitle = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['title'] ?? 'Documents <span class="moving-gradient-text">Download</span>') : 'Documents <span class="moving-gradient-text">Download</span>';
-    $heroDescription = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['description'] ?? 'Must-read guides, handpicked for their popularity among global exporters') : 'Must-read guides, handpicked for their popularity among global exporters';
-    $heroImage = $pageMeta && $pageMeta->hero_image
+    // Read the normalized columns directly. This avoids depending on the virtual
+    // content accessor being present in an older/cached server model deployment.
+    $heroBadge = $pageMeta?->badge_text ?: 'Explore All Documents';
+    $heroTitle = $pageMeta?->title ?: 'Documents <span class="moving-gradient-text">Download</span>';
+    $heroDescription = $pageMeta?->description ?: 'Must-read guides, handpicked for their popularity among global exporters';
+    $heroImage = $pageMeta?->hero_image
         ? asset(ltrim($pageMeta->hero_image, '/'))
         : asset('public/website_images/document.webp');
 @endphp
