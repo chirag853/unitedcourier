@@ -320,7 +320,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="heroImage" class="form-label">Image</label>
-                                        <input type="text" class="form-control" id="heroImage" name="content[image]" placeholder="Image path (e.g., public/website_images/air-freight-service.webp)">
+                                        <input type="text" class="form-control" id="heroImage" name="content[image]" placeholder="Image path (e.g., website_images/air-freight-service.webp)">
                                         <div class="mt-2 d-flex align-items-center gap-2">
                                             <img id="heroImagePreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
                                             <input type="file" class="form-control form-control-sm" id="heroImageFile" name="images[image]" accept="image/*" data-preview="heroImagePreview" data-target="heroImage">
@@ -369,7 +369,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="overviewImage" class="form-label">Image</label>
-                                        <input type="text" class="form-control" id="overviewImage" name="content[image]" placeholder="Image path (e.g., public/website_images/map-pattern.png)">
+                                        <input type="text" class="form-control" id="overviewImage" name="content[image]" placeholder="Image path (e.g., website_images/map-pattern.png)">
                                         <div class="mt-2 d-flex align-items-center gap-2">
                                             <img id="overviewImagePreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
                                             <input type="file" class="form-control form-control-sm" id="overviewImageFile" name="images[image]" accept="image/*" data-preview="overviewImagePreview" data-target="overviewImage">
@@ -432,7 +432,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="testimonialsGoogleReview" class="form-label">Google Review Image</label>
-                                        <input type="text" class="form-control" id="testimonialsGoogleReview" name="content[google_review_image]" placeholder="public/website_images/google-review.png">
+                                        <input type="text" class="form-control" id="testimonialsGoogleReview" name="content[google_review_image]" placeholder="website_images/google-review.png">
                                         <div class="mt-2 d-flex align-items-center gap-2">
                                             <img id="testimonialsGoogleReviewPreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
                                             <input type="file" class="form-control form-control-sm" id="testimonialsGoogleReviewFile" name="images[google_review_image]" accept="image/*" data-preview="testimonialsGoogleReviewPreview" data-target="testimonialsGoogleReview">
@@ -448,7 +448,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="testimonialAvatar" class="form-label">Avatar Image Path</label>
-                                        <input type="text" class="form-control" id="testimonialAvatar" name="content[avatar]" placeholder="public/website_images/review-1.png">
+                                        <input type="text" class="form-control" id="testimonialAvatar" name="content[avatar]" placeholder="website_images/review-1.png">
                                         <div class="mt-2 d-flex align-items-center gap-2">
                                             <img id="testimonialAvatarPreview" src="" alt="" class="rounded-circle border" style="max-height:80px;max-width:80px;object-fit:cover;display:none;">
                                             <input type="file" class="form-control form-control-sm" id="testimonialAvatarFile" name="images[avatar]" accept="image/*" data-preview="testimonialAvatarPreview" data-target="testimonialAvatar">
@@ -705,18 +705,21 @@
     }
 
     // Show the currently-saved image in the preview thumbnail.
-    // pathFieldId = the text input holding the image path
-    // previewImgId = the <img> element used as preview
-    // path         = the raw stored path/value (may be "public/website_images/x.webp", "/website_images/x.webp", or a full URL)
+    // Legacy values may contain one or more leading public/ segments.
     function setImagePreview(pathFieldId, previewImgId, path) {
         const preview = document.getElementById(previewImgId);
         if (!preview) return;
         if (path && String(path).trim() !== '') {
-            // Normalize: strip a leading "public/" so asset() resolves correctly
             let src = String(path).trim();
-            src = src.replace(/^public\//, '');
-            if (!src.startsWith('/')) { src = '/' + src; }
-            preview.src = '{{ url('/') }}' + src;
+
+            if (!/^https?:\/\//i.test(src)) {
+                src = src.replace(/^\/+/, '').replace(/^(?:public\/)+/i, '');
+                src = '/' + src;
+                preview.src = '{{ url('/') }}' + src;
+            } else {
+                preview.src = src;
+            }
+
             preview.style.display = 'block';
         } else {
             preview.src = '';

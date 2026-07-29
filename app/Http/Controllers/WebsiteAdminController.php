@@ -3185,19 +3185,25 @@ class WebsiteAdminController extends Controller
     /**
      * Handle image file uploads for the Express Air Freight Solutions admin form.
      *
-     * The form sends uploaded files under the "images" array (e.g. images[image],
-     * images[google_review_image], images[avatar], images[sidebar_image]) and
-     * keeps the manual text path under "content[...]". If a file was uploaded we
-     * store it in public/website_images/ and return the public path; otherwise we
-     * fall back to the text value so existing behaviour is preserved.
-     *
-     * @param  \Illuminate\Http\Request $request
-     * @param  string $key      The images[] key (e.g. "image", "avatar")
-     * @param  string $fallback The value from the text field (content[...])
-     * @return string|null      The path to store (e.g. "public/website_images/x.webp")
+     * Image files are physically stored inside the public document root at
+     * public/website_images, so the database must contain only the URL-relative
+     * path website_images/filename. This prevents asset() from generating a
+     * duplicate /public/public path on deployments where the application URL
+     * already includes the public directory.
      */
     private function handleExpressAirImageUpload(Request $request, $key, $fallback = null)
     {
+        $normalizePath = static function ($path) {
+            if (!is_string($path) || trim($path) === '') {
+                return $path;
+            }
+
+            $path = ltrim(trim($path), '/\\');
+
+            // Remove every leading public/ prefix from legacy/manual values.
+            return preg_replace('#^(?:public/)+#i', '', $path);
+        };
+
         if ($request->hasFile("images.{$key}")) {
             $file = $request->file("images.{$key}");
             if ($file && $file->isValid()) {
@@ -3207,10 +3213,12 @@ class WebsiteAdminController extends Controller
                     mkdir($uploadPath, 0755, true);
                 }
                 $file->move($uploadPath, $imageName);
-                return 'public/website_images/' . $imageName;
+
+                return 'website_images/' . $imageName;
             }
         }
-        return $fallback;
+
+        return $normalizePath($fallback);
     }
 
     // ------------------------------------------------------------------
