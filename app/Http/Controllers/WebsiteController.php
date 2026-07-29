@@ -488,7 +488,8 @@ class WebsiteController extends Controller
      */
     public function documentDownload()
     {
-        $documents = \App\Models\DocumentDownloadPage::active()->ordered()->get();
+        // Keep the page hero record out of the document cards; it is rendered only in the hero section.
+        $documents = \App\Models\DocumentDownloadPage::whereNull('section')->active()->ordered()->get();
         $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->active()->first();
         return view('document-download', compact('documents', 'pageMeta'));
     }

@@ -255,7 +255,7 @@
     <div id="document-stack">
 
         <div class="row g-4">
-            @forelse($documents as $doc)
+            @forelse($documents->whereNull('section') as $doc)
             @php
             $iconClass = match($doc->file_type) {
             'pdf' => 'file-pdf',
