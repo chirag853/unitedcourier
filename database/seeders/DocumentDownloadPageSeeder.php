@@ -116,21 +116,19 @@ class DocumentDownloadPageSeeder extends Seeder
         // Page Meta (Hero section content)
         // ──────────────────────────────────────────────
         DocumentDownloadPage::create([
-            'section'    => 'page_meta',
-            'file_type'  => null,
-            'title'      => null,
-            'file_size'  => null,
-            'file_url'   => null,
-            'category'   => null,
+            'section'      => 'page_meta',
+            'file_type'    => null,
+            'title'        => 'Documents <span class="moving-gradient-text">Download</span>',
+            'file_size'    => null,
+            'file_url'     => null,
+            'category'     => null,
             'status_badge' => null,
-            'description'  => null,
+            'badge_text'   => 'Explore All Documents',
+            'hero_image'   => 'public/website_images/document.webp',
+            'description'  => 'Must-read guides, handpicked for their popularity among global exporters',
             'sort_order'   => 0,
             'status'       => 'Active',
-            'content'      => [
-                'badge'       => 'Explore All Documents',
-                'title'       => 'Documents <span class="moving-gradient-text">Download</span>',
-                'description' => 'Must-read guides, handpicked for their popularity among global exporters',
-            ],
+            'page_meta'    => null,
         ]);
 
         $this->command->info('Document Download page seeded with ' . count($documents) . ' documents.');

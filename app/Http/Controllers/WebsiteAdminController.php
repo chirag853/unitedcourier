@@ -4377,23 +4377,51 @@ class WebsiteAdminController extends Controller
     public function updateDocumentDownloadPageMeta(Request $request)
     {
         try {
-            $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->active()->first();
+            $request->validate([
+                'badge' => 'nullable|string|max:255',
+                'title' => 'required|string|max:2000',
+                'description' => 'nullable|string',
+                'hero_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp,bmp|max:10240',
+            ]);
+
+            $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->first();
             if (!$pageMeta) {
                 $pageMeta = new \App\Models\DocumentDownloadPage();
                 $pageMeta->section = 'page_meta';
                 $pageMeta->status = 'Active';
+                $pageMeta->sort_order = 0;
             }
 
-            $pageMeta->content = [
-                'badge' => $request->input('badge'),
-                'title' => $request->input('title'),
-                'description' => $request->input('description'),
-            ];
+            $pageMeta->badge_text = $request->input('badge');
+            $pageMeta->title = $request->input('title');
+            $pageMeta->description = $request->input('description');
+
+            if ($request->hasFile('hero_image')) {
+                $image = $request->file('hero_image');
+                $uploadPath = public_path('website_images');
+
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+
+                if (!empty($pageMeta->hero_image) && preg_match('#^website_images/(.+)$#i', $pageMeta->hero_image, $matches)) {
+                    $oldImagePath = public_path('website_images/' . $matches[1]);
+                    if (file_exists($oldImagePath)) {
+                        unlink($oldImagePath);
+                    }
+                }
+
+                $imageName = time() . '_document_hero_' . str_replace(' ', '_', $image->getClientOriginalName());
+                $image->move($uploadPath, $imageName);
+                $pageMeta->hero_image = 'website_images/' . $imageName;
+            }
+
+            $pageMeta->page_meta = null;
             $pageMeta->save();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Page content updated successfully!'
+                'message' => 'Hero content and image updated successfully!'
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -4407,7 +4435,7 @@ class WebsiteAdminController extends Controller
 
     public function changeDocumentDownload()
     {
-        $documents = \App\Models\DocumentDownloadPage::ordered()->get();
+        $documents = \App\Models\DocumentDownloadPage::whereNull('section')->ordered()->get();
         $pageMeta = \App\Models\DocumentDownloadPage::bySection('page_meta')->first();
         return view('admin.change-document-download', compact('documents', 'pageMeta'));
     }

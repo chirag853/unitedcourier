@@ -207,6 +207,9 @@
     $heroBadge = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['badge'] ?? 'Explore All Documents') : 'Explore All Documents';
     $heroTitle = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['title'] ?? 'Documents <span class="moving-gradient-text">Download</span>') : 'Documents <span class="moving-gradient-text">Download</span>';
     $heroDescription = ($pageMeta && $pageMeta->content) ? ($pageMeta->content['description'] ?? 'Must-read guides, handpicked for their popularity among global exporters') : 'Must-read guides, handpicked for their popularity among global exporters';
+    $heroImage = $pageMeta && $pageMeta->hero_image
+        ? asset(ltrim($pageMeta->hero_image, '/'))
+        : asset('public/website_images/document.webp');
 @endphp
 <header style="min-height: 70vh; padding-top: 140px; padding-bottom: 50px;" class="hero-gradient">
     <div class="floating-blob bg-warning opacity-25" style="width: 250px; height: 250px; top: 10%; left: -125px;">
@@ -237,7 +240,7 @@
             <div class="col-md-6 text-center">
                 <div class="hero-graphic">
                     <div class="">
-                        <img src="{{ asset('public/website_images/document.webp') }}" class="img-fluid" style="width:50%">
+                        <img src="{{ $heroImage }}" alt="Document download" class="img-fluid" style="width:50%">
                     </div>
                 </div>
             </div>

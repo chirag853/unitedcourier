@@ -15,6 +15,8 @@ class DocumentDownloadPage extends Model
         'file_url',
         'category',
         'status_badge',
+        'badge_text',
+        'hero_image',
         'description',
         'sort_order',
         'status',
@@ -27,16 +29,16 @@ class DocumentDownloadPage extends Model
     ];
 
     /**
-     * Get the content attribute (backward-compatible accessor).
-     * The page_meta column stores JSON page-level metadata.
+     * Build the legacy content array from normalized hero columns.
      */
     public function getContentAttribute($value)
     {
-        if (!empty($this->page_meta)) {
-            $decoded = json_decode($this->page_meta, true);
-            return is_array($decoded) ? $decoded : [];
-        }
-        return [];
+        return [
+            'badge' => $this->badge_text,
+            'title' => $this->title,
+            'description' => $this->description,
+            'image' => $this->hero_image,
+        ];
     }
 
     public function scopeActive($query)

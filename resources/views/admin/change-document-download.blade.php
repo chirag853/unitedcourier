@@ -74,45 +74,6 @@
                     </div>
                 </div>
 
-                <!-- Page Hero Content Section -->
-                <div class="col-12 mb-4">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="card-title">Page Hero Content</h5>
-                            <p class="card-text">Edit the hero section content (badge, title, description) for the Document Download page</p>
-                        </div>
-                        <div class="card-body">
-                            <form id="pageMetaForm">
-                                @csrf
-                                <div class="row">
-                                    <div class="col-md-4 mb-3">
-                                        <label for="badge" class="form-label">Badge Text</label>
-                                        <input type="text" class="form-control" id="badge" name="badge"
-                                            value="{{ $pageMeta && $pageMeta->content ? ($pageMeta->content['badge'] ?? '') : '' }}"
-                                            placeholder="e.g. Explore All Documents">
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label for="title" class="form-label">Hero Title <small class="text-muted">(HTML allowed)</small></label>
-                                        <input type="text" class="form-control" id="title" name="title"
-                                            value="{{ $pageMeta && $pageMeta->content ? ($pageMeta->content['title'] ?? '') : '' }}"
-                                            placeholder="e.g. Documents <span>Download</span>">
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label for="description" class="form-label">Description</label>
-                                        <textarea class="form-control" id="description" name="description" rows="2"
-                                            placeholder="e.g. Must-read guides, handpicked for their popularity among global exporters">{{ $pageMeta && $pageMeta->content ? ($pageMeta->content['description'] ?? '') : '' }}</textarea>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <button type="submit" class="btn btn-primary" id="savePageMetaBtn">
-                                        <i class="ti ti-device-floppy me-1"></i> Save Page Content
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Document Download Content Table -->
                 <div>
                     <div class="col-12">
@@ -155,6 +116,41 @@
                                             </tr>
                                         </thead>
                                         <tbody>
+                                            @if($pageMeta)
+                                            <tr>
+                                                <td>{{ $pageMeta->id }}</td>
+                                                <td>
+                                                    <strong>{{ $pageMeta->title ?: 'Page Hero Content' }}</strong>
+                                                    <div><small class="text-muted">Hero Section</small></div>
+                                                </td>
+                                                <td>
+                                                    @if($pageMeta->hero_image)
+                                                    <img src="{{ asset(ltrim($pageMeta->hero_image, '/')) }}" alt="Hero image"
+                                                        style="width: 64px; height: 48px; object-fit: contain; border-radius: 6px;">
+                                                    @else
+                                                    <span class="text-muted">-</span>
+                                                    @endif
+                                                </td>
+                                                <td><span class="text-muted">-</span></td>
+                                                <td><span class="badge bg-primary">Hero</span></td>
+                                                <td>{{ $pageMeta->badge_text ?: '-' }}</td>
+                                                <td><span class="badge bg-info">{{ $pageMeta->sort_order }}</span></td>
+                                                <td>
+                                                    @if($pageMeta->status == 'Active')
+                                                    <span class="badge bg-success">Active</span>
+                                                    @else
+                                                    <span class="badge bg-danger">Inactive</span>
+                                                    @endif
+                                                </td>
+                                                <td><small class="text-muted">{{ $pageMeta->created_at ? $pageMeta->created_at->format('d/m/Y') : '-' }}</small></td>
+                                                <td>
+                                                    <button type="button" class="btn btn-sm btn-primary action-btn"
+                                                        data-bs-toggle="modal" data-bs-target="#heroEditModal">
+                                                        <i class="ti ti-edit"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            @endif
                                             @forelse($documents as $doc)
                                             <tr>
                                                 <td>{{ $doc->id }}</td>
@@ -221,6 +217,59 @@
                     </div>
                 </div>
 
+                <div class="modal fade" id="heroEditModal" tabindex="-1" aria-labelledby="heroEditModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <form id="pageMetaForm" enctype="multipart/form-data">
+                                @csrf
+                                <div class="modal-header">
+                                    <div>
+                                        <h5 class="modal-title" id="heroEditModalLabel">Edit Page Hero Content</h5>
+                                        <small class="text-muted">Update the badge, title, description, and image shown on the Document Download page.</small>
+                                    </div>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label for="badge" class="form-label">Badge Text</label>
+                                        <input type="text" class="form-control" id="badge" name="badge"
+                                            value="{{ $pageMeta->badge_text ?? '' }}" placeholder="e.g. Explore All Documents">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="title" class="form-label">Hero Title <small class="text-muted">(HTML allowed)</small></label>
+                                        <input type="text" class="form-control" id="title" name="title"
+                                            value="{{ $pageMeta->title ?? '' }}" placeholder="e.g. Documents <span>Download</span>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="description" class="form-label">Description</label>
+                                        <textarea class="form-control" id="description" name="description" rows="4"
+                                            placeholder="Hero description">{{ $pageMeta->description ?? '' }}</textarea>
+                                    </div>
+                                    <div class="mb-0">
+                                        <label for="hero_image" class="form-label">Hero Image</label>
+                                        <input type="file" class="form-control" id="hero_image" name="hero_image"
+                                            accept="image/jpeg,image/png,image/gif,image/svg+xml,image/webp,image/bmp">
+                                        <small class="text-muted">JPEG, PNG, GIF, SVG, WebP, or BMP. Maximum size: 10 MB.</small>
+                                        @if($pageMeta && $pageMeta->hero_image)
+                                        <div class="mt-3">
+                                            <p class="mb-2 text-muted">Current image:</p>
+                                            <img src="{{ asset(ltrim($pageMeta->hero_image, '/')) }}" alt="Current hero image"
+                                                class="img-thumbnail" style="max-width: 220px; max-height: 160px; object-fit: contain;">
+                                        </div>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-primary" id="savePageMetaBtn">
+                                        <i class="ti ti-device-floppy me-1"></i> Save Hero Content
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -279,14 +328,19 @@
             const btn = $('#savePageMetaBtn');
             btn.prop('disabled', true).html('<i class="ti ti-loader me-1"></i> Saving...');
 
+            const formData = new FormData(this);
+
             $.ajax({
                 url: '{{ route("admin.update-document-download-page-meta") }}',
                 method: 'POST',
-                data: $(this).serialize(),
+                data: formData,
+                processData: false,
+                contentType: false,
                 dataType: 'json',
                 success: function(response) {
                     if (response.success) {
                         alert(response.message);
+                        location.reload();
                     } else {
                         alert('Error: ' + (response.message || 'Unknown error'));
                     }
@@ -295,7 +349,7 @@
                     alert('Error: ' + (xhr.responseJSON?.message || 'An error occurred'));
                 },
                 complete: function() {
-                    btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Page Content');
+                    btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Hero Content');
                 }
             });
         });
