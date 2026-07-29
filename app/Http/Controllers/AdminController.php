@@ -1560,14 +1560,54 @@ class AdminController extends Controller
             $webinar = \App\Models\WebinarPage::findOrFail($id);
 
             if ($webinar->section) {
-                // ── Page content row: save individual JSON fields ──
+                // ── Page content row: save fields into normalized DB columns ──
                 $request->validate([
                     'json_fields' => 'nullable|array',
                     'sort_order' => 'nullable|integer|min:0',
                     'status' => 'nullable|in:Active,Inactive',
                 ]);
 
-                $webinar->content = $request->json_fields ?? [];
+                $fields = $request->json_fields ?? [];
+                $fieldColumnMap = [
+                    'title' => 'title',
+                    'description' => 'description',
+                    'image' => 'image',
+                    'link' => 'link',
+                    'badge' => 'badge_text',
+                    'badge_text' => 'badge_text',
+                    'icon_svg' => 'icon_svg',
+                    'icon_class' => 'icon_class',
+                    'color_class' => 'color_scheme',
+                    'button_text' => 'button_text',
+                    'button_url' => 'button_url',
+                    'btn_text' => 'btn_text',
+                    'subtitle' => 'subtitle',
+                    'paragraphs' => 'paragraphs',
+                    'question' => 'question',
+                    'answer' => 'answer',
+                    'name' => 'name',
+                    'avatar' => 'avatar_url',
+                    'rating' => 'rating',
+                    'text' => 'text_content',
+                    'value' => 'stat_value',
+                    'label' => 'stat_label',
+                    'suffix' => 'stat_suffix',
+                    'logo_url' => 'logo_url',
+                    'alt' => 'alt_text',
+                ];
+                $extraContent = [];
+
+                foreach ($fields as $key => $value) {
+                    if (isset($fieldColumnMap[$key])) {
+                        $webinar->{$fieldColumnMap[$key]} = $value === '' ? null : $value;
+                    } elseif ($value !== '' && $value !== null) {
+                        $extraContent[$key] = $value;
+                    }
+                }
+
+                // The legacy content column is no longer used for editable data.
+                $webinar->content = null;
+                $webinar->extra_content = $extraContent ? json_encode($extraContent) : null;
                 $webinar->status = $request->status ?? 'Active';
                 $webinar->sort_order = $request->sort_order ?? 0;
                 $webinar->save();
@@ -1588,13 +1628,17 @@ class AdminController extends Controller
                 'status' => 'nullable|in:Active,Inactive',
             ]);
 
-            $webinar->fill($request->except(['image']));
+            $webinar->fill($request->except(['image', 'json_fields', 'content']));
 
-            // Save content JSON fields (category_tag, read_time, author_name, etc.)
+            // Store item metadata outside the legacy content column.
             if ($request->has('json_fields')) {
-                $existingContent = $webinar->content ?? [];
-                $webinar->content = array_merge($existingContent, $request->json_fields);
+                $itemFields = array_filter(
+                    $request->json_fields,
+                    static fn ($value) => $value !== '' && $value !== null
+                );
+                $webinar->extra_content = $itemFields ? json_encode($itemFields) : null;
             }
+            $webinar->content = null;
 
             // Handle image file upload
             if ($request->hasFile('image')) {

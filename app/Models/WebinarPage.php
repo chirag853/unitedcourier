@@ -35,6 +35,7 @@ class WebinarPage extends Model
             'icon_svg'    => $this->icon_svg,
             'icon_class'  => $this->icon_class,
             'color_class' => $this->color_scheme,
+            'badge'       => $this->badge_text,
             'badge_text'  => $this->badge_text,
             'button_text' => $this->button_text,
             'button_url'  => $this->button_url,
@@ -61,7 +62,7 @@ class WebinarPage extends Model
             $data['check_list'] = explode("\n", $this->check_list_text);
         }
 
-        // Merge any extra content stored as JSON
+        // Merge non-standard item metadata stored outside the legacy content column.
         if (!empty($this->extra_content)) {
             $extra = json_decode($this->extra_content, true);
             if (is_array($extra)) {
