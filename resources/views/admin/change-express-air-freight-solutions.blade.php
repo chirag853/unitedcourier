@@ -321,6 +321,11 @@
                                     <div class="mb-3">
                                         <label for="heroImage" class="form-label">Image</label>
                                         <input type="text" class="form-control" id="heroImage" name="content[image]" placeholder="Image path (e.g., public/website_images/air-freight-service.webp)">
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <img id="heroImagePreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
+                                            <input type="file" class="form-control form-control-sm" id="heroImageFile" name="images[image]" accept="image/*" data-preview="heroImagePreview" data-target="heroImage">
+                                        </div>
+                                        <small class="text-muted">Upload a new image, or leave the path field above to keep the existing image.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="heroBadges" class="form-label">Badges (one per line: icon|text)</label>
@@ -365,6 +370,11 @@
                                     <div class="mb-3">
                                         <label for="overviewImage" class="form-label">Image</label>
                                         <input type="text" class="form-control" id="overviewImage" name="content[image]" placeholder="Image path (e.g., public/website_images/map-pattern.png)">
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <img id="overviewImagePreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
+                                            <input type="file" class="form-control form-control-sm" id="overviewImageFile" name="images[image]" accept="image/*" data-preview="overviewImagePreview" data-target="overviewImage">
+                                        </div>
+                                        <small class="text-muted">Upload a new image, or leave the path field above to keep the existing image.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="overviewButtonText" class="form-label">Button Text</label>
@@ -423,6 +433,11 @@
                                     <div class="mb-3">
                                         <label for="testimonialsGoogleReview" class="form-label">Google Review Image</label>
                                         <input type="text" class="form-control" id="testimonialsGoogleReview" name="content[google_review_image]" placeholder="public/website_images/google-review.png">
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <img id="testimonialsGoogleReviewPreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
+                                            <input type="file" class="form-control form-control-sm" id="testimonialsGoogleReviewFile" name="images[google_review_image]" accept="image/*" data-preview="testimonialsGoogleReviewPreview" data-target="testimonialsGoogleReview">
+                                        </div>
+                                        <small class="text-muted">Upload a new image, or leave the path field above to keep the existing image.</small>
                                     </div>
                                 </div>
 
@@ -434,6 +449,11 @@
                                     <div class="mb-3">
                                         <label for="testimonialAvatar" class="form-label">Avatar Image Path</label>
                                         <input type="text" class="form-control" id="testimonialAvatar" name="content[avatar]" placeholder="public/website_images/review-1.png">
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <img id="testimonialAvatarPreview" src="" alt="" class="rounded-circle border" style="max-height:80px;max-width:80px;object-fit:cover;display:none;">
+                                            <input type="file" class="form-control form-control-sm" id="testimonialAvatarFile" name="images[avatar]" accept="image/*" data-preview="testimonialAvatarPreview" data-target="testimonialAvatar">
+                                        </div>
+                                        <small class="text-muted">Upload a new image, or leave the path field above to keep the existing image.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="testimonialRating" class="form-label">Rating (1-5)</label>
@@ -457,6 +477,11 @@
                                     <div class="mb-3">
                                         <label for="faqHeaderSidebarImage" class="form-label">Sidebar Image URL</label>
                                         <input type="text" class="form-control" id="faqHeaderSidebarImage" name="content[sidebar_image]" placeholder="Sidebar image URL (e.g., https://...gif)">
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <img id="faqHeaderSidebarImagePreview" src="" alt="" class="rounded border" style="max-height:80px;max-width:120px;object-fit:cover;display:none;">
+                                            <input type="file" class="form-control form-control-sm" id="faqHeaderSidebarImageFile" name="images[sidebar_image]" accept="image/*" data-preview="faqHeaderSidebarImagePreview" data-target="faqHeaderSidebarImage">
+                                        </div>
+                                        <small class="text-muted">Upload a new image, or leave the path field above to keep the existing image.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="faqHeaderSidebarTitle" class="form-label">Sidebar Title</label>
@@ -567,7 +592,14 @@
         document.getElementById('itemKey').value = itemKey;
         document.getElementById('sortOrder').value = sortOrder;
         document.getElementById('isActive').checked = isActive == 1;
-        
+
+        // Reset all file inputs + previews before repopulating
+        document.querySelectorAll('input[type="file"][data-preview]').forEach(inp => {
+            inp.value = '';
+            const pv = document.getElementById(inp.dataset.preview);
+            if (pv) { pv.src = ''; pv.style.display = 'none'; }
+        });
+
         hideAllSectionFields();
         
         // Show relevant fields and populate data
@@ -584,6 +616,7 @@
                 document.getElementById('heroButtonSecondaryIcon').value = content.button_secondary_icon || '';
                 document.getElementById('heroButtonSecondaryUrl').value = content.button_secondary_url || '';
                 document.getElementById('heroImage').value = content.image || '';
+                setImagePreview('heroImage', 'heroImagePreview', content.image);
                 if (Array.isArray(content.badges)) {
                     document.getElementById('heroBadges').value = content.badges.map(b => `${b.icon}|${b.text}`).join('\n');
                 } else {
@@ -623,6 +656,7 @@
                 document.getElementById('overviewTitle').value = content.title || '';
                 document.getElementById('overviewDescription').value = content.description || '';
                 document.getElementById('overviewImage').value = content.image || '';
+                setImagePreview('overviewImage', 'overviewImagePreview', content.image);
                 document.getElementById('overviewButtonText').value = content.button_text || '';
                 document.getElementById('overviewButtonUrl').value = content.button_url || '';
                 if (Array.isArray(content.check_list)) {
@@ -637,12 +671,14 @@
                 document.getElementById('testimonialsHeaderTitle').value = content.title || '';
                 document.getElementById('testimonialsHeaderDescription').value = content.description || '';
                 document.getElementById('testimonialsGoogleReview').value = content.google_review_image || '';
+                setImagePreview('testimonialsGoogleReview', 'testimonialsGoogleReviewPreview', content.google_review_image);
                 break;
 
             case 'testimonials':
                 toggleSectionFields('testimonialsFields', true);
                 document.getElementById('testimonialName').value = content.name || '';
                 document.getElementById('testimonialAvatar').value = content.avatar || '';
+                setImagePreview('testimonialAvatar', 'testimonialAvatarPreview', content.avatar);
                 document.getElementById('testimonialRating').value = content.rating || '';
                 document.getElementById('testimonialText').value = content.text || '';
                 break;
@@ -652,6 +688,7 @@
                 document.getElementById('faqHeaderBadge').value = content.badge || '';
                 document.getElementById('faqHeaderTitle').value = content.title || '';
                 document.getElementById('faqHeaderSidebarImage').value = content.sidebar_image || '';
+                setImagePreview('faqHeaderSidebarImage', 'faqHeaderSidebarImagePreview', content.sidebar_image);
                 document.getElementById('faqHeaderSidebarTitle').value = content.sidebar_title || '';
                 document.getElementById('faqHeaderSidebarDescription').value = content.sidebar_description || '';
                 document.getElementById('faqHeaderContactBoxTitle').value = content.contact_box_title || '';
@@ -664,6 +701,26 @@
                 document.getElementById('faqQuestion').value = content.question || '';
                 document.getElementById('faqAnswer').value = content.answer || '';
                 break;
+        }
+    }
+
+    // Show the currently-saved image in the preview thumbnail.
+    // pathFieldId = the text input holding the image path
+    // previewImgId = the <img> element used as preview
+    // path         = the raw stored path/value (may be "public/website_images/x.webp", "/website_images/x.webp", or a full URL)
+    function setImagePreview(pathFieldId, previewImgId, path) {
+        const preview = document.getElementById(previewImgId);
+        if (!preview) return;
+        if (path && String(path).trim() !== '') {
+            // Normalize: strip a leading "public/" so asset() resolves correctly
+            let src = String(path).trim();
+            src = src.replace(/^public\//, '');
+            if (!src.startsWith('/')) { src = '/' + src; }
+            preview.src = '{{ url('/') }}' + src;
+            preview.style.display = 'block';
+        } else {
+            preview.src = '';
+            preview.style.display = 'none';
         }
     }
 
@@ -842,13 +899,40 @@
         if (activeFieldId) {
             document.querySelectorAll(`#${activeFieldId} input, #${activeFieldId} textarea, #${activeFieldId} select`).forEach(el => {
                 if (el.name && !el.disabled) {
-                    formData.append(el.name, el.value);
+                    // File inputs: append the actual File object (not el.value which is "C:\fakepath\...")
+                    if (el.type === 'file') {
+                        if (el.files && el.files.length > 0) {
+                            formData.append(el.name, el.files[0]);
+                        }
+                        // If no file selected, skip — the text path field (content[...]) is sent separately
+                    } else {
+                        formData.append(el.name, el.value);
+                    }
                 }
             });
         }
 
         return formData;
     }
+
+    // Live preview when admin picks a file
+    document.addEventListener('change', function (e) {
+        if (e.target && e.target.type === 'file' && e.target.dataset.preview) {
+            const preview = document.getElementById(e.target.dataset.preview);
+            const targetInput = e.target.dataset.target ? document.getElementById(e.target.dataset.target) : null;
+            const file = e.target.files && e.target.files[0];
+            if (file && preview) {
+                const reader = new FileReader();
+                reader.onload = function (ev) {
+                    preview.src = ev.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+                // Clear the manual path field so the controller knows to use the uploaded file
+                if (targetInput) { targetInput.value = ''; }
+            }
+        }
+    });
 
     function deleteContent(id) {
         if (confirm('Are you sure you want to delete this content?')) {

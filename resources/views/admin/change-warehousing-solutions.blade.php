@@ -276,11 +276,6 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label for="extraContent" class="form-label">Extra Content (JSON)</label>
-                                    <textarea class="form-control font-monospace" id="extraContent" name="extra_content" rows="4" placeholder='{"custom_key": "custom_value", "another_key": "value"}'></textarea>
-                                    <small class="text-muted">Optional: JSON key-value pairs that will be merged into the content array. These values override any other content fields with the same key.</small>
-                                </div>
                             </div>
 
                             <div class="col-md-6">
@@ -587,17 +582,6 @@
                 break;
         }
 
-        // Populate extra_content
-        const extraContent = content.extra_content || {};
-        // Remove keys that are already handled by regular fields to keep it clean
-        const handledKeys = ['title','subtitle','paragraphs','badge_text','button_text','button_url','image','list_items','stat_number','stat_label','suffix','icon_svg','icon_class','question','answer','description'];
-        const filteredExtra = {};
-        for (const [key, val] of Object.entries(extraContent)) {
-            if (!handledKeys.includes(key)) {
-                filteredExtra[key] = val;
-            }
-        }
-        document.getElementById('extraContent').value = Object.keys(filteredExtra).length > 0 ? JSON.stringify(filteredExtra, null, 2) : '';
     }
 
     function openCreateModal() {
@@ -616,7 +600,6 @@
                 el.value = '';
             }
         });
-        document.getElementById('extraContent').value = '';
         toggleSectionFields('heroFields', true);
         document.getElementById('section').dispatchEvent(new Event('change'));
 
@@ -664,7 +647,7 @@
         try {
             formData = buildSectionFormData(this);
         } catch (e) {
-            // If extra_content JSON is invalid, buildSectionFormData already alerted the user
+            // If form data building fails, abort submission
             return;
         }
         
@@ -700,19 +683,6 @@
 
     function getSectionFieldIds() {
         return ['heroFields','statsFields','featuresFields','featuresHeaderFields','overviewFields','faqFields','ctaFields'];
-    }
-
-    // Gather extra_content from the JSON textarea
-    function getExtraContentJson() {
-        const raw = document.getElementById('extraContent').value.trim();
-        if (!raw) return null;
-        try {
-            const parsed = JSON.parse(raw);
-            return JSON.stringify(parsed); // Return valid JSON string
-        } catch(e) {
-            alert('Extra Content JSON is invalid. Please fix it or clear the field.\nError: ' + e.message);
-            throw new Error('Invalid JSON in extra_content');
-        }
     }
 
     function getFieldIdForSection(section) {
@@ -785,17 +755,6 @@
                     formData.append(el.name, el.value);
                 }
             });
-        }
-
-        // Append extra_content
-        try {
-            const extraContentJson = getExtraContentJson();
-            if (extraContentJson !== null) {
-                formData.append('extra_content', extraContentJson);
-            }
-        } catch (e) {
-            // Abort form submission if JSON is invalid
-            throw e;
         }
 
         return formData;

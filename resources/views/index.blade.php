@@ -223,9 +223,26 @@
 
             <div class="col-lg-6 animate-on-scroll" data-anim="animate__fadeInLeft" style="animation-delay: 0.1s;">
                 <div class="about-image-grid">
-                    <video autoplay muted loop class="main-about-img">
-                        <source src="{{ asset('/website_images/truck-video.mp4') }}" type="video/mp4">
-                    </video>
+                    @php
+                        $aboutMediaPath = trim((string) ($aboutData['media_path'] ?? ''));
+                        $aboutMediaType = strtolower(trim((string) ($aboutData['media_type'] ?? '')));
+                        $aboutMediaUrl = $aboutMediaPath !== ''
+                            ? asset(ltrim($aboutMediaPath, '/'))
+                            : asset('website_images/truck-video.mp4');
+                        $aboutMediaExtension = strtolower(pathinfo($aboutMediaPath, PATHINFO_EXTENSION));
+                        $aboutVideoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
+                        $isAboutVideo = $aboutMediaType === 'video'
+                            || in_array($aboutMediaExtension, $aboutVideoExtensions, true);
+                    @endphp
+
+                    @if ($aboutMediaPath !== '' && ! $isAboutVideo)
+                        <img src="{{ $aboutMediaUrl }}" alt="About United Worldwide Couriers" class="main-about-img">
+                    @else
+                        <video src="{{ $aboutMediaUrl }}" autoplay muted loop playsinline preload="auto"
+                            class="main-about-img">
+                            Your browser does not support the video tag.
+                        </video>
+                    @endif
                 </div>
             </div>
 

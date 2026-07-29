@@ -162,7 +162,7 @@
                                                         <span class="badge bg-primary">{{ $content->section_key }}</span>
                                                     </td>
                                                     <td>
-                                                        <strong>{{ $content->title ?? '-' }}</strong>
+                                                        <strong>{!! $content->title ?: '-' !!}</strong>
                                                     </td>
                                                     <td>
                                                         <div class="content-preview">
@@ -182,7 +182,21 @@
                                                     <td>{{ $content->sort_order }}</td>
                                                     <td>
                                                         <div class="table-actions">
-                                                            <button type="button" class="btn btn-sm btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#editModal" onclick="editContent({{ $content->id }}, '{{ $content->section_key }}', '{{ $content->title ?? '' }}', '{{ addslashes($content->paragraphs ?? '') }}', '{{ addslashes($content->address ?? '') }}', '{{ addslashes($content->map_embed_url ?? '') }}', {{ $content->sort_order }}, '{{ addslashes(json_encode($content->phone_numbers ?? [])) }}', '{{ addslashes(json_encode($content->email_addresses ?? [])) }}', '{{ addslashes(json_encode($content->list_items ?? [])) }}', '{{ addslashes(json_encode($content->social_links ?? [])) }}')">
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-primary action-btn edit-content-btn"
+                                                                    data-bs-toggle="modal"
+                                                                    data-bs-target="#editModal"
+                                                                    data-id="{{ $content->id }}"
+                                                                    data-section-key="{{ $content->section_key }}"
+                                                                    data-title="{{ $content->title ?? '' }}"
+                                                                    data-paragraphs="{{ $content->paragraphs ?? '' }}"
+                                                                    data-address="{{ $content->address ?? '' }}"
+                                                                    data-map-embed-url="{{ $content->map_embed_url ?? '' }}"
+                                                                    data-sort-order="{{ $content->sort_order }}"
+                                                                    data-phone-numbers="{{ json_encode($content->phone_numbers ?? []) }}"
+                                                                    data-email-addresses="{{ json_encode($content->email_addresses ?? []) }}"
+                                                                    data-list-items="{{ json_encode($content->list_items ?? []) }}"
+                                                                    data-social-links="{{ json_encode($content->social_links ?? []) }}">
                                                                 <i class="ti ti-edit"></i> Edit
                                                             </button>
                                                             <button type="button" class="btn btn-sm btn-danger action-btn" onclick="deleteContent({{ $content->id }})">
@@ -466,14 +480,17 @@
         document.getElementById('socialLinks').value = JSON.stringify(links);
     }
 
-    function editContent(id, sectionKey, title, paragraphs, address, mapEmbedUrl, sortOrder, phoneNumbersJson, emailAddressesJson, listItemsJson, socialLinksJson) {
-        document.getElementById('contentId').value = id;
-        document.getElementById('sectionKey').value = sectionKey;
-        document.getElementById('title').value = title;
-        document.getElementById('paragraphs').value = paragraphs;
-        document.getElementById('address').value = address;
-        document.getElementById('mapEmbedUrl').value = mapEmbedUrl;
-        document.getElementById('sortOrder').value = sortOrder;
+    // Populate the edit modal from data attributes on the clicked button.
+    // Using data attributes (HTML-entity-encoded by Blade) avoids breaking the
+    // onclick attribute when fields contain quotes or HTML (e.g. hero title).
+    function editContentFromButton(btn) {
+        document.getElementById('contentId').value = btn.dataset.id;
+        document.getElementById('sectionKey').value = btn.dataset.sectionKey;
+        document.getElementById('title').value = btn.dataset.title;
+        document.getElementById('paragraphs').value = btn.dataset.paragraphs;
+        document.getElementById('address').value = btn.dataset.address;
+        document.getElementById('mapEmbedUrl').value = btn.dataset.mapEmbedUrl;
+        document.getElementById('sortOrder').value = btn.dataset.sortOrder;
 
         // Clear existing dynamic inputs
         document.getElementById('phoneNumbersContainer').innerHTML = '';
@@ -482,6 +499,7 @@
         document.getElementById('socialLinksContainer').innerHTML = '';
 
         // Parse and populate phone numbers
+        const phoneNumbersJson = btn.dataset.phoneNumbers;
         try {
             const phoneNumbers = JSON.parse(phoneNumbersJson);
             if (Array.isArray(phoneNumbers)) {
@@ -494,6 +512,7 @@
         }
 
         // Parse and populate email addresses
+        const emailAddressesJson = btn.dataset.emailAddresses;
         try {
             const emailAddresses = JSON.parse(emailAddressesJson);
             if (Array.isArray(emailAddresses)) {
@@ -506,6 +525,7 @@
         }
 
         // Parse and populate list items
+        const listItemsJson = btn.dataset.listItems;
         try {
             const listItems = JSON.parse(listItemsJson);
             if (Array.isArray(listItems)) {
@@ -518,6 +538,7 @@
         }
 
         // Parse and populate social links
+        const socialLinksJson = btn.dataset.socialLinks;
         try {
             const socialLinks = JSON.parse(socialLinksJson);
             if (Array.isArray(socialLinks)) {
@@ -537,6 +558,14 @@
             if (socialLinksJson) addSocialLinkInput('', socialLinksJson);
         }
     }
+
+    // Wire up all edit buttons via event delegation (handles re-renders too)
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.edit-content-btn');
+        if (btn) {
+            editContentFromButton(btn);
+        }
+    });
 
     document.getElementById('editForm').addEventListener('submit', function(e) {
         e.preventDefault();

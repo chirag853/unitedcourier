@@ -161,36 +161,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Dynamic JSON Fields -->
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5 class="card-title">Content Fields (JSON)</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        @if($currencyCalculator->content && is_array($currencyCalculator->content))
-                                            @foreach($currencyCalculator->content as $key => $value)
-                                            <div class="mb-3">
-                                                <label for="json_{{ $key }}" class="form-label">{{ ucwords(str_replace('_', ' ', $key)) }}</label>
-                                                @if(is_string($value) && (strlen($value) > 100 || str_contains($value, "\n")))
-                                                <textarea class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" rows="4">{{ old('json_fields.' . $key, $value) }}</textarea>
-                                                @elseif(is_string($value) && (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')))
-                                                <div class="input-group">
-                                                    <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ old('json_fields.' . $key, $value) }}" placeholder="https://...">
-                                                    @if($value)
-                                                    <a href="{{ $value }}" target="_blank" class="btn btn-outline-primary"><i class="ti ti-external-link"></i></a>
-                                                    @endif
-                                                </div>
-                                                @else
-                                                <input type="text" class="form-control" id="json_{{ $key }}" name="json_fields[{{ $key }}]" value="{{ old('json_fields.' . $key, $value) }}">
-                                                @endif
-                                            </div>
-                                            @endforeach
-                                        @else
-                                            <p class="text-muted mb-0">No content data available.</p>
-                                        @endif
-                                    </div>
-                                </div>
-
                                 <!-- Image Upload / Display -->
                                 <div class="card">
                                     <div class="card-header">

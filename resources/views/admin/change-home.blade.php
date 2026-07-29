@@ -233,6 +233,53 @@
                     <div class="modal-body">
                         <input type="hidden" id="contentId" name="id">
 
+                        @php
+                            $currentMediaType = $aboutMediaType ?? null;
+                            $currentMediaPath = $aboutMediaPath ?? null;
+                        @endphp
+
+                        <div class="mb-3 p-3 border rounded bg-light">
+                            <h6 class="mb-3">About Section Media (Video / Image / GIF)</h6>
+                            <div class="mb-3" id="currentMediaPreview">
+                                @if ($currentMediaPath)
+                                    @if ($currentMediaType === 'video')
+                                        <video src="{{ asset($currentMediaPath) }}" controls
+                                            style="max-width: 300px; max-height: 180px; border-radius: 8px;"></video>
+                                    @else
+                                        <img src="{{ asset($currentMediaPath) }}" alt="Current Media"
+                                            style="max-width: 300px; max-height: 180px; border-radius: 8px;">
+                                    @endif
+                                    <div><small class="text-muted">Current: {{ ucfirst($currentMediaType) }} &middot; {{ $currentMediaPath }}</small></div>
+                                @else
+                                    <small class="text-muted">No media uploaded. The default video is currently shown.</small>
+                                @endif
+                            </div>
+
+                            <div id="aboutMediaForm">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label for="mediaType" class="form-label">Media Type</label>
+                                        <select class="form-select" id="mediaType" name="media_type">
+                                            <option value="video" {{ $currentMediaType === 'video' ? 'selected' : '' }}>Video</option>
+                                            <option value="image" {{ $currentMediaType === 'image' ? 'selected' : '' }}>Image / GIF</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label for="mediaFile" class="form-label">Select File</label>
+                                        <input type="file" class="form-control" id="mediaFile" name="media_file"
+                                            accept="video/*,image/*" onchange="previewAboutMedia(this)">
+                                        <small class="text-muted">Maximum 50MB.</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="button" class="btn btn-primary w-100" onclick="uploadAboutMedia()">
+                                            <i class="ti ti-upload me-1"></i> Upload Media
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="newMediaPreview" class="mt-3"></div>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label for="section" class="form-label">Section</label>
                             <input type="text" class="form-control" id="editSection" name="section" readonly>
@@ -346,6 +393,43 @@
     <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
 
     <script>
+    function previewAboutMedia(input) {
+        const preview = document.getElementById('newMediaPreview');
+        preview.innerHTML = '';
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = file.type.startsWith('video/')
+            ? `<video src="${url}" controls style="max-width:300px;max-height:200px;border-radius:8px;"></video>`
+            : `<img src="${url}" alt="Selected media" style="max-width:300px;max-height:200px;border-radius:8px;">`;
+    }
+
+    function uploadAboutMedia() {
+        const file = document.getElementById('mediaFile').files[0];
+        if (!file) {
+            alert('Please select a video, image, or GIF.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('_token', '{{ csrf_token() }}');
+        formData.append('media_type', document.getElementById('mediaType').value);
+        formData.append('media_file', file);
+        fetch(`${BASE_URL}/admin/update-about-media`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Upload failed.');
+            alert(data.message);
+            location.reload();
+        })
+        .catch(error => alert(error.message));
+    }
+
     let dataTable = null;
     $(document).ready(function() {
         $('#homeContentTable').DataTable();

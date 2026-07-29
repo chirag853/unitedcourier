@@ -186,7 +186,7 @@
                     Contact Us
                 </div>
                 <h1 class="hero-title mb-4">
-                    Landed Here <span class="moving-gradient-text"> With a Question?</span>
+                    {!! $pageMeta->title ?? 'Landed Here <span class="moving-gradient-text"> With a Question?</span>' !!}
                 </h1>
                 <p style="max-width: 100%;" class="text-center mb-5 lead">
                     {{ $pageMeta->paragraphs ?? 'If you need to know more about our services, or would like to contact someone who can help you with your request, please fill up the form below, and we will contact you as soon as possible.' }}

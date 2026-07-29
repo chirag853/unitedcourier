@@ -158,7 +158,14 @@ class WebsiteAdminController extends Controller
     public function changeHome()
     {
         $homeContent = \App\Models\HomePageContent::orderBy('sort_order')->get();
-        return view('admin.change-home', ['homeContent' => $homeContent]);
+        $aboutMedia = \App\Models\HomePageContent::where('section', 'about')
+            ->whereIn('field_name', ['media_type', 'media_path'])
+            ->pluck('content', 'field_name');
+        return view('admin.change-home', [
+            'homeContent' => $homeContent,
+            'aboutMediaType' => $aboutMedia->get('media_type'),
+            'aboutMediaPath' => $aboutMedia->get('media_path'),
+        ]);
     }
 
     // ------------------------------------------------------------------
@@ -241,6 +248,77 @@ class WebsiteAdminController extends Controller
                 'message' => 'Content updated successfully!'
             ]);
         }
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Manage the About section media (video or image/gif) shown on the home page.
+     *
+     * Stores two rows in the `home_page` table under section = 'about':
+     *   - field_name = 'media_type' : either 'video' or 'image'
+     *   - field_name = 'media_path' : the uploaded file path (relative to public/)
+     *
+     * Accepts image files (jpg, png, gif, webp, svg) and video files (mp4, webm, ogg).
+     */
+    public function updateAboutMedia(Request $request)
+    {
+        $request->validate([
+            'media_type' => 'required|in:video,image',
+            'media_file' => 'required|file|max:51200', // 50MB max
+        ]);
+
+        $mediaType = $request->input('media_type');
+        $file = $request->file('media_file');
+
+        // Validate file mime based on selected type
+        if ($mediaType === 'video') {
+            $request->validate([
+                'media_file' => 'mimes:mp4,webm,ogg,mov,avi,mkv',
+            ]);
+        } else {
+            $request->validate([
+                'media_file' => 'mimes:jpeg,jpg,png,gif,webp,svg',
+            ]);
+        }
+
+        $uploadPath = public_path('website_images');
+        if (! is_dir($uploadPath)) {
+            mkdir($uploadPath, 0755, true);
+        }
+
+        $previousPath = HomePageContent::where('section', 'about')
+            ->where('field_name', 'media_path')
+            ->value('content');
+        if ($previousPath && str_starts_with($previousPath, 'website_images/')) {
+            $previousFile = public_path($previousPath);
+            if (is_file($previousFile)) {
+                unlink($previousFile);
+            }
+        }
+
+        $filename = time() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+        $file->move($uploadPath, $filename);
+        $path = 'website_images/' . $filename;
+
+        // Upsert media_type row
+        \App\Models\HomePageContent::updateOrCreate(
+            ['section' => 'about', 'field_name' => 'media_type'],
+            ['content' => $mediaType, 'sort_order' => 0]
+        );
+
+        // Upsert media_path row
+        \App\Models\HomePageContent::updateOrCreate(
+            ['section' => 'about', 'field_name' => 'media_path'],
+            ['content' => $path, 'sort_order' => 0]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'About section media updated successfully!',
+            'media_type' => $mediaType,
+            'media_path' => $path,
+        ]);
     }
 
     // ------------------------------------------------------------------
@@ -999,6 +1077,7 @@ class WebsiteAdminController extends Controller
                     // Also populate normalized columns
                     $storeData['paragraphs'] = $request->input('content.paragraphs');
                     $storeData['subtitle'] = $request->input('content.subtitle');
+                    $storeData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
                 case 'stats':
                     $contentData = [
@@ -1024,6 +1103,7 @@ class WebsiteAdminController extends Controller
                     // Also populate normalized columns
                     $storeData['paragraphs'] = $request->input('content.paragraphs');
                     $storeData['subtitle'] = $request->input('content.subtitle');
+                    $storeData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
                 case 'features_header':
                     $contentData = [
@@ -1137,6 +1217,7 @@ class WebsiteAdminController extends Controller
                     // Also populate normalized columns
                     $updateData['paragraphs'] = $request->input('content.paragraphs');
                     $updateData['subtitle'] = $request->input('content.subtitle');
+                    $updateData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
                     
                 case 'stats':
@@ -1164,6 +1245,7 @@ class WebsiteAdminController extends Controller
                     // Also populate normalized columns
                     $updateData['paragraphs'] = $request->input('content.paragraphs');
                     $updateData['subtitle'] = $request->input('content.subtitle');
+                    $updateData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
                     
                 case 'features_header':
@@ -2581,7 +2663,10 @@ class WebsiteAdminController extends Controller
                 $currencyCalculator->title = $request->title;
                 $currencyCalculator->description = $request->description;
                 $currencyCalculator->link = $request->link;
-                $currencyCalculator->content = $request->json_fields ?? [];
+                // Preserve existing content JSON; only overwrite if json_fields is explicitly provided
+                if ($request->has('json_fields') && is_array($request->json_fields)) {
+                    $currencyCalculator->content = $request->json_fields;
+                }
                 $currencyCalculator->status = $request->status ?? 'Active';
                 $currencyCalculator->sort_order = $request->sort_order ?? 0;
 
@@ -3088,6 +3173,39 @@ class WebsiteAdminController extends Controller
 
     // ------------------------------------------------------------------
 
+    /**
+     * Handle image file uploads for the Express Air Freight Solutions admin form.
+     *
+     * The form sends uploaded files under the "images" array (e.g. images[image],
+     * images[google_review_image], images[avatar], images[sidebar_image]) and
+     * keeps the manual text path under "content[...]". If a file was uploaded we
+     * store it in public/website_images/ and return the public path; otherwise we
+     * fall back to the text value so existing behaviour is preserved.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @param  string $key      The images[] key (e.g. "image", "avatar")
+     * @param  string $fallback The value from the text field (content[...])
+     * @return string|null      The path to store (e.g. "public/website_images/x.webp")
+     */
+    private function handleExpressAirImageUpload(Request $request, $key, $fallback = null)
+    {
+        if ($request->hasFile("images.{$key}")) {
+            $file = $request->file("images.{$key}");
+            if ($file && $file->isValid()) {
+                $imageName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+                $uploadPath = public_path('website_images');
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+                $file->move($uploadPath, $imageName);
+                return 'public/website_images/' . $imageName;
+            }
+        }
+        return $fallback;
+    }
+
+    // ------------------------------------------------------------------
+
     public function storeExpressAirFreightSolutionsContent(Request $request)
     {
         try {
@@ -3135,7 +3253,7 @@ class WebsiteAdminController extends Controller
                         'button_secondary_text' => $request->input('content.button_secondary_text'),
                         'button_secondary_icon' => $request->input('content.button_secondary_icon'),
                         'button_secondary_url' => $request->input('content.button_secondary_url'),
-                        'image' => $request->input('content.image'),
+                        'image' => $this->handleExpressAirImageUpload($request, 'image', $request->input('content.image')),
                         'badges' => $badges,
                         'stat_pills' => $statPills,
                     ];
@@ -3160,7 +3278,7 @@ class WebsiteAdminController extends Controller
                     $extraContent = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
-                        'image' => $request->input('content.image'),
+                        'image' => $this->handleExpressAirImageUpload($request, 'image', $request->input('content.image')),
                     ];
                     break;
                 case 'features_header':
@@ -3181,12 +3299,12 @@ class WebsiteAdminController extends Controller
                     $extraContent = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
-                        'google_review_image' => $request->input('content.google_review_image'),
+                        'google_review_image' => $this->handleExpressAirImageUpload($request, 'google_review_image', $request->input('content.google_review_image')),
                     ];
                     break;
                 case 'testimonials':
                     $storeData['name'] = $request->input('content.name');
-                    $storeData['avatar_url'] = $request->input('content.avatar');
+                    $storeData['avatar_url'] = $this->handleExpressAirImageUpload($request, 'avatar', $request->input('content.avatar'));
                     $storeData['rating'] = $request->input('content.rating');
                     $storeData['text_content'] = $request->input('content.text');
                     break;
@@ -3194,7 +3312,7 @@ class WebsiteAdminController extends Controller
                     $storeData['badge_text'] = $request->input('content.badge');
                     $extraContent = [
                         'title' => $request->input('content.title'),
-                        'sidebar_image' => $request->input('content.sidebar_image'),
+                        'sidebar_image' => $this->handleExpressAirImageUpload($request, 'sidebar_image', $request->input('content.sidebar_image')),
                         'sidebar_title' => $request->input('content.sidebar_title'),
                         'sidebar_description' => $request->input('content.sidebar_description'),
                         'contact_box_title' => $request->input('content.contact_box_title'),
@@ -3285,7 +3403,7 @@ class WebsiteAdminController extends Controller
                         'button_secondary_text' => $request->input('content.button_secondary_text'),
                         'button_secondary_icon' => $request->input('content.button_secondary_icon'),
                         'button_secondary_url' => $request->input('content.button_secondary_url'),
-                        'image' => $request->input('content.image'),
+                        'image' => $this->handleExpressAirImageUpload($request, 'image', $request->input('content.image')),
                         'badges' => $badges,
                         'stat_pills' => $statPills,
                     ];
@@ -3312,7 +3430,7 @@ class WebsiteAdminController extends Controller
                     $extraContent = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
-                        'image' => $request->input('content.image'),
+                        'image' => $this->handleExpressAirImageUpload($request, 'image', $request->input('content.image')),
                     ];
                     break;
                 case 'features_header':
@@ -3333,12 +3451,12 @@ class WebsiteAdminController extends Controller
                     $extraContent = [
                         'title' => $request->input('content.title'),
                         'description' => $request->input('content.description'),
-                        'google_review_image' => $request->input('content.google_review_image'),
+                        'google_review_image' => $this->handleExpressAirImageUpload($request, 'google_review_image', $request->input('content.google_review_image')),
                     ];
                     break;
                 case 'testimonials':
                     $updateData['name'] = $request->input('content.name');
-                    $updateData['avatar_url'] = $request->input('content.avatar');
+                    $updateData['avatar_url'] = $this->handleExpressAirImageUpload($request, 'avatar', $request->input('content.avatar'));
                     $updateData['rating'] = $request->input('content.rating');
                     $updateData['text_content'] = $request->input('content.text');
                     break;
@@ -3346,7 +3464,7 @@ class WebsiteAdminController extends Controller
                     $updateData['badge_text'] = $request->input('content.badge');
                     $extraContent = [
                         'title' => $request->input('content.title'),
-                        'sidebar_image' => $request->input('content.sidebar_image'),
+                        'sidebar_image' => $this->handleExpressAirImageUpload($request, 'sidebar_image', $request->input('content.sidebar_image')),
                         'sidebar_title' => $request->input('content.sidebar_title'),
                         'sidebar_description' => $request->input('content.sidebar_description'),
                         'contact_box_title' => $request->input('content.contact_box_title'),

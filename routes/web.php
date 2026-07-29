@@ -427,6 +427,7 @@ Route::prefix('admin')->group(function () {
     Route::get('/get-home-content/{id}', [WebsiteAdminController::class, 'getHomeContent'])->name('admin.get-home-content');
     Route::post('/update-home-content/{id}', [WebsiteAdminController::class, 'updateHomeContent'])->name('admin.update-home-content');
     Route::post('/update-multiple-home-content', [WebsiteAdminController::class, 'updateMultipleHomeContent'])->name('admin.update-multiple-home-content');
+    Route::post('/update-about-media', [WebsiteAdminController::class, 'updateAboutMedia'])->name('admin.update-about-media');
     
     // Service Page Management Routes
     Route::post('/update-service-content/{id}', [WebsiteAdminController::class, 'updateServiceContent'])->name('admin.update-service-content');

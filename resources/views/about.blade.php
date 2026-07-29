@@ -630,7 +630,7 @@
     <div class="container">
         <div class="faq-header">
             <span class="heading-badge">{{ $faqHeader->subtitle ?? 'Common Questions' }}</span>
-            <h2 class="about-title">{{ $faqHeader->title }}</h2>
+            <h2 class="about-title">{{ $faqHeader->title ?? 'Frequently Asked Questions' }}</h2>
         </div>
         
         <div class="row g-4">
