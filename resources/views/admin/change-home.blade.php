@@ -238,7 +238,7 @@
                             $currentMediaPath = $aboutMediaPath ?? null;
                         @endphp
 
-                        <div class="mb-3 p-3 border rounded bg-light">
+                        <div id="aboutMediaSection" class="mb-3 p-3 border rounded bg-light" style="display: none;">
                             <h6 class="mb-3">About Section Media (Video / Image / GIF)</h6>
                             <div class="mb-3" id="currentMediaPreview">
                                 @if ($currentMediaPath)
@@ -467,6 +467,16 @@
             document.getElementById('editFieldName').value = data.field_name;
             document.getElementById('editContent').value = data.content;
             document.getElementById('editSortOrder').value = data.sort_order;
+
+            // The About media uploader belongs only to the media path record.
+            const aboutMediaSection = document.getElementById('aboutMediaSection');
+            const isAboutMediaRecord = data.section === 'about' && data.field_name === 'media_path';
+            aboutMediaSection.style.display = isAboutMediaRecord ? 'block' : 'none';
+
+            if (!isAboutMediaRecord) {
+                document.getElementById('mediaFile').value = '';
+                document.getElementById('newMediaPreview').innerHTML = '';
+            }
 
             // Show image preview if content contains image
             updateContentPreview(data.content);

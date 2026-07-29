@@ -157,7 +157,16 @@ class WebsiteAdminController extends Controller
 
     public function changeHome()
     {
-        $homeContent = \App\Models\HomePageContent::orderBy('sort_order')->get();
+        // Keep internal media metadata and the obsolete legacy video row out of
+        // the editable content table. The single media_path row represents the
+        // About media item; media_type is managed through its upload control.
+        $homeContent = \App\Models\HomePageContent::where(function ($query) {
+                $query->where('section', '!=', 'about')
+                    ->orWhereNotIn('field_name', ['media_type', 'video']);
+            })
+            ->orderBy('sort_order')
+            ->get();
+
         $aboutMedia = \App\Models\HomePageContent::where('section', 'about')
             ->whereIn('field_name', ['media_type', 'media_path'])
             ->pluck('content', 'field_name');
@@ -4085,7 +4094,7 @@ class WebsiteAdminController extends Controller
                 ]);
                 $image = $request->file('image');
                 $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
-                $imagePath = 'public/website_images/' . $imageName;
+                $imagePath = 'website_images/' . $imageName;
                 $uploadPath = public_path('website_images');
                 if (!file_exists($uploadPath)) {
                     mkdir($uploadPath, 0755, true);
@@ -4139,7 +4148,7 @@ class WebsiteAdminController extends Controller
                 if ($request->hasFile('image')) {
                     $image = $request->file('image');
                     $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
-                    $imagePath = 'public/website_images/' . $imageName;
+                    $imagePath = 'website_images/' . $imageName;
                     $uploadPath = public_path('website_images');
                     if (!file_exists($uploadPath)) {
                         mkdir($uploadPath, 0755, true);
@@ -4172,7 +4181,7 @@ class WebsiteAdminController extends Controller
                 ]);
                 $image = $request->file('image');
                 $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
-                $imagePath = 'public/website_images/' . $imageName;
+                $imagePath = 'website_images/' . $imageName;
                 $uploadPath = public_path('website_images');
                 if (!file_exists($uploadPath)) {
                     mkdir($uploadPath, 0755, true);

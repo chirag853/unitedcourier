@@ -25,6 +25,22 @@ class PartnershipPage extends Model
         'rating' => 'decimal:1',
     ];
 
+    /**
+     * Partnership image paths are relative to Laravel's public directory.
+     * Normalize legacy values so asset() never generates an extra /public/ segment.
+     */
+    public function getImageAttribute($value)
+    {
+        return is_string($value) ? preg_replace('#^(?:/?public/)+#', '', $value) : $value;
+    }
+
+    public function setImageAttribute($value)
+    {
+        $this->attributes['image'] = is_string($value)
+            ? preg_replace('#^(?:/?public/)+#', '', $value)
+            : $value;
+    }
+
     public function getContentAttribute($value)
     {
         $data = [
