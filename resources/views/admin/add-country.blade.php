@@ -268,7 +268,7 @@
                                             <option value="TV|Tuvalu|TV">Tuvalu (TV)</option>
                                             <option value="UG|Uganda|UG">Uganda (UG)</option>
                                             <option value="UA|Ukraine|UA">Ukraine (UA)</option>
-                                            <option value="AE|United Arab Emirates|AE">United Arab Emirates (AE)</option>
+                                            <option value="UAE|United Arab Emirates|AE">United Arab Emirates (UAE)</option>
                                             <option value="UK|United Kingdom|UK">United Kingdom (UK)</option>
                                             <option value="US|United States|US">United States (US)</option>
                                             <option value="UY|Uruguay|UY">Uruguay (UY)</option>

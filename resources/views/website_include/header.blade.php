@@ -146,7 +146,7 @@
                         </div>
                     </li>
                     <li class="nav-item dropdown-mobile">
-                        <a class="nav-link" href="{{ url('/resources') }}">Resources <i class="fas fa-chevron-down"></i></a>
+                        <a class="nav-link">Resources <i class="fas fa-chevron-down"></i></a>
                         <div class="mega-menu">
                             <div class="menu-col-left">
                                 <span class="menu-label">Our Tools</span>
