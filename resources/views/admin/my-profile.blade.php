@@ -75,6 +75,13 @@
 </head>
 
 <body>
+    @php
+        $profileHomeUrl = $admin->canAccessDashboard()
+            ? route('admin.dashboard')
+            : ($admin->canAccessDeliveryDashboard()
+                ? route('admin.delivery-dashboard')
+                : route('admin.my-profile'));
+    @endphp
     <!-- Begin Wrapper -->
     <div class="main-wrapper">
         <!-- Header Start -->
@@ -124,7 +131,7 @@
                     <div class="page-breadcrumb">
                         <nav aria-label="breadcrumb">
                             <ol class="breadcrumb">
-                                <li class="breadcrumb-item"><a href="{{ url('/admin/dashboard') }}">Dashboard</a></li>
+                                <li class="breadcrumb-item"><a href="{{ $profileHomeUrl }}">Dashboard</a></li>
                                 <li class="breadcrumb-item active" aria-current="page">My Profile</li>
                             </ol>
                         </nav>
@@ -162,11 +169,7 @@
                                 <div class="mb-0">
                                     <div class="profile-info-label"><i class="ti ti-user-pin me-1"></i>Role</div>
                                     <div class="profile-info-value">
-                                        @if($admin->type == 1)
-                                            Super Admin
-                                        @else
-                                            Admin
-                                        @endif
+                                        {{ $admin->type === 'Delivery_person' ? 'Delivery Person' : $admin->type }}
                                     </div>
                                 </div>
                             </div>
@@ -266,7 +269,7 @@
 
                                     <!-- Submit -->
                                     <div class="text-end mt-4">
-                                        <a href="{{ url('/admin/dashboard') }}" class="btn btn-secondary me-2">
+                                        <a href="{{ $profileHomeUrl }}" class="btn btn-secondary me-2">
                                             <i class="ti ti-arrow-left me-1"></i>Cancel
                                         </a>
                                         <button type="submit" class="btn btn-primary">

@@ -169,6 +169,35 @@
                             <div class="col-md-9">
                                 <form id="shipmentForm" action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
                                     @csrf
+                                    @if($isExporter)
+                                        <div class="card border mb-3">
+                                            <div class="card-body">
+                                                <div class="row align-items-end">
+                                                    <div class="col-md-9">
+                                                        <label class="form-label" for="exporterCustomerSelect">Select Customer</label>
+                                                        <small class="text-muted"> (Selecting a saved customer fills Shipper Info automatically.)</small>
+
+                                                        <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
+                                                            <option value="">Enter shipper details manually</option>
+                                                            @foreach($exporterCustomers as $savedCustomer)
+                                                                <option value="{{ $savedCustomer->id }}" {{ old('selected_exporter_customer_id') == $savedCustomer->id ? 'selected' : '' }}>
+                                                                    {{ $savedCustomer->company_name }} — {{ $savedCustomer->contact_person }} ({{ $savedCustomer->city }})
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
+                                                        @error('selected_exporter_customer_id')
+                                                            <div class="text-danger small mt-1">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+                                                    <div class="col-md-3 mt-2 mt-md-0">
+                                                        <a href="{{ route('customer.exporter-customers') }}" class="btn btn-outline-primary w-100">
+                                                            <i class="ti ti-user-plus me-1"></i>Add Customer
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endif
                                     <div class="accordion accordion-bordered" id="main_accordion">
                                         <!-- Basic Info -->
                                         <div class="accordion-item rounded mb-3">
@@ -257,7 +286,7 @@
                                                             </div>
                                                         </div>
                                                         <div class="form-check mb-3">
-                                                            <input class="form-check-input" type="checkbox"
+                                                            <input class="form-check-input" type="checkbox" value="1"
                                                                 id="sameAsCustomer" name="shipper_same_as_customer" {{ old('shipper_same_as_customer') ? 'checked' : '' }}>
                                                             <label class="form-check-label" for="sameAsCustomer">
                                                                 Shipper Details (Same as Customer)
@@ -9356,19 +9385,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // Button click handler triggers rate calculation
+        // Rates are calculated only when the Invoice section's Next button is
+        // clicked. Field restoration and change events must not trigger it.
         const btn = document.getElementById('rateCalculateBtn');
         if (btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
-                calculateRate();
-            });
-        }
-
-        // Auto-calculate rate when consignee state changes
-        const consigneeStateEl = document.querySelector('select[name="consignee_state"]');
-        if (consigneeStateEl) {
-            consigneeStateEl.addEventListener('change', function() {
                 calculateRate();
             });
         }
@@ -9488,9 +9510,15 @@
     @endphp
     document.addEventListener('DOMContentLoaded', function () {
         const sameAsCustomer = document.getElementById('sameAsCustomer');
-        if (!sameAsCustomer) return;
+        const exporterCustomerSelect = document.getElementById('exporterCustomerSelect');
+        if (!sameAsCustomer && !exporterCustomerSelect) return;
 
         const customerData = @json($customerPrefill);
+        const exporterCustomerData = @json(
+            $exporterCustomers->mapWithKeys(fn ($savedCustomer) => [
+                $savedCustomer->id => $savedCustomer->toShipperArray()
+            ])
+        );
 
         // Remember user-entered values so unchecking restores them
         const savedValues = {};
@@ -9503,7 +9531,14 @@
                 const iti = window.intlTelInputGlobals?.getInstance(el);
                 if (iti) { iti.setNumber(value); return; }
             }
-            el.value = value;
+            if (el.type === 'checkbox') {
+                el.checked = Boolean(value);
+            } else {
+                el.value = value ?? '';
+                if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
+                    jQuery(el).trigger('change.select2');
+                }
+            }
         }
 
         function getField(name) {
@@ -9513,18 +9548,48 @@
                 const iti = window.intlTelInputGlobals?.getInstance(el);
                 if (iti) return iti.getNumber();
             }
-            return el.value;
+            return el.type === 'checkbox' ? el.checked : el.value;
         }
 
         const fieldNames = [
             'shipper_company_names', 'shipper_contact_person',
             'shipper_address_line1', 'shipper_address_line2', 'shipper_address_line3',
             'shipper_pincode', 'shipper_city', 'shipper_state',
-            'shipper_phone_number', 'shipper_emails'
+            'shipper_phone_number', 'shipper_emails', 'shipper_email_opt_out',
+            'shipper_kyc_type', 'shipper_kyc_number'
         ];
 
+        function applySelectedExporterCustomer() {
+            if (!exporterCustomerSelect) return;
+
+            const selectedCustomer = exporterCustomerData[exporterCustomerSelect.value];
+            if (!selectedCustomer) return;
+
+            fieldNames.forEach(function (name) {
+                setField(name, selectedCustomer[name]);
+            });
+
+            if (sameAsCustomer) {
+                sameAsCustomer.checked = false;
+            }
+        }
+
+        if (exporterCustomerSelect) {
+            exporterCustomerSelect.addEventListener('change', applySelectedExporterCustomer);
+
+            // Apply an old-input selection after a validation redirect. On a normal
+            // load, localStorage restoration will dispatch change after restoring.
+            if (exporterCustomerSelect.value) {
+                setTimeout(applySelectedExporterCustomer, 0);
+            }
+        }
+
+        if (!sameAsCustomer) return;
         sameAsCustomer.addEventListener('change', function () {
             if (this.checked) {
+                if (exporterCustomerSelect) {
+                    exporterCustomerSelect.value = '';
+                }
                 // Save current values then pre-fill from customer data
                 fieldNames.forEach(function (n) { savedValues[n] = getField(n); });
                 setField('shipper_company_names', customerData.company_names || '');
@@ -10264,6 +10329,7 @@ if (rateRadio && rateRadio.dataset.rate) {
     // ============================================================
     (function() {
         const STORAGE_KEY = 'create_shipment_form_data';
+        const HAS_SERVER_OLD_INPUT = @json(session()->hasOldInput());
 
         // Get all form elements in the main create-shipment form
         function getMainForm() {
@@ -10322,8 +10388,11 @@ if (rateRadio && rateRadio.dataset.rate) {
             }
         }
 
-        // Restore form values from localStorage
+        // Restore form values from localStorage only when Laravel has not already
+        // repopulated the form after server-side validation.
         function restoreFromStorage() {
+            if (HAS_SERVER_OLD_INPUT) return;
+
             let saved;
             try {
                 saved = localStorage.getItem(STORAGE_KEY);

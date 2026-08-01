@@ -16,6 +16,7 @@ use App\Models\ShipperInfo;
 use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Notifications\DeliveryAssignedNotification;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 
@@ -23,9 +24,13 @@ class AdminController extends Controller
 {
     public function index()
     {
-        // Check if admin is authenticated
-        if (!Auth::guard('admin')->check()) {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin) {
             return redirect()->route('admin.login')->with('error', 'Please login first');
+        }
+        if (!$admin->canAccessDashboard()) {
+            return redirect()->route('admin.my-profile')
+                ->with('error', 'You do not have permission to access the dashboard.');
         }
 
         // Customer Summary
@@ -108,8 +113,9 @@ class AdminController extends Controller
      */
     public function dashboardChartData(Request $request)
     {
-        if (!Auth::guard('admin')->check()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized']);
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
         $filter = $request->input('filter', 'this_month');
@@ -220,11 +226,325 @@ class AdminController extends Controller
         ]);
     }
 
+    /**
+     * Show delivery statistics scoped to the authenticated delivery person.
+     */
+    public function deliveryDashboard()
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return redirect()->route('admin.my-profile')
+                ->with('error', 'You do not have permission to access the delivery dashboard.');
+        }
+
+        $assignedShipments = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id);
+
+        $statusCounts = (clone $assignedShipments)
+            ->select('shipper_info.status', DB::raw('count(*) as count'))
+            ->groupBy('shipper_info.status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $totalAssigned = array_sum($statusCounts);
+        $completed = $statusCounts['delivered'] ?? 0;
+        $pendingPickup = $statusCounts['assigned_for_pickup'] ?? 0;
+        $inProgressStatuses = ['received', 'ready_to_dispatch', 'dispatched'];
+        $performedStatuses = array_merge($inProgressStatuses, ['delivered']);
+        $inProgress = collect($inProgressStatuses)->sum(fn ($status) => $statusCounts[$status] ?? 0);
+        $performed = collect($performedStatuses)->sum(fn ($status) => $statusCounts[$status] ?? 0);
+        $completionPercentage = $totalAssigned > 0 ? round(($completed / $totalAssigned) * 100, 1) : 0;
+
+        $recentDeliveries = (clone $assignedShipments)
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->select(
+                'shipment_invoice.id',
+                'shipment_invoice.invoice_number',
+                'shipment_invoice.updated_at as assigned_at',
+                'shipper_info.awb_number',
+                'shipper_info.company_name',
+                'shipper_info.contact_person as pickup_name',
+                'shipper_info.address_line1 as pickup_address_line1',
+                'shipper_info.address_line2 as pickup_address_line2',
+                'shipper_info.address_line3 as pickup_address_line3',
+                'shipper_info.pincode as pickup_pincode',
+                'shipper_info.city as pickup_city',
+                'shipper_info.state as pickup_state',
+                'shipper_info.phone_number as pickup_phone',
+                'shipper_info.status',
+                'consignee_info.consignee_name',
+                'consignee_info.address_line1 as destination_address_line1',
+                'consignee_info.address_line2 as destination_address_line2',
+                'consignee_info.address_line3 as destination_address_line3',
+                'consignee_info.zip_code as destination_pincode',
+                'consignee_info.city as destination_city',
+                'consignee_info.state as destination_state',
+                'consignee_info.phone_number as destination_phone'
+            )
+            ->orderByDesc('shipment_invoice.updated_at')
+            ->limit(10)
+            ->get();
+
+        $statusMap = Tracking::getStatusTitleMap();
+
+        return view('admin.delivery-dashboard', compact(
+            'admin',
+            'totalAssigned',
+            'completed',
+            'pendingPickup',
+            'inProgress',
+            'performed',
+            'completionPercentage',
+            'statusCounts',
+            'statusMap',
+            'recentDeliveries'
+        ));
+    }
+
+    /**
+     * Show deliveries assigned to the authenticated delivery person.
+     */
+    public function deliveryOrders(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return redirect()->route('admin.my-profile')
+                ->with('error', 'You do not have permission to access delivery records.');
+        }
+
+        $view = $request->input('view', 'pending');
+        if (!in_array($view, ['pending', 'process_pickup', 'completed', 'history'], true)) {
+            $view = 'pending';
+        }
+
+        $baseQuery = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id);
+
+        $pendingStatuses = [
+            'received',
+            'ready_to_dispatch',
+            'dispatched',
+            'delivered',
+            'cancelled',
+            'disputed',
+        ];
+        $pendingCount = (clone $baseQuery)->whereNotIn('shipper_info.status', $pendingStatuses)->count();
+        $processPickupCount = (clone $baseQuery)->where('shipper_info.status', 'received')->count();
+        $completedCount = (clone $baseQuery)->where('shipper_info.status', 'delivered')->count();
+        $historyCount = (clone $baseQuery)->count();
+
+        if ($view === 'pending') {
+            $baseQuery->whereNotIn('shipper_info.status', $pendingStatuses);
+        } elseif ($view === 'process_pickup') {
+            $baseQuery->where('shipper_info.status', 'received');
+        } elseif ($view === 'completed') {
+            $baseQuery->where('shipper_info.status', 'delivered');
+        }
+
+        $search = trim((string) $request->input('search', ''));
+        if ($search !== '') {
+            $baseQuery->where(function ($query) use ($search) {
+                $query->where('shipper_info.awb_number', 'like', '%' . $search . '%')
+                    ->orWhere('shipment_invoice.invoice_number', 'like', '%' . $search . '%')
+                    ->orWhere('shipper_info.company_name', 'like', '%' . $search . '%')
+                    ->orWhere('shipper_info.contact_person', 'like', '%' . $search . '%')
+                    ->orWhere('shipper_info.address_line1', 'like', '%' . $search . '%')
+                    ->orWhere('consignee_info.consignee_name', 'like', '%' . $search . '%')
+                    ->orWhere('consignee_info.city', 'like', '%' . $search . '%')
+                    ->orWhere('consignee_info.address_line1', 'like', '%' . $search . '%');
+            });
+        }
+
+        $deliveries = $baseQuery
+            ->select(
+                'shipment_invoice.id',
+                'shipment_invoice.invoice_number',
+                'shipment_invoice.delivery_type',
+                'shipment_invoice.updated_at as assigned_at',
+                'shipper_info.id as shipper_id',
+                'shipper_info.awb_number',
+                'shipper_info.company_name',
+                'shipper_info.contact_person as pickup_name',
+                'shipper_info.address_line1 as pickup_address_line1',
+                'shipper_info.address_line2 as pickup_address_line2',
+                'shipper_info.address_line3 as pickup_address_line3',
+                'shipper_info.pincode as pickup_pincode',
+                'shipper_info.city as pickup_city',
+                'shipper_info.state as pickup_state',
+                'shipper_info.phone_number as pickup_phone',
+                'shipper_info.status',
+                'consignee_info.consignee_name',
+                'consignee_info.contact_person as consignee_contact',
+                'consignee_info.address_line1 as destination_address_line1',
+                'consignee_info.address_line2 as destination_address_line2',
+                'consignee_info.address_line3 as destination_address_line3',
+                'consignee_info.zip_code as destination_pincode',
+                'consignee_info.city as destination_city',
+                'consignee_info.state as destination_state',
+                'consignee_info.phone_number as destination_phone'
+            )
+            ->orderByDesc('shipment_invoice.updated_at')
+            ->paginate(15)
+            ->withQueryString();
+
+        $statusMap = Tracking::getStatusTitleMap();
+
+        return view('admin.delivery-orders', compact(
+            'admin',
+            'view',
+            'search',
+            'deliveries',
+            'pendingCount',
+            'processPickupCount',
+            'completedCount',
+            'historyCount',
+            'statusMap'
+        ));
+    }
+
+    /**
+     * Confirm pickup for an assigned delivery and move it into process.
+     */
+    public function pickupDelivery(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate(['shipment_id' => 'required|integer']);
+
+        $shipment = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->where('shipment_invoice.id', $request->integer('shipment_id'))
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->select('shipment_invoice.id', 'shipper_info.id as shipper_id', 'shipper_info.awb_number', 'shipper_info.status')
+            ->first();
+
+        if (!$shipment) {
+            return response()->json(['success' => false, 'message' => 'This delivery is not assigned to you.'], 403);
+        }
+
+        if (in_array($shipment->status, ['delivered', 'cancelled', 'disputed', 'received', 'ready_to_dispatch', 'dispatched'], true)) {
+            return response()->json(['success' => false, 'message' => 'This delivery is already in process or completed.'], 422);
+        }
+
+        DB::transaction(function () use ($shipment) {
+            Tracking::create([
+                'awb_number' => $shipment->awb_number,
+                'status' => 'received',
+                'title' => 'Pickup Confirmed - In Process',
+                'shipper_id' => $shipment->shipper_id,
+                'uwc_id' => $shipment->awb_number,
+            ]);
+
+            DB::table('shipper_info')->where('id', $shipment->shipper_id)->update([
+                'status' => 'received',
+                'updated_at' => now(),
+            ]);
+        });
+
+        return response()->json(['success' => true, 'message' => 'Pickup confirmed. Delivery moved to In Process.']);
+    }
+
+    /**
+     * Return filtered chart data for the authenticated delivery person.
+     */
+    public function deliveryDashboardChartData(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $filter = $request->input('filter', 'this_month');
+        $now = now();
+
+        switch ($filter) {
+            case 'today':
+                $startDate = $now->copy()->startOfDay();
+                $endDate = $now->copy()->endOfDay();
+                break;
+            case 'yesterday':
+                $startDate = $now->copy()->subDay()->startOfDay();
+                $endDate = $now->copy()->subDay()->endOfDay();
+                break;
+            case 'last_month':
+                $startDate = $now->copy()->subMonthNoOverflow()->startOfMonth();
+                $endDate = $now->copy()->subMonthNoOverflow()->endOfMonth();
+                break;
+            case 'last_year':
+                $startDate = $now->copy()->subYearNoOverflow()->startOfYear();
+                $endDate = $now->copy()->subYearNoOverflow()->endOfYear();
+                break;
+            case 'this_month':
+            default:
+                $filter = 'this_month';
+                $startDate = $now->copy()->startOfMonth();
+                $endDate = $now->copy()->endOfMonth();
+                break;
+        }
+
+        $baseQuery = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->whereBetween('shipment_invoice.updated_at', [$startDate, $endDate]);
+
+        $statusCounts = (clone $baseQuery)
+            ->select('shipper_info.status', DB::raw('count(*) as count'))
+            ->groupBy('shipper_info.status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $periodExpression = $filter === 'last_year'
+            ? "DATE_FORMAT(shipment_invoice.updated_at, '%Y-%m')"
+            : "DATE_FORMAT(shipment_invoice.updated_at, '%Y-%m-%d')";
+
+        $assignmentTrend = (clone $baseQuery)
+            ->select(DB::raw($periodExpression . ' as period'), DB::raw('count(*) as count'))
+            ->groupBy('period')
+            ->orderBy('period')
+            ->pluck('count', 'period')
+            ->toArray();
+
+        $trackingPeriodExpression = $filter === 'last_year'
+            ? "DATE_FORMAT(tracking.created_at, '%Y-%m')"
+            : "DATE_FORMAT(tracking.created_at, '%Y-%m-%d')";
+
+        $completionTrend = DB::table('tracking')
+            ->join('shipment_invoice', 'tracking.shipper_id', '=', 'shipment_invoice.shipper_id')
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->where('tracking.status', 'delivered')
+            ->whereBetween('tracking.created_at', [$startDate, $endDate])
+            ->select(DB::raw($trackingPeriodExpression . ' as period'), DB::raw('count(distinct tracking.shipper_id) as count'))
+            ->groupBy('period')
+            ->orderBy('period')
+            ->pluck('count', 'period')
+            ->toArray();
+
+        return response()->json([
+            'success' => true,
+            'filter' => $filter,
+            'statusCounts' => $statusCounts,
+            'statusMap' => Tracking::getStatusTitleMap(),
+            'assignmentTrend' => $assignmentTrend,
+            'completionTrend' => $completionTrend,
+        ]);
+    }
+
     public function login()
     {
-        // If already logged in, redirect to dashboard
-        if (Auth::guard('admin')->check()) {
-            return redirect()->route('admin.dashboard');
+        // Send already-authenticated users to a destination they can access.
+        $admin = Auth::guard('admin')->user();
+        if ($admin) {
+            $landingRoute = $admin->canAccessDashboard()
+                ? 'admin.dashboard'
+                : ($admin->canAccessDeliveryDashboard() ? 'admin.delivery-dashboard' : 'admin.my-profile');
+
+            return redirect()->route($landingRoute);
         }
         
         return view('admin.login');
@@ -250,7 +570,12 @@ class AdminController extends Controller
 
         // Attempt to login with admin guard (also enforce status at credential level)
         if (Auth::guard('admin')->attempt(['email' => $request->email, 'password' => $request->password, 'status' => 1], $request->has('remember'))) {
-            return redirect()->route('admin.dashboard')->with('success', 'Login successful!');
+            $authenticatedAdmin = Auth::guard('admin')->user();
+            $landingRoute = $authenticatedAdmin->canAccessDashboard()
+                ? 'admin.dashboard'
+                : ($authenticatedAdmin->canAccessDeliveryDashboard() ? 'admin.delivery-dashboard' : 'admin.my-profile');
+
+            return redirect()->route($landingRoute)->with('success', 'Login successful!');
         }
 
         // Login failed
@@ -337,6 +662,9 @@ class AdminController extends Controller
                 'delivery_person_id' => 'nullable|integer|exists:admin_user,id',
             ]);
 
+            $shipmentBeforeUpdate = ShipmentInvoice::findOrFail($request->shipment_id);
+            $previousDeliveryPersonId = $shipmentBeforeUpdate->assigned_delivery_person;
+
             $updateData = [
                 'delivery_type' => $request->delivery_type,
             ];
@@ -376,6 +704,31 @@ class AdminController extends Controller
                 }
             }
 
+            $newDeliveryPersonId = $updateData['assigned_delivery_person'] ?? null;
+            if ($newDeliveryPersonId && (string) $previousDeliveryPersonId !== (string) $newDeliveryPersonId) {
+                $deliveryPerson = Admin::where('id', $newDeliveryPersonId)
+                    ->where('type', 'Delivery_person')
+                    ->where('status', 1)
+                    ->first();
+
+                if ($deliveryPerson) {
+                    $shipmentInvoice = $shipmentInvoice ?: ShipmentInvoice::find($request->shipment_id);
+                    $shipper = $shipmentInvoice?->shipper_id
+                        ? ShipperInfo::find($shipmentInvoice->shipper_id)
+                        : null;
+
+                    $deliveryPerson->notify(new DeliveryAssignedNotification(
+                        shipmentInvoiceId: (int) $request->shipment_id,
+                        shipperId: $shipmentInvoice?->shipper_id,
+                        awbNumber: $shipper?->awb_number,
+                        invoiceNumber: $shipmentInvoice?->invoice_number,
+                        shipperCompany: $shipper?->company_name,
+                        destination: null,
+                        assignedBy: Auth::guard('admin')->user()?->name
+                    ));
+                }
+            }
+
             // If DDU (Delhivery) is selected, call the Delhivery API
             $delhiveryResponse = null;
             if ($request->delivery_type === 'DDU') {
@@ -404,6 +757,52 @@ class AdminController extends Controller
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Return recent notifications for the authenticated admin user.
+     */
+    public function notificationsData()
+    {
+        $admin = Auth::guard('admin')->user();
+        $notifications = $admin->notifications()
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(function ($notification) {
+                $data = $notification->data;
+
+                return [
+                    'id' => $notification->id,
+                    'title' => $data['title'] ?? 'Notification',
+                    'message' => $data['message'] ?? '',
+                    'url' => $data['url'] ?? route('admin.notifications'),
+                    'read' => !is_null($notification->read_at),
+                    'created_at' => optional($notification->created_at)->diffForHumans(),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'unread_count' => $admin->unreadNotifications()->count(),
+            'notifications' => $notifications,
+        ]);
+    }
+
+    public function markNotificationRead(string $id)
+    {
+        $admin = Auth::guard('admin')->user();
+        $notification = $admin->notifications()->where('id', $id)->firstOrFail();
+        $notification->markAsRead();
+
+        return response()->json(['success' => true]);
+    }
+
+    public function markAllNotificationsRead()
+    {
+        Auth::guard('admin')->user()->unreadNotifications()->update(['read_at' => now()]);
+
+        return response()->json(['success' => true]);
     }
 
     /**
@@ -921,12 +1320,15 @@ class AdminController extends Controller
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|max:255|unique:admin_user,email',
-                'mobile' => 'nullable|string|max:20',
+                'mobile' => 'nullable|string|max:20|unique:admin_user,mobile',
                 'password' => 'required|string|min:6',
                 'designation' => 'nullable|string|max:100',
                 'state' => 'nullable|string|max:100',
                 'city' => 'nullable|string|max:100',
                 'status' => 'nullable|in:0,1',
+            ], [
+                'email.unique' => 'This email address is already in use.',
+                'mobile.unique' => 'This mobile number is already in use.',
             ]);
 
             Admin::create([
@@ -945,8 +1347,9 @@ class AdminController extends Controller
                 ->with('success', 'Delivery person added successfully!');
         } catch (\Illuminate\Validation\ValidationException $e) {
             return redirect()->route('admin.delivery-persons')
-                ->with('error', 'Validation failed: ' . $e->getMessage())
-                ->withInput();
+                ->withErrors($e->validator)
+                ->withInput()
+                ->with('open_delivery_person_modal', 'add');
         } catch (\Exception $e) {
             return redirect()->route('admin.delivery-persons')
                 ->with('error', 'Error: ' . $e->getMessage())
@@ -963,12 +1366,15 @@ class AdminController extends Controller
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|max:255|unique:admin_user,email,' . $id,
-                'mobile' => 'nullable|string|max:20',
+                'mobile' => 'nullable|string|max:20|unique:admin_user,mobile,' . $id,
                 'password' => 'nullable|string|min:6',
                 'designation' => 'nullable|string|max:100',
                 'state' => 'nullable|string|max:100',
                 'city' => 'nullable|string|max:100',
                 'status' => 'nullable|in:0,1',
+            ], [
+                'email.unique' => 'This email address is already in use.',
+                'mobile.unique' => 'This mobile number is already in use.',
             ]);
 
             $deliveryPerson = Admin::where('type', 'Delivery_person')->findOrFail($id);
@@ -993,8 +1399,10 @@ class AdminController extends Controller
                 ->with('success', 'Delivery person updated successfully!');
         } catch (\Illuminate\Validation\ValidationException $e) {
             return redirect()->route('admin.delivery-persons')
-                ->with('error', 'Validation failed: ' . $e->getMessage())
-                ->withInput();
+                ->withErrors($e->validator)
+                ->withInput()
+                ->with('open_delivery_person_modal', 'edit')
+                ->with('edit_delivery_person_id', $id);
         } catch (\Exception $e) {
             return redirect()->route('admin.delivery-persons')
                 ->with('error', 'Error: ' . $e->getMessage())
@@ -2679,124 +3087,110 @@ class AdminController extends Controller
     }
 
     /**
-     * Download a sample Excel file for bulk rate upload.
+     * Download a horizontally grouped sample Excel file for bulk rate upload.
      *
-     * The admin selects a Service (and optionally a Zone No) on the Manage
-     * Rate page, then clicks "Download Sample". This generates an .xlsx
-     * file with the expected header row (Weight Start, Weight End, Zone No,
-     * Price, Fuel Charge, Fuel %, GST %). If a service is selected, the
-     * file is pre-filled with the existing default rates for that service
-     * so the admin can see the current values and edit them.
-     *
-     * Query params:
-     *   - service_id : optional, pre-fills existing rates for this service
-     *   - zone_no    : optional, further filters the pre-filled rates
+     * Each selected zone contributes Price, Fuel Charge, Fuel %, and GST %
+     * columns. Existing default rates are pre-filled where available.
      */
     public function downloadRateSample(Request $request)
     {
         $serviceId = $request->query('service_id');
-        $zoneNo    = $request->query('zone_no');
+        $zoneNos = $request->query('zone_nos', []);
+        $zoneNos = is_array($zoneNos) ? $zoneNos : [$zoneNos];
+        $zoneNos = array_values(array_unique(array_filter(array_map('intval', $zoneNos), function ($zone) {
+            return $zone >= 0 && $zone <= 13;
+        })));
+
+        // Keep a useful default for older bookmarks that do not send zones.
+        if (empty($zoneNos)) {
+            $zoneNos = [1, 2];
+        }
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
+        $headers = ['Weight Start', 'Weight End'];
+        foreach ($zoneNos as $zoneNo) {
+            $headers[] = 'Zone ' . $zoneNo . ' Price';
+            $headers[] = 'Zone ' . $zoneNo . ' Fuel Charge';
+            $headers[] = 'Zone ' . $zoneNo . ' Fuel %';
+            $headers[] = 'Zone ' . $zoneNo . ' GST %';
+        }
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter . '1', $header);
+        }
 
-        // Header row
-        $sheet->setCellValue('A1', 'Weight Start');
-        $sheet->setCellValue('B1', 'Weight End');
-        $sheet->setCellValue('C1', 'Zone No');
-        $sheet->setCellValue('D1', 'Price');
-        $sheet->setCellValue('E1', 'Fuel Charge');
-        $sheet->setCellValue('F1', 'Fuel %');
-        $sheet->setCellValue('G1', 'GST %');
+        $ratesByWeight = [];
+        if ($serviceId) {
+            $rates = \App\Models\CourierRate::where('customer_id', 0)
+                ->where('service_id', $serviceId)
+                ->whereIn('zone_no', $zoneNos)
+                ->orderBy('wt_range_start')
+                ->orderBy('zone_no')
+                ->get();
+
+            foreach ($rates as $rate) {
+                $key = $rate->wt_range_start . '|' . $rate->wt_range_end;
+                $ratesByWeight[$key]['start'] = $rate->wt_range_start;
+                $ratesByWeight[$key]['end'] = $rate->wt_range_end;
+                $ratesByWeight[$key]['zones'][(int) $rate->zone_no] = $rate;
+            }
+        }
+
+        if (empty($ratesByWeight)) {
+            foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
+                $key = $range[0] . '|' . $range[1];
+                $ratesByWeight[$key] = ['start' => $range[0], 'end' => $range[1], 'zones' => []];
+            }
+        }
 
         $row = 2;
-
-        // If a service is selected, include the default rates that already
-        // exist for that service (optionally filtered by zone) so the admin
-        // can see what's already there and edit/update them.
-        if ($serviceId) {
-            $query = \App\Models\CourierRate::where('customer_id', 0)
-                ->where('service_id', $serviceId)
-                ->orderBy('zone_no')
-                ->orderBy('wt_range_start');
-
-            if ($zoneNo !== null && $zoneNo !== '') {
-                $query->where('zone_no', $zoneNo);
+        foreach ($ratesByWeight as $weight) {
+            $sheet->setCellValue('A' . $row, $weight['start']);
+            $sheet->setCellValue('B' . $row, $weight['end']);
+            $column = 3;
+            foreach ($zoneNos as $zoneNo) {
+                $rate = $weight['zones'][$zoneNo] ?? null;
+                $values = $rate
+                    ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
+                    : ['', '', '', ''];
+                foreach ($values as $value) {
+                    $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($column++);
+                    $sheet->setCellValue($columnLetter . $row, $value);
+                }
             }
-
-            $existingRates = $query->get();
-
-            foreach ($existingRates as $r) {
-                $sheet->setCellValue('A' . $row, $r->wt_range_start);
-                $sheet->setCellValue('B' . $row, $r->wt_range_end);
-                $sheet->setCellValue('C' . $row, $r->zone_no);
-                $sheet->setCellValue('D' . $row, $r->price);
-                $sheet->setCellValue('E' . $row, $r->fuel_charge);
-                $sheet->setCellValue('F' . $row, $r->fuel_percentage);
-                $sheet->setCellValue('G' . $row, $r->gst_percentage);
-                $row++;
-            }
+            $row++;
         }
 
-        // If no existing rates were found (or no service was selected), fall
-        // back to a few example rows so the file is not empty.
-        if ($row === 2) {
-            $samples = [
-                [0.5, 1.0, 1, 1500, 0, 0, 18],
-                [1.0, 2.0, 1, 1800, 0, 0, 18],
-                [2.0, 3.0, 1, 2100, 0, 0, 18],
-                [0.5, 1.0, 2, 1600, 0, 0, 18],
-                [1.0, 2.0, 2, 1900, 0, 0, 18],
-            ];
-            foreach ($samples as $s) {
-                $sheet->setCellValue('A' . $row, $s[0]);
-                $sheet->setCellValue('B' . $row, $s[1]);
-                $sheet->setCellValue('C' . $row, $s[2]);
-                $sheet->setCellValue('D' . $row, $s[3]);
-                $sheet->setCellValue('E' . $row, $s[4]);
-                $sheet->setCellValue('F' . $row, $s[5]);
-                $sheet->setCellValue('G' . $row, $s[6]);
-                $row++;
-            }
-        }
-
-        // Bold the header row and auto-size columns
-        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
-        foreach (range('A', 'G') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
         }
 
         $fileName = 'rate-upload-sample.xlsx';
         $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
-
         return response()->streamDownload(function () use ($writer) {
             $writer->save('php://output');
         }, $fileName, [
-            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-            'Cache-Control'       => 'max-age=0',
+            'Cache-Control' => 'max-age=0',
         ]);
     }
 
     /**
-     * Bulk-import default rates from an uploaded Excel file.
+     * Bulk-import default rates from a horizontal or legacy vertical file.
      *
-     * The admin selects a Service (and optionally a Zone No) on the Manage
-     * Rate page, then uploads an .xlsx/.xls/.csv file. The file must have a
-     * header row with "Weight Start", "Weight End", "Price" (required) and
-     * optionally "Zone No", "Fuel Charge", "Fuel %", "GST %". If the file
-     * does not contain a "Zone No" column, the zone selected on the form is
-     * applied to every row. Each data row creates a new default rate
-     * (customer_id = 0, is_default = true) for the chosen service.
-     *
-     * Duplicate detection: a rate is considered a duplicate if a default
-     * rate already exists for the same service_id + wt_range_start +
-     * wt_range_end + zone_no combination.
+     * Checked zones are imported only; duplicate detection remains based on
+     * service, weight range, and zone number.
      */
     public function uploadRateExcel(Request $request)
     {
         $validated = $request->validate([
             'service_id' => 'required|integer|exists:courier_services,id',
+            'zone_nos'   => 'nullable|array',
+            'zone_nos.*' => 'integer|min:0|max:13',
             'zone_no'    => 'nullable|integer|min:0|max:13',
             'rate_file'  => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
@@ -2848,6 +3242,7 @@ class AdminController extends Controller
         $fuelChargeCol = null;
         $fuelPctCol    = null;
         $gstPctCol     = null;
+        $horizontalGroups = [];
 
         foreach ($header as $idx => $h) {
             if ($wtStartCol === null && in_array($h, $wtStartHeaders, true)) {
@@ -2871,13 +3266,57 @@ class AdminController extends Controller
             if ($gstPctCol === null && in_array($h, $gstPctHeaders, true)) {
                 $gstPctCol = $idx;
             }
+
+            // Horizontal sample columns are normalized below into the legacy
+            // seven-column row format, so the existing import/propagation code
+            // remains shared by both formats.
+            if (preg_match('/^zone\s*(\d+)\s+(price|fuel charge|fuel %|gst %)$/', $h, $matches)) {
+                $horizontalGroups[(int) $matches[1]][$matches[2]] = $idx;
+            }
         }
 
-        // Weight Start, Weight End and Price are required columns.
-        if ($wtStartCol === null || $wtEndCol === null || $priceCol === null) {
+        $selectedZoneNos = array_values(array_unique(array_map('intval', $validated['zone_nos'] ?? [])));
+        if (empty($selectedZoneNos) && isset($validated['zone_no']) && $validated['zone_no'] !== null) {
+            $selectedZoneNos = [(int) $validated['zone_no']];
+        }
+
+        $isHorizontal = $wtStartCol !== null && $wtEndCol !== null && !empty($horizontalGroups);
+        if ($isHorizontal) {
+            $normalizedRows = [$rows[0]];
+            foreach (array_slice($rows, 1) as $sourceRow) {
+                foreach ($horizontalGroups as $zoneNumber => $columns) {
+                    // If zones were selected during upload, ignore every other
+                    // horizontal zone group, including Zone 3 in a Zone 1/2 upload.
+                    if (!empty($selectedZoneNos) && !in_array($zoneNumber, $selectedZoneNos, true)) {
+                        continue;
+                    }
+                    $normalizedRows[] = [
+                        $sourceRow[$wtStartCol] ?? '',
+                        $sourceRow[$wtEndCol] ?? '',
+                        $zoneNumber,
+                        $sourceRow[$columns['price'] ?? -1] ?? '',
+                        $sourceRow[$columns['fuel charge'] ?? -1] ?? '',
+                        $sourceRow[$columns['fuel %'] ?? -1] ?? '',
+                        $sourceRow[$columns['gst %'] ?? -1] ?? '',
+                    ];
+                }
+            }
+            $rows = $normalizedRows;
+            $wtStartCol = 0;
+            $wtEndCol = 1;
+            $zoneNoCol = 2;
+            $priceCol = 3;
+            $fuelChargeCol = 4;
+            $fuelPctCol = 5;
+            $gstPctCol = 6;
+        }
+
+        // Weight Start, Weight End and Price are required for vertical files;
+        // horizontal files have one Price column inside each zone group.
+        if ($wtStartCol === null || $wtEndCol === null || (!$isHorizontal && $priceCol === null)) {
             return redirect()
                 ->route('admin.manage-rate')
-                ->with('error', 'The file must contain "Weight Start", "Weight End" and "Price" columns. Please download the sample file for the correct format.');
+                ->with('error', 'The file must contain Weight Start and Weight End plus either Price or horizontal Zone N Price columns. Please download the sample file for the correct format.');
         }
 
         $created = 0;
@@ -2964,12 +3403,21 @@ class AdminController extends Controller
                 continue;
             }
 
-            // Zone No must be a valid integer 0-13.
+            // Zone No must be valid and must be one of the zones explicitly
+            // checked in the modal. This also filters legacy vertical files.
             if ($zoneNo === '' || !is_numeric($zoneNo) || (int) $zoneNo < 0 || (int) $zoneNo > 13) {
                 $skipped++;
                 continue;
             }
             $zoneNoInt = (int) $zoneNo;
+
+            if (
+                !empty($selectedZoneNos)
+                && !in_array($zoneNoInt, $selectedZoneNos, true)
+            ) {
+                $skipped++;
+                continue;
+            }
 
             $key = $wtStart . '|' . $wtEnd . '|' . $zoneNoInt;
 

@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Customer;
+use App\Models\ExporterCustomer;
 use App\Models\Wallet;
 use App\Models\BusinessCategory;
 use App\Models\KycDetail;
@@ -29,6 +30,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 
@@ -715,6 +717,107 @@ class customerController extends Controller
 
         return view('customer.companies');
     }
+
+    /**
+     * Show exporter-owned customers and the add-customer form.
+     */
+    public function exporterCustomers()
+    {
+        $exporter = auth()->guard('customer')->user();
+        if (!$exporter) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($this->isExporter($exporter), 403, 'Only exporters can manage saved customers.');
+
+        $exporterCustomers = $exporter->exporterCustomers()
+            ->orderBy('company_name')
+            ->orderBy('contact_person')
+            ->get();
+
+        return view('customer.exporter-customers', compact('exporterCustomers'));
+    }
+
+    /**
+     * Store a shipper profile owned by the logged-in exporter.
+     */
+    public function storeExporterCustomer(Request $request)
+    {
+        $exporter = auth()->guard('customer')->user();
+        if (!$exporter) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($this->isExporter($exporter), 403, 'Only exporters can manage saved customers.');
+
+        $request->merge([
+            'company_name' => trim((string) $request->input('company_name')),
+            'contact_person' => trim((string) $request->input('contact_person')),
+            'email' => strtolower(trim((string) $request->input('email'))),
+            'phone_number' => preg_replace('/\D+/', '', (string) $request->input('phone_number')),
+            'pincode' => preg_replace('/\D+/', '', (string) $request->input('pincode')),
+            'kyc_number' => strtoupper(preg_replace('/\s+/', '', (string) $request->input('kyc_number'))),
+        ]);
+
+        $validated = $request->validate([
+            'company_name' => ['required', 'string', 'min:2', 'max:150', 'regex:/^[\pL\pN][\pL\pN\s.&()\'\/-]*$/u'],
+            'contact_person' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+            'address_line1' => ['required', 'string', 'min:5', 'max:255'],
+            'address_line2' => ['nullable', 'string', 'max:255'],
+            'address_line3' => ['nullable', 'string', 'max:255'],
+            'pincode' => ['required', 'regex:/^[1-9][0-9]{5}$/'],
+            'city' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+            'state' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+            'phone_number' => [
+                'required',
+                'regex:/^[6-9][0-9]{9}$/',
+                Rule::unique('exporter_customers', 'phone_number')->where('exporter_id', $exporter->id),
+            ],
+            'email' => [
+                'required',
+                'email:rfc',
+                'max:150',
+                Rule::unique('exporter_customers', 'email')->where('exporter_id', $exporter->id),
+            ],
+            'email_opt_out' => ['sometimes', 'boolean'],
+            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['GST (Normal)', 'Aadhar Card', 'PAN Card', 'Passport Number'])],
+            'kyc_number' => [
+                'nullable',
+                'required_with:kyc_type',
+                'max:100',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    $patterns = [
+                        'GST (Normal)' => ['/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', 'Enter a valid 15-character GST number.'],
+                        'Aadhar Card' => ['/^[2-9][0-9]{11}$/', 'Enter a valid 12-digit Aadhaar number.'],
+                        'PAN Card' => ['/^[A-Z]{5}[0-9]{4}[A-Z]$/', 'Enter a valid 10-character PAN number.'],
+                        'Passport Number' => ['/^[A-Z][0-9]{7}$/', 'Enter a valid passport number (one letter followed by seven digits).'],
+                    ];
+                    $rule = $patterns[$request->input('kyc_type')] ?? null;
+                    if ($value && $rule && !preg_match($rule[0], (string) $value)) {
+                        $fail($rule[1]);
+                    }
+                },
+            ],
+        ], [
+            'company_name.regex' => 'Company name contains invalid characters.',
+            'contact_person.regex' => 'Contact person may contain letters, spaces, dots, apostrophes and hyphens only.',
+            'pincode.regex' => 'Enter a valid 6-digit Indian pincode.',
+            'city.regex' => 'City may contain letters, spaces, dots, apostrophes and hyphens only.',
+            'state.regex' => 'State may contain letters, spaces, dots, apostrophes and hyphens only.',
+            'phone_number.regex' => 'Enter a valid 10-digit Indian mobile number starting with 6, 7, 8 or 9.',
+            'phone_number.unique' => 'A customer with this phone number already exists.',
+            'email.unique' => 'A customer with this email address already exists.',
+            'kyc_type.required_with' => 'Select a KYC type when entering a KYC number.',
+            'kyc_number.required_with' => 'Enter the KYC number for the selected KYC type.',
+        ]);
+
+        $validated['email_opt_out'] = $request->boolean('email_opt_out');
+        $validated['kyc_number'] = $validated['kyc_number'] ?: null;
+        $exporter->exporterCustomers()->create($validated);
+
+        return redirect()->route('customer.exporter-customers')
+            ->with('success', 'Customer saved successfully.');
+    }
     
     public function createShipment()
     {
@@ -729,7 +832,20 @@ class customerController extends Controller
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
         $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
-        return view('customer.create-shipment', compact('customer', 'courierServices', 'zones', 'destinations', 'canCreateShipment'));
+        $isExporter = $this->isExporter($customer);
+        $exporterCustomers = $isExporter
+            ? $customer->exporterCustomers()->orderBy('company_name')->get()
+            : collect();
+
+        return view('customer.create-shipment', compact(
+            'customer',
+            'courierServices',
+            'zones',
+            'destinations',
+            'canCreateShipment',
+            'isExporter',
+            'exporterCustomers'
+        ));
     }
 
     /**
@@ -1770,9 +1886,21 @@ class customerController extends Controller
     public function storeShipment(Request $request)
     {
         try {
-            // Block shipment creation if the admin has disabled it for this customer.
+            // Shipment creation always requires an authenticated customer.
             $customer = auth()->guard('customer')->user();
-            if ($customer && !$customer->can_create_shipment) {
+            if (!$customer) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please log in to create a shipment.',
+                    ], 401);
+                }
+
+                return redirect()->route('login');
+            }
+
+            // Block shipment creation if the admin has disabled it for this customer.
+            if (!$customer->can_create_shipment) {
                 $message = 'You do not have the right to create shipments. Please contact United Courier Worldwide.';
                 if ($request->ajax() || $request->wantsJson()) {
                     return response()->json([
@@ -1794,6 +1922,7 @@ class customerController extends Controller
                 // keeps working with the human-readable name.
                 'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
+                'selected_exporter_customer_id' => 'nullable|integer',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
@@ -1870,6 +1999,27 @@ class customerController extends Controller
                 'items.*.amount' => 'nullable|numeric|min:0',
 
             ]);
+
+            // Never trust a client-submitted saved-customer ID or its accompanying
+            // shipper fields. Verify exporter ownership, then use the saved record
+            // as the authoritative source before KYC and shipment validation.
+            if (!empty($validatedData['selected_exporter_customer_id'])) {
+                $selectedExporterCustomer = $this->isExporter($customer)
+                    ? ExporterCustomer::where('exporter_id', $customer->id)
+                        ->find($validatedData['selected_exporter_customer_id'])
+                    : null;
+
+                if (!$selectedExporterCustomer) {
+                    throw ValidationException::withMessages([
+                        'selected_exporter_customer_id' => 'The selected customer is invalid or does not belong to your account.',
+                    ]);
+                }
+
+                $validatedData = array_merge(
+                    $validatedData,
+                    $selectedExporterCustomer->toShipperArray()
+                );
+            }
 
             // ------------------------------------------------------------------
             // KYC Number format validation based on the selected KYC Type.
@@ -3756,7 +3906,7 @@ class customerController extends Controller
 				// rates). The query below is fully parameterized by
 				// $destinationCountry, so adding 'AUS' here makes the
 				// ARAMEX GPX ALL IN service rates resolve correctly.
-				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ') {
+				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY') {
 					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
@@ -6936,7 +7086,7 @@ class customerController extends Controller
      * that matches the `country` column on the courier_services table
      * (which stores the same code as destinations.country_code).
      *
-     * Returns one of: "UK", "CA", "AUS", "US".
+     * Returns one of: "UK", "CA", "AUS", "UAE", "NZ", "SG", "MY", "US".
      *
      * The destination string can arrive in several formats depending on the
      * caller:
@@ -6948,7 +7098,7 @@ class customerController extends Controller
      * as "US".
      *
      * @param string|null $destination
-     * @return string  "UK" | "CA" | "AUS" | "US"
+     * @return string  "UK" | "CA" | "AUS" | "UAE" | "NZ" | "SG" | "MY" | "US"
      */
     private function resolveDestinationCountry($destination)
     {
@@ -6994,6 +7144,17 @@ class customerController extends Controller
             return 'AUS';
         }
 
+        // UAE detection — covers "United Arab Emirates", "UAE", and "ARE".
+        $isUae = (
+            $destUpper === 'UNITED ARAB EMIRATES'
+            || $destUpper === 'UAE'
+            || $destUpper === 'ARE'
+            || str_contains($destUpper, 'UNITED ARAB EMIRATES')
+        );
+
+        if ($isUae) {
+            return 'UAE';
+        }
 
         // i want to add newzealand as well so i am adding it here
         // New Zealand detection — covers "New Zealand", "NZ", "NZL",
@@ -7009,6 +7170,27 @@ class customerController extends Controller
             return 'NZ';
         }
 
+        // Singapore detection — covers "Singapore", "SG", and "SGP".
+        $isSingapore = (
+            $destUpper === 'SINGAPORE'
+            || $destUpper === 'SG'
+            || $destUpper === 'SGP'
+            || str_contains($destUpper, 'SINGAPORE')
+        );
+        if ($isSingapore) {
+            return 'SG';
+        }
+
+        // Malaysia detection — covers "Malaysia", "MY", and "MYS".
+        $isMalaysia = (
+            $destUpper === 'Malaysia'
+            || $destUpper === 'MY'
+            || $destUpper === 'MYS'
+            || str_contains($destUpper, 'MALAYSIA')
+        );
+        if ($isMalaysia) {
+            return 'MY';
+        }
 
         // Everything else (US, USA, United States, etc.) → US.
         return 'US';
@@ -8031,6 +8213,7 @@ class customerController extends Controller
      */
     private function buildOverseasLogisticPayloadFromDb($shipper)
     {
+        
         $consignee = $shipper->consigneeInfo;
         if (!$consignee) {
             \Log::warning('buildOverseasLogisticPayloadFromDb: No consignee found for shipper #' . $shipper->id);
@@ -8058,7 +8241,6 @@ class customerController extends Controller
         else{
             $kycType_data = $shipper->kyc_type ?? '';
         }
-        
         
         // ---- Sender ----
         $senderName      = $shipper->company_name ?? $shipper->contact_person ?? 'Shipper';
@@ -8091,7 +8273,7 @@ class customerController extends Controller
         // $kycType         = $shipper->kyc_type ?? 'GSTIN (Normal)';
         $kycType         = $kycType_data;
         $kycNo           = (string) ($shipper->kyc_number ?? '');
-
+        
         // ---- Receiver ----
         // $receiverType      = $consignee->origin_type ? ucfirst(strtolower($consignee->origin_type)) : 'Business';
         // if($consignee->origin_type == "CSB IV") {
@@ -9712,6 +9894,23 @@ class customerController extends Controller
             ->get(['id', 'items', 'hs_code', 'hts_code']);
 
         return response()->json($results);
+    }
+
+    /**
+     * Determine whether a customer belongs to the Exporter business category.
+     */
+    private function isExporter(Customer $customer): bool
+    {
+        $category = $customer->relationLoaded('businessCategory')
+            ? $customer->businessCategory
+            : $customer->businessCategory()->first();
+
+        if (!$category) {
+            return false;
+        }
+
+        return strtolower(trim((string) $category->category_slug)) === 'exporter'
+            || strtolower(trim((string) $category->category_name)) === 'exporter';
     }
 
     private function generateAwbNumber()

@@ -76,4 +76,12 @@ class Customer extends Authenticatable
     {
         return $this->belongsTo(BusinessCategory::class, 'business_category_id');
     }
+
+    /**
+     * Get the saved shipper profiles owned by this exporter.
+     */
+    public function exporterCustomers()
+    {
+        return $this->hasMany(ExporterCustomer::class, 'exporter_id');
+    }
 }

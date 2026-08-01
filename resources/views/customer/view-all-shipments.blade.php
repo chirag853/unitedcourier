@@ -904,6 +904,8 @@
     <script src="{{ asset('assets/plugins/datatables/js/jquery.dataTables.min.js') }}"></script>
     <script src="{{ asset('assets/plugins/datatables/js/dataTables.bootstrap5.min.js') }}"></script>
     <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
+    <!-- Main theme JS initializes the sidebar dropdowns. -->
+    <script src="{{ asset('assets/js/script.js') }}"></script>
 
     <script>
     // Shipment data embedded from server for detail modal

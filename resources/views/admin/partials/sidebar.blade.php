@@ -8,23 +8,31 @@
     background-color: #f0f0f0;
 }
 </style>
+@php
+    $authAdmin = auth()->guard('admin')->user();
+    $adminHomeUrl = $authAdmin && $authAdmin->canAccessDashboard()
+        ? route('admin.dashboard')
+        : ($authAdmin && $authAdmin->canAccessDeliveryDashboard()
+            ? route('admin.delivery-dashboard')
+            : route('admin.my-profile'));
+@endphp
 <div class="sidebar" id="sidebar">
 
     <!-- Start Logo -->
     <div class="sidebar-logo">
         <div>
             <!-- Logo Normal -->
-            <a href="{{ url('/admin/dashboard') }}" class="logo logo-normal">
+            <a href="{{ $adminHomeUrl }}" class="logo logo-normal">
                 <img src="{{ asset('assets/img/logo.png') }}" alt="Logo" style = "width: 90%">
             </a>
 
             <!-- Logo Small -->
-            <a href="{{ url('/admin/dashboard') }}" class="logo-small">
+            <a href="{{ $adminHomeUrl }}" class="logo-small">
                 <img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="Logo" style = "width: 100%">
             </a>
 
             <!-- Logo Dark -->
-            <a href="{{ url('/admin/dashboard') }}" class="dark-logo">
+            <a href="{{ $adminHomeUrl }}" class="dark-logo">
                 <img src="{{ asset('assets/img/logo-white.svg') }}" alt="Logo">
             </a>
         </div>
@@ -46,13 +54,35 @@
                 <li class="menu-title"><span>Main Menu</span></li>
                 <li>
                     <ul>
-                        @php $authAdmin = auth()->guard('admin')->user(); @endphp
-                        @if($authAdmin && $authAdmin->hasModuleAccess('dashboard'))
+                        @if($authAdmin && $authAdmin->canAccessDashboard())
                         <li>
-                            <a href="{{ url('/admin/dashboard') }}" class="{{ request()->is('admin/dashboard') ? 'active' : '' }}">
+                            <a href="{{ route('admin.dashboard') }}" class="{{ request()->is('admin/dashboard') ? 'active' : '' }}">
                                 <i class="ti ti-dashboard"></i>
                                 <span>Dashboard</span>
                             </a>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->canAccessDeliveryDashboard())
+                        <li>
+                            <a href="{{ route('admin.delivery-dashboard') }}" class="{{ request()->is('admin/delivery-dashboard') ? 'active' : '' }}">
+                                <i class="ti ti-dashboard"></i>
+                                <span>Delivery Dashboard</span>
+                            </a>
+                        </li>
+                        <li class="submenu">
+                            <a href="javascript:void(0);" class="{{ request()->is('admin/delivery-orders') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-truck-delivery"></i><span>Delivery</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.delivery-orders', ['view' => 'pending']) }}"
+                                        class="{{ request()->is('admin/delivery-orders') && request('view', 'pending') === 'pending' ? 'active' : '' }}">Pending Delivery</a></li>
+                                <li><a href="{{ route('admin.delivery-orders', ['view' => 'process_pickup']) }}"
+                                        class="{{ request()->is('admin/delivery-orders') && request('view') === 'process_pickup' ? 'active' : '' }}">Process Pickup</a></li>
+                                <li><a href="{{ route('admin.delivery-orders', ['view' => 'completed']) }}"
+                                        class="{{ request()->is('admin/delivery-orders') && request('view') === 'completed' ? 'active' : '' }}">Complete Delivery</a></li>
+                                <li><a href="{{ route('admin.delivery-orders', ['view' => 'history']) }}"
+                                        class="{{ request()->is('admin/delivery-orders') && request('view') === 'history' ? 'active' : '' }}">Delivery History</a></li>
+                            </ul>
                         </li>
                         @endif
                         @if($authAdmin && $authAdmin->hasModuleAccess('website'))

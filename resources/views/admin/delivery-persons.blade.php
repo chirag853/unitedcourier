@@ -229,6 +229,17 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        @if(session('open_delivery_person_modal') === 'add' && $errors->any())
+                            <div class="alert alert-danger" role="alert">
+                                <i class="ti ti-alert-triangle me-2"></i>
+                                <strong>Please correct the following errors:</strong>
+                                <ul class="mb-0 mt-2">
+                                    @foreach($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Name <span class="text-danger">*</span></label>
@@ -248,7 +259,13 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Designation</label>
-                                <input type="text" class="form-control" name="designation" placeholder="e.g. Pickup Agent">
+                                <select class="form-select" name="designation">
+                                    <option value="">Select designation</option>
+                                    <option value="Pickup Agent">Pickup Agent</option>
+                                    <option value="Delivery Agent">Delivery Agent</option>
+                                    <option value="Field Executive">Field Executive</option>
+                                    <option value="Supervisor">Supervisor</option>
+                                </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">State</label>
@@ -292,6 +309,17 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        @if(session('open_delivery_person_modal') === 'edit' && $errors->any())
+                            <div class="alert alert-danger" role="alert">
+                                <i class="ti ti-alert-triangle me-2"></i>
+                                <strong>Please correct the following errors:</strong>
+                                <ul class="mb-0 mt-2">
+                                    @foreach($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Name <span class="text-danger">*</span></label>
@@ -311,7 +339,13 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Designation</label>
-                                <input type="text" class="form-control" name="designation" id="edit_designation" placeholder="e.g. Pickup Agent">
+                                <select class="form-select" name="designation" id="edit_designation">
+                                    <option value="">Select designation</option>
+                                    <option value="Pickup Agent">Pickup Agent</option>
+                                    <option value="Delivery Agent">Delivery Agent</option>
+                                    <option value="Field Executive">Field Executive</option>
+                                    <option value="Supervisor">Supervisor</option>
+                                </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">State</label>
@@ -359,6 +393,16 @@
 
     <script>
         $(document).ready(function () {
+            // Keep submitted values visible when the add modal reopens after validation.
+            @if(session('open_delivery_person_modal') === 'add')
+                $('#addDeliveryPersonForm [name="name"]').val(@json(old('name')));
+                $('#addDeliveryPersonForm [name="email"]').val(@json(old('email')));
+                $('#addDeliveryPersonForm [name="mobile"]').val(@json(old('mobile')));
+                $('#addDeliveryPersonForm [name="designation"]').val(@json(old('designation')));
+                $('#addDeliveryPersonForm [name="state"]').val(@json(old('state')));
+                $('#addDeliveryPersonForm [name="city"]').val(@json(old('city')));
+                $('#addDeliveryPersonForm [name="status"]').val(@json(old('status', '1')));
+            @endif
             $('#deliveryPersonsTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
@@ -385,6 +429,24 @@
                 $('#edit_city').val($(this).data('city'));
                 $('#edit_status').val($(this).data('status'));
             });
+
+            @if(session('open_delivery_person_modal') === 'add')
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('addDeliveryPersonModal')).show();
+            @elseif(session('open_delivery_person_modal') === 'edit')
+                var errorEditId = @json(session('edit_delivery_person_id'));
+                var $editButton = $('.edit-delivery-btn[data-id="' + errorEditId + '"]');
+                if ($editButton.length) {
+                    $editButton.trigger('click');
+                    $('#edit_name').val(@json(old('name')));
+                    $('#edit_email').val(@json(old('email')));
+                    $('#edit_mobile').val(@json(old('mobile')));
+                    $('#edit_designation').val(@json(old('designation')));
+                    $('#edit_state').val(@json(old('state')));
+                    $('#edit_city').val(@json(old('city')));
+                    $('#edit_status').val(@json(old('status', '1')));
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('editDeliveryPersonModal')).show();
+                }
+            @endif
         });
     </script>
 </body>

@@ -1,3 +1,12 @@
+@php
+    $sidebarCustomer = auth()->guard('customer')->user();
+    $sidebarBizCat = $sidebarCustomer?->businessCategory;
+    $sidebarUserType = $sidebarBizCat?->user_type ?: 'Personal';
+    $sidebarIsExporter = $sidebarBizCat && (
+        strtolower(trim((string) $sidebarBizCat->category_slug)) === 'exporter'
+        || strtolower(trim((string) $sidebarBizCat->category_name)) === 'exporter'
+    );
+@endphp
 <div class="sidebar" id="sidebar">
 
             <!-- Start Logo -->
@@ -48,7 +57,7 @@
 
 
                                 <li>
-                                    <a href="{{ url('/customer/dashboard') }}" class="active">
+                                    <a href="{{ url('/customer/dashboard') }}" class="{{ request()->routeIs('customer.dashboard') ? 'active' : '' }}">
                                         <i class="ti ti-dashboard"></i>
                                         <span>Dashboard</span>
                                     </a>
@@ -56,18 +65,21 @@
 
 
                                 <li class="submenu">
-                                    <a href="javascript:void(0);" class="active subdrop">
+                                    <a href="javascript:void(0);" class="{{ request()->routeIs('customer.exporter-customers*', 'customer.create-shipment*', 'customer.bulk-upload*', 'customer.view-all-shipments') ? 'active subdrop' : '' }}">
                                         <i class="ti ti-dashboard"></i><span>Customer</span><span
                                             class="menu-arrow"></span>
                                     </a>
                                     <ul>
                                         <!-- <li><a href="/customer/companies" class="active">View Customer List</a></li> -->
-                                        <li><a href="{{ url('/customer/create-shipment') }}" class="active">Add Shipment</a></li>
-                                        <li><a href="{{ url('/customer/bulk-upload') }}">Bulk Upload</a></li>
-                                        <li><a href="{{ url('/customer/view-all-shipments') }}">View All Shipment</a></li>
+                                        @if($sidebarIsExporter)
+                                            <li><a href="{{ route('customer.exporter-customers') }}" class="{{ request()->routeIs('customer.exporter-customers*') ? 'active' : '' }}">Add Customer</a></li>
+                                        @endif
+                                        <li><a href="{{ url('/customer/create-shipment') }}" class="{{ request()->routeIs('customer.create-shipment*') ? 'active' : '' }}">Add Shipment</a></li>
+                                        <li><a href="{{ url('/customer/bulk-upload') }}" class="{{ request()->routeIs('customer.bulk-upload*') ? 'active' : '' }}">Bulk Upload</a></li>
+                                        <li><a href="{{ url('/customer/view-all-shipments') }}" class="{{ request()->routeIs('customer.view-all-shipments') ? 'active' : '' }}">View All Shipment</a></li>
                                     </ul>
                                 </li>
-                                <li class="submenu">
+                                <!-- <li class="submenu">
                                     <a href="javascript:void(0);"><i
                                             class="ti ti-brand-airtable"></i><span>Shipping</span><span
                                             class="menu-arrow"></span></a>
@@ -77,21 +89,21 @@
                                         <li><a href="{{ url('#') }}">Select Shipment</a></li>
                                         <li><a href="{{ url('#') }}">Shipment Report</a></li>
                                     </ul>
-                                </li>
-                                <li class="submenu">
+                                </li> -->
+                                <!-- <li class="submenu">
                                     <a href="javascript:void(0);">
                                         <i class="ti ti-user-star"></i><span>Manifest</span>
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <ul>
-                                        <!-- <li><a href="{{ url('#') }}">Create Manifest</a></li> -->
-                                        <!-- <li><a href="{{ url('#') }}">Edit Manifest</a></li> -->
+                                        <li><a href="{{ url('#') }}">Create Manifest</a></li>
+                                        <li><a href="{{ url('#') }}">Edit Manifest</a></li>
                                         <li><a href="{{ url('#') }}">Dispatch Manifest</a></li>
                                         <li><a href="{{ url('#') }}">Manifests Report</a></li>
                                     </ul>
-                                </li>
+                                </li> -->
                                 <li class="submenu">
-                                    <a href="javascript:void(0);">
+                                    <a href="javascript:void(0);" class="{{ request()->routeIs('customer.transaction-history', 'customer.wallet-history') ? 'active subdrop' : '' }}">
                                         <i class="ti ti-layout-grid"></i><span>Account</span>
                                         <span class="menu-arrow"></span>
                                     </a>
@@ -99,8 +111,8 @@
                                         <!-- <li><a href="{{ url('#') }}">Wallet Recharge</a></li> -->
                                         <!-- <li><a href="{{ url('#') }}">Account Ledger</a></li> -->
                                         <!-- <li><a href="{{ url('#') }}">Sale Report</a></li> -->
-                                        <li><a href="{{ route('customer.transaction-history') }}">Transaction History</a></li>
-                                        <li><a href="{{ route('customer.wallet-history') }}">Wallet History</a></li>
+                                        <li><a href="{{ route('customer.transaction-history') }}" class="{{ request()->routeIs('customer.transaction-history') ? 'active' : '' }}">Transaction History</a></li>
+                                        <li><a href="{{ route('customer.wallet-history') }}" class="{{ request()->routeIs('customer.wallet-history') ? 'active' : '' }}">Wallet History</a></li>
                                     </ul>
                                 </li>
 
@@ -124,23 +136,13 @@
                                     <a href="{{ url('shipping-rate-calculator') }}" target="_blank"><i class="ti ti-user-up"></i><span>Get Quote</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ url('track-shipment') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
+                                    <a href="{{ url('tracking') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                                 </li>
                                 <li>
-                                    @php
-                                        $sidebarCustomer = auth()->guard('customer')->user();
-                                        $sidebarUserType = 'Personal';
-                                        if ($sidebarCustomer && $sidebarCustomer->business_category_id) {
-                                            $sidebarBizCat = \App\Models\BusinessCategory::find($sidebarCustomer->business_category_id);
-                                            if ($sidebarBizCat && $sidebarBizCat->user_type) {
-                                                $sidebarUserType = $sidebarBizCat->user_type;
-                                            }
-                                        }
-                                    @endphp
-                                    <a href="{{ route('customer.kyc.summary') }}"><i class="ti ti-shield-check"></i><span>{{ $sidebarUserType === 'Business' ? 'Business KYC' : 'Personal KYC' }}</span></a>
+                                    <a href="{{ route('customer.kyc.summary') }}" class="{{ request()->routeIs('customer.kyc.*') ? 'active' : '' }}"><i class="ti ti-shield-check"></i><span>{{ $sidebarUserType === 'Business' ? 'Business KYC' : 'Personal KYC' }}</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ route('customer.my-profile') }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
+                                    <a href="{{ route('customer.my-profile') }}" class="{{ request()->routeIs('customer.my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
                                 <li>
                                     <a href="{{ url('logout') }}"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>

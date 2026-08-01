@@ -98,6 +98,22 @@ class Admin extends Authenticatable
     }
 
     /**
+     * Whether this account type is allowed to view the main admin dashboard.
+     */
+    public function canAccessDashboard(): bool
+    {
+        return in_array($this->type, ['Admin', 'Super Admin'], true);
+    }
+
+    /**
+     * Whether this account is a delivery person dashboard user.
+     */
+    public function canAccessDeliveryDashboard(): bool
+    {
+        return $this->type === 'Delivery_person';
+    }
+
+    /**
      * Whether this admin is a Super Admin (full access, bypasses module checks).
      */
     public function isSuperAdmin(): bool

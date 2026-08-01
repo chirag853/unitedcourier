@@ -613,7 +613,7 @@
                 <div class="modal-body">
                     <div class="alert alert-info py-2">
                         <i class="ti ti-info-circle me-1"></i>
-                        Upload an Excel (.xlsx/.xls) or CSV file to add many default rates at once. The file must have a header row with <strong>Weight Start</strong>, <strong>Weight End</strong> and <strong>Price</strong> (required), and optionally <strong>Zone No</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, <strong>GST %</strong>. <strong>Tip:</strong> select a Service below first, then click <em>Download Sample</em> — the sample will include the existing rates for that service so you can see what's already there. Rates that already exist (same service + weight range + zone) are automatically skipped.
+                        Select a country and one or more zones, then download the sample. The Excel file places each selected zone horizontally with its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. During upload, only the currently checked zones are imported; all other zone columns are skipped. Existing duplicate rates are also skipped.
                     </div>
                     <form id="bulkUploadForm" method="POST" action="{{ route('admin.manage-rate.upload') }}" enctype="multipart/form-data">
                         @csrf
@@ -637,13 +637,21 @@
                                 </select>
                                 <small class="text-muted">Only services for the selected country are listed. Leave country as "All Countries" to see every service.</small>
                             </div>
-                            <!-- Zone No (optional) -->
-                            <div class="col-md-4" id="bulkZoneSection">
-                                <label class="form-label fw-bold">Zone No</label>
-                                <select class="form-select" id="bulkZoneNo" name="zone_no">
-                                    <option value="">— Select Country First —</option>
-                                </select>
-                                <small class="text-muted">Optional. Used if the file has no Zone No column.</small>
+                            <!-- Multiple zones used by sample download and upload -->
+                            <div class="col-12 d-none" id="bulkZoneSection">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <label class="form-label fw-bold mb-0">Select Zones <span class="text-danger">*</span></label>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-link p-0 me-2" id="bulkSelectAllZones">Select all</button>
+                                            <button type="button" class="btn btn-sm btn-link p-0" id="bulkClearZones">Clear</button>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2" id="bulkZoneCheckboxes">
+                                        <div class="col-12 text-muted">Select a country to view its zones.</div>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Only checked zones become horizontal columns in the sample and only those zones are imported from the uploaded file.</small>
+                                </div>
                             </div>
                             <!-- File -->
                             <div class="col-md-8">
@@ -1495,85 +1503,47 @@
 
             // ===== Bulk Upload Rate Modal =====
 
-            // (Re)initialize Select2 on the bulk zone dropdown inside the
-            // bulk upload modal (dropdownParent points to #bulkUploadModal
-            // so Bootstrap 5 modal focus enforcement doesn't break search).
-            function initBulkZoneSelect2(selectEl, placeholderText) {
-                if ($(selectEl).hasClass('select2-hidden-accessible')) {
-                    $(selectEl).select2('destroy');
-                }
-                $(selectEl).select2({
-                    placeholder: placeholderText,
-                    allowClear: true,
-                    width: '100%',
-                    dropdownParent: $('#bulkUploadModal')
-                });
-            }
-
-            // Populate the bulk zone dropdown based on the selected country.
-            // Mirrors populateZoneDropdown but targets #bulkZoneSection and
-            // allows an "All Zones" option (zone is optional here).
-            function populateBulkZoneDropdown(selectEl, country) {
+            function populateBulkZoneCheckboxes(country) {
                 var zoneSection = document.getElementById('bulkZoneSection');
-
-                while (selectEl.options.length > 0) {
-                    selectEl.remove(0);
-                }
+                var container = document.getElementById('bulkZoneCheckboxes');
+                container.innerHTML = '';
 
                 if (!country) {
-                    var ph = document.createElement('option');
-                    ph.value = '';
-                    ph.textContent = '— Select Country First —';
-                    selectEl.appendChild(ph);
-                    initBulkZoneSelect2(selectEl, '— Select Country First —');
-                    zoneSection.style.display = '';
+                    zoneSection.classList.add('d-none');
+                    container.innerHTML = '<div class="col-12 text-muted">Select a country to view its zones.</div>';
                     return;
                 }
 
                 var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
                 var zoneMap = destId ? zoneLookup[destId] : null;
+                var zoneKeys = zoneMap ? Object.keys(zoneMap)
+                    .map(function(key) { return parseInt(key, 10); })
+                    .filter(function(zone) { return !isNaN(zone); })
+                    .sort(function(a, b) { return a - b; }) : [];
 
-                var zoneKeys = [];
-                if (zoneMap) {
-                    zoneKeys = Object.keys(zoneMap)
-                        .map(function(k) { return parseInt(k, 10); })
-                        .filter(function(n) { return !isNaN(n); })
-                        .sort(function(a, b) { return a - b; });
-                }
-
-                if (zoneKeys.length === 0) {
-                    zoneSection.style.display = 'none';
-                    var none = document.createElement('option');
-                    none.value = '';
-                    none.textContent = '— No zones —';
-                    selectEl.appendChild(none);
-                    initBulkZoneSelect2(selectEl, '— No zones —');
+                zoneSection.classList.remove('d-none');
+                if (!zoneKeys.length) {
+                    container.innerHTML = '<div class="col-12 text-warning">No zones are configured for this country.</div>';
                     return;
                 }
 
-                zoneSection.style.display = '';
-
-                // First option is "All Zones" so leaving it blank means the
-                // file's own Zone No column (if present) is used.
-                var placeholder = document.createElement('option');
-                placeholder.value = '';
-                placeholder.textContent = '— All Zones (use file column) —';
-                selectEl.appendChild(placeholder);
-
-                zoneKeys.forEach(function(z) {
-                    var info = zoneMap[z] || {};
-                    var count = info.count || 0;
-                    var category = info.category || 'state';
-                    var label = 'Zone ' + z;
-                    if (count > 0) {
-                        label += ' (' + count + ' ' + (category === 'zipcode' ? 'Records Avl' : (category === 'city' ? 'cities' : 'states')) + ')';
-                    }
-                    var opt = document.createElement('option');
-                    opt.value = z;
-                    opt.textContent = label;
-                    selectEl.appendChild(opt);
+                zoneKeys.forEach(function(zone) {
+                    var info = zoneMap[zone] || {};
+                    var category = info.category === 'zipcode' ? 'records' : (info.category === 'city' ? 'cities' : 'states');
+                    var label = 'Zone ' + zone + (info.count ? ' (' + info.count + ' ' + category + ')' : '');
+                    container.insertAdjacentHTML('beforeend',
+                        '<div class="col-md-4 col-sm-6">' +
+                        '<div class="form-check border rounded bg-white px-4 py-2">' +
+                        '<input class="form-check-input bulk-zone-checkbox" type="checkbox" name="zone_nos[]" value="' + zone + '" id="bulkZone' + zone + '">' +
+                        '<label class="form-check-label" for="bulkZone' + zone + '">' + label + '</label>' +
+                        '</div></div>');
                 });
-                initBulkZoneSelect2(selectEl, '— All Zones (use file column) —');
+            }
+
+            function getCheckedBulkZones() {
+                return Array.from(document.querySelectorAll('.bulk-zone-checkbox:checked')).map(function(checkbox) {
+                    return checkbox.value;
+                });
             }
 
             // When the bulk modal is shown, start with an empty service
@@ -1581,7 +1551,7 @@
             // selected country, so they appear once a country is chosen.
             document.getElementById('bulkUploadModal').addEventListener('shown.bs.modal', function() {
                 populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), '');
+                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value);
             });
 
             // Country change → repopulate BOTH the service dropdown (only
@@ -1594,22 +1564,32 @@
                 var serviceCountry = resolveServiceCountry(country);
                 populateServiceDropdown(document.getElementById('bulkService'), serviceCountry);
                 document.getElementById('bulkService').value = '';
-                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), country);
+                populateBulkZoneCheckboxes(country);
+            });
+
+            document.getElementById('bulkSelectAllZones').addEventListener('click', function() {
+                document.querySelectorAll('.bulk-zone-checkbox').forEach(function(checkbox) { checkbox.checked = true; });
+            });
+            document.getElementById('bulkClearZones').addEventListener('click', function() {
+                document.querySelectorAll('.bulk-zone-checkbox').forEach(function(checkbox) { checkbox.checked = false; });
             });
 
             // Download Sample: append selected service_id and zone_no so the
             // sample includes existing rates for that service/zone.
             document.getElementById('bulkDownloadSampleBtn').addEventListener('click', function(e) {
                 e.preventDefault();
+                var country = document.getElementById('bulkCountry').value;
                 var serviceId = document.getElementById('bulkService').value;
-                var zoneNo = document.getElementById('bulkZoneNo').value;
-                var base = "{{ route('admin.manage-rate.sample') }}";
-                var params = [];
-                if (serviceId) params.push('service_id=' + encodeURIComponent(serviceId));
-                if (zoneNo) params.push('zone_no=' + encodeURIComponent(zoneNo));
-                var url = base;
-                if (params.length) url += (base.indexOf('?') === -1 ? '?' : '&') + params.join('&');
-                window.location.href = url;
+                var zones = getCheckedBulkZones();
+                if (!country) { alert('Please select a country first.'); return; }
+                if (!serviceId) { alert('Please select a service.'); return; }
+                if (!zones.length) { alert('Please select at least one zone.'); return; }
+
+                var params = new URLSearchParams();
+                params.append('service_id', serviceId);
+                params.append('country', country);
+                zones.forEach(function(zone) { params.append('zone_nos[]', zone); });
+                window.location.href = "{{ route('admin.manage-rate.sample') }}" + '?' + params.toString();
             });
 
             // Submit the bulk upload form (regular POST — the controller
@@ -1618,8 +1598,10 @@
             document.getElementById('bulkUploadSubmitBtn').addEventListener('click', function() {
                 var form = document.getElementById('bulkUploadForm');
                 var serviceId = document.getElementById('bulkService').value;
+                var zones = getCheckedBulkZones();
                 var fileInput = form.querySelector('input[name="rate_file"]');
                 if (!serviceId) { alert('Please select a service.'); return; }
+                if (!zones.length) { alert('Please select at least one zone to upload.'); return; }
                 if (!fileInput.files || !fileInput.files.length) { alert('Please choose an Excel/CSV file.'); return; }
                 var btn = this;
                 btn.disabled = true;
@@ -1631,7 +1613,7 @@
             document.getElementById('bulkUploadModal').addEventListener('hidden.bs.modal', function() {
                 document.getElementById('bulkUploadForm').reset();
                 populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneDropdown(document.getElementById('bulkZoneNo'), '');
+                populateBulkZoneCheckboxes('');
             });
         });
 

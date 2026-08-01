@@ -71,6 +71,13 @@ Route::prefix('admin')->group(function () {
         // Dashboard Routes
         Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
         Route::get('/dashboard-chart-data', [AdminController::class, 'dashboardChartData'])->name('admin.dashboard-chart-data');
+        Route::get('/delivery-dashboard', [AdminController::class, 'deliveryDashboard'])->name('admin.delivery-dashboard');
+        Route::get('/delivery-dashboard-chart-data', [AdminController::class, 'deliveryDashboardChartData'])->name('admin.delivery-dashboard-chart-data');
+        Route::get('/delivery-orders', [AdminController::class, 'deliveryOrders'])->name('admin.delivery-orders');
+        Route::post('/pickup-delivery', [AdminController::class, 'pickupDelivery'])->name('admin.pickup-delivery');
+        Route::get('/notifications-data', [AdminController::class, 'notificationsData'])->name('admin.notifications.data');
+        Route::patch('/notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('admin.notifications.read-all');
+        Route::patch('/notifications/{id}/read', [AdminController::class, 'markNotificationRead'])->name('admin.notifications.read');
         Route::get('/leads-dashboard', [AdminController::class, 'leadsDashboard'])->name('admin.leads-dashboard');
         Route::get('/project-dashboard', [AdminController::class, 'projectDashboard'])->name('admin.project-dashboard');
         
@@ -608,6 +615,8 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/dashboard-chart-data', [customerController::class, 'dashboardChartData'])->name('dashboard-chart-data');
     Route::post('/logout', [customerController::class, 'logout'])->name('logout');
     Route::get('/companies', [customerController::class, 'companies'])->name('companies');
+    Route::get('/exporter-customers', [customerController::class, 'exporterCustomers'])->name('exporter-customers');
+    Route::post('/exporter-customers', [customerController::class, 'storeExporterCustomer'])->name('exporter-customers.store');
     Route::get('/create-shipment', [customerController::class, 'createShipment'])->name('create-shipment');
     Route::get('/zones-by-destination', [customerController::class, 'getZonesByDestination'])->name('zones-by-destination');
     Route::get('/csb5-form', [customerController::class, 'csb5Form'])->name('csb5-form');

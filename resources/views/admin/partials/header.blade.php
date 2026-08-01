@@ -1,5 +1,14 @@
 <header class="navbar-header">
 
+@php
+    $authAdmin = auth()->guard('admin')->user();
+    $adminHomeUrl = $authAdmin && $authAdmin->canAccessDashboard()
+        ? route('admin.dashboard')
+        : ($authAdmin && $authAdmin->canAccessDeliveryDashboard()
+            ? route('admin.delivery-dashboard')
+            : route('admin.my-profile'));
+@endphp
+
     <!-- change after ftp -->
     <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
 
@@ -8,7 +17,7 @@
         <div class="d-flex align-items-center gap-2">
 
             <!-- Logo -->
-            <a href="{{ route('admin.dashboard') }}" class="logo">
+            <a href="{{ $adminHomeUrl }}" class="logo">
 
                 <!-- Logo Normal -->
                 <span class="logo-light">
@@ -156,161 +165,34 @@
             <!-- Notification Dropdown -->
             <div class="header-item">
                 <div class="dropdown me-2">
-
-                    <button class="topbar-link btn topbar-link dropdown-toggle drop-arrow-none"
+                    <button class="topbar-link btn dropdown-toggle drop-arrow-none"
                         data-bs-toggle="dropdown" data-bs-offset="0,24" type="button" aria-haspopup="false"
-                        aria-expanded="false">
+                        aria-expanded="false" id="notificationDropdownButton">
                         <i class="ti ti-bell-check fs-16 animate-ring"></i>
-                        <span class="badge rounded-pill">10</span>
+                        <span class="badge rounded-pill d-none" id="notificationUnreadBadge">0</span>
                     </button>
 
-                    <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg" style="min-height: 300px;">
+                    <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg" style="min-height: 260px;">
+                        <div class="p-2 border-bottom d-flex align-items-center justify-content-between">
+                            <h6 class="m-0 fs-16 fw-semibold">Notifications</h6>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none d-none"
+                                id="markAllNotificationsRead">Mark all as read</button>
+                        </div>
 
-                        <div class="p-2 border-bottom">
-                            <div class="row align-items-center">
-                                <div class="col">
-                                    <h6 class="m-0 fs-16 fw-semibold"> Notifications</h6>
-                                </div>
+                        <div class="notification-body position-relative z-2 rounded-0 overflow-auto"
+                            id="notificationList" style="max-height: 360px;">
+                            <div class="py-5 text-center text-muted" id="notificationLoading">
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                Loading notifications...
                             </div>
                         </div>
 
-                        <!-- Notification Body -->
-                        <div class="notification-body position-relative z-2 rounded-0" data-simplebar>
-
-                            <!-- Item-->
-                            <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                id="notification-1">
-                                <div class="d-flex">
-                                    <div class="me-2 position-relative flex-shrink-0">
-                                        <img src="assets/img/users/user-01.jpg" class="avatar-md rounded-circle"
-                                            alt="Img">
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-0 fw-medium text-dark">John Doe</p>
-                                        <p class="mb-1 text-wrap">
-                                            left 6 comments on <span class="fw-medium text-dark">Isla Nublar
-                                                SOC2 compliance report</span>
-                                        </p>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span class="fs-12"><i class="ti ti-clock me-1"></i>4 min ago</span>
-                                            <div class="notification-action d-flex align-items-center float-end gap-2">
-                                                <a href="javascript:void(0);"
-                                                    class="notification-read rounded-circle bg-danger"
-                                                    data-bs-toggle="tooltip" title=""
-                                                    data-bs-original-title="Make as Read" aria-label="Make as Read"></a>
-                                                <button class="btn rounded-circle p-0"
-                                                    data-dismissible="#notification-1">
-                                                    <i class="ti ti-x"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Item-->
-                            <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                id="notification-2">
-                                <div class="d-flex">
-                                    <div class="me-2 position-relative flex-shrink-0">
-                                        <img src="assets/img/users/user-12.jpg" class="avatar-md rounded-circle"
-                                            alt="Img">
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-0 fw-medium text-dark">Thomas William</p>
-                                        <p class="mb-1 text-wrap">
-                                            “Oh, I finished de-bugging the phones, but the system's compiling
-                                            for eighteen minutes, or twenty...”
-                                        </p>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span class="fs-12"><i class="ti ti-clock me-1"></i>8 min ago</span>
-                                            <div class="notification-action d-flex align-items-center float-end gap-2">
-                                                <a href="javascript:void(0);"
-                                                    class="notification-read rounded-circle bg-danger"
-                                                    data-bs-toggle="tooltip" title=""
-                                                    data-bs-original-title="Make as Read" aria-label="Make as Read"></a>
-                                                <button class="btn rounded-circle p-0"
-                                                    data-dismissible="#notification-2">
-                                                    <i class="ti ti-x"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Item-->
-                            <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                id="notification-3">
-                                <div class="d-flex">
-                                    <div class="me-2 position-relative flex-shrink-0">
-                                        <img src="assets/img/profiles/avatar-12.jpg" class="avatar-md rounded-circle"
-                                            alt="Img">
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-0 fw-medium text-dark">Sarah Anderson</p>
-                                        <p class="mb-1 text-wrap">
-                                            attached a file to <span class="fw-medium text-dark">Isla Nublar
-                                                SOC2 compliance report</span>
-                                        </p>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span class="fs-12"><i class="ti ti-clock me-1"></i>15 min
-                                                ago</span>
-                                            <div class="notification-action d-flex align-items-center float-end gap-2">
-                                                <a href="javascript:void(0);"
-                                                    class="notification-read rounded-circle bg-danger"
-                                                    data-bs-toggle="tooltip" title=""
-                                                    data-bs-original-title="Make as Read" aria-label="Make as Read"></a>
-                                                <button class="btn rounded-circle p-0"
-                                                    data-dismissible="#notification-3">
-                                                    <i class="ti ti-x"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Item-->
-                            <div class="dropdown-item notification-item py-3 text-wrap" id="notification-4">
-                                <div class="d-flex">
-                                    <div class="me-2 position-relative flex-shrink-0">
-                                        <img src="assets/img/profiles/avatar-08.jpg" class="avatar-md rounded-circle"
-                                            alt="Img">
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-0 fw-medium text-dark">Ann McClure</p>
-                                        <p class="mb-1 text-wrap">
-                                            mentioned you in <span class="fw-medium text-dark">Bug Fix Review -
-                                                Task #432</span>
-                                        </p>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span class="fs-12"><i class="ti ti-clock me-1"></i>20 min
-                                                ago</span>
-                                            <div class="notification-action d-flex align-items-center float-end gap-2">
-                                                <a href="javascript:void(0);"
-                                                    class="notification-read rounded-circle bg-danger"
-                                                    data-bs-toggle="tooltip" title=""
-                                                    data-bs-original-title="Make as Read" aria-label="Make as Read"></a>
-                                                <button class="btn rounded-circle p-0"
-                                                    data-dismissible="#notification-4">
-                                                    <i class="ti ti-x"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <!-- View All-->
                         <div class="p-2 rounded-bottom border-top text-center">
-                            <a href="notifications.html" class="text-center text-decoration-underline fs-14 mb-0">
-                                View All Notifications
+                            <a href="{{ $adminHomeUrl }}"
+                                class="text-center text-decoration-underline fs-14 mb-0">
+                                View Dashboard
                             </a>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -377,6 +259,158 @@
     </div>
 </header>
 
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;">
+    <div id="deliveryNotificationToast" class="toast border-0 shadow" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header bg-primary text-white">
+            <i class="ti ti-truck-delivery me-2"></i>
+            <strong class="me-auto" id="deliveryToastTitle">New Delivery Assigned</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="deliveryToastMessage"></div>
+    </div>
+</div>
+
 <script>
     const BASE_URL = '{{ url('/') }}';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const dataUrl = @json(route('admin.notifications.data'));
+        const readUrlTemplate = @json(route('admin.notifications.read', ['id' => '__ID__']));
+        const readAllUrl = @json(route('admin.notifications.read-all'));
+        const csrfToken = @json(csrf_token());
+        const badge = document.getElementById('notificationUnreadBadge');
+        const list = document.getElementById('notificationList');
+        const markAllButton = document.getElementById('markAllNotificationsRead');
+        let knownNotificationIds = new Set();
+        let notificationsInitialized = false;
+
+        function renderNotifications(notifications, unreadCount) {
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            badge.classList.toggle('d-none', unreadCount === 0);
+            markAllButton.classList.toggle('d-none', unreadCount === 0);
+            list.replaceChildren();
+
+            if (!notifications.length) {
+                const empty = document.createElement('div');
+                empty.className = 'py-5 text-center text-muted';
+                empty.textContent = 'No notifications yet.';
+                list.appendChild(empty);
+                return;
+            }
+
+            notifications.forEach(function (notification) {
+                const item = document.createElement('a');
+                item.href = notification.url || '#';
+                item.className = 'dropdown-item notification-item py-3 text-wrap border-bottom d-block';
+                if (!notification.read) {
+                    item.classList.add('bg-light');
+                }
+
+                const title = document.createElement('p');
+                title.className = 'mb-1 fw-semibold text-dark';
+                title.textContent = notification.title;
+
+                const message = document.createElement('p');
+                message.className = 'mb-1 text-wrap';
+                message.textContent = notification.message;
+
+                const time = document.createElement('span');
+                time.className = 'fs-12 text-muted';
+                time.textContent = notification.created_at;
+
+                item.append(title, message, time);
+                item.addEventListener('click', function (event) {
+                    if (notification.read) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    markAsRead(notification.id).finally(function () {
+                        window.location.href = item.href;
+                    });
+                });
+                list.appendChild(item);
+            });
+        }
+
+        function showNewDelivery(notification) {
+            document.getElementById('deliveryToastTitle').textContent = notification.title;
+            document.getElementById('deliveryToastMessage').textContent = notification.message;
+
+            if (window.bootstrap && bootstrap.Toast) {
+                bootstrap.Toast.getOrCreateInstance(document.getElementById('deliveryNotificationToast'), {
+                    delay: 8000
+                }).show();
+            }
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const browserNotification = new Notification(notification.title, {
+                    body: notification.message,
+                    icon: @json(asset('favicon.ico'))
+                });
+                browserNotification.onclick = function () {
+                    window.focus();
+                    window.location.href = notification.url;
+                };
+            }
+        }
+
+        async function loadNotifications() {
+            try {
+                const response = await fetch(dataUrl, {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+                if (!response.ok) {
+                    return;
+                }
+
+                const payload = await response.json();
+                const incomingIds = new Set(payload.notifications.map(function (notification) {
+                    return notification.id;
+                }));
+
+                if (notificationsInitialized) {
+                    const newest = payload.notifications.find(function (notification) {
+                        return !notification.read && !knownNotificationIds.has(notification.id);
+                    });
+                    if (newest) {
+                        showNewDelivery(newest);
+                    }
+                }
+
+                knownNotificationIds = incomingIds;
+                notificationsInitialized = true;
+                renderNotifications(payload.notifications, payload.unread_count);
+            } catch (error) {
+                // Keep the existing UI during temporary network failures.
+            }
+        }
+
+        async function markAsRead(id) {
+            await fetch(readUrlTemplate.replace('__ID__', encodeURIComponent(id)), {
+                method: 'PATCH',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                credentials: 'same-origin'
+            });
+        }
+
+        markAllButton.addEventListener('click', async function () {
+            await fetch(readAllUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                credentials: 'same-origin'
+            });
+            await loadNotifications();
+        });
+
+        loadNotifications();
+        window.setInterval(loadNotifications, 10000);
+    });
 </script>

@@ -31,18 +31,54 @@ class AdminAuth
                 ->with('error', 'Your account has been deactivated. Please contact the Super Admin.');
         }
 
+        // The main dashboard is reserved for Admin and Super Admin accounts.
+        // Delivery persons use their own scoped dashboard instead.
+        $uri = $request->path();
+        $routeUri = preg_replace('#^admin/?#', '', $uri);
+        if ($admin && in_array($routeUri, ['dashboard', 'dashboard-chart-data'], true) && !$admin->canAccessDashboard()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'You do not have permission to access the dashboard.',
+                ], 403);
+            }
+            if ($admin->canAccessDeliveryDashboard()) {
+                return redirect()->route('admin.delivery-dashboard');
+            }
+
+            return redirect()->route('admin.my-profile')
+                ->with('error', 'You do not have permission to access the dashboard.');
+        }
+
+        // Delivery pages are exclusively scoped to Delivery_person accounts.
+        if ($admin && in_array($routeUri, ['delivery-dashboard', 'delivery-dashboard-chart-data', 'delivery-orders', 'pickup-delivery'], true)) {
+            if (!$admin->canAccessDeliveryDashboard()) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => 'You do not have permission to access delivery pages.',
+                    ], 403);
+                }
+
+                return redirect()->route('admin.my-profile')
+                    ->with('error', 'You do not have permission to access delivery pages.');
+            }
+
+            return $next($request);
+        }
+
         // Enforce module-wise access control.
         // Super Admin bypasses all checks. Other users must have the
         // relevant module granted in their module_access list.
 
         if ($admin && !$admin->isSuperAdmin()) {
-            // Resolve the route URI relative to the /admin prefix.
-            $uri = $request->path(); // e.g. "admin/dashboard"
-            $routeUri = preg_replace('#^admin/?#', '', $uri); // e.g. "dashboard"
-
-            // Always allow access to the dashboard index, logout and profile
-            // so a restricted user can still navigate and sign out.
-            $alwaysAllowed = ['dashboard', 'logout', 'my-profile', 'my-profile/*'];
+            // Logout, profile, and notification polling remain available so
+            // restricted users can manage their account and receive assignments.
+            $alwaysAllowed = [
+                'logout',
+                'my-profile',
+                'my-profile/*',
+                'notifications-data',
+                'notifications/*',
+            ];
             foreach ($alwaysAllowed as $pattern) {
                 if (str_ends_with($pattern, '*')) {
                     $prefix = rtrim($pattern, '*');
@@ -62,7 +98,7 @@ class AdminAuth
                     ], 403);
                 }
 
-                return redirect()->route('admin.dashboard')
+                return redirect()->route('admin.my-profile')
                     ->with('error', 'You do not have permission to access this module.');
             }
         }
