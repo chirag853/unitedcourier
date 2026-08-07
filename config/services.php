@@ -123,4 +123,22 @@ return [
         'timeout'       => (int) env('OVERSEAS_TIMEOUT', 60),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | ShipUniversal API
+    |--------------------------------------------------------------------------
+    | Token authentication uses HTTP Basic Auth. The returned token is sent as
+    | a Bearer token when creating a shipment.
+    */
+    'shipuniversal' => [
+        'base_url'     => env('SHIPUNIVERSAL_BASE_URL', 'https://apiv2.shipuniversal.com'),
+        'token_url'    => env('SHIPUNIVERSAL_TOKEN_URL', 'https://apiv2.shipuniversal.com/token'),
+        'shipment_url' => env('SHIPUNIVERSAL_SHIPMENT_URL', 'https://apiv2.shipuniversal.com/api/shipment/create'),
+        'username'     => env('SHIPUNIVERSAL_USERNAME'),
+        'password'     => env('SHIPUNIVERSAL_PASSWORD'),
+        'grant_type'   => env('SHIPUNIVERSAL_GRANT_TYPE', 'client_credentials'),
+        'account_code' => env('SHIPUNIVERSAL_ACCOUNT_CODE', 'SU0119'),
+        'timeout'      => (int) env('SHIPUNIVERSAL_TIMEOUT', 60),
+    ],
+
 ];

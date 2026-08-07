@@ -97,6 +97,43 @@
             return '';
         }
 
+        var imageOnlyDocumentNames = ['aadhar_front_document', 'aadhar_back_document', 'pan_document'];
+
+        function validateImageDocument(input, required) {
+            var file = input && input.files ? input.files[0] : null;
+            if (!file) {
+                if (required) {
+                    showAlert('Please upload all required Aadhaar and PAN images.', 'error');
+                    if (input) input.focus();
+                    return false;
+                }
+                return true;
+            }
+
+            var extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+            if (['jpg', 'jpeg', 'png'].indexOf(extension) === -1 ||
+                ['image/jpeg', 'image/png'].indexOf(file.type) === -1) {
+                showAlert('Aadhaar and PAN documents must be JPG, JPEG, or PNG images.', 'error');
+                input.value = '';
+                return false;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showAlert('Aadhaar and PAN images must not exceed 5 MB.', 'error');
+                input.value = '';
+                return false;
+            }
+            return true;
+        }
+
+        imageOnlyDocumentNames.forEach(function (name) {
+            var input = form.querySelector('[name="' + name + '"]');
+            if (input) {
+                input.addEventListener('change', function () {
+                    validateImageDocument(input, false);
+                });
+            }
+        });
+
         var aadharVerifyBtn = document.getElementById('aadharVerifyBtn');
         var aadharVerifiedBadge = document.getElementById('aadharVerifiedBadge');
         if (aadharVerifyBtn) {
@@ -183,6 +220,13 @@
             if (terms && !terms.checked) {
                 showAlert('Please accept the terms and conditions to continue.', 'error');
                 return;
+            }
+
+            for (var i = 0; i < imageOnlyDocumentNames.length; i++) {
+                var imageInput = form.querySelector('[name="' + imageOnlyDocumentNames[i] + '"]');
+                if (!validateImageDocument(imageInput, true)) {
+                    return;
+                }
             }
 
             var formData = new FormData(form);

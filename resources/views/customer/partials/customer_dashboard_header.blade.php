@@ -149,7 +149,7 @@
 
                     <!-- Wallet Button -->
 
-                    <div class="ms-3 mb-2">
+                    <div class="ms-3 mb-2 header-wallet-section">
                         <p class="form-label fw-bold mb-1" style="color: #3e2d5e;">Wallet Recharge</p>
                         <button class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#walletRechargeModal" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
                         border-color: #7b1fa2;
@@ -159,7 +159,7 @@
                         </button>
                     </div>
 
-                    <div class="ms-3 mb-2">
+                    <div class="ms-3 mb-2 header-credit-balance-section">
                         <p b-hoqn66jiy3="" class="form-label fw-bold mb-1" style="color: #3e2d5e;">Credit Balance</p>
                         <button b-hoqn66jiy3="" class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#modalCenter" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
                         border-color: #7b1fa2;
@@ -185,7 +185,7 @@
                     </div>
 
                     <!-- Notification Dropdown -->
-                    <div class="header-item">
+                    <div class="header-item header-notification-section">
                         <div class="dropdown me-2">
 
                             <button class="topbar-link btn topbar-link dropdown-toggle drop-arrow-none"
@@ -497,14 +497,17 @@
                 confirmBtn.disabled = true;
                 confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
 
-                var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-                var token = csrfMeta ? csrfMeta.getAttribute('content') : '';
+                // Use a server-rendered token instead of relying on every page
+                // that includes this header to provide a CSRF meta element.
+                var token = @json(csrf_token());
 
-                fetch('{{ url("/customer/wallet-recharge") }}', {
+                fetch('{{ route("customer.wallet-recharge") }}', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': token,
+                        'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'application/json'
                     },
                     body: JSON.stringify({ amount: amount })

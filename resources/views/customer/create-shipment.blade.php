@@ -169,7 +169,7 @@
                             <div class="col-md-9">
                                 <form id="shipmentForm" action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
                                     @csrf
-                                    @if($isExporter)
+                                    @if($canManageSavedCustomers)
                                         <div class="card border mb-3">
                                             <div class="card-body">
                                                 <div class="row align-items-end">
@@ -178,10 +178,21 @@
                                                         <small class="text-muted"> (Selecting a saved customer fills Shipper Info automatically.)</small>
 
                                                         <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
-                                                            <option value="">Enter shipper details manually</option>
+                                                            <option value="" data-csb-color="#212529" data-initial-visible="1">Enter shipper details manually</option>
                                                             @foreach($exporterCustomers as $savedCustomer)
-                                                                <option value="{{ $savedCustomer->id }}" {{ old('selected_exporter_customer_id') == $savedCustomer->id ? 'selected' : '' }}>
-                                                                    {{ $savedCustomer->company_name }} — {{ $savedCustomer->contact_person }} ({{ $savedCustomer->city }})
+                                                                @php
+                                                                    $isCsbV = $savedCustomer->csb_type === 'csb_v';
+                                                                    $csbLabel = $isCsbV ? 'CSB V' : 'CSB IV';
+                                                                    $csbColor = $isCsbV ? '#198754' : '#dc3545';
+                                                                @endphp
+                                                                <option
+                                                                    value="{{ $savedCustomer->id }}"
+                                                                    data-csb-color="{{ $csbColor }}"
+                                                                    data-initial-visible="{{ $loop->iteration <= 10 ? '1' : '0' }}"
+                                                                    style="color: {{ $csbColor }}; font-weight: 600;"
+                                                                    {{ old('selected_exporter_customer_id') == $savedCustomer->id ? 'selected' : '' }}
+                                                                >
+                                                                    {{ $savedCustomer->company_name }} — {{ $savedCustomer->contact_person }} ({{ $savedCustomer->city }}) — {{ $csbLabel }}
                                                                 </option>
                                                             @endforeach
                                                         </select>
@@ -363,8 +374,12 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">State <span
                                                                         class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control"
-                                                                    name="shipper_state" value="{{ old('shipper_state') }}" placeholder="State">
+                                                                <input type="text" class="form-control text-uppercase"
+                                                                    name="shipper_state" value="{{ strtoupper(old('shipper_state', '')) }}"
+                                                                    placeholder="DL / GJ" autocomplete="address-level1"
+                                                                    minlength="2" maxlength="2" pattern="[A-Z]{2}"
+                                                                    title="Enter exactly 2 capital letters, for example DL or GJ"
+                                                                    oninput="this.value = this.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2)">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -7441,6 +7456,7 @@
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                        {{--
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">LUT Number</label>
@@ -7448,6 +7464,7 @@
                                                                     name="lut_number" value="{{ old('lut_number') }}" placeholder="LUT Number">
                                                             </div>
                                                         </div>
+                                                        --}}
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">IEC Code </label>
@@ -7477,6 +7494,7 @@
                                                                     placeholder="Bank Account Number">
                                                             </div>
                                                         </div>
+                                                        {{--
                                                         <div class="col-md-4">
                                                             <div class="mb-0">
                                                                 <label class="form-label">Bank IFSC Code</label>
@@ -7484,6 +7502,7 @@
                                                                     name="bank_ifsc_code" value="{{ old('bank_ifsc_code') }}" placeholder="Bank IFSC Code">
                                                             </div>
                                                         </div>
+                                                        --}}
                                                     </div>
                                                 </div>
                                             </div>
@@ -7516,7 +7535,8 @@
                                                                 <div class="mb-3">
                                                                     <label class="form-label">Invoice Date</label>
                                                                     <input type="date" class="form-control"
-                                                                        name="invoice_date" value="{{ old('invoice_date') }}">
+                                                                        name="invoice_date" value="{{ old('invoice_date') }}"
+                                                                        min="{{ now()->toDateString() }}">
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
@@ -9507,6 +9527,30 @@
             'phone_number'   => $customer->phone_number ?? '',
             'emails'         => $customer->email ?? '',
         ];
+        $exporterCustomerPrefill = $exporterCustomers->mapWithKeys(function ($savedCustomer) {
+            $isCsbV = $savedCustomer->csb_type === 'csb_v';
+
+            return [
+                $savedCustomer->id => array_merge($savedCustomer->toShipperArray(), [
+                    'csb_type' => $savedCustomer->csb_type,
+                    'csb_label' => $isCsbV ? 'CSB V' : 'CSB IV',
+                    'bond_ut_igst' => $isCsbV
+                        ? ($savedCustomer->is_lut ? 'Bond UT' : 'IGST')
+                        : '',
+                    'lut_number' => $isCsbV && $savedCustomer->is_lut
+                        ? $savedCustomer->lut_bond_year
+                        : '',
+                    'iec_code' => $isCsbV ? $savedCustomer->iec_number : '',
+                    'gst_number' => $savedCustomer->kyc_type === 'GST (Normal)'
+                        ? $savedCustomer->kyc_number
+                        : '',
+                    'ad_code' => $isCsbV ? $savedCustomer->ad_code : '',
+                    'bank_account_number' => $isCsbV
+                        ? $savedCustomer->bank_account_number
+                        : '',
+                ]),
+            ];
+        });
     @endphp
     document.addEventListener('DOMContentLoaded', function () {
         const sameAsCustomer = document.getElementById('sameAsCustomer');
@@ -9514,11 +9558,7 @@
         if (!sameAsCustomer && !exporterCustomerSelect) return;
 
         const customerData = @json($customerPrefill);
-        const exporterCustomerData = @json(
-            $exporterCustomers->mapWithKeys(fn ($savedCustomer) => [
-                $savedCustomer->id => $savedCustomer->toShipperArray()
-            ])
-        );
+        const exporterCustomerData = @json($exporterCustomerPrefill);
 
         // Remember user-entered values so unchecking restores them
         const savedValues = {};
@@ -9526,18 +9566,38 @@
         function setField(name, value) {
             const el = document.querySelector('[name="' + name + '"]');
             if (!el) return;
-            // Try intl-tel-input aware update for phone field
+
+            const normalizedValue = value ?? '';
+            if (el.type === 'radio') {
+                document.querySelectorAll('[name="' + name + '"]').forEach(function (radio) {
+                    radio.checked = radio.value === normalizedValue;
+                    radio.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                return;
+            }
+
+            // Keep the phone plugin and its underlying input synchronized.
             if (el.classList.contains('phone') && window.intlTelInput && el.dataset.intlTelInputId !== undefined) {
                 const iti = window.intlTelInputGlobals?.getInstance(el);
-                if (iti) { iti.setNumber(value); return; }
+                if (iti) {
+                    iti.setNumber(normalizedValue);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    return;
+                }
             }
+
             if (el.type === 'checkbox') {
                 el.checked = Boolean(value);
             } else {
-                el.value = value ?? '';
-                if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
-                    jQuery(el).trigger('change.select2');
-                }
+                el.value = normalizedValue;
+            }
+
+            // Notify calculations, validation, and other dependent form listeners.
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
+                jQuery(el).trigger('change.select2');
             }
         }
 
@@ -9558,16 +9618,144 @@
             'shipper_phone_number', 'shipper_emails', 'shipper_email_opt_out',
             'shipper_kyc_type', 'shipper_kyc_number'
         ];
+        const savedCustomerCsbFieldNames = [
+            'bond_ut_igst', 'iec_code', 'gst_number',
+            'ad_code', 'bank_account_number'
+        ];
+        const savedCustomerConsigneeFieldMap = {
+            consignee_name: 'shipper_company_names',
+            consignee_contact_person: 'shipper_contact_person',
+            consignee_address_line1: 'shipper_address_line1',
+            consignee_address_line2: 'shipper_address_line2',
+            consignee_address_line3: 'shipper_address_line3',
+            consignee_zip_code: 'shipper_pincode',
+            consignee_city: 'shipper_city',
+            consignee_state: 'shipper_state',
+            consignee_phone_number: 'shipper_phone_number',
+            consignee_email: 'shipper_emails'
+        };
+
+        function normalizeComparableFieldValue(value) {
+            return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function clearDuplicatedCustomerDataFromConsignee(selectedCustomer) {
+            Object.entries(savedCustomerConsigneeFieldMap).forEach(function ([consigneeField, shipperField]) {
+                const consigneeValue = getField(consigneeField);
+                const selectedCustomerValue = selectedCustomer[shipperField];
+
+                // Preserve independently entered consignee information. Only remove a
+                // value when form restoration/autofill duplicated this saved customer.
+                if (
+                    normalizeComparableFieldValue(consigneeValue)
+                    && normalizeComparableFieldValue(consigneeValue)
+                        === normalizeComparableFieldValue(selectedCustomerValue)
+                ) {
+                    setField(consigneeField, '');
+                }
+            });
+        }
+
+        function getExporterCustomerOptionColor(option) {
+            return option?.dataset.csbColor || '#212529';
+        }
+
+        function syncExporterCustomerCsbColor() {
+            if (!exporterCustomerSelect) return;
+
+            const selectedOption = exporterCustomerSelect.options[exporterCustomerSelect.selectedIndex];
+            const color = getExporterCustomerOptionColor(selectedOption);
+            exporterCustomerSelect.style.color = color;
+            exporterCustomerSelect.style.fontWeight = exporterCustomerSelect.value ? '600' : '400';
+
+            if (window.jQuery && jQuery(exporterCustomerSelect).hasClass('select2-hidden-accessible')) {
+                const renderedSelection = jQuery(exporterCustomerSelect)
+                    .next('.select2-container')
+                    .find('.select2-selection__rendered');
+                renderedSelection.css({
+                    color: color,
+                    fontWeight: exporterCustomerSelect.value ? '600' : '400'
+                });
+            }
+        }
+
+        function initializeExporterCustomerSearch() {
+            if (!exporterCustomerSelect || !window.jQuery || !jQuery.fn.select2) return;
+
+            jQuery(exporterCustomerSelect).select2({
+                width: '100%',
+                placeholder: 'Search or select a customer',
+                matcher: function (params, data) {
+                    if (!data.element) return data;
+
+                    const searchTerm = (params.term || '').trim().toLowerCase();
+                    if (!searchTerm) {
+                        return data.element.dataset.initialVisible === '1' ? data : null;
+                    }
+
+                    return (data.text || '').toLowerCase().includes(searchTerm) ? data : null;
+                },
+                templateResult: function (data) {
+                    if (!data.element) return data.text;
+                    return jQuery('<span>').text(data.text).css({
+                        color: getExporterCustomerOptionColor(data.element),
+                        fontWeight: data.id ? '600' : '400'
+                    });
+                },
+                templateSelection: function (data) {
+                    if (!data.element) return data.text;
+                    return jQuery('<span>').text(data.text).css({
+                        color: getExporterCustomerOptionColor(data.element),
+                        fontWeight: data.id ? '600' : '400'
+                    });
+                }
+            });
+        }
+
+        const originTypeSelect = document.getElementById('originType');
+        const csbVOriginTypeOption = originTypeSelect
+            ? originTypeSelect.querySelector('option[value="CSB V"]')
+            : null;
+
+        function syncOriginTypeOptions(csbType) {
+            if (!originTypeSelect) return;
+
+            const isCsbIvCustomer = csbType === 'csb_iv';
+
+            if (isCsbIvCustomer) {
+                originTypeSelect.value = 'CSB IV';
+                if (csbVOriginTypeOption?.isConnected) {
+                    csbVOriginTypeOption.remove();
+                }
+            } else if (csbVOriginTypeOption && !csbVOriginTypeOption.isConnected) {
+                csbVOriginTypeOption.disabled = false;
+                csbVOriginTypeOption.hidden = false;
+                originTypeSelect.appendChild(csbVOriginTypeOption);
+            }
+
+            // Select2 reads its choices from the current option collection. Detaching
+            // CSB V ensures it cannot appear in the dropdown for a CSB IV customer.
+            if (window.jQuery && jQuery(originTypeSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(originTypeSelect).trigger('change.select2');
+            }
+            originTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
 
         function applySelectedExporterCustomer() {
             if (!exporterCustomerSelect) return;
 
-            const selectedCustomer = exporterCustomerData[exporterCustomerSelect.value];
+            syncExporterCustomerCsbColor();
+
+            const selectedCustomerId = String(exporterCustomerSelect.value || '');
+            const selectedCustomer = exporterCustomerData[selectedCustomerId];
+            syncOriginTypeOptions(selectedCustomer ? selectedCustomer.csb_type : '');
             if (!selectedCustomer) return;
 
-            fieldNames.forEach(function (name) {
+            // Fill the actual Shipper Info fields and every matching CSB Info field.
+            fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (name) {
                 setField(name, selectedCustomer[name]);
             });
+            clearDuplicatedCustomerDataFromConsignee(selectedCustomer);
 
             if (sameAsCustomer) {
                 sameAsCustomer.checked = false;
@@ -9575,7 +9763,18 @@
         }
 
         if (exporterCustomerSelect) {
+            initializeExporterCustomerSearch();
             exporterCustomerSelect.addEventListener('change', applySelectedExporterCustomer);
+
+            // Select2 emits its own selection event. Apply again on the next frame
+            // after Select2 has synchronized the underlying select value.
+            if (window.jQuery && jQuery(exporterCustomerSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(exporterCustomerSelect).on('select2:select.savedCustomer', function () {
+                    window.requestAnimationFrame(applySelectedExporterCustomer);
+                });
+            }
+
+            syncExporterCustomerCsbColor();
 
             // Apply an old-input selection after a validation redirect. On a normal
             // load, localStorage restoration will dispatch change after restoring.
@@ -9589,9 +9788,15 @@
             if (this.checked) {
                 if (exporterCustomerSelect) {
                     exporterCustomerSelect.value = '';
+                    if (window.jQuery && jQuery(exporterCustomerSelect).hasClass('select2-hidden-accessible')) {
+                        jQuery(exporterCustomerSelect).trigger('change.select2');
+                    }
+                    syncExporterCustomerCsbColor();
+                    syncOriginTypeOptions('');
                 }
                 // Save current values then pre-fill from customer data
                 fieldNames.forEach(function (n) { savedValues[n] = getField(n); });
+                syncOriginTypeOptions('');
                 setField('shipper_company_names', customerData.company_names || '');
                 setField('shipper_contact_person', customerData.contact_person || '');
                 setField('shipper_address_line1', customerData.address_line1 || '');
@@ -9674,9 +9879,266 @@
             return messages.length ? '<ul class="text-start mb-0 ps-3">' + messages.join('') + '</ul>' : '';
         }
 
+        function openShipmentAccordion(accordionId) {
+            if (!accordionId) return;
+            const collapse = document.getElementById(accordionId);
+            if (!collapse) return;
+
+            if (window.bootstrap && bootstrap.Collapse) {
+                bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
+            } else if (window.jQuery) {
+                window.jQuery(collapse).collapse('show');
+            }
+        }
+
+        function clearShipmentValidation(form) {
+            form.querySelectorAll('.is-invalid').forEach(function(element) {
+                element.classList.remove('is-invalid');
+            });
+            form.querySelectorAll('.select2-selection.is-invalid').forEach(function(element) {
+                element.classList.remove('is-invalid');
+            });
+            form.querySelectorAll('[data-shipment-validation-error]').forEach(function(element) {
+                element.remove();
+            });
+        }
+
+        function markShipmentFieldInvalid(element, message) {
+            if (!element) return;
+            element.classList.add('is-invalid');
+
+            if (element.classList.contains('select2-hidden-accessible')) {
+                const select2Selection = element.nextElementSibling?.querySelector('.select2-selection');
+                if (select2Selection) select2Selection.classList.add('is-invalid');
+            }
+
+            const feedback = document.createElement('div');
+            feedback.className = 'invalid-feedback d-block';
+            feedback.dataset.shipmentValidationError = '1';
+            feedback.textContent = message;
+
+            const select2Container = element.classList.contains('select2-hidden-accessible')
+                ? element.nextElementSibling
+                : null;
+            (select2Container || element).insertAdjacentElement('afterend', feedback);
+        }
+
+        function focusShipmentField(element, accordionId) {
+            openShipmentAccordion(accordionId);
+            window.setTimeout(function() {
+                const focusTarget = element?.classList.contains('select2-hidden-accessible')
+                    ? element.nextElementSibling?.querySelector('.select2-selection')
+                    : element;
+                focusTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                focusTarget?.focus({ preventScroll: true });
+            }, 250);
+        }
+
+        window.validateShipmentForm = function(form, options) {
+            options = options || {};
+            clearShipmentValidation(form);
+
+            const errors = [];
+            const addError = function(element, message, accordionId) {
+                if (!element) return;
+                if (!errors.some(function(error) { return error.element === element; })) {
+                    errors.push({ element: element, message: message, accordionId: accordionId });
+                    markShipmentFieldInvalid(element, message);
+                }
+            };
+            const value = function(name) {
+                return (form.querySelector('[name="' + name + '"]')?.value || '').trim();
+            };
+            const requireFields = function(fields, accordionId) {
+                fields.forEach(function(field) {
+                    const element = form.querySelector('[name="' + field.name + '"]');
+                    if (!element || element.disabled || !String(element.value || '').trim()) {
+                        addError(element, field.label + ' is required.', accordionId);
+                    }
+                });
+            };
+
+            requireFields([
+                { name: 'shipper_company_names', label: 'Shipper company name' },
+                { name: 'shipper_contact_person', label: 'Shipper contact person' },
+                { name: 'shipper_address_line1', label: 'Shipper address' },
+                { name: 'shipper_pincode', label: 'Shipper pincode' },
+                { name: 'shipper_city', label: 'Shipper city' },
+                { name: 'shipper_state', label: 'Shipper state' },
+                { name: 'shipper_phone_number', label: 'Shipper phone number' },
+                { name: 'shipper_emails', label: 'Shipper email' },
+                { name: 'shipper_kyc_type', label: 'Shipper KYC type' },
+                { name: 'shipper_kyc_number', label: 'Shipper KYC number' }
+            ], 'basic');
+
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const shipperEmail = form.querySelector('[name="shipper_emails"]');
+            if (shipperEmail && shipperEmail.value.trim() && !emailPattern.test(shipperEmail.value.trim())) {
+                addError(shipperEmail, 'Enter a valid shipper email address.', 'basic');
+            }
+
+            const shipperState = form.querySelector('[name="shipper_state"]');
+            if (shipperState) {
+                shipperState.value = shipperState.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+            }
+            const shipperStateValue = shipperState ? shipperState.value : '';
+            if (shipperStateValue && !/^[A-Z]{2}$/.test(shipperStateValue)) {
+                addError(shipperState, 'Enter exactly 2 capital letters for shipper state, for example DL or GJ.', 'basic');
+            }
+
+            const selectedRate = form.querySelector('input[name="rate_select"]:checked');
+            const legacyRate = form.querySelector('input[name="ddp_shipping_method"]:checked, input[name="ddu_shipping_method"]:checked');
+            const selectedMethod = selectedRate ? (selectedRate.dataset.method || '').toUpperCase().trim() : '';
+
+            if (typeof window.validateShipperKycNumber === 'function' && !window.validateShipperKycNumber()) {
+                addError(form.querySelector('[name="shipper_kyc_number"]'), 'Enter a valid number for the selected KYC type.', 'basic');
+            }
+
+            requireFields([
+                { name: 'delivery_destination', label: 'Delivery destination' },
+                { name: 'origin_type', label: 'Origin type' },
+                { name: 'consignee_name', label: 'Consignee name' },
+                { name: 'consignee_contact_person', label: 'Consignee contact person' },
+                { name: 'consignee_address_line1', label: 'Consignee address' },
+                { name: 'consignee_zip_code', label: 'Consignee zip code' },
+                { name: 'consignee_city', label: 'Consignee city' },
+                { name: 'consignee_phone_number', label: 'Consignee phone number' },
+                { name: 'consignee_email', label: 'Consignee email' }
+            ], 'address');
+
+            const consigneeEmail = form.querySelector('[name="consignee_email"]');
+            if (consigneeEmail && consigneeEmail.value.trim() && !emailPattern.test(consigneeEmail.value.trim())) {
+                addError(consigneeEmail, 'Enter a valid consignee email address.', 'address');
+            }
+
+            const boxes = form.querySelector('[name="number_of_boxes"]');
+            const boxCount = parseInt(boxes?.value || '0', 10);
+            if (!boxes?.value || !Number.isInteger(boxCount) || boxCount < 1 || boxCount > 50) {
+                addError(boxes, 'Number of boxes must be between 1 and 50.', 'social');
+            }
+
+            const packageCards = Array.from(form.querySelectorAll('.rowContaineraddmore'));
+            packageCards.forEach(function(card, index) {
+                [
+                    ['actual_weight_kg', 'actual weight'],
+                    ['length_cm', 'length'],
+                    ['width_cm', 'width'],
+                    ['height_cm', 'height']
+                ].forEach(function(field) {
+                    const element = card.querySelector('[name$="[' + field[0] + ']"]');
+                    const number = parseFloat(element?.value || '0');
+                    if (!element?.value || !Number.isFinite(number) || number <= 0) {
+                        addError(element, 'Box #' + (index + 1) + ' ' + field[1] + ' must be greater than 0.', 'social');
+                    }
+                });
+            });
+            if (packageCards.length !== boxCount && boxes?.value) {
+                addError(boxes, 'Package rows must match the number of boxes.', 'social');
+            }
+            if (typeof window.validateAllPackages === 'function') {
+                const packageResult = window.validateAllPackages();
+                packageResult.blockedCards.forEach(function(item) {
+                    const card = packageCards[item.index];
+                    const element = card?.querySelector('[name$="[actual_weight_kg]"]');
+                    addError(element, 'Box #' + (item.index + 1) + ': ' + item.result.messages.join(' '), 'social');
+                });
+            }
+
+            const originType = value('origin_type');
+            if (originType === 'CSB V') {
+                ['ecommerce', 'scheme'].forEach(function(name) {
+                    if (!form.querySelector('[name="' + name + '"]:checked')) {
+                        addError(form.querySelector('[name="' + name + '"]'),
+                            (name === 'ecommerce' ? 'E-Commerce' : 'Scheme') + ' selection is required.', 'csbinfo');
+                    }
+                });
+            }
+
+            requireFields([
+                { name: 'invoice_number', label: 'Invoice number' },
+                { name: 'invoice_date', label: 'Invoice date' },
+                { name: 'invoice_amount', label: 'Invoice amount' },
+                { name: 'incoterms', label: 'Incoterms' },
+                { name: 'invoice_currency', label: 'Invoice currency' }
+            ], 'access-info');
+
+            const invoiceDate = form.querySelector('[name="invoice_date"]');
+            if (invoiceDate?.value) {
+                const today = new Date();
+                const todayString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                if (invoiceDate.value < todayString) {
+                    addError(invoiceDate, 'Invoice date must be today or a future date.', 'access-info');
+                }
+            }
+            const invoiceAmount = form.querySelector('[name="invoice_amount"]');
+            if (invoiceAmount?.value && parseFloat(invoiceAmount.value) <= 0) {
+                addError(invoiceAmount, 'Invoice amount must be greater than 0.', 'access-info');
+            }
+
+            const itemRows = Array.from(form.querySelectorAll('#invoiceTable tr'));
+            itemRows.forEach(function(row, index) {
+                const requiredItemFields = [
+                    ['box_no', 'box number'],
+                    ['description', 'description'],
+                    ['hs_code', 'HS code'],
+                    ['unit_type', 'unit type'],
+                    ['qty', 'quantity'],
+                    ['unit_rate', 'unit rate']
+                ];
+                requiredItemFields.forEach(function(field) {
+                    const element = row.querySelector('[name$="[' + field[0] + ']"]');
+                    if (!element || !String(element.value || '').trim()) {
+                        addError(element, 'Item #' + (index + 1) + ' ' + field[1] + ' is required.', 'access-info');
+                    }
+                });
+                ['qty', 'unit_rate'].forEach(function(name) {
+                    const element = row.querySelector('[name$="[' + name + ']"]');
+                    if (element?.value && parseFloat(element.value) <= 0) {
+                        addError(element, 'Item #' + (index + 1) + ' ' + (name === 'qty' ? 'quantity' : 'unit rate') + ' must be greater than 0.', 'access-info');
+                    }
+                });
+                if (originType === 'CSB V') {
+                    const igst = row.querySelector('[name$="[igst_percentage]"]');
+                    const igstValue = parseFloat(igst?.value);
+                    if (!igst?.value || !Number.isFinite(igstValue) || igstValue < 0 || igstValue > 100) {
+                        addError(igst, 'Item #' + (index + 1) + ' IGST percentage must be between 0 and 100.', 'access-info');
+                    }
+                }
+            });
+            if (!itemRows.length) {
+                addError(form.querySelector('[name="invoice_amount"]'), 'Add at least one invoice item.', 'access-info');
+            }
+
+            if (!selectedRate && !legacyRate) {
+                const rateTarget = document.getElementById('rateCalculateBtn') || document.getElementById('previewOrderBtn');
+                addError(rateTarget, 'Calculate and select a shipping method before creating the shipment.', 'rate-calc');
+            }
+
+            if (errors.length) {
+                const firstError = errors[0];
+                focusShipmentField(firstError.element, firstError.accordionId);
+                if (options.showAlert !== false) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Please complete the shipment form',
+                        html: '<div class="text-start">' + errors.map(function(error) {
+                            return '<div class="mb-1">• ' + error.message + '</div>';
+                        }).join('') + '</div>',
+                        confirmButtonColor: '#dc3545'
+                    });
+                }
+                return false;
+            }
+
+            return true;
+        };
+
         // ===== Preview Order Modal Logic =====
         document.getElementById('previewOrderBtn').addEventListener('click', function() {
             const form = document.getElementById('shipmentForm');
+            if (!window.validateShipmentForm(form)) {
+                return;
+            }
             const getVal = (name) => {
                 const el = form.querySelector('[name="' + name + '"]');
                 if (!el) return '';
@@ -9882,6 +10344,13 @@
 
         // ===== Preview "Create Now" Button Handler =====
         document.getElementById('previewCreateNowBtn').addEventListener('click', function() {
+            const form = document.getElementById('shipmentForm');
+            if (!window.validateShipmentForm(form)) {
+                const previewModal = bootstrap.Modal.getInstance(document.getElementById('previewOrderModal'));
+                if (previewModal) previewModal.hide();
+                return;
+            }
+
             // Close the preview modal
             const previewModalEl = document.getElementById('previewOrderModal');
             const previewModalInstance = bootstrap.Modal.getInstance(previewModalEl);
@@ -9908,86 +10377,9 @@
                 if (!submitButton) {
                     return;
                 }
-                // Validate KYC number format based on selected KYC type
-                if (typeof window.validateShipperKycNumber === 'function' && !window.validateShipperKycNumber()) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Invalid KYC Number',
-                        html: 'The KYC Number entered is not valid for the selected KYC Type.<br>Please check the KYC Number field and try again.',
-                        confirmButtonColor: '#dc3545'
-                    });
-                    // Re-open the Shipper Info accordion so the user can fix the error
-                    const basicCollapse = document.getElementById('basic');
-                    if (basicCollapse && window.bootstrap) {
-                        bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
-                    } else if (window.$ && window.$('#basic')) {
-                        window.$('#basic').collapse('show');
-                    }
+                if (!window.validateShipmentForm(form)) {
                     return;
                 }
-                // ===== Shipper state validation: max 2 words =====
-                // The shipper state field must not contain more than 2 words
-                // (e.g. "Gujarat", "New South Wales" are valid, but
-                // "Some Very Long State Name" is not). Block submission here
-                // so the user is informed BEFORE the shipment is created.
-                (function() {
-                    const stateEl = document.querySelector('[name="shipper_state"]');
-                    const stateVal = stateEl ? (stateEl.value || '').trim() : '';
-                    if (stateVal !== '') {
-                        const wordCount = stateVal.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
-                        if (wordCount > 2) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Invalid Shipper State',
-                                html: 'Shipper state must not exceed <strong>2 words</strong>.<br>The provided state <strong>"' + stateVal + '"</strong> contains <strong>' + wordCount + ' words</strong>.<br>Please enter a shorter state name and try again.',
-                                confirmButtonColor: '#dc3545'
-                            });
-                            // Re-open the Shipper Info accordion so the user can fix the error
-                            const basicCollapse = document.getElementById('basic');
-                            if (basicCollapse && window.bootstrap) {
-                                bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
-                            } else if (window.$ && window.$('#basic')) {
-                                window.$('#basic').collapse('show');
-                            }
-                            if (stateEl) { stateEl.focus(); }
-                            return;
-                        }
-                    }
-                })();
-                // ===== Shipper state validation for Overseas Logistic methods =====
-                // The Overseas Logistic API (UNITED CANADA DDP / E-COMMERCE and
-                // ARAMEX GPX / Australia) requires the shipper state to be a
-                // 2-letter code (e.g. "GJ", "MH"). Block submission here so the
-                // user is informed BEFORE the shipment is created.
-                (function() {
-                    const rateRadioEl = document.querySelector('input[name="rate_select"]:checked');
-                    const selectedMethod = rateRadioEl ? (rateRadioEl.dataset.method || '') : '';
-                    const methodUpper = (selectedMethod || '').toUpperCase().trim();
-                    // Match Overseas Logistic methods: "UNITED CANADA" (DDP /
-                    // E-COMMERCE) and "ARAMEX GPX" (Australia).
-                    const isOverseas = methodUpper.includes('UNITED CANADA') || methodUpper.includes('ARAMEX GPX');
-                    if (isOverseas) {
-                        const stateEl = document.querySelector('[name="shipper_state"]');
-                        const stateVal = stateEl ? (stateEl.value || '').trim() : '';
-                        if (stateVal.length > 2) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Invalid Shipper State',
-                                html: 'Shipper state must be a <strong>2-letter code</strong> (e.g. "GJ", "MH") for Overseas shipments.<br>The provided state <strong>"' + stateVal + '"</strong> is too long.<br>Please enter a 2-letter state code and try again.',
-                                confirmButtonColor: '#dc3545'
-                            });
-                            // Re-open the Shipper Info accordion so the user can fix the error
-                            const basicCollapse = document.getElementById('basic');
-                            if (basicCollapse && window.bootstrap) {
-                                bootstrap.Collapse.getOrCreateInstance(basicCollapse).show();
-                            } else if (window.$ && window.$('#basic')) {
-                                window.$('#basic').collapse('show');
-                            }
-                            if (stateEl) { stateEl.focus(); }
-                            return;
-                        }
-                    }
-                })();
                 // Validate invoice total against origin-type limit
                 // CSB IV -> max 25,000 | CSB V -> max 10,00,000
                 if (window.getMaxInvoiceTotal && window.updateTotal) {
@@ -10227,7 +10619,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                             html: successHtml,
                             confirmButtonColor: '#2563eb'
                         }).then(() => {
-                            // window.location.reload();
+                            window.location.href = @json(route('customer.view-all-shipments'));
                         });
                     } else {
                         // Error could be UPS failure or validation error (controller handles both)

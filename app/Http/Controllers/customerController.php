@@ -18,6 +18,7 @@ use App\Models\CsbInformation;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\CsbForm;
+use App\Models\KycDraft;
 use App\Models\CreateShipment;
 use App\Models\ShipmentTracking;
 use App\Models\Tracking;
@@ -262,7 +263,7 @@ class customerController extends Controller
             if (!$customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Phone number not found. Please check your number or register first.'
+                    'message' => 'This phone number is not registered. Please register yourself first.'
                 ], 404);
             }
 
@@ -600,14 +601,76 @@ class customerController extends Controller
 
         // Load the customer's business category to determine user_type (Personal / Business)
         $businessCategory = BusinessCategory::find($customer->business_category_id);
+        $customer->setRelation('businessCategory', $businessCategory);
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
+        $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+        $kycType = strtolower($userType) === 'business' ? 'business' : 'personal';
+        $kycDraft = KycDraft::where('customer_id', $customerId)
+            ->where('kyc_type', $kycType)
+            ->first();
 
         return view('customer.dashboard', compact(
             'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
             'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
             'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-            'userType', 'businessCategory'
+            'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft'
         ));
+    }
+
+    public function saveKycDraft(Request $request)
+    {
+        $customer = auth()->guard('customer')->user();
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must be logged in to save KYC progress.',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'kyc_type' => ['required', Rule::in(['personal', 'business'])],
+            'current_step' => ['required', 'integer', 'min:1', 'max:7'],
+            'form_data' => ['nullable', 'array'],
+        ]);
+
+        $maxStep = $validated['kyc_type'] === 'business' ? 6 : 7;
+        if ((int) $validated['current_step'] > $maxStep) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The selected KYC step is invalid.',
+            ], 422);
+        }
+
+        $allowedFields = [
+            'gst_number', 'gst_verified', 'otp_verified', 'aadhar_number',
+            'aadhar_verified', 'aadhar_address', 'pan_number', 'pan_holder_name',
+            'pan_dob', 'pan_verified', 'organization_name', 'authorized_signatory',
+            'billing_address', 'billing_gst', 'billing_contact', 'billing_email',
+            'terms_accepted', 'is_csb_v', 'is_gst', 'is_lut',
+            'gst_certificate_number', 'gst_certificate_verified', 'iec_number',
+            'ad_code', 'lut_expiry_date', 'lut_bond_year', 'bank_account_number',
+            'bank_type',
+        ];
+        $formData = array_intersect_key(
+            $validated['form_data'] ?? [],
+            array_flip($allowedFields)
+        );
+
+        $draft = KycDraft::updateOrCreate(
+            [
+                'customer_id' => $customer->id,
+                'kyc_type' => $validated['kyc_type'],
+            ],
+            [
+                'current_step' => (int) $validated['current_step'],
+                'form_data' => $formData,
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'saved_at' => $draft->updated_at?->toIso8601String(),
+        ]);
     }
 
     /**
@@ -719,7 +782,7 @@ class customerController extends Controller
     }
 
     /**
-     * Show exporter-owned customers and the add-customer form.
+     * Show saved customers and the add-customer form for Courier or Aggregator accounts.
      */
     public function exporterCustomers()
     {
@@ -728,18 +791,23 @@ class customerController extends Controller
             return redirect()->route('login');
         }
 
-        abort_unless($this->isExporter($exporter), 403, 'Only exporters can manage saved customers.');
+        abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
 
         $exporterCustomers = $exporter->exporterCustomers()
+            ->with('businessCategory')
             ->orderBy('company_name')
             ->orderBy('contact_person')
             ->get();
+        $groupedBusinessCategories = BusinessCategory::active()
+            ->ordered()
+            ->get()
+            ->groupBy(fn (BusinessCategory $category) => $category->parent_group ?: $category->user_type ?: 'Other');
 
-        return view('customer.exporter-customers', compact('exporterCustomers'));
+        return view('customer.exporter-customers', compact('exporterCustomers', 'groupedBusinessCategories'));
     }
 
     /**
-     * Store a shipper profile owned by the logged-in exporter.
+     * Store a shipper profile owned by the logged-in Courier or Aggregator account.
      */
     public function storeExporterCustomer(Request $request)
     {
@@ -748,18 +816,40 @@ class customerController extends Controller
             return redirect()->route('login');
         }
 
-        abort_unless($this->isExporter($exporter), 403, 'Only exporters can manage saved customers.');
+        abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
+
+        $selectedBusinessCategory = BusinessCategory::active()
+            ->find($request->input('business_category_id'));
+        $isBusinessCustomer = $selectedBusinessCategory
+            && strcasecmp((string) $selectedBusinessCategory->user_type, 'Business') === 0;
 
         $request->merge([
+            'business_category_id' => $request->filled('business_category_id')
+                ? (int) $request->input('business_category_id')
+                : null,
+            'csb_type' => $isBusinessCustomer ? 'csb_v' : $request->input('csb_type'),
             'company_name' => trim((string) $request->input('company_name')),
             'contact_person' => trim((string) $request->input('contact_person')),
             'email' => strtolower(trim((string) $request->input('email'))),
             'phone_number' => preg_replace('/\D+/', '', (string) $request->input('phone_number')),
             'pincode' => preg_replace('/\D+/', '', (string) $request->input('pincode')),
             'kyc_number' => strtoupper(preg_replace('/\s+/', '', (string) $request->input('kyc_number'))),
+            'ad_code' => preg_replace('/\D+/', '', (string) $request->input('ad_code')),
+            'iec_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('iec_number'))),
+            'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
+            'billing_contact' => preg_replace('/\D+/', '', (string) $request->input('billing_contact')),
+            'billing_email' => strtolower(trim((string) $request->input('billing_email'))),
         ]);
 
+        $isCsbV = $request->input('csb_type') === 'csb_v';
+        $usesLut = $isCsbV && $request->boolean('is_lut');
+
         $validated = $request->validate([
+            'business_category_id' => [
+                'required',
+                'integer',
+                Rule::exists('business_categories', 'id')->where('status', 'active'),
+            ],
             'company_name' => ['required', 'string', 'min:2', 'max:150', 'regex:/^[\pL\pN][\pL\pN\s.&()\'\/-]*$/u'],
             'contact_person' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
             'address_line1' => ['required', 'string', 'min:5', 'max:255'],
@@ -792,13 +882,44 @@ class customerController extends Controller
                         'PAN Card' => ['/^[A-Z]{5}[0-9]{4}[A-Z]$/', 'Enter a valid 10-character PAN number.'],
                         'Passport Number' => ['/^[A-Z][0-9]{7}$/', 'Enter a valid passport number (one letter followed by seven digits).'],
                     ];
-                    $rule = $patterns[$request->input('kyc_type')] ?? null;
+                    $kycType = $request->input('kyc_type');
+                    $rule = $patterns[$kycType] ?? null;
                     if ($value && $rule && !preg_match($rule[0], (string) $value)) {
                         $fail($rule[1]);
+                        return;
+                    }
+
+                    if (
+                        $value
+                        && $kycType === 'Aadhar Card'
+                        && \App\Models\ExporterCustomer::query()
+                            ->where('kyc_type', 'Aadhar Card')
+                            ->where('kyc_number', (string) $value)
+                            ->exists()
+                    ) {
+                        $fail('This Aadhaar number is already registered for another saved customer.');
                     }
                 },
             ],
+            'csb_type' => ['required', Rule::in(['csb_iv', 'csb_v'])],
+            'is_lut' => ['nullable', 'boolean'],
+            'ad_code' => [Rule::requiredIf($isCsbV), 'nullable', 'digits:14'],
+            'ad_code_document' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'iec_number' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[A-Z0-9]{10}$/'],
+            'iec_document' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'bank_account_number' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[0-9]{9,18}$/'],
+            'bank_type' => [Rule::requiredIf($isCsbV), 'nullable', Rule::in(['private', 'government'])],
+            'lut_bond_year' => [Rule::requiredIf($usesLut), 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
+            'lut_expiry_date' => [Rule::requiredIf($usesLut), 'nullable', 'date', 'after_or_equal:today'],
+            'lut_document' => [Rule::requiredIf($usesLut), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+            'billing_address' => [Rule::requiredIf($isCsbV), 'nullable', 'string', 'min:10', 'max:1000'],
+            'billing_contact' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
+            'billing_email' => [Rule::requiredIf($isCsbV), 'nullable', 'email:rfc', 'max:255'],
+            'merchant_agreement' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf', 'max:10240'],
+            'terms_accepted' => [Rule::excludeIf(!$isCsbV), 'required', 'accepted'],
         ], [
+            'business_category_id.required' => 'Please select a customer type.',
+            'business_category_id.exists' => 'The selected customer type is invalid or inactive.',
             'company_name.regex' => 'Company name contains invalid characters.',
             'contact_person.regex' => 'Contact person may contain letters, spaces, dots, apostrophes and hyphens only.',
             'pincode.regex' => 'Enter a valid 6-digit Indian pincode.',
@@ -809,10 +930,78 @@ class customerController extends Controller
             'email.unique' => 'A customer with this email address already exists.',
             'kyc_type.required_with' => 'Select a KYC type when entering a KYC number.',
             'kyc_number.required_with' => 'Enter the KYC number for the selected KYC type.',
+            'ad_code.digits' => 'The AD Code must be exactly 14 numeric digits.',
+            'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
+            'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
+            'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
+            'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
+            'terms_accepted.accepted' => 'You must accept the declaration and terms.',
         ]);
 
         $validated['email_opt_out'] = $request->boolean('email_opt_out');
         $validated['kyc_number'] = $validated['kyc_number'] ?: null;
+        $validated['is_lut'] = $usesLut;
+        $validated['terms_accepted'] = $isCsbV && $request->boolean('terms_accepted');
+        $validated['merchant_agreement_accepted_at'] = $validated['terms_accepted'] ? now() : null;
+
+        if ($isCsbV && !empty($validated['lut_bond_year'])) {
+            [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
+            $startYear = (int) $startYear;
+            $endYear = (intdiv($startYear, 100) * 100) + (int) $endYearSuffix;
+            if ($endYear <= $startYear) {
+                $endYear += 100;
+            }
+            if ($endYear < $startYear + 1 || $endYear > $startYear + 5) {
+                throw ValidationException::withMessages([
+                    'lut_bond_year' => 'The LUT Bond End Year must be within five years after the Start Year.',
+                ]);
+            }
+
+            $expectedExpiryDate = sprintf('%04d-03-31', $endYear);
+            if (($validated['lut_expiry_date'] ?? null) !== $expectedExpiryDate) {
+                throw ValidationException::withMessages([
+                    'lut_expiry_date' => 'The LUT Expiry Date must be 31 March of the selected LUT Bond End Year.',
+                ]);
+            }
+        }
+
+        if ($isCsbV) {
+            $uploadDirectory = public_path('uploads/exporter_customer_csb_documents/' . $exporter->id);
+            if (!is_dir($uploadDirectory)) {
+                mkdir($uploadDirectory, 0755, true);
+            }
+
+            foreach (['ad_code_document', 'iec_document', 'lut_document', 'merchant_agreement'] as $documentField) {
+                if (!$request->hasFile($documentField)) {
+                    continue;
+                }
+
+                $file = $request->file($documentField);
+                $filename = Str::uuid() . '_' . $documentField . '.' . $file->extension();
+                $file->move($uploadDirectory, $filename);
+                $validated[$documentField] = 'uploads/exporter_customer_csb_documents/' . $exporter->id . '/' . $filename;
+            }
+        } else {
+            $validated = collect($validated)->except([
+                'is_lut',
+                'ad_code',
+                'ad_code_document',
+                'iec_number',
+                'iec_document',
+                'bank_account_number',
+                'bank_type',
+                'lut_bond_year',
+                'lut_expiry_date',
+                'lut_document',
+                'billing_address',
+                'billing_contact',
+                'billing_email',
+                'merchant_agreement',
+                'terms_accepted',
+                'merchant_agreement_accepted_at',
+            ])->all();
+        }
+
         $exporter->exporterCustomers()->create($validated);
 
         return redirect()->route('customer.exporter-customers')
@@ -832,9 +1021,9 @@ class customerController extends Controller
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
         $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
-        $isExporter = $this->isExporter($customer);
-        $exporterCustomers = $isExporter
-            ? $customer->exporterCustomers()->orderBy('company_name')->get()
+        $canManageSavedCustomers = $this->canManageSavedCustomers($customer);
+        $exporterCustomers = $canManageSavedCustomers
+            ? $customer->exporterCustomers()->orderByDesc('id')->get()
             : collect();
 
         return view('customer.create-shipment', compact(
@@ -843,7 +1032,7 @@ class customerController extends Controller
             'zones',
             'destinations',
             'canCreateShipment',
-            'isExporter',
+            'canManageSavedCustomers',
             'exporterCustomers'
         ));
     }
@@ -956,7 +1145,6 @@ class customerController extends Controller
                 'pan_verified' => 'nullable|boolean',
                 'organization_name' => 'nullable|string|max:255',
                 'authorized_signatory' => 'nullable|string|max:255',
-                'signature' => 'nullable|string',
                 'billing_address' => 'nullable|string|max:1000',
                 'billing_gst' => 'nullable|string|max:15',
                 'billing_contact' => 'nullable|string|max:20',
@@ -964,10 +1152,10 @@ class customerController extends Controller
                 'terms_accepted' => 'nullable|boolean',
                 'terms_accepted_at' => 'nullable|date',
                 // File uploads
-                'aadhar_front_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
-                'aadhar_back_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
-                'pan_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
-                'signature_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'aadhar_front_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+                'aadhar_back_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+                'pan_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+                'signature_document' => 'required|image|mimes:jpg,jpeg,png|max:2048',
             ], [
                 'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
                 'gst_number.size' => 'The GST number must be exactly 15 characters.',
@@ -975,6 +1163,53 @@ class customerController extends Controller
 
             // Get current customer
             $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to submit your KYC application.'
+                ], 401);
+            }
+
+            $gstNumber = $request->gst_number
+                ? strtoupper(preg_replace('/\s+/', '', $request->gst_number))
+                : null;
+            $aadharNumber = $request->aadhar_number
+                ? preg_replace('/\s+/', '', $request->aadhar_number)
+                : null;
+            $panNumber = $request->pan_number
+                ? strtoupper(preg_replace('/\s+/', '', $request->pan_number))
+                : null;
+
+            $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+            $hasAnyAadhaarData = $aadharNumber
+                || $request->boolean('aadhar_verified')
+                || $request->hasFile('aadhar_front_document')
+                || $request->hasFile('aadhar_back_document');
+
+            if (!$isAadhaarOptional || $hasAnyAadhaarData) {
+                if (!preg_match('/^[2-9][0-9]{11}$/', (string) $aadharNumber)
+                    || !$request->boolean('aadhar_verified')
+                    || !$request->hasFile('aadhar_front_document')
+                    || !$request->hasFile('aadhar_back_document')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $isAadhaarOptional
+                            ? 'Complete Aadhaar verification and upload both Aadhaar images, or leave all Aadhaar fields empty.'
+                            : 'A verified Aadhaar and both Aadhaar images are required before submitting KYC.'
+                    ], 422);
+                }
+            }
+
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, $gstNumber, $aadharNumber, $panNumber)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
+            }
+
+            if ($panNumber && $this->isBusinessCustomer($customer) && $this->isIndividualPan($panNumber)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
+                ], 422);
+            }
 
             // Ensure upload directories exist
             $uploadDirs = [
@@ -1017,26 +1252,21 @@ class customerController extends Controller
                 $panDocumentPath = 'uploads/pan_documents/' . $filename;
             }
 
-            // Handle signature document upload
-            $signaturePath = null;
-            if ($request->hasFile('signature_document')) {
-                $file = $request->file('signature_document');
-                $filename = time() . '_signature_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/signature_documents'), $filename);
-                $signaturePath = 'uploads/signature_documents/' . $filename;
-            }
-
-            // Normalize PAN number to uppercase
-            $panNumber = $request->pan_number ? strtoupper(preg_replace('/\s+/', '', $request->pan_number)) : null;
+            // Store the uploaded image and persist only its relative path.
+            $file = $request->file('signature_document');
+            $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
+                . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads/signature_documents'), $filename);
+            $signaturePath = 'uploads/signature_documents/' . $filename;
 
             // Prepare KYC data
             $kycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'personal',
-                'gst_number' => $request->gst_number,
+                'gst_number' => $gstNumber,
                 'gst_verified' => $request->gst_verified ?? false,
                 'otp_verified' => $request->otp_verified ?? false,
-                'aadhar_number' => $request->aadhar_number,
+                'aadhar_number' => $aadharNumber,
                 'aadhar_verified' => $request->aadhar_verified ?? false,
                 'aadhar_address' => $request->aadhar_address,
                 'aadhar_front_document' => $aadharFrontPath,
@@ -1047,9 +1277,9 @@ class customerController extends Controller
                 'pan_document' => $panDocumentPath,
                 'pan_verified' => $request->pan_verified ?? false,
                 'signature_document' => $signaturePath,
+                'signature' => null,
                 'organization_name' => $request->organization_name,
                 'authorized_signatory' => $request->authorized_signatory,
-                'signature' => $request->signature,
                 'billing_address' => $request->billing_address,
                 'billing_gst' => $request->billing_gst,
                 'billing_contact' => $request->billing_contact,
@@ -1061,6 +1291,9 @@ class customerController extends Controller
 
             // Create KYC record
             $kyc = KycDetail::create($kycData);
+            KycDraft::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->delete();
 
             return response()->json([
                 'success' => true,
@@ -1068,11 +1301,21 @@ class customerController extends Controller
                 'kyc_id' => $kyc->id
             ]);
 
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('KYC submit database error: ' . $e->getMessage());
+            if ($e->getCode() === '23000' && ($identifier = $this->databaseKycIdentifierFromException($e))) {
+                return $this->kycIdentifierConflictResponse($identifier);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'KYC submission failed. Please try again.'
+            ], 500);
         } catch (\Throwable $e) {
             \Log::error('KYC submit error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Error submitting KYC application: ' . $e->getMessage()
+                'message' => 'KYC submission failed. Please try again.'
             ], 500);
         }
     }
@@ -1090,10 +1333,6 @@ class customerController extends Controller
     public function verifyGst(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'gst_number' => 'required|string|size:15',
-            ]);
-
             $customer = auth()->guard('customer')->user();
             if (!$customer) {
                 return response()->json([
@@ -1102,7 +1341,18 @@ class customerController extends Controller
                 ], 401);
             }
 
-            $gst = strtoupper(trim($request->gst_number));
+            $validated = $request->validate([
+                'gst_number' => ['required', 'string', 'size:15'],
+                'gst_certificate_document' => $this->isBusinessCustomer($customer)
+                    ? 'required|file|mimes:pdf|max:5120'
+                    : 'nullable|file|mimes:pdf|max:5120',
+            ], [
+                'gst_certificate_document.required' => 'Upload the GST Certificate PDF before verification.',
+                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
+                'gst_certificate_document.max' => 'The GST Certificate PDF must not exceed 5 MB.',
+            ]);
+
+            $gst = strtoupper(preg_replace('/\s+/', '', $validated['gst_number']));
 
             // GSTIN format validation:
             // [0-3][0-9]  -> state code 01-38
@@ -1140,6 +1390,10 @@ class customerController extends Controller
                 ], 422);
             }
 
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, $gst, null, null)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
+            }
+
             session([
                 'kyc_gst_number' => $gst,
                 'kyc_gst_verified' => true,
@@ -1160,8 +1414,7 @@ class customerController extends Controller
             \Log::error('GST verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'GST verification failed. Please try again.',
-                'error' => $e->getMessage()
+                'message' => 'GST verification failed. Please try again.'
             ], 500);
         }
     }
@@ -1208,6 +1461,91 @@ class customerController extends Controller
     }
 
     /**
+     * Determine whether the customer's selected business category is a business account.
+     */
+    private function isBusinessCustomer(Customer $customer): bool
+    {
+        $businessCategory = BusinessCategory::find($customer->business_category_id);
+
+        return $businessCategory && strcasecmp((string) $businessCategory->user_type, 'Business') === 0;
+    }
+
+    /**
+     * PAN entity code P identifies an individual PAN.
+     */
+    private function isIndividualPan(string $pan): bool
+    {
+        return strtoupper(substr($pan, 3, 1)) === 'P';
+    }
+
+    /**
+     * Check GST, Aadhaar, and PAN across personal and business KYC storage.
+     */
+    private function findKycIdentifierConflict(Customer $customer, ?string $gst, ?string $aadhar, ?string $pan): ?string
+    {
+        if ($gst && (KycDetail::whereRaw("UPPER(REPLACE(REPLACE(REPLACE(gst_number, ' ', ''), CHAR(9), ''), CHAR(10), '')) = ?", [$gst])
+            ->where('customer_id', '!=', $customer->id)
+            ->exists()
+            || CsbForm::whereRaw("UPPER(REPLACE(REPLACE(REPLACE(gst_certificate_number, ' ', ''), CHAR(9), ''), CHAR(10), '')) = ?", [$gst])
+                ->where('customer_id', '!=', $customer->id)
+                ->exists())) {
+            return 'gst';
+        }
+
+        if ($aadhar && (Customer::whereRaw("REPLACE(REPLACE(REPLACE(aadhar_number, ' ', ''), CHAR(9), ''), CHAR(10), '') = ?", [$aadhar])
+            ->where('id', '!=', $customer->id)
+            ->exists()
+            || KycDetail::whereRaw("REPLACE(REPLACE(REPLACE(aadhar_number, ' ', ''), CHAR(9), ''), CHAR(10), '') = ?", [$aadhar])
+                ->where('customer_id', '!=', $customer->id)
+                ->exists()
+            || CsbForm::whereRaw("REPLACE(REPLACE(REPLACE(aadhar_number, ' ', ''), CHAR(9), ''), CHAR(10), '') = ?", [$aadhar])
+                ->where('customer_id', '!=', $customer->id)
+                ->exists())) {
+            return 'aadhar';
+        }
+
+        if ($pan && (Customer::whereRaw("UPPER(REPLACE(REPLACE(REPLACE(pan_number, ' ', ''), CHAR(9), ''), CHAR(10), '')) = ?", [$pan])
+            ->where('id', '!=', $customer->id)
+            ->exists()
+            || KycDetail::whereRaw("UPPER(REPLACE(REPLACE(REPLACE(pan_number, ' ', ''), CHAR(9), ''), CHAR(10), '')) = ?", [$pan])
+                ->where('customer_id', '!=', $customer->id)
+                ->exists())) {
+            return 'pan';
+        }
+
+        return null;
+    }
+
+    private function databaseKycIdentifierFromException(\Illuminate\Database\QueryException $exception): ?string
+    {
+        $message = strtolower($exception->getMessage());
+
+        foreach (['gst' => ['gst_number', 'gst_certificate_number'], 'aadhar' => ['aadhar_number'], 'pan' => ['pan_number']] as $identifier => $columns) {
+            foreach ($columns as $column) {
+                if (str_contains($message, $column)) {
+                    return $identifier;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function kycIdentifierConflictResponse(string $identifier)
+    {
+        $messages = [
+            'gst' => 'This GST number is already registered with another account.',
+            'aadhar' => 'This Aadhaar number is already registered with another account.',
+            'pan' => 'This PAN number is already registered with another account.',
+        ];
+
+        return response()->json([
+            'success' => false,
+            'message' => $messages[$identifier] ?? 'This KYC number is already registered with another account.',
+        ], 409);
+    }
+
+    /**
      * Verify Aadhar number during KYC.
      * Accepts an Aadhar number, validates the format, and marks it as verified.
      */
@@ -1215,7 +1553,7 @@ class customerController extends Controller
     {
         try {
             $validated = $request->validate([
-                'aadhar_number' => 'required|string|size:12',
+                'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
             ]);
 
             // Get current customer
@@ -1227,31 +1565,27 @@ class customerController extends Controller
                 ], 401);
             }
 
-            // Basic Aadhar format validation: 12 digits, not starting with 0 or 1
-            $aadhar = preg_replace('/\s+/', '', $request->aadhar_number);
-            if (!preg_match('/^[2-9][0-9]{11}$/', $aadhar)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid Aadhar number. It must be 12 digits and cannot start with 0 or 1.'
-                ], 422);
+            // Normalize the Aadhaar number before every lookup and write.
+            $aadhar = preg_replace('/\s+/', '', $validated['aadhar_number']);
+
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, null)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            // Store Aadhar verification in session so it can be included when KYC is submitted
+            // Store verification in session only after the unique ownership check succeeds.
             session([
                 'kyc_aadhar_number' => $aadhar,
                 'kyc_aadhar_verified' => true,
             ]);
 
-            // Also update the customer record if an aadhar_number column exists
-            if (\Schema::hasColumn('customers', 'aadhar_number')) {
-                $customer->aadhar_number = $aadhar;
-                $customer->aadhar_verified = true;
-                $customer->save();
-            }
+            // Persist the verified Aadhaar against the authenticated customer.
+            $customer->aadhar_number = $aadhar;
+            $customer->aadhar_verified = true;
+            $customer->save();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Aadhar number verified successfully!',
+                'message' => 'Aadhaar number verified successfully!',
                 'aadhar_number' => $aadhar,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1260,12 +1594,24 @@ class customerController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('Aadhar verification database error: ' . $e->getMessage());
+            if ($e->getCode() === '23000' && str_contains(strtolower($e->getMessage()), 'aadhar_number')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This Aadhaar number is already registered with another account.'
+                ], 409);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Aadhaar verification failed. Please try again.'
+            ], 500);
         } catch (\Throwable $e) {
             \Log::error('Aadhar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Aadhar verification failed. Please try again.',
-                'error' => $e->getMessage()
+                'message' => 'Aadhaar verification failed. Please try again.'
             ], 500);
         }
     }
@@ -1299,7 +1645,18 @@ class customerController extends Controller
                 ], 422);
             }
 
-            // Store PAN verification in session so it can be included when KYC is submitted
+            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($pan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
+                ], 422);
+            }
+
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, null, $pan)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
+            }
+
+            // Store PAN verification in session only after all checks succeed.
             session([
                 'kyc_pan_number' => $pan,
                 'kyc_pan_verified' => true,
@@ -1327,8 +1684,7 @@ class customerController extends Controller
             \Log::error('PAN verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'PAN verification failed. Please try again.',
-                'error' => $e->getMessage()
+                'message' => 'PAN verification failed. Please try again.'
             ], 500);
         }
     }
@@ -1368,14 +1724,14 @@ class customerController extends Controller
             // Validate the request
             $validated = $request->validate([
                 'aadhar_number' => 'required|string|size:12',
-                'aadhar_front_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'aadhar_back_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'aadhar_front_document' => 'required|image|mimes:jpg,jpeg,png|max:5120',
+                'aadhar_back_document' => 'required|image|mimes:jpg,jpeg,png|max:5120',
                 'aadhar_address' => 'required|string|max:1000',
                 'pan_number' => 'required|string|size:10|regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/',
                 'pan_holder_name' => 'required|string|max:255',
                 'pan_dob' => 'required|date|before:today',
-                'pan_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'signature_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'pan_document' => 'required|image|mimes:jpg,jpeg,png|max:5120',
+                'signature_document' => 'required|image|mimes:jpg,jpeg,png|max:2048',
                 'billing_address' => 'required|string|max:1000',
                 'billing_contact' => 'required|string|max:20',
                 'billing_email' => 'required|email|max:255',
@@ -1390,6 +1746,12 @@ class customerController extends Controller
 
             // Get current customer
             $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to submit personal KYC.'
+                ], 401);
+            }
 
             // Basic Aadhaar format validation: 12 digits, not starting with 0 or 1
             $aadhar = preg_replace('/\s+/', '', $request->aadhar_number);
@@ -1397,6 +1759,18 @@ class customerController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid Aadhaar number. It must be 12 digits and cannot start with 0 or 1.'
+                ], 422);
+            }
+
+            $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
+
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, $panNumber)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
+            }
+            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($panNumber)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
                 ], 422);
             }
 
@@ -1442,14 +1816,12 @@ class customerController extends Controller
                 $panDocumentPath = 'uploads/pan_documents/' . $filename;
             }
 
-            // Handle signature document upload
-            $signaturePath = null;
-            if ($request->hasFile('signature_document')) {
-                $file = $request->file('signature_document');
-                $filename = time() . '_signature_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/signature_documents'), $filename);
-                $signaturePath = 'uploads/signature_documents/' . $filename;
-            }
+            // Store the uploaded image and persist only its relative path.
+            $file = $request->file('signature_document');
+            $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
+                . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads/signature_documents'), $filename);
+            $signaturePath = 'uploads/signature_documents/' . $filename;
 
             // Handle merchant agreement document upload
             $merchantAgreementPath = null;
@@ -1459,9 +1831,6 @@ class customerController extends Controller
                 $file->move(public_path('uploads/merchant_agreements'), $filename);
                 $merchantAgreementPath = 'uploads/merchant_agreements/' . $filename;
             }
-
-            // Normalize PAN to uppercase
-            $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
 
             // Create or update KYC Detail record (Personal KYC = CSB-IV)
             $kycDetail = KycDetail::where('customer_id', $customer->id)
@@ -1483,6 +1852,7 @@ class customerController extends Controller
                 'pan_document' => $panDocumentPath,
                 'pan_verified' => true,
                 'signature_document' => $signaturePath,
+                'signature' => null,
                 'billing_address' => $validated['billing_address'],
                 'billing_contact' => $validated['billing_contact'],
                 'billing_email' => $validated['billing_email'],
@@ -1507,6 +1877,9 @@ class customerController extends Controller
             // Personal KYC = CSB-IV (status 1)
             $customer->csb_status = 1;
             $customer->save();
+            KycDraft::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->delete();
 
             return response()->json([
                 'success' => true,
@@ -1520,12 +1893,21 @@ class customerController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('Personal KYC database error: ' . $e->getMessage());
+            if ($e->getCode() === '23000' && ($identifier = $this->databaseKycIdentifierFromException($e))) {
+                return $this->kycIdentifierConflictResponse($identifier);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Personal KYC submission failed. Please try again.'
+            ], 500);
         } catch (\Throwable $e) {
             \Log::error('Personal KYC submission error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Personal KYC submission failed. Please try again.',
-                'error' => $e->getMessage()
+                'message' => 'Personal KYC submission failed. Please try again.'
             ], 500);
         }
     }
@@ -1579,58 +1961,176 @@ class customerController extends Controller
     public function storeCsb5Form(Request $request)
     {
         try {
-            // Validate the request
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to submit the CSB form.'
+                ], 401);
+            }
+
+            $existingCsbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();
+            $existingBusinessKyc = KycDetail::where('customer_id', $customer->id)
+                ->where('kyc_type', 'business')
+                ->latest()
+                ->first();
+
+            // Existing documents remain valid while editing KYC. A replacement file is
+            // required only when the customer has not uploaded that document previously.
             $validated = $request->validate([
                 'is_csb_v' => 'required|boolean',
                 'is_gst' => 'required|boolean',
                 'is_lut' => 'required|boolean',
-                'lut_verified' => 'nullable|boolean',
-                'ad_code' => 'required|string|max:50',
-                'ad_code_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'iec_number' => 'required|string|max:50',
-                'iec_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'gst_certificate_number' => 'required|string|max:50',
-                'gst_certificate_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'gst_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'bank_account_number' => 'required|string|max:50',
+                'gst_certificate_number' => ['required', 'string', 'size:15'],
+                'gst_certificate_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(
+                        !$existingCsbForm?->gst_certificate_document
+                        && !$existingCsbForm?->gst_document
+                    ),
+                    'nullable', 'file', 'mimes:pdf', 'max:5120'
+                ],
+                'gst_document' => ['nullable', 'file', 'mimes:pdf', 'max:5120'],
+                'aadhar_front_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_back_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'pan_number' => ['required', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
+                'pan_holder_name' => ['required', 'string', 'max:255'],
+                'pan_dob' => ['required', 'date', 'before:today'],
+                'pan_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$existingBusinessKyc?->pan_document),
+                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
+                ],
+                'ad_code' => ['required', 'digits:14'],
+                'ad_code_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->ad_code_document),
+                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
+                ],
+                'iec_number' => ['required', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
+                'iec_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->iec_document),
+                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
+                ],
+                'bank_account_number' => ['required', 'regex:/^[0-9]{9,18}$/'],
                 'bank_type' => 'required|in:private,government',
-                'lut_document' => 'nullable|file|mimes:pdf|max:5120',
-                'lut_expiry_date' => 'nullable|date',
-                'lut_bond_year' => 'nullable|string|max:10',
-                'aadhar_number' => 'required|string|size:12',
-                'aadhar_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'signature_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'billing_address' => 'required|string|max:1000',
-                'billing_gst' => 'nullable|string|max:15',
-                'billing_contact' => 'required|string|max:20',
+                'lut_document' => [
+                    \Illuminate\Validation\Rule::requiredIf($request->boolean('is_lut') && !$existingCsbForm?->lut_document),
+                    'nullable', 'file', 'mimes:pdf', 'max:5120'
+                ],
+                'lut_expiry_date' => 'required_if:is_lut,1|nullable|date|after_or_equal:today',
+                'lut_bond_year' => ['required_if:is_lut,1', 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
+                'billing_address' => 'required|string|min:10|max:1000',
+                'billing_contact' => ['required', 'regex:/^[6-9][0-9]{9}$/'],
                 'billing_email' => 'required|email|max:255',
-                'merchant_agreement' => 'required|file|mimes:pdf|max:10240',
-                'terms_accepted' => 'required|boolean',
+                'signature_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(
+                        !$existingCsbForm?->signature_document
+                        && !$existingBusinessKyc?->signature_document
+                    ),
+                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
+                ],
+                'merchant_agreement' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
+                'terms_accepted' => 'accepted',
             ], [
-                'aadhar_number.size' => 'The Aadhaar number must be exactly 12 digits.',
+                'gst_certificate_number.size' => 'The GST Certificate Number must contain exactly 15 characters.',
+                'pan_number.regex' => 'The PAN number must use the valid format ABCDE1234F.',
+                'pan_dob.before' => 'The PAN date of birth must be before today.',
+                'ad_code.digits' => 'The AD Code must be exactly 14 numeric digits.',
+                'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
+                'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
+                'lut_expiry_date.after_or_equal' => 'The LUT Expiry Date cannot be in the past.',
+                'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
+                'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
+                'terms_accepted.accepted' => 'You must accept the declaration and terms.',
             ]);
 
-            // Get current customer
-            $customer = auth()->guard('customer')->user();
+            if (!empty($validated['lut_bond_year'])) {
+                [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
+                $startYear = (int) $startYear;
+                $endYear = (intdiv($startYear, 100) * 100) + (int) $endYearSuffix;
+                if ($endYear <= $startYear) {
+                    $endYear += 100;
+                }
 
-            // Basic Aadhaar format validation: 12 digits, not starting with 0 or 1
-            $aadhar = preg_replace('/\s+/', '', $request->aadhar_number);
-            if (!preg_match('/^[2-9][0-9]{11}$/', $aadhar)) {
+                if ($endYear < $startYear + 1 || $endYear > $startYear + 5) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The LUT Bond End Year must be within five years after the Start Year.'
+                    ], 422);
+                }
+
+                // The expiry date only needs to be current or future, as enforced
+                // by the validator above. Do not force it into the bond end year.
+            }
+
+            // Aadhaar is optional only for Courier / Aggregator customers. Use
+            // the value submitted with this form so an old incomplete customer
+            // value does not prevent the customer from intentionally skipping it.
+            $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+            $submittedAadhaar = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
+            $storedAadhaar = preg_replace('/\s+/', '', (string) $customer->aadhar_number);
+            $aadhar = $isAadhaarOptional
+                ? $submittedAadhaar
+                : ($submittedAadhaar !== '' ? $submittedAadhaar : $storedAadhaar);
+
+            $isValidVerifiedAadhaar = $aadhar !== ''
+                && (bool) $customer->aadhar_verified
+                && hash_equals($storedAadhaar, $aadhar)
+                && preg_match('/^[2-9][0-9]{11}$/', $aadhar);
+
+            if ($aadhar !== '' && !$isValidVerifiedAadhaar) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid Aadhaar number. It must be 12 digits and cannot start with 0 or 1.'
+                    'message' => 'Complete Aadhaar verification or clear the Aadhaar number before submitting the CSB-V form.'
                 ], 422);
+            }
+
+            if (!$isAadhaarOptional && !$isValidVerifiedAadhaar) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A verified Aadhaar is required before submitting the CSB-V form.'
+                ], 422);
+            }
+
+            $aadhar = $isValidVerifiedAadhaar ? $aadhar : null;
+            $aadharVerified = $isValidVerifiedAadhaar;
+
+            if ($aadharVerified) {
+                $hasAadhaarFront = $request->hasFile('aadhar_front_document')
+                    || $request->hasFile('aadhar_document')
+                    || !empty($existingBusinessKyc?->aadhar_front_document)
+                    || !empty($existingCsbForm?->aadhar_document);
+                $hasAadhaarBack = $request->hasFile('aadhar_back_document')
+                    || !empty($existingBusinessKyc?->aadhar_back_document);
+
+                if (!$hasAadhaarFront || !$hasAadhaarBack) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'aadhar_front_document' => 'Upload both the front and back Aadhaar documents.',
+                    ]);
+                }
+            }
+
+            $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
+            $storedPan = strtoupper(preg_replace('/\s+/', '', (string) $customer->pan_number));
+            if (!(bool) $customer->pan_verified || !hash_equals($storedPan, $panNumber)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'pan_number' => 'Verify the submitted PAN number before completing Business KYC.',
+                ]);
+            }
+
+            if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, $panNumber)) {
+                return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
             // Ensure upload directories exist
             $uploadDirs = [
-                'uploads/lut_documents',
                 'uploads/gst_documents',
+                'uploads/aadhar_front_documents',
+                'uploads/aadhar_back_documents',
+                'uploads/pan_documents',
+                'uploads/lut_documents',
                 'uploads/iec_documents',
-                'uploads/gst_certificate_documents',
-                'uploads/aadhar_documents',
-                'uploads/signature_documents',
                 'uploads/ad_code_documents',
+                'uploads/signature_documents',
                 'uploads/merchant_agreements',
             ];
             foreach ($uploadDirs as $dir) {
@@ -1638,6 +2138,39 @@ class customerController extends Controller
                 if (!file_exists($path)) {
                     mkdir($path, 0755, true);
                 }
+            }
+
+            // Store identity and registration documents selected in steps 1-3.
+            $gstDocumentPath = null;
+            $gstFile = $request->file('gst_certificate_document') ?? $request->file('gst_document');
+            if ($gstFile) {
+                $filename = time() . '_gst_' . \Illuminate\Support\Str::uuid() . '.' . $gstFile->getClientOriginalExtension();
+                $gstFile->move(public_path('uploads/gst_documents'), $filename);
+                $gstDocumentPath = 'uploads/gst_documents/' . $filename;
+            }
+
+            $aadharFrontPath = null;
+            $aadharFrontFile = $request->file('aadhar_front_document') ?? $request->file('aadhar_document');
+            if ($aadharFrontFile) {
+                $filename = time() . '_aadhar_front_' . \Illuminate\Support\Str::uuid() . '.' . $aadharFrontFile->getClientOriginalExtension();
+                $aadharFrontFile->move(public_path('uploads/aadhar_front_documents'), $filename);
+                $aadharFrontPath = 'uploads/aadhar_front_documents/' . $filename;
+            }
+
+            $aadharBackPath = null;
+            if ($request->hasFile('aadhar_back_document')) {
+                $file = $request->file('aadhar_back_document');
+                $filename = time() . '_aadhar_back_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/aadhar_back_documents'), $filename);
+                $aadharBackPath = 'uploads/aadhar_back_documents/' . $filename;
+            }
+
+            $panDocumentPath = null;
+            if ($request->hasFile('pan_document')) {
+                $file = $request->file('pan_document');
+                $filename = time() . '_pan_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/pan_documents'), $filename);
+                $panDocumentPath = 'uploads/pan_documents/' . $filename;
             }
 
             // Handle LUT document upload
@@ -1649,15 +2182,6 @@ class customerController extends Controller
                 $lutDocumentPath = 'uploads/lut_documents/' . $filename;
             }
 
-            // Handle GST document upload
-            $gstDocumentPath = null;
-            if ($request->hasFile('gst_document')) {
-                $file = $request->file('gst_document');
-                $filename = time() . '_gst_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/gst_documents'), $filename);
-                $gstDocumentPath = 'uploads/gst_documents/' . $filename;
-            }
-
             // Handle IEC document upload
             $iecDocumentPath = null;
             if ($request->hasFile('iec_document')) {
@@ -1665,33 +2189,6 @@ class customerController extends Controller
                 $filename = time() . '_iec_' . $file->getClientOriginalName();
                 $file->move(public_path('uploads/iec_documents'), $filename);
                 $iecDocumentPath = 'uploads/iec_documents/' . $filename;
-            }
-
-            // Handle GST certificate document upload
-            $gstCertificateDocumentPath = null;
-            if ($request->hasFile('gst_certificate_document')) {
-                $file = $request->file('gst_certificate_document');
-                $filename = time() . '_gstcert_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/gst_certificate_documents'), $filename);
-                $gstCertificateDocumentPath = 'uploads/gst_certificate_documents/' . $filename;
-            }
-
-            // Handle Aadhaar document upload
-            $aadharDocumentPath = null;
-            if ($request->hasFile('aadhar_document')) {
-                $file = $request->file('aadhar_document');
-                $filename = time() . '_aadhar_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/aadhar_documents'), $filename);
-                $aadharDocumentPath = 'uploads/aadhar_documents/' . $filename;
-            }
-
-            // Handle signature document upload
-            $signatureDocumentPath = null;
-            if ($request->hasFile('signature_document')) {
-                $file = $request->file('signature_document');
-                $filename = time() . '_signature_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/signature_documents'), $filename);
-                $signatureDocumentPath = 'uploads/signature_documents/' . $filename;
             }
 
             // Handle AD Code document upload
@@ -1712,33 +2209,48 @@ class customerController extends Controller
                 $merchantAgreementPath = 'uploads/merchant_agreements/' . $filename;
             }
 
-            // Create or update CSB Form record
-            $existingCsbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();
+            // Store the multipart image and persist only its relative path.
+            $signaturePath = null;
+            if ($request->hasFile('signature_document')) {
+                $file = $request->file('signature_document');
+                $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
+                    . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/signature_documents'), $filename);
+                $signaturePath = 'uploads/signature_documents/' . $filename;
+            }
 
+            // Create or update CSB Form record
             $csbData = [
                 'customer_id' => $customer->id,
                 'is_csb_v' => $validated['is_csb_v'],
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
-                'lut_verified' => $validated['lut_verified'] ?? false,
+                'gst_certificate_number' => strtoupper($validated['gst_certificate_number']),
+                'gst_certificate_document' => $gstDocumentPath
+                    ?? ($existingCsbForm->gst_certificate_document ?? null)
+                    ?? ($existingCsbForm->gst_document ?? null),
+                'gst_document' => $gstDocumentPath
+                    ?? ($existingCsbForm->gst_document ?? null)
+                    ?? ($existingCsbForm->gst_certificate_document ?? null),
+                'lut_verified' => false,
                 'ad_code' => $validated['ad_code'],
                 'ad_code_document' => $adCodeDocumentPath ?? ($existingCsbForm->ad_code_document ?? null),
                 'iec_number' => $validated['iec_number'],
                 'iec_document' => $iecDocumentPath ?? ($existingCsbForm->iec_document ?? null),
-                'gst_certificate_number' => $validated['gst_certificate_number'],
-                'gst_certificate_document' => $gstCertificateDocumentPath ?? ($existingCsbForm->gst_certificate_document ?? null),
                 'bank_account_number' => $validated['bank_account_number'],
                 'bank_type' => $validated['bank_type'],
                 'lut_document' => $lutDocumentPath ?? ($existingCsbForm->lut_document ?? null),
-                'gst_document' => $gstDocumentPath ?? ($existingCsbForm->gst_document ?? null),
                 'lut_expiry_date' => $validated['lut_expiry_date'] ?? null,
                 'lut_bond_year' => $validated['lut_bond_year'] ?? null,
                 'aadhar_number' => $aadhar,
-                'aadhar_verified' => true,
-                'aadhar_document' => $aadharDocumentPath ?? ($existingCsbForm->aadhar_document ?? null),
-                'signature_document' => $signatureDocumentPath ?? ($existingCsbForm->signature_document ?? null),
+                'aadhar_verified' => $aadharVerified,
+                'aadhar_document' => $aadharFrontPath
+                    ?? ($existingCsbForm->aadhar_document ?? null)
+                    ?? ($existingBusinessKyc->aadhar_front_document ?? null),
+                'signature_document' => $signaturePath
+                    ?? ($existingCsbForm->signature_document ?? null)
+                    ?? ($existingBusinessKyc->signature_document ?? null),
                 'billing_address' => $validated['billing_address'],
-                'billing_gst' => $validated['billing_gst'] ?? null,
                 'billing_contact' => $validated['billing_contact'],
                 'billing_email' => $validated['billing_email'],
                 'merchant_agreement' => $merchantAgreementPath ?? ($existingCsbForm->merchant_agreement ?? null),
@@ -1754,22 +2266,31 @@ class customerController extends Controller
 
             // Create or update a KycDetail record with kyc_type='business'
             // so the submission appears in the admin KYC Pending list for review.
-            $existingBusinessKyc = KycDetail::where('customer_id', $customer->id)
-                ->where('kyc_type', 'business')
-                ->latest()
-                ->first();
-
             $businessKycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'business',
-                'aadhar_number' => $aadhar,
-                'aadhar_verified' => true,
-                'gst_number' => $validated['gst_certificate_number'] ?? null,
+                'gst_number' => strtoupper($validated['gst_certificate_number']),
                 'gst_verified' => true,
+                'aadhar_number' => $aadhar,
+                'aadhar_verified' => $aadharVerified,
+                'aadhar_front_document' => $aadharFrontPath
+                    ?? ($existingBusinessKyc->aadhar_front_document ?? null)
+                    ?? ($existingCsbForm->aadhar_document ?? null),
+                'aadhar_back_document' => $aadharBackPath ?? ($existingBusinessKyc->aadhar_back_document ?? null),
+                'pan_number' => $panNumber,
+                'pan_holder_name' => $validated['pan_holder_name'],
+                'pan_dob' => $validated['pan_dob'],
+                'pan_document' => $panDocumentPath ?? ($existingBusinessKyc->pan_document ?? null),
+                'pan_verified' => true,
                 'organization_name' => $customer->first_name . ' ' . $customer->last_name,
                 'authorized_signatory' => $customer->first_name . ' ' . $customer->last_name,
+                'signature_document' => $signaturePath
+                    ?? ($existingBusinessKyc->signature_document ?? null)
+                    ?? ($existingCsbForm->signature_document ?? null),
+                'signature' => $signaturePath
+                    ?? ($existingBusinessKyc->signature_document ?? null)
+                    ?? ($existingCsbForm->signature_document ?? null),
                 'billing_address' => $validated['billing_address'],
-                'billing_gst' => $validated['billing_gst'] ?? null,
                 'billing_contact' => $validated['billing_contact'],
                 'billing_email' => $validated['billing_email'],
                 'merchant_agreement' => $merchantAgreementPath ?? ($existingBusinessKyc->merchant_agreement ?? null),
@@ -1785,12 +2306,15 @@ class customerController extends Controller
                 KycDetail::create($businessKycData);
             }
 
-            // Update customer record with Aadhaar and CSB status
+            // Update customer record with the actual Aadhaar state and CSB status.
             $customer->aadhar_number = $aadhar;
-            $customer->aadhar_verified = true;
+            $customer->aadhar_verified = $aadharVerified;
             // Business KYC: CSB-IV (1) or CSB-V (2) based on selection
             $customer->csb_status = $validated['is_csb_v'] ? 2 : 1;
             $customer->save();
+            KycDraft::where('customer_id', $customer->id)
+                ->where('kyc_type', 'business')
+                ->delete();
 
             return response()->json([
                 'success' => true,
@@ -1799,16 +2323,29 @@ class customerController extends Controller
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            $firstError = collect($e->errors())->flatten()->first();
+
             return response()->json([
                 'success' => false,
-                'message' => 'Validation failed',
+                'message' => $firstError ?: 'Please check the Business KYC details and try again.',
                 'errors' => $e->errors()
             ], 422);
 
-        } catch (\Exception $e) {
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('CSB form database error: ' . $e->getMessage());
+            if ($e->getCode() === '23000' && ($identifier = $this->databaseKycIdentifierFromException($e))) {
+                return $this->kycIdentifierConflictResponse($identifier);
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error submitting CSB form: ' . $e->getMessage()
+                'message' => 'CSB form submission failed. Please try again.'
+            ], 500);
+        } catch (\Throwable $e) {
+            \Log::error('CSB form submission error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'CSB form submission failed. Please try again.'
             ], 500);
         }
     }
@@ -1913,6 +2450,15 @@ class customerController extends Controller
                     ->with('error', $message);
             }
 
+            // Keep shipper state as an uppercase two-letter code regardless of client-side behavior.
+            if ($request->filled('shipper_state')) {
+                $request->merge([
+                    'shipper_state' => strtoupper(
+                        preg_replace('/[^A-Za-z]/', '', trim((string) $request->shipper_state))
+                    ),
+                ]);
+            }
+
             // Validate the request data
             $validatedData = $request->validate([
                 // Shipper Info
@@ -1933,7 +2479,7 @@ class customerController extends Controller
                 'shipper_address_line3' => 'nullable|string|max:255',
                 'shipper_pincode' => 'required|string|max:20',
                 'shipper_city' => 'required|string|max:100',
-                'shipper_state' => 'required|string|max:100',
+                'shipper_state' => ['required', 'string', 'size:2', 'regex:/^[A-Z]{2}$/'],
                 'shipper_phone_number' => 'required|string|max:30',
                 'shipper_emails' => 'required|email|max:150',
                 'shipper_email_opt_out' => 'boolean',
@@ -1979,7 +2525,7 @@ class customerController extends Controller
 
                 // Invoice Information
                 'invoice_number' => 'required|string|max:100',
-                'invoice_date' => 'required|date',
+                'invoice_date' => 'required|date|after_or_equal:today',
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
@@ -2001,10 +2547,10 @@ class customerController extends Controller
             ]);
 
             // Never trust a client-submitted saved-customer ID or its accompanying
-            // shipper fields. Verify exporter ownership, then use the saved record
-            // as the authoritative source before KYC and shipment validation.
+            // shipper fields. Verify account ownership and category access, then use
+            // the saved record as the authoritative source before shipment validation.
             if (!empty($validatedData['selected_exporter_customer_id'])) {
-                $selectedExporterCustomer = $this->isExporter($customer)
+                $selectedExporterCustomer = $this->canManageSavedCustomers($customer)
                     ? ExporterCustomer::where('exporter_id', $customer->id)
                         ->find($validatedData['selected_exporter_customer_id'])
                     : null;
@@ -2887,7 +3433,7 @@ class customerController extends Controller
 
                     // ---- Create Shipment Invoice (one per consignee/AwbNo) ----
                     $invoiceNo = $getCol($firstRow, 'invoiceno') ?: ('INV-' . $newAwbNumber);
-                    $invoiceValue = floatval($getCol($firstRow, 'invoicevalue') ?: 0);
+                    $invoiceValue = round(floatval($getCol($firstRow, 'invoicevalue') ?: 0), 2);
                     $currency = $getCol($firstRow, 'currency') ?: 'INR';
 
                     $invoice = ShipmentInvoice::create([
@@ -2901,12 +3447,13 @@ class customerController extends Controller
                     ]);
 
                     // ---- Create Invoice Items (one per row) ----
+                    // Use the invoiceValue from the current Excel row as the item's unit_rate.
                     $itemBoxNo = 1;
                     foreach ($rowGroup as $r) {
                         $description = $getCol($r, 'description');
                         $qty = floatval($getCol($r, 'pcs') ?: 1);
-                        $unitRate = $invoiceValue > 0 && $qty > 0 ? round($invoiceValue / $qty, 2) : 0;
-                        $amount = $unitRate * $qty;
+                        $unitRate = round(floatval($getCol($r, 'invoicevalue') ?: 0), 2);
+                        $amount = round($qty * $unitRate, 2);
 
                         ShipmentInvoiceItem::create([
                             'invoice_id' => $invoice->id,
@@ -3906,7 +4453,7 @@ class customerController extends Controller
 				// rates). The query below is fully parameterized by
 				// $destinationCountry, so adding 'AUS' here makes the
 				// ARAMEX GPX ALL IN service rates resolve correctly.
-				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY') {
+				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE') {
 					$boxBreakdown = [];
                     $combinedBase = 0;
                     $combinedFuel = 0;
@@ -4963,9 +5510,15 @@ class customerController extends Controller
         // Get all shipper IDs for this customer
         $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
 
-        // Get all invoices for those shippers, with shipper info
+        // Get all invoices and the selected rate used to calculate the complete shipping charge.
         $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
-            ->with(['invoiceItems', 'shipperInfo.shipmentTracking', 'shipperInfo.consigneeInfo', 'shipperInfo.packageDimensions'])
+            ->with([
+                'invoiceItems',
+                'shipperInfo.shipmentTracking',
+                'shipperInfo.consigneeInfo',
+                'shipperInfo.packageDimensions',
+                'shipperInfo.serviceRate',
+            ])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -4976,6 +5529,10 @@ class customerController extends Controller
             $tracking = $shipper ? $shipper->shipmentTracking : null;
             $packages = $shipper ? $shipper->packageDimensions : collect([]);
             $items = $invoice->invoiceItems;
+            $selectedRate = $shipper ? $shipper->serviceRate : null;
+            $displayAmount = $selectedRate
+                ? (float) $selectedRate->inclusive_total
+                : round((float) $invoice->total_amount, 2);
 
             // Extract label data from package_results
             // UPS Ship API uses "ShippingLabel" key (not "LabelImage")
@@ -5062,13 +5619,7 @@ class customerController extends Controller
                             'amount' => number_format($amount, 2),
                         ];
                     })->values()->toArray(),
-                    'items_total' => number_format($items->sum(function($item) {
-                        $qty = $item->qty ?? 0;
-                        $rate = $item->unit_rate ?? 0;
-                        $igstAmt = $item->igst_amount ?? 0;
-                        $amount = $item->amount ?? ($qty * $rate + $igstAmt);
-                        return $amount;
-                    }), 2),
+                    'items_total' => number_format($displayAmount, 2),
                     'charges' => $tracking ? [
                         'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
                         'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
@@ -5309,19 +5860,19 @@ class customerController extends Controller
 
             $customerId = auth()->guard('customer')->id();
 
-            // Validate request
+            // Validate identifiers. The payable amount is always calculated from stored data.
             $validated = $request->validate([
                 'invoice_id' => 'required|integer',
                 'shipper_id' => 'required|integer',
-                'amount' => 'required|numeric|min:0.01',
+                'amount' => 'nullable|numeric|min:0.01',
             ]);
 
             $invoiceId = $validated['invoice_id'];
             $shipperId = $validated['shipper_id'];
-            $amount = $validated['amount'];
 
-            // Find the shipper info and verify it belongs to this customer
-            $shipper = ShipperInfo::where('id', $shipperId)
+            // Find the shipper and selected rate, and verify ownership.
+            $shipper = ShipperInfo::with('serviceRate')
+                ->where('id', $shipperId)
                 ->where('customer_id', $customerId)
                 ->first();
 
@@ -5330,6 +5881,28 @@ class customerController extends Controller
                     'success' => false,
                     'message' => 'Shipment not found or does not belong to you.'
                 ], 403);
+            }
+
+            $invoice = ShipmentInvoice::where('id', $invoiceId)
+                ->where('shipper_id', $shipper->id)
+                ->first();
+
+            if (!$invoice) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice not found for this shipment.'
+                ], 404);
+            }
+
+            $amount = $shipper->serviceRate
+                ? $shipper->serviceRate->inclusive_total
+                : round((float) $invoice->total_amount, 2);
+
+            if ($amount <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A valid shipment charge could not be calculated.'
+                ], 422);
             }
 
             // Check if already paid (status is ready)
@@ -5437,11 +6010,12 @@ class customerController extends Controller
 
             $customerId = auth()->guard('customer')->id();
 
-            // Find the invoice and verify it belongs to this customer
+            // Find the invoice and verify it belongs to this customer.
             $invoice = ShipmentInvoice::findOrFail($id);
 
-            // Verify the invoice's shipper belongs to this customer
-            $shipper = ShipperInfo::where('id', $invoice->shipper_id)
+            // Load the selected rate so refunds match the shipping charge that was paid.
+            $shipper = ShipperInfo::with('serviceRate')
+                ->where('id', $invoice->shipper_id)
                 ->where('customer_id', $customerId)
                 ->first();
 
@@ -5460,12 +6034,15 @@ class customerController extends Controller
                 ], 400);
             }
 
-            // Determine if the shipment was paid (shipper status is ready/packed/manifested)
-            $wasPaid = in_array($shipper->status, ['ready', 'packed', 'manifested']);
+            // Determine whether this shipment has a charge to refund back to the wallet.
+            // Draft, ready and packed shipments all carry a shipping amount that should be returned.
+            $wasPaid = in_array($shipper->status, ['draft', 'ready', 'packed', 'manifested']);
             $previousStatus = $shipper->status;
-            $refundAmount = 0;
+            $refundAmount = $shipper->serviceRate
+                ? $shipper->serviceRate->inclusive_total
+                : round((float) $invoice->total_amount, 2);
 
-            // Update status to cancelled and refund wallet if paid
+            // Update status to cancelled and refund wallet when a charge exists.
             DB::transaction(function () use ($invoice, $shipper, $wasPaid, $previousStatus, $customerId, &$refundAmount) {
                 $invoice->update(['status' => 'cancelled']);
                 $shipper->update(['status' => 'cancelled']);
@@ -5487,21 +6064,16 @@ class customerController extends Controller
                     $shipper->awb_number,
                     'cancelled',
                     $previousStatus,
-                    $wasPaid ? 'Shipment cancelled. Refund ₹' . number_format($invoice->total_amount, 2) . ' to wallet.' : 'Shipment cancelled.',
+                    $refundAmount > 0 ? 'Shipment cancelled. Refund ₹' . number_format($refundAmount, 2) . ' to wallet.' : 'Shipment cancelled.',
                     $customerId,
                     'customer'
                 );
 
-                if ($wasPaid) {
-                    // Calculate the amount that was paid (total from invoice items)
-                    $refundAmount = $invoice->total_amount;
-
-                    if ($refundAmount > 0) {
-                        // Find the customer's wallet and refund the amount
-                        $wallet = Wallet::where('customer_id', $customerId)->first();
-                        if ($wallet) {
-                            $wallet->increment('balance', $refundAmount);
-                        }
+                if ($refundAmount > 0) {
+                    // A cancelled draft/ready/packed shipment should return the shipping amount to the wallet.
+                    $wallet = Wallet::where('customer_id', $customerId)->first();
+                    if ($wallet) {
+                        $wallet->increment('balance', $refundAmount);
                     }
                 }
             });
@@ -5624,9 +6196,60 @@ class customerController extends Controller
             \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '" → api_provider="' . $apiProvider . '"');
 
             // Route to appropriate API based on the resolved provider.
+            if ($apiProvider === 'shipuniversal') {
+                $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
+                if (!$shipUniversalResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'ShipUniversal API Failed: ' . ($shipUniversalResult['message'] ?? 'Unknown error'),
+                        'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
+                        'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                $apiResponse = $shipUniversalResult['data'] ?? [];
+                $trackingNumber = $this->extractShipUniversalTrackingNumber($apiResponse);
+                $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
+
+                if (empty($trackingNumber)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'ShipUniversal created no usable AWB number. The shipment remains packed.',
+                        'shipuniversal_response' => $apiResponse,
+                        'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    ], 502);
+                }
+
+                try {
+                    $this->persistShipUniversalManifest(
+                        $shipper,
+                        $customerId,
+                        $apiResponse,
+                        $trackingNumber,
+                        $labelUrl,
+                        false
+                    );
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store ShipUniversal manifest: ' . $e->getMessage());
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to store tracking data: ' . $e->getMessage(),
+                    ], 500);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via ShipUniversal!',
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'network' => 'ShipUniversal',
+                    'shipuniversal_response' => $apiResponse,
+                    'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                ]);
             // Priority 0: Overseas Logistic for UNITED CANADA DDP /
             //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
-            if ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
+            } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                 // Call Overseas Logistic API
                 $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
                 if (!$overseasResult['success']) {
@@ -6109,9 +6732,53 @@ class customerController extends Controller
 
                     \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '" → api_provider="' . $apiProvider . '"');
 
+                    if ($apiProvider === 'shipuniversal') {
+                        $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
+                        if (!$shipUniversalResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'ShipUniversal API error: ' . ($shipUniversalResult['message'] ?? 'Unknown'),
+                                'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                                'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
+                            ];
+                            continue;
+                        }
+
+                        $apiResponse = $shipUniversalResult['data'] ?? [];
+                        $trackingNumber = $this->extractShipUniversalTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
+
+                        if (empty($trackingNumber)) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'ShipUniversal created no usable AWB number. The shipment remains packed.',
+                                'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                                'shipuniversal_response' => $apiResponse,
+                            ];
+                            continue;
+                        }
+
+                        $this->persistShipUniversalManifest(
+                            $shipper,
+                            $customerId,
+                            $apiResponse,
+                            $trackingNumber,
+                            $labelUrl,
+                            true
+                        );
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'network' => 'ShipUniversal',
+                            'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                        ];
+
+                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via ShipUniversal.');
                     // Priority 0: Overseas Logistic for UNITED CANADA DDP /
                     //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
-                    if ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
+                    } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                         // Call Overseas Logistic API
                         $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
 
@@ -7192,6 +7859,17 @@ class customerController extends Controller
             return 'MY';
         }
 
+        // i want to implement germany destination
+        $isGermany = (
+            $destUpper === 'GERMANY'
+            || $destUpper === 'DE'
+            || $destUpper === 'DEU'
+            || str_contains($destUpper, 'GERMANY')
+        );
+        if($isGermany){
+            return 'DE';
+        }
+
         // Everything else (US, USA, United States, etc.) → US.
         return 'US';
     }
@@ -8031,8 +8709,8 @@ class customerController extends Controller
      *
      * Database-first with fallback:
      *   1. If the matched CourierService has a non-empty `api_provider`
-     *      column, that value wins (e.g. "overseas", "postshipping",
-     *      "flyingtigers", "shipglobal", "ups").
+     *      column, that value wins (e.g. "shipuniversal", "overseas",
+     *      "postshipping", "flyingtigers", "shipglobal", "ups").
      *   2. Otherwise, fall back to the legacy string-matching methods so
      *      existing services keep working until their rows are populated.
      *
@@ -8045,8 +8723,8 @@ class customerController extends Controller
      * @param \App\Models\ShipperInfo $shipper
      * @param \App\Models\CourierService|null $courierService  Optional
      *        pre-resolved service to avoid a redundant lookup.
-     * @return string  One of: overseas, postshipping, flyingtigers,
-     *                 shipglobal, ups.
+     * @return string  One of: shipuniversal, overseas, postshipping,
+     *                 flyingtigers, shipglobal, ups.
      */
     private function resolveApiProvider($shippingMethod, $shipper, $courierService = null)
     {
@@ -8066,13 +8744,16 @@ class customerController extends Controller
             }
 
             // No explicit api_provider — derive the network for the
-            // shipglobal/ups fallback branches below.
+            // ShipUniversal/ShipGlobal/UPS fallback branches below.
             $network = strtolower(trim($courierService->network ?? ''));
         } else {
             $network = '';
         }
 
         // Legacy fallback chain (mirrors the original if/elseif order).
+        if ($network === 'ship universal' || $network === 'shipuniversal') {
+            return 'shipuniversal';
+        }
         if ($this->isOverseasLogisticMethod($shippingMethod)) {
             return 'overseas';
         }
@@ -8087,6 +8768,554 @@ class customerController extends Controller
         }
 
         return $fallback;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ShipUniversal API
+    |--------------------------------------------------------------------------
+    | Token URL uses HTTP Basic Auth. The shipment-create URL receives the
+    | generated token as a Bearer token.
+    */
+
+    /**
+     * Persist a successful ShipUniversal manifest using the common tracking tables.
+     */
+    private function persistShipUniversalManifest(
+        $shipper,
+        $customerId,
+        array $apiResponse,
+        $trackingNumber,
+        $labelUrl,
+        $isBulk = false
+    ) {
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+
+        ShipmentTracking::updateOrCreate(
+            ['shipper_id' => $shipper->id],
+            [
+                'customer_id' => $customerId,
+                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                'response_status_code' => '1',
+                'response_status_description' => 'ShipUniversal shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                'raw_response' => $apiResponse,
+                'status' => 'created',
+            ]
+        );
+
+        $shipper->status = 'manifested';
+        $shipper->save();
+
+        Tracking::firstOrCreate(
+            [
+                'shipper_id' => $shipper->id,
+                'status' => 'manifested',
+            ],
+            [
+                'awb_number' => $shipper->awb_number,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus('manifested'),
+            ]
+        );
+
+        ShipmentLog::logStatus(
+            $shipper->id,
+            $shipper->awb_number,
+            'manifested',
+            'packed',
+            'Shipment manifested via ShipUniversal'
+                . ($isBulk ? ' (bulk)' : '')
+                . '. Tracking: ' . ($trackingNumber ?? 'N/A'),
+            $customerId,
+            'customer'
+        );
+    }
+
+    /**
+     * Generate a Bearer token using ShipUniversal HTTP Basic authentication.
+     *
+     * @return array ['success' => bool, 'token' => string|null, 'message' => string|null]
+     */
+    private function getShipUniversalToken()
+    {
+        try {
+            $tokenUrl = config('services.shipuniversal.token_url');
+            $username = config('services.shipuniversal.username');
+            $password = config('services.shipuniversal.password');
+            $grantType = config('services.shipuniversal.grant_type', 'client_credentials');
+            $timeout = (int) config('services.shipuniversal.timeout', 60);
+
+            if (empty($tokenUrl) || empty($username) || empty($password)) {
+                return [
+                    'success' => false,
+                    'message' => 'ShipUniversal credentials are not configured.',
+                ];
+            }
+
+            $response = Http::withBasicAuth($username, $password)
+                ->acceptJson()
+                ->asForm()
+                ->timeout($timeout)
+                ->post($tokenUrl, [
+                    'grant_type' => $grantType,
+                ]);
+
+            if (!$response->successful()) {
+                $responseData = $response->json();
+                $message = $this->extractShipUniversalErrorMessage(
+                    $responseData,
+                    'ShipUniversal token generation failed.'
+                );
+
+                \Log::error(
+                    'ShipUniversal token generation failed. Status: '
+                    . $response->status() . ' | Body: ' . $response->body()
+                );
+
+                return ['success' => false, 'message' => $message];
+            }
+
+            $tokenData = $response->json();
+            $token = $this->findShipUniversalResponseValue(
+                $tokenData,
+                ['access_token', 'accessToken', 'token', 'Token', 'bearer_token', 'bearerToken']
+            );
+
+            // Some token endpoints return a plain token instead of JSON.
+            if (empty($token)) {
+                $rawToken = trim($response->body(), " \t\n\r\0\x0B\"");
+                if ($rawToken !== '' && !str_starts_with($rawToken, '{') && !str_starts_with($rawToken, '[')) {
+                    $token = $rawToken;
+                }
+            }
+
+            if (!is_scalar($token) || trim((string) $token) === '') {
+                \Log::error('ShipUniversal token response did not contain a token.');
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in ShipUniversal authentication response.',
+                ];
+            }
+
+            return ['success' => true, 'token' => trim((string) $token)];
+        } catch (\Exception $e) {
+            \Log::error('ShipUniversal token generation exception: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal token generation failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Build the ShipUniversal shipment-create payload from stored shipment data.
+     *
+     * @param \App\Models\ShipperInfo $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildShipUniversalPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (!$consignee) {
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+        $invoiceItems = $invoice
+            ? ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get()
+            : collect();
+        $csbInformation = $shipper->csbInformation;
+
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = !empty($shipper->service_id)
+            ? CourierService::find($shipper->service_id)
+            : null;
+        if (!$courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
+        $serviceCode = trim((string) (
+            $courierService->service_code
+            ?? $courierService->scode
+            ?? ''
+        ));
+        if ($serviceCode === '') {
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal service code is not configured for the selected courier service.',
+            ];
+        }
+
+        $kycType = match ($shipper->kyc_type) {
+            'GST (Normal)' => 'GSTIN (Normal)',
+            'Aadhar Card' => 'Aadhaar Number',
+            'PAN Card' => 'PAN Number',
+            default => (string) ($shipper->kyc_type ?? ''),
+        };
+
+        $packageDetails = $packages->map(function ($package) {
+            return [
+                'Length' => (float) ($package->length_cm ?? 0),
+                'Width' => (float) ($package->width_cm ?? 0),
+                'Height' => (float) ($package->height_cm ?? 0),
+                'ActualWeight' => (float) ($package->actual_weight_kg ?? 0),
+            ];
+        })->values()->all();
+
+        $totalPackageWeight = (float) $packages->sum(function ($package) {
+            return (float) ($package->actual_weight_kg ?? 0);
+        });
+        $totalItemQuantity = (float) $invoiceItems->sum(function ($item) {
+            return max(0, (float) ($item->qty ?? 0));
+        });
+        $pieceWeight = $totalItemQuantity > 0
+            ? round($totalPackageWeight / $totalItemQuantity, 3)
+            : round($totalPackageWeight, 3);
+
+        $productDetails = $invoiceItems->map(function ($item) use ($pieceWeight) {
+            return [
+                'BoxNo' => (string) ($item->box_no ?? 1),
+                'Description' => (string) ($item->description ?? ''),
+                'HSNCode' => (string) ($item->hs_code ?? ''),
+                'HTSCode' => (string) ($item->hts_code ?? ''),
+                'UnitType' => (string) ($item->unit_type ?? 'PCS'),
+                'Qty' => (float) ($item->qty ?? 1),
+                'UnitRate' => (float) ($item->unit_rate ?? 0),
+                'ShipPieceIGST' => (float) ($item->igst_percentage ?? 0),
+                'PieceWt' => $pieceWeight,
+            ];
+        })->values()->all();
+
+        if (empty($productDetails)) {
+            $productDetails[] = [
+                'BoxNo' => '1',
+                'Description' => 'General Merchandise',
+                'HSNCode' => '',
+                'HTSCode' => '',
+                'UnitType' => 'PCS',
+                'Qty' => 1,
+                'UnitRate' => (float) ($invoice->invoice_amount ?? 0),
+                'ShipPieceIGST' => 0,
+                'PieceWt' => $pieceWeight,
+            ];
+        }
+
+        $originType = strtoupper(trim((string) ($consignee->origin_type ?? '')));
+        $csbType = in_array($originType, ['CSB V', 'CSB 5'], true) ? 'CSB 5' : 'CSB 4';
+        $bondUtIgst = trim((string) ($csbInformation->bond_ut_igst ?? ''));
+        $isIgstPaid = str_contains(strtoupper($bondUtIgst), 'IGST');
+        $igstAmount = (float) $invoiceItems->sum(function ($item) {
+            return (float) ($item->igst_amount ?? 0);
+        });
+
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? $invoice->invoice_date->format('Y-m-d') . 'T00:00:00Z'
+            : now()->format('Y-m-d') . 'T00:00:00Z';
+        $referenceNumber = trim((string) ($invoice->reference_number ?? ''));
+        if ($referenceNumber === '') {
+            $referenceNumber = (string) ($shipper->awb_number ?? ('SU-' . $shipper->id));
+        }
+
+        $senderAddressLine1 = trim((string) ($shipper->address_line1 ?? ''));
+        $senderAddressLine2 = trim((string) ($shipper->address_line2 ?? ''));
+        if ($senderAddressLine2 === '') {
+            $senderAddressLine2 = $senderAddressLine1;
+        }
+
+        $receiverAddressLine1 = trim((string) ($consignee->address_line1 ?? ''));
+        $receiverAddressLine2 = trim((string) ($consignee->address_line2 ?? ''));
+        if ($receiverAddressLine2 === '') {
+            $receiverAddressLine2 = $receiverAddressLine1;
+        }
+
+        $payload = [
+            'AccountCode' => config('services.shipuniversal.account_code', 'SU0119'),
+            'Sender' => [
+                'SenderName' => (string) ($shipper->company_name ?? $shipper->contact_person ?? 'Shipper'),
+                'SenderContactPerson' => (string) ($shipper->contact_person ?? $shipper->company_name ?? 'Shipper'),
+                'SenderAddressLine1' => $senderAddressLine1,
+                'SenderAddressLine2' => $senderAddressLine2,
+                'SenderAddressLine3' => (string) ($shipper->address_line3 ?? ''),
+                'SenderPincode' => (string) ($shipper->pincode ?? ''),
+                'SenderCity' => (string) ($shipper->city ?? ''),
+                'SenderState' => (string) ($shipper->state ?? ''),
+                'SenderTelephone' => (string) ($shipper->phone_number ?? ''),
+                'SenderEmailId' => (string) ($shipper->email ?? ''),
+                'KYCType' => $kycType,
+                'KYCNo' => (string) ($shipper->kyc_number ?? ''),
+            ],
+            'Receiver' => [
+                'ReceiverName' => (string) ($consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee'),
+                'ReceiverContactPerson' => (string) ($consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee'),
+                'ReceiverAddressLine1' => $receiverAddressLine1,
+                'ReceiverAddressLine2' => $receiverAddressLine2,
+                'ReceiverAddressLine3' => (string) ($consignee->address_line3 ?? ''),
+                'ReceiverZipcode' => (string) ($consignee->zip_code ?? ''),
+                'ReceiverCity' => (string) ($consignee->city ?? ''),
+                'ReceiverState' => (string) ($consignee->state ?? ''),
+                'ReceiverCountry' => $this->getShipUniversalCountryCode($consignee->delivery_destination),
+                'ReceiverTelephone' => (string) ($consignee->phone_number ?? ''),
+                'ReceiverEmailid' => (string) ($consignee->email ?? ''),
+                'VatId' => '',
+            ],
+            'ServiceDetails' => [
+                'Service' => $serviceCode,
+                'GoodsType' => 'NDox',
+                'PackageType' => 'PACKAGE',
+            ],
+            'PackageDetails' => [
+                'PackageDetail' => $packageDetails,
+            ],
+            'AdditionalDetails' => [
+                'IsThirdParty' => true,
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => (string) ($invoice->invoice_currency ?? 'INR'),
+                'InvoiceNo' => (string) ($invoice->invoice_number ?? ''),
+                'InvoiceDate' => $invoiceDate,
+                'TermsOfSale' => (string) ($invoice->incoterms ?? 'FOB'),
+                'ReasonForExport' => 'SALE',
+                'FreightCharge' => 0,
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => $referenceNumber,
+                'DeliveryConfirmation' => 'No',
+                'DutyTax' => 'DDU',
+                'DutiesAccountNo' => '',
+                'TransactionId' => '',
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
+                'IECNo' => (string) ($csbInformation->iec_code ?? ''),
+                'ADCode' => (string) ($csbInformation->ad_code ?? ''),
+                'BankType' => 'G',
+                'BankAccount' => (string) ($csbInformation->bank_account_number ?? ''),
+                'NFEI' => false,
+                'Ecom' => $this->shipUniversalValueIsYes($csbInformation->ecommerce ?? null),
+                'MEIS' => $this->shipUniversalValueIsYes($csbInformation->scheme ?? null),
+                'BoundUT' => $bondUtIgst !== '' ? $bondUtIgst : 'NA',
+                'IGSTPaid' => $isIgstPaid ? 'Yes' : 'No',
+                'IGSTAmount' => $isIgstPaid ? $igstAmount : 0,
+            ],
+        ];
+
+        return ['success' => true, 'payload' => $payload];
+    }
+
+    /**
+     * Create a shipment through ShipUniversal using a generated Bearer token.
+     */
+    private function callShipUniversalApiFromDb($shipper)
+    {
+        try {
+            $tokenResult = $this->getShipUniversalToken();
+            if (!$tokenResult['success']) {
+                return $tokenResult;
+            }
+
+            $payloadResult = $this->buildShipUniversalPayloadFromDb($shipper);
+            if (!$payloadResult['success']) {
+                return $payloadResult;
+            }
+
+            $shipmentUrl = config('services.shipuniversal.shipment_url');
+            $timeout = (int) config('services.shipuniversal.timeout', 60);
+            $payload = $payloadResult['payload'];
+
+            if (empty($shipmentUrl)) {
+                return [
+                    'success' => false,
+                    'message' => 'ShipUniversal shipment URL is not configured.',
+                    'request_payload' => $payload,
+                ];
+            }
+
+            \Log::info(
+                'ShipUniversal shipment request for shipper #' . $shipper->id,
+                ['service' => $payload['ServiceDetails']['Service'] ?? null]
+            );
+
+            $response = Http::withToken($tokenResult['token'])
+                ->acceptJson()
+                ->asJson()
+                ->timeout($timeout)
+                ->post($shipmentUrl, $payload);
+
+            $apiResponse = $response->json();
+            if (!is_array($apiResponse)) {
+                $apiResponse = ['raw_body' => $response->body()];
+            }
+
+            if (!$response->successful()) {
+                $message = $this->extractShipUniversalErrorMessage(
+                    $apiResponse,
+                    'ShipUniversal shipment creation failed.'
+                );
+                \Log::error(
+                    'ShipUniversal shipment creation failed. Status: '
+                    . $response->status() . ' | Body: ' . $response->body()
+                );
+
+                return [
+                    'success' => false,
+                    'message' => $message,
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code' => $response->status(),
+                ];
+            }
+
+            $status = $this->findShipUniversalResponseValue($apiResponse, ['Status', 'status', 'Success', 'success']);
+            if ($status === false || (is_string($status) && in_array(strtoupper($status), ['ERROR', 'FAILED', 'FAILURE', 'FALSE'], true))) {
+                return [
+                    'success' => false,
+                    'message' => $this->extractShipUniversalErrorMessage(
+                        $apiResponse,
+                        'ShipUniversal API returned an error status.'
+                    ),
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'ShipUniversal shipment created successfully.',
+                'data' => $apiResponse,
+                'request_payload' => $payload,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('ShipUniversal API call failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal API call failed: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Find the first matching scalar value anywhere in a ShipUniversal response.
+     */
+    private function findShipUniversalResponseValue($value, array $keys)
+    {
+        if (!is_array($value)) {
+            return null;
+        }
+
+        $normalizedKeys = array_map('strtolower', $keys);
+        foreach ($value as $key => $child) {
+            if (in_array(strtolower((string) $key), $normalizedKeys, true) && is_scalar($child)) {
+                return $child;
+            }
+        }
+
+        foreach ($value as $child) {
+            if (is_array($child)) {
+                $found = $this->findShipUniversalResponseValue($child, $keys);
+                if ($found !== null && $found !== '') {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractShipUniversalTrackingNumber($apiResponse)
+    {
+        $value = $this->findShipUniversalResponseValue($apiResponse, [
+            'AwbNo', 'AwbNumber', 'AWBNumber', 'awb_number', 'awb',
+            'TrackingNumber', 'tracking_number', 'WaybillNumber', 'waybill_number',
+            'ConsignmentNumber', 'consignment_number', 'ShipmentNumber', 'shipment_number',
+        ]);
+
+        return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+    private function extractShipUniversalLabelUrl($apiResponse)
+    {
+        $value = $this->findShipUniversalResponseValue($apiResponse, [
+            'AirwaybillUrl', 'BoxlabelUrl', 'LabelUrl', 'label_url', 'LabelURL',
+            'LabelLink', 'label_link', 'PdfUrl', 'pdf_url', 'LabelBase64', 'label_base64',
+        ]);
+
+        return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+    private function extractShipUniversalErrorMessage($apiResponse, $fallback)
+    {
+        $message = $this->findShipUniversalResponseValue($apiResponse, [
+            'ErrorMessage', 'error_message', 'Error', 'error', 'Message', 'message',
+            'Description', 'description', 'Detail', 'detail',
+        ]);
+
+        if (is_scalar($message) && trim((string) $message) !== '') {
+            return trim((string) $message);
+        }
+
+        return $fallback;
+    }
+
+    private function shipUniversalValueIsYes($value)
+    {
+        return in_array(strtolower(trim((string) $value)), ['1', 'yes', 'true', 'y'], true);
+    }
+
+    private function getShipUniversalCountryCode($destination)
+    {
+        $destination = strtoupper(trim((string) $destination));
+        if (preg_match('/^[A-Z]{2}$/', $destination)) {
+            return $destination;
+        }
+
+        $countries = [
+            'UNITED STATES' => 'US',
+            'UNITED STATE' => 'US',
+            'USA' => 'US',
+            'UNITED KINGDOM' => 'GB',
+            'GREAT BRITAIN' => 'GB',
+            'UK' => 'GB',
+            'CANADA' => 'CA',
+            'AUSTRALIA' => 'AU',
+            'INDIA' => 'IN',
+            'CHINA' => 'CN',
+            'RUSSIA' => 'RU',
+            'SRI LANKA' => 'LK',
+            'SRILANKA' => 'LK',
+            'UNITED ARAB EMIRATES' => 'AE',
+            'UAE' => 'AE',
+            'GERMANY' => 'DE',
+            'FRANCE' => 'FR',
+            'ITALY' => 'IT',
+            'SPAIN' => 'ES',
+            'NETHERLANDS' => 'NL',
+            'SINGAPORE' => 'SG',
+            'MALAYSIA' => 'MY',
+        ];
+
+        foreach ($countries as $name => $code) {
+            if (str_contains($destination, $name)) {
+                return $code;
+            }
+        }
+
+        // Destination dropdown values commonly begin with an ISO code (e.g. "US-").
+        if (preg_match('/^([A-Z]{2})\s*[-–:]/', $destination, $matches)) {
+            return $matches[1];
+        }
+
+        return 'US';
     }
 
     /*
@@ -9897,9 +11126,9 @@ class customerController extends Controller
     }
 
     /**
-     * Determine whether a customer belongs to the Exporter business category.
+     * Determine whether the customer belongs to the Courier / Aggregator category.
      */
-    private function isExporter(Customer $customer): bool
+    private function isCourierOrAggregator(Customer $customer): bool
     {
         $category = $customer->relationLoaded('businessCategory')
             ? $customer->businessCategory
@@ -9909,8 +11138,24 @@ class customerController extends Controller
             return false;
         }
 
-        return strtolower(trim((string) $category->category_slug)) === 'exporter'
-            || strtolower(trim((string) $category->category_name)) === 'exporter';
+        $allowedCategories = [
+            'courier-or-aggregator',
+            'courier-aggregator',
+            'courier or aggregator',
+            'courier / aggregator',
+            'courier/aggregator',
+        ];
+
+        return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)
+            || in_array(strtolower(trim((string) $category->category_name)), $allowedCategories, true);
+    }
+
+    /**
+     * Determine whether a customer can create and manage saved customers.
+     */
+    private function canManageSavedCustomers(Customer $customer): bool
+    {
+        return $this->isCourierOrAggregator($customer);
     }
 
     private function generateAwbNumber()

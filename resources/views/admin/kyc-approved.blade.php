@@ -339,21 +339,23 @@
                                                                 @endif
                                                             </form>
                                                         @endif
-                                                        @php
-                                                            $canShip = isset($kyc->customer->can_create_shipment) ? (bool) $kyc->customer->can_create_shipment : true;
-                                                        @endphp
-                                                        <form action="{{ route('admin.customer.toggle-shipment-access', $customerId) }}" method="POST" class="d-inline toggle-shipment-form">
-                                                            @csrf
-                                                            @if($canShip)
-                                                                <button type="submit" class="btn-toggle-shipment is-enabled" title="Disable shipment creation for this customer">
-                                                                    <i class="ti ti-package-off me-1"></i>Disable Shipment
-                                                                </button>
-                                                            @else
-                                                                <button type="submit" class="btn-toggle-shipment is-disabled" title="Enable shipment creation for this customer">
-                                                                    <i class="ti ti-package me-1"></i>Enable Shipment
-                                                                </button>
-                                                            @endif
-                                                        </form>
+                                                        @if($customerId)
+                                                            @php
+                                                                $canShip = isset($kyc->customer->can_create_shipment) ? (bool) $kyc->customer->can_create_shipment : true;
+                                                            @endphp
+                                                            <form action="{{ route('admin.customer.toggle-shipment-access', $customerId) }}" method="POST" class="d-inline toggle-shipment-form">
+                                                                @csrf
+                                                                @if($canShip)
+                                                                    <button type="submit" class="btn-toggle-shipment is-enabled" title="Disable shipment creation for this customer">
+                                                                        <i class="ti ti-package-off me-1"></i>Disable Shipment
+                                                                    </button>
+                                                                @else
+                                                                    <button type="submit" class="btn-toggle-shipment is-disabled" title="Enable shipment creation for this customer">
+                                                                        <i class="ti ti-package me-1"></i>Enable Shipment
+                                                                    </button>
+                                                                @endif
+                                                            </form>
+                                                        @endif
                                                     </div>
                                                 </td>
                                             </tr>

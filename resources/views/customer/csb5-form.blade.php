@@ -110,27 +110,18 @@
                         </div>
 
                         <form id="csbvForm" action="{{ route('customer.csb5-form.store') }}" method="POST"
-                            enctype="multipart/form-data">
+                            enctype="multipart/form-data" novalidate>
                             @csrf
+                            {{-- Compatibility fields prevent previously cached CSB5 JavaScript from failing. --}}
+                            <input type="checkbox" id="csbvToggle" name="is_csb_v" value="1" checked hidden
+                                aria-hidden="true" tabindex="-1">
+                            <input type="checkbox" id="gstType" hidden aria-hidden="true" tabindex="-1">
                             <!-- Tax Choice -->
                             <div class="mb-4">
-                                <div class="form-check d-flex align-items-center mb-3">
-                                    <input class="form-check-input" type="checkbox" checked id="csbvToggle"
-                                        name="is_csb_v" value="1">
-                                    <label class="form-check-label fw-bold" for="csbvToggle">
-                                        CSB V <span class="text-muted fw-normal ms-2" style="font-size: 13px;">(For Non
-                                            Gifts and Non Samples)</span>
-                                    </label>
-                                </div>
                             </div>
 
                             <div class="section-title-alt">Tell us about your Tax type?</div>
                             <div class="d-flex gap-4 mb-4">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" checked id="gstType" name="is_gst"
-                                        value="1">
-                                    <label class="form-check-label fw-bold" for="gstType">GST</label>
-                                </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="lutType" name="is_lut"
                                         value="1">
@@ -143,18 +134,25 @@
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="section-label">AD Code</label>
+
                                     <div class="input-wrapper">
-                                        <input type="text" class="input-custom" placeholder="Enter AD Code *"
-                                            name="ad_code" required
+                                        <input type="text" class="input-custom" placeholder="Enter 14-digit AD Code *"
+                                            name="ad_code" required inputmode="numeric" maxlength="14"
+                                            pattern="[0-9]{14}" title="AD Code must be exactly 14 digits"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 14)"
                                             value="{{ old('ad_code', $csbForm->ad_code ?? '') }}">
+                                    <small class="text-muted">AD Code must be exactly 14 numeric digits.</small>
+
                                         <i class="fas fa-barcode"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="section-label">IEC Number</label>
                                     <div class="input-wrapper">
-                                        <input type="text" class="input-custom" placeholder="Enter IEC *"
-                                            name="iec_number" id="iecNumber" required
+                                        <input type="text" class="input-custom" placeholder="Enter 10-character IEC *"
+                                            name="iec_number" id="iecNumber" required maxlength="10"
+                                            pattern="[A-Za-z0-9]{10}" title="IEC Number must be exactly 10 letters or digits"
+                                            oninput="this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10)"
                                             value="{{ old('iec_number', $csbForm->iec_number ?? '') }}">
                                         <i class="fas fa-file-invoice"></i>
                                     </div>
@@ -173,7 +171,7 @@
                                             </div>
                                         </div>
                                         <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="adCodeFileInput" name="ad_code_document"
+                                            <input type="file" id="adCodeFileInput" name="ad_code_document" required
                                                 style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                 onchange="handleDocSelect(this, 'adCodeFileNameDisplay', 'adCodeFileInfo', 'adCodeRemoveFile', '.adCodeUploadBtn', '#adCodeDocContainer');">
                                             <button type="button"
@@ -183,72 +181,6 @@
                                             </button>
                                             <span class="text-danger-alt adCodeRemoveFile" style="display: none;"
                                                 onclick="clearDocInput('adCodeFileInput', 'adCodeFileNameDisplay', 'adCodeFileInfo', 'adCodeRemoveFile', '.adCodeUploadBtn', '#adCodeDocContainer');"><i
-                                                    class="fas fa-trash-alt"></i> Remove</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="section-title-alt">GST Details</div>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="section-label">GST Certificate Number</label>
-                                    <div class="input-wrapper">
-                                        <input type="text" class="input-custom"
-                                            placeholder="Enter GST Certificate Number *" name="gst_certificate_number"
-                                            id="gstCertificateNumber" required
-                                            value="{{ old('gst_certificate_number', $csbForm->gst_certificate_number ?? '') }}">
-                                        <i class="fas fa-certificate"></i>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="section-label">GST Document</label>
-                                    <div class="doc-item compact" id="gstDocContainer">
-                                        <div class="doc-meta">
-                                            <div>
-                                                <span class="doc-name">GST File</span>
-                                                <div id="gstFileInfo" class="file-status">Selected: <span
-                                                        id="gstFileNameDisplay">file.pdf</span></div>
-                                            </div>
-                                        </div>
-                                        <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="gstFileInput" name="gst_document"
-                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
-                                                onchange="handleDocSelect(this, 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');">
-                                            <button type="button" class="link-alt border-0 bg-transparent gstUploadBtn"
-                                                onclick="document.getElementById('gstFileInput').click();">
-                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                                            </button>
-                                            <span class="text-danger-alt gstRemoveFile" style="display: none;"
-                                                onclick="clearDocInput('gstFileInput', 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');"><i
-                                                    class="fas fa-trash-alt"></i> Remove</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="section-label">GST Certificate</label>
-                                    <div class="doc-item compact" id="gstCertDocContainer">
-                                        <div class="doc-meta">
-                                            <div>
-                                                <span class="doc-name">GST Certificate</span>
-                                                <div id="gstCertFileInfo" class="file-status">Selected: <span
-                                                        id="gstCertFileNameDisplay">file.pdf</span></div>
-                                            </div>
-                                        </div>
-                                        <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="gstCertFileInput" name="gst_certificate_document"
-                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
-                                                onchange="handleDocSelect(this, 'gstCertFileNameDisplay', 'gstCertFileInfo', 'gstCertRemoveFile', '.gstCertUploadBtn', '#gstCertDocContainer');">
-                                            <button type="button"
-                                                class="link-alt border-0 bg-transparent gstCertUploadBtn"
-                                                onclick="document.getElementById('gstCertFileInput').click();">
-                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                                            </button>
-                                            <span class="text-danger-alt gstCertRemoveFile" style="display: none;"
-                                                onclick="clearDocInput('gstCertFileInput', 'gstCertFileNameDisplay', 'gstCertFileInfo', 'gstCertRemoveFile', '.gstCertUploadBtn', '#gstCertDocContainer');"><i
                                                     class="fas fa-trash-alt"></i> Remove</span>
                                         </div>
                                     </div>
@@ -264,7 +196,7 @@
                                             </div>
                                         </div>
                                         <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="iecFileInput" name="iec_document"
+                                            <input type="file" id="iecFileInput" name="iec_document" required
                                                 style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                 onchange="handleDocSelect(this, 'iecFileNameDisplay', 'iecFileInfo', 'iecRemoveFile', '.iecUploadBtn', '#iecDocContainer');">
                                             <button type="button"
@@ -287,7 +219,9 @@
                                     <div class="input-wrapper">
                                         <input type="text" class="input-custom"
                                             placeholder="Enter Bank Account Number *" name="bank_account_number"
-                                            required
+                                            required inputmode="numeric" minlength="9" maxlength="18" pattern="[0-9]{9,18}"
+                                            title="Bank Account Number must contain 9 to 18 digits"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 18)"
                                             value="{{ old('bank_account_number', $csbForm->bank_account_number ?? '') }}">
                                         <i class="fas fa-university"></i>
                                     </div>
@@ -305,9 +239,56 @@
                                 </div>
                             </div>
 
+                            @php
+                                $savedLutBondYear = old('lut_bond_year', $csbForm->lut_bond_year ?? '');
+                                $savedLutStartYear = preg_match('/^(\d{4})-(\d{2})$/', $savedLutBondYear, $lutBondMatches)
+                                    ? $lutBondMatches[1]
+                                    : '';
+                                $savedLutEndYear = '';
+                                if ($savedLutStartYear !== '') {
+                                    $savedEndYearSuffix = (int) $lutBondMatches[2];
+                                    $savedLutEndYear = (intdiv((int) $savedLutStartYear, 100) * 100) + $savedEndYearSuffix;
+                                    if ($savedLutEndYear <= (int) $savedLutStartYear) {
+                                        $savedLutEndYear += 100;
+                                    }
+                                    $savedLutEndYear = (string) $savedLutEndYear;
+                                }
+                                $currentLutYear = now()->year;
+                                $lutStartYears = range($currentLutYear, $currentLutYear + 5);
+                            @endphp
                             <div class="section-title-alt">LUT Details</div>
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
+                                    <label class="section-label" for="lutBondStartYear">LUT Bond Start Year</label>
+                                    <div class="input-wrapper select-wrapper">
+                                        <select class="input-custom" id="lutBondStartYear" name="lut_bond_start_year">
+                                            <option value="">Select Start Year</option>
+                                            @if ($savedLutStartYear !== '' && !in_array((int) $savedLutStartYear, $lutStartYears, true))
+                                                <option value="{{ $savedLutStartYear }}" selected>{{ $savedLutStartYear }}</option>
+                                            @endif
+                                            @foreach ($lutStartYears as $lutStartYear)
+                                                <option value="{{ $lutStartYear }}"
+                                                    {{ (string) $lutStartYear === $savedLutStartYear ? 'selected' : '' }}>
+                                                    {{ $lutStartYear }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <i class="fas fa-calendar-day"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="section-label" for="lutBondEndYear">LUT Bond End Year</label>
+                                    <div class="input-wrapper select-wrapper">
+                                        <select class="input-custom" id="lutBondEndYear" name="lut_bond_end_year"
+                                            data-saved-end-year="{{ $savedLutEndYear }}" disabled>
+                                            <option value="">Select Start Year First</option>
+                                        </select>
+                                        <i class="fas fa-calendar-day"></i>
+                                    </div>
+                                    <input type="hidden" name="lut_bond_year" id="lutBondYear"
+                                        value="{{ $savedLutBondYear }}">
+                                </div>
+                                <div class="col-md-4">
                                     <label class="section-label">LUT Expiry Date</label>
                                     <div class="input-wrapper">
                                         <input type="date" class="input-custom"
@@ -317,99 +298,10 @@
                                         <i class="fas fa-calendar"></i>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="section-label">LUT Bond Year</label>
-                                    <div class="input-wrapper">
-                                        <input type="text" class="input-custom"
-                                            placeholder="Enter LUT Bond Year (e.g. 2026-27)" name="lut_bond_year"
-                                            id="lutBondYear" maxlength="10"
-                                            value="{{ old('lut_bond_year', $csbForm->lut_bond_year ?? '') }}">
-                                        <i class="fas fa-calendar-day"></i>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="section-title-alt">Aadhaar Verification</div>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="section-label">Aadhaar Number</label>
-                                    <div class="input-wrapper">
-                                        <input type="text" class="input-custom"
-                                            placeholder="Enter 12-digit Aadhaar Number *" name="aadhar_number"
-                                            id="businessAadharNumber" maxlength="12" inputmode="numeric"
-                                            value="{{ old('aadhar_number', $csbForm->aadhar_number ?? ($customer->aadhar_number ?? '')) }}"
-                                            required>
-                                        <i class="fas fa-id-card"></i>
-                                    </div>
-                                    <button type="button" class="btn-verify mt-1" id="businessAadharVerifyBtn">
-                                        <i class="fas fa-shield-halved me-1"></i> Verify Aadhaar
-                                    </button>
-                                    <span class="verified-badge ms-2" id="businessAadharVerifiedBadge" style="display: none;">
-                                        <i class="fas fa-circle-check me-1"></i> Verified
-                                    </span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="section-label">Aadhaar Document</label>
-                                    <div class="doc-item compact" id="businessAadharDocContainer">
-                                        <div class="doc-meta">
-                                            <div>
-                                                <span class="doc-name">Aadhaar Card</span>
-                                                <div id="businessAadharFileInfo" class="file-status">Selected: <span
-                                                        id="businessAadharFileNameDisplay">file</span></div>
-                                            </div>
-                                        </div>
-                                        <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="businessAadharFileInput" name="aadhar_document"
-                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
-                                                onchange="handleDocSelect(this, 'businessAadharFileNameDisplay', 'businessAadharFileInfo', 'businessAadharRemoveFile', '.businessAadharUploadBtn', '#businessAadharDocContainer');">
-                                            <button type="button"
-                                                class="link-alt border-0 bg-transparent businessAadharUploadBtn"
-                                                onclick="document.getElementById('businessAadharFileInput').click();">
-                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                                            </button>
-                                            <span class="text-danger-alt businessAadharRemoveFile" style="display: none;"
-                                                onclick="clearDocInput('businessAadharFileInput', 'businessAadharFileNameDisplay', 'businessAadharFileInfo', 'businessAadharRemoveFile', '.businessAadharUploadBtn', '#businessAadharDocContainer');"><i
-                                                    class="fas fa-trash-alt"></i> Remove</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="section-title-alt">Authorized Signature</div>
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label class="section-label">Signature (with Company Stamp)</label>
-                                    <div class="doc-item" id="businessSignatureDocContainer">
-                                        <div class="doc-meta">
-                                            <div>
-                                                <div class="d-flex align-items-center">
-                                                    <span class="doc-name">Authorized Signature</span>
-                                                    <i class="fas fa-info-circle info-circle ms-2"
-                                                        title="Upload authorized signature with company stamp"></i>
-                                                </div>
-                                                <div id="businessSignatureFileInfo" class="file-status">Selected: <span
-                                                        id="businessSignatureFileNameDisplay">file</span></div>
-                                            </div>
-                                        </div>
-                                        <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="businessSignatureFileInput" name="signature_document"
-                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
-                                                onchange="handleDocSelect(this, 'businessSignatureFileNameDisplay', 'businessSignatureFileInfo', 'businessSignatureRemoveFile', '.businessSignatureUploadBtn', '#businessSignatureDocContainer');">
-                                            <button type="button"
-                                                class="link-alt border-0 bg-transparent businessSignatureUploadBtn"
-                                                onclick="document.getElementById('businessSignatureFileInput').click();">
-                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                                            </button>
-                                            <span class="text-danger-alt businessSignatureRemoveFile" style="display: none;"
-                                                onclick="clearDocInput('businessSignatureFileInput', 'businessSignatureFileNameDisplay', 'businessSignatureFileInfo', 'businessSignatureRemoveFile', '.businessSignatureUploadBtn', '#businessSignatureDocContainer');"><i
-                                                    class="fas fa-trash-alt"></i> Remove</span>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
                             <div class="section-title-alt">Document List</div>
-                            <!-- LUT Document Upload + Verify -->
+                            <!-- LUT Document Upload -->
                             <div class="doc-item" id="lutDocContainer">
                                 <div class="doc-meta">
                                     <div>
@@ -430,20 +322,13 @@
                                     </button>
                                     <span id="removeFile" class="text-danger-alt" style="display: none;"><i
                                             class="fas fa-trash-alt"></i> Remove</span>
-                                    <button type="button" id="lutVerifyBtn" class="btn-verify ms-2" disabled>
-                                        <i class="fas fa-shield-halved me-1"></i> Verify
-                                    </button>
-                                    <span id="lutVerifiedBadge" class="verified-badge" style="display: none;">
-                                        <i class="fas fa-circle-check me-1"></i> Verified
-                                    </span>
-                                    <input type="hidden" name="lut_verified" id="lutVerifiedInput" value="0">
                                 </div>
                             </div>
 
                             <div class="section-title-alt">Billing Details</div>
                             <div class="row g-3">
                                 <div class="col-12">
-                                    <label class="section-label">Billing Address (from GST)</label>
+                                    <label class="section-label">Billing Address</label>
                                     <div class="input-wrapper">
                                         <textarea class="input-custom" rows="3"
                                             placeholder="Enter Billing Address *" name="billing_address"
@@ -455,28 +340,18 @@
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label class="section-label">Billing GST</label>
-                                    <div class="input-wrapper">
-                                        <input type="text" class="input-custom"
-                                            placeholder="Enter Billing GST Number" name="billing_gst" maxlength="15"
-                                            style="text-transform: uppercase;"
-                                            value="{{ old('billing_gst', $csbForm->billing_gst ?? '') }}">
-                                        <i class="fas fa-certificate"></i>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
                                     <label class="section-label">Billing Contact Number</label>
                                     <div class="input-wrapper">
                                         <input type="tel" class="input-custom"
-                                            placeholder="Enter Contact Number *" name="billing_contact"
-                                            maxlength="20" inputmode="numeric"
+                                            placeholder="Enter 10-digit Contact Number *" name="billing_contact"
+                                            maxlength="10" inputmode="numeric" pattern="[6-9][0-9]{9}"
+                                            title="Contact number must contain 10 digits and start with 6, 7, 8, or 9"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 10); if (/^[0-5]/.test(this.value)) { this.value = ''; }"
                                             value="{{ old('billing_contact', $csbForm->billing_contact ?? '') }}"
                                             required>
                                         <i class="fas fa-phone"></i>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="section-label">Billing Email</label>
                                     <div class="input-wrapper">
@@ -488,7 +363,6 @@
                                     </div>
                                 </div>
                             </div>
-
                             <div class="section-title-alt">Merchant Agreement</div>
                             <div class="row g-3">
                                 <div class="col-12">
@@ -506,7 +380,7 @@
                                             </div>
                                         </div>
                                         <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="businessMerchantAgreementFileInput" name="merchant_agreement"
+                                            <input type="file" id="businessMerchantAgreementFileInput" name="merchant_agreement" required
                                                 style="display: none;" accept=".pdf"
                                                 onchange="handleDocSelect(this, 'businessMerchantAgreementFileNameDisplay', 'businessMerchantAgreementFileInfo', 'businessMerchantAgreementRemoveFile', '.businessMerchantAgreementUploadBtn', '#businessMerchantAgreementContainer');">
                                             <button type="button"
@@ -555,7 +429,8 @@
                     // external csb5-form.js is served from a stale cache.
                     function handleDocSelect(input, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
                         if (input.files && input.files.length > 0) {
-                            var name = input.files[0].name;
+                            var file = input.files[0];
+                            var name = file.name;
                             var nameEl = document.getElementById(nameId);
                             if (nameEl) { nameEl.textContent = name; }
                             var infoEl = document.getElementById(infoId);
@@ -580,6 +455,58 @@
                         var container = document.querySelector(containerSel);
                         if (container) { container.classList.remove('has-file'); }
                     }
+
+                    // Initialize linked LUT years inline as a cache-safe fallback.
+                    (function initializeLutBondYears() {
+                        var startYearSelect = document.getElementById('lutBondStartYear');
+                        var endYearSelect = document.getElementById('lutBondEndYear');
+                        var combinedYearInput = document.getElementById('lutBondYear');
+                        var expiryDateInput = document.getElementById('lutExpiryDate');
+
+                        if (!startYearSelect || !endYearSelect || !combinedYearInput || !expiryDateInput) {
+                            return;
+                        }
+
+                        function updateEndYear(restoreSavedYear) {
+                            var startYear = parseInt(startYearSelect.value, 10);
+                            var savedEndYear = restoreSavedYear ? endYearSelect.getAttribute('data-saved-end-year') : '';
+                            endYearSelect.innerHTML = '';
+
+                            if (!startYear) {
+                                endYearSelect.appendChild(new Option('Select Start Year First', ''));
+                                endYearSelect.disabled = true;
+                                expiryDateInput.removeAttribute('min');
+                                combinedYearInput.value = '';
+                                return;
+                            }
+
+                            expiryDateInput.min = String(startYear + 1) + '-01-01';
+                            if (expiryDateInput.value && expiryDateInput.value < expiryDateInput.min) {
+                                expiryDateInput.value = '';
+                            }
+
+                            endYearSelect.appendChild(new Option('Select End Year', ''));
+                            for (var yearOffset = 1; yearOffset <= 5; yearOffset++) {
+                                var endYear = String(startYear + yearOffset);
+                                endYearSelect.appendChild(new Option(endYear, endYear));
+                            }
+                            endYearSelect.disabled = false;
+                            endYearSelect.value = savedEndYear && endYearSelect.querySelector('option[value="' + savedEndYear + '"]')
+                                ? savedEndYear
+                                : String(startYear + 1);
+                            combinedYearInput.value = String(startYear) + '-' + endYearSelect.value.slice(-2);
+                        }
+
+                        startYearSelect.addEventListener('change', function () {
+                            updateEndYear(false);
+                        });
+                        endYearSelect.addEventListener('change', function () {
+                            combinedYearInput.value = startYearSelect.value && endYearSelect.value
+                                ? startYearSelect.value + '-' + endYearSelect.value.slice(-2)
+                                : '';
+                        });
+                        updateEndYear(true);
+                    }());
                 </script>
                 <script src="{{ asset('js/csb5-form.js') }}?v={{ filemtime(public_path('js/csb5-form.js')) ?: 1 }}"></script>
 

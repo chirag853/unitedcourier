@@ -2180,22 +2180,63 @@ class AdminController extends Controller
     public function approveKyc($id)
     {
         $kycDetail = \App\Models\KycDetail::findOrFail($id);
-        $kycDetail->kyc_status = 'approved';
-        $kycDetail->save();
 
-        // Clone all default rates (customer_id = 0) from courier_rates for the approved customer
-        $defaultRates = \App\Models\CourierRate::where('customer_id', 0)->get();
+        $ratesCount = DB::transaction(function () use ($kycDetail) {
+            $kycDetail->kyc_status = 'approved';
+            $kycDetail->save();
 
-        foreach ($defaultRates as $rate) {
-            $newRate = $rate->replicate();
-            $newRate->customer_id = $kycDetail->customer_id;
-            $newRate->save();
-        }
+            $customer = Customer::lockForUpdate()->findOrFail($kycDetail->customer_id);
+            $customer->can_create_shipment = true;
+            $customer->save();
 
-        $ratesCount = $defaultRates->count();
+            // Create the customer's zero-balance wallet as soon as KYC is approved.
+            // firstOrCreate keeps repeated approval requests idempotent.
+            Wallet::firstOrCreate(
+                ['customer_id' => $kycDetail->customer_id],
+                ['balance' => 0.00]
+            );
+
+            // Copy only missing default rates so repeated approval requests cannot
+            // create duplicate rates or overwrite customer-specific pricing.
+            $defaultRates = \App\Models\CourierRate::where('customer_id', 0)->get();
+            $existingRateKeys = \App\Models\CourierRate::where('customer_id', $kycDetail->customer_id)
+                ->get(['service_id', 'wt_range_start', 'wt_range_end', 'zone_no'])
+                ->mapWithKeys(function ($rate) {
+                    $key = implode('|', [
+                        $rate->service_id,
+                        (string) $rate->wt_range_start,
+                        (string) $rate->wt_range_end,
+                        (int) ($rate->zone_no ?? 0),
+                    ]);
+
+                    return [$key => true];
+                });
+
+            $copiedRates = 0;
+            foreach ($defaultRates as $rate) {
+                $key = implode('|', [
+                    $rate->service_id,
+                    (string) $rate->wt_range_start,
+                    (string) $rate->wt_range_end,
+                    (int) ($rate->zone_no ?? 0),
+                ]);
+
+                if ($existingRateKeys->has($key)) {
+                    continue;
+                }
+
+                $newRate = $rate->replicate();
+                $newRate->customer_id = $kycDetail->customer_id;
+                $newRate->save();
+                $existingRateKeys->put($key, true);
+                $copiedRates++;
+            }
+
+            return $copiedRates;
+        });
 
         return redirect()->route('admin.kyc-pending')
-            ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been approved successfully. ' . $ratesCount . ' courier rates copied.');
+            ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been approved successfully. Shipment creation enabled, wallet created with ₹0 balance, and ' . $ratesCount . ' courier rates assigned.');
     }
 
     public function rejectKyc($id)
@@ -3087,33 +3128,52 @@ class AdminController extends Controller
     }
 
     /**
-     * Download a horizontally grouped sample Excel file for bulk rate upload.
+     * Download a zoned horizontal sample or a plain sample for a no-zone country.
      *
-     * Each selected zone contributes Price, Fuel Charge, Fuel %, and GST %
-     * columns. Existing default rates are pre-filled where available.
+     * Existing default rates are pre-filled where available.
      */
     public function downloadRateSample(Request $request)
     {
         $serviceId = $request->query('service_id');
+        $country = $request->query('country');
+        $withoutZone = $request->boolean('without_zone');
+        $destinationId = $this->destinationIdForCountry($country);
+
+        if ($country && !$destinationId) {
+            abort(422, 'The selected country is not recognized.');
+        }
+
+        if ($serviceId && $destinationId && !$this->serviceBelongsToDestination($serviceId, $destinationId)) {
+            abort(422, 'The selected service does not belong to the selected country.');
+        }
+
+        if ($withoutZone && (!$destinationId || $this->destinationHasConfiguredZones($destinationId))) {
+            abort(422, 'The without-zone sample is available only for a selected country that has no configured zones.');
+        }
+
         $zoneNos = $request->query('zone_nos', []);
         $zoneNos = is_array($zoneNos) ? $zoneNos : [$zoneNos];
         $zoneNos = array_values(array_unique(array_filter(array_map('intval', $zoneNos), function ($zone) {
             return $zone >= 0 && $zone <= 13;
         })));
 
-        // Keep a useful default for older bookmarks that do not send zones.
-        if (empty($zoneNos)) {
+        // Retain the historical sample only when no explicit no-zone mode was requested.
+        if (empty($zoneNos) && !$withoutZone) {
             $zoneNos = [1, 2];
         }
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $headers = ['Weight Start', 'Weight End'];
-        foreach ($zoneNos as $zoneNo) {
-            $headers[] = 'Zone ' . $zoneNo . ' Price';
-            $headers[] = 'Zone ' . $zoneNo . ' Fuel Charge';
-            $headers[] = 'Zone ' . $zoneNo . ' Fuel %';
-            $headers[] = 'Zone ' . $zoneNo . ' GST %';
+        if ($withoutZone) {
+            $headers = array_merge($headers, ['Price', 'Fuel Charge', 'Fuel %', 'GST %']);
+        } else {
+            foreach ($zoneNos as $zoneNo) {
+                $headers[] = 'Zone ' . $zoneNo . ' Price';
+                $headers[] = 'Zone ' . $zoneNo . ' Fuel Charge';
+                $headers[] = 'Zone ' . $zoneNo . ' Fuel %';
+                $headers[] = 'Zone ' . $zoneNo . ' GST %';
+            }
         }
         foreach ($headers as $index => $header) {
             $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
@@ -3122,9 +3182,18 @@ class AdminController extends Controller
 
         $ratesByWeight = [];
         if ($serviceId) {
-            $rates = \App\Models\CourierRate::where('customer_id', 0)
-                ->where('service_id', $serviceId)
-                ->whereIn('zone_no', $zoneNos)
+            $ratesQuery = \App\Models\CourierRate::where('customer_id', 0)
+                ->where('service_id', $serviceId);
+
+            if ($withoutZone) {
+                $ratesQuery->where(function ($query) {
+                    $query->where('zone_no', 0)->orWhereNull('zone_no');
+                });
+            } else {
+                $ratesQuery->whereIn('zone_no', $zoneNos);
+            }
+
+            $rates = $ratesQuery
                 ->orderBy('wt_range_start')
                 ->orderBy('zone_no')
                 ->get();
@@ -3149,7 +3218,8 @@ class AdminController extends Controller
             $sheet->setCellValue('A' . $row, $weight['start']);
             $sheet->setCellValue('B' . $row, $weight['end']);
             $column = 3;
-            foreach ($zoneNos as $zoneNo) {
+            $sampleZoneNos = $withoutZone ? [0] : $zoneNos;
+            foreach ($sampleZoneNos as $zoneNo) {
                 $rate = $weight['zones'][$zoneNo] ?? null;
                 $values = $rate
                     ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
@@ -3168,7 +3238,9 @@ class AdminController extends Controller
             $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
         }
 
-        $fileName = 'rate-upload-sample.xlsx';
+        $fileName = $withoutZone
+            ? 'rate-upload-sample-without-zone.xlsx'
+            : 'rate-upload-sample.xlsx';
         $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
         return response()->streamDownload(function () use ($writer) {
             $writer->save('php://output');
@@ -3180,20 +3252,43 @@ class AdminController extends Controller
     }
 
     /**
-     * Bulk-import default rates from a horizontal or legacy vertical file.
+     * Bulk-import default rates from zoned, zone-free, or legacy vertical files.
      *
-     * Checked zones are imported only; duplicate detection remains based on
-     * service, weight range, and zone number.
+     * Zone-free rows use zone 0. Duplicate detection remains based on service,
+     * weight range, and zone number.
      */
     public function uploadRateExcel(Request $request)
     {
         $validated = $request->validate([
-            'service_id' => 'required|integer|exists:courier_services,id',
-            'zone_nos'   => 'nullable|array',
-            'zone_nos.*' => 'integer|min:0|max:13',
-            'zone_no'    => 'nullable|integer|min:0|max:13',
-            'rate_file'  => 'required|file|mimes:xlsx,xls,csv|max:5120',
+            'service_id'   => 'required|integer|exists:courier_services,id',
+            'country'      => 'required|string|max:100',
+            'without_zone' => 'nullable|boolean',
+            'zone_nos'     => 'nullable|array',
+            'zone_nos.*'   => 'integer|min:0|max:13',
+            'zone_no'      => 'nullable|integer|min:0|max:13',
+            'rate_file'    => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
+
+        $withoutZone = $request->boolean('without_zone');
+        $destinationId = $this->destinationIdForCountry($validated['country']);
+
+        if (!$destinationId) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'The selected country is not recognized.');
+        }
+
+        if (!$this->serviceBelongsToDestination($validated['service_id'], $destinationId)) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'The selected service does not belong to the selected country.');
+        }
+
+        if ($withoutZone && $this->destinationHasConfiguredZones($destinationId)) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'The selected country has configured zones. Select at least one zone and use the zoned sample file.');
+        }
 
         $file = $request->file('rate_file');
         $filePath = $file->getRealPath();
@@ -3276,11 +3371,18 @@ class AdminController extends Controller
         }
 
         $selectedZoneNos = array_values(array_unique(array_map('intval', $validated['zone_nos'] ?? [])));
-        if (empty($selectedZoneNos) && isset($validated['zone_no']) && $validated['zone_no'] !== null) {
+        if ($withoutZone) {
+            $selectedZoneNos = [0];
+        } elseif (empty($selectedZoneNos) && isset($validated['zone_no']) && $validated['zone_no'] !== null) {
             $selectedZoneNos = [(int) $validated['zone_no']];
         }
 
         $isHorizontal = $wtStartCol !== null && $wtEndCol !== null && !empty($horizontalGroups);
+        if ($withoutZone && $isHorizontal) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'A country without zones requires the without-zone sample file with plain Price, Fuel Charge, Fuel %, and GST % columns.');
+        }
         if ($isHorizontal) {
             $normalizedRows = [$rows[0]];
             foreach (array_slice($rows, 1) as $sourceRow) {
@@ -3319,6 +3421,12 @@ class AdminController extends Controller
                 ->with('error', 'The file must contain Weight Start and Weight End plus either Price or horizontal Zone N Price columns. Please download the sample file for the correct format.');
         }
 
+        if (!$withoutZone && !$isHorizontal && $zoneNoCol === null && empty($selectedZoneNos)) {
+            return redirect()
+                ->route('admin.manage-rate')
+                ->with('error', 'Select at least one zone, or choose a country without configured zones and use its without-zone sample file.');
+        }
+
         $created = 0;
         $skipped = 0;
         $duplicates = 0;
@@ -3333,7 +3441,8 @@ class AdminController extends Controller
 
         $existingKeys = [];
         foreach ($existingRates as $r) {
-            $key = $r->wt_range_start . '|' . $r->wt_range_end . '|' . $r->zone_no;
+            $existingZoneNo = (int) ($r->zone_no ?? 0);
+            $key = $r->wt_range_start . '|' . $r->wt_range_end . '|' . $existingZoneNo;
             $existingKeys[$key] = true;
         }
 
@@ -3341,7 +3450,7 @@ class AdminController extends Controller
         // appearing twice in the same file is only inserted once.
         $seenInUpload = [];
 
-        $formZoneNo = $validated['zone_no'] ?? null;
+        $formZoneNo = $withoutZone ? 0 : ($validated['zone_no'] ?? null);
 
         // Pre-fetch all customer IDs once so we can propagate every new
         // default rate to all customers (is_default = 1) in a single batch
@@ -3359,7 +3468,8 @@ class AdminController extends Controller
                 ->where('service_id', $validated['service_id'])
                 ->get(['customer_id', 'wt_range_start', 'wt_range_end', 'zone_no']);
             foreach ($existingCustomerRates as $cr) {
-                $k = $cr->wt_range_start . '|' . $cr->wt_range_end . '|' . $cr->zone_no;
+                $existingZoneNo = (int) ($cr->zone_no ?? 0);
+                $k = $cr->wt_range_start . '|' . $cr->wt_range_end . '|' . $existingZoneNo;
                 $existingCustomerKeys[$k][$cr->customer_id] = true;
             }
         }
@@ -3374,10 +3484,13 @@ class AdminController extends Controller
             $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
             $price   = isset($row[$priceCol]) ? trim((string) $row[$priceCol]) : '';
 
-            // Zone No: prefer the file column, fall back to the form value.
-            $zoneNo = ($zoneNoCol !== null && isset($row[$zoneNoCol]) && trim((string) $row[$zoneNoCol]) !== '')
-                ? trim((string) $row[$zoneNoCol])
-                : ($formZoneNo !== null ? (string) $formZoneNo : '');
+            // Zone-free workbooks always map to zone 0. Zoned formats prefer
+            // the file column and fall back to the modal's legacy zone value.
+            $zoneNo = $withoutZone
+                ? '0'
+                : (($zoneNoCol !== null && isset($row[$zoneNoCol]) && trim((string) $row[$zoneNoCol]) !== '')
+                    ? trim((string) $row[$zoneNoCol])
+                    : ($formZoneNo !== null ? (string) $formZoneNo : ''));
 
             $fuelCharge = ($fuelChargeCol !== null && isset($row[$fuelChargeCol])) ? trim((string) $row[$fuelChargeCol]) : '';
             $fuelPct    = ($fuelPctCol !== null && isset($row[$fuelPctCol])) ? trim((string) $row[$fuelPctCol]) : '';
@@ -3516,6 +3629,34 @@ class AdminController extends Controller
         return redirect()
             ->route('admin.manage-rate')
             ->with('success', $msg);
+    }
+
+    private function destinationIdForCountry(?string $country): ?int
+    {
+        $country = strtolower(trim((string) $country));
+        if ($country === '') {
+            return null;
+        }
+
+        $destinationId = \App\Models\Destination::where(function ($query) use ($country) {
+            $query->whereRaw('LOWER(country_code) = ?', [$country])
+                ->orWhereRaw('LOWER(code) = ?', [$country])
+                ->orWhereRaw('LOWER(name) = ?', [$country]);
+        })->value('id');
+
+        return $destinationId ? (int) $destinationId : null;
+    }
+
+    private function destinationHasConfiguredZones(int $destinationId): bool
+    {
+        return \App\Models\Zone::where('destination_id', $destinationId)->exists();
+    }
+
+    private function serviceBelongsToDestination(int $serviceId, int $destinationId): bool
+    {
+        $serviceCountry = \App\Models\CourierService::whereKey($serviceId)->value('country');
+
+        return $this->destinationIdForCountry($serviceCountry) === $destinationId;
     }
 
     /**

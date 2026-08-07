@@ -91,6 +91,12 @@
         font-weight: 600;
     }
 
+    body.kyc-header-hidden .header-wallet-section,
+    body.kyc-header-hidden .header-credit-balance-section,
+    body.kyc-header-hidden .header-notification-section,
+    body.kyc-header-hidden .header-line {
+        display: none !important;
+    }
 
     /* terms and condition */
     .document-wrapper {
@@ -296,7 +302,16 @@
     </style>
 </head>
 
-<body>
+<body class="customer-dashboard">
+    <script>
+        function toggleKycHeaderState() {
+            const stepper = document.querySelector('.stepper-container');
+            document.body.classList.toggle('kyc-header-hidden', !!stepper);
+        }
+
+        document.addEventListener('DOMContentLoaded', toggleKycHeaderState);
+        window.addEventListener('load', toggleKycHeaderState);
+    </script>
 
     <!-- Begin Wrapper -->
     <div class="main-wrapper">
@@ -758,7 +773,7 @@
 
                     <div class="stepper-wrapper">
                         @if($userType === 'Business')
-                        <!-- Business KYC (CSB-V): 6 Steps -->
+                        <!-- Business KYC (CSB-V): 7 Steps -->
                         <div class="step-item active" id="step1-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
@@ -787,13 +802,19 @@
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Signature & Agreement</div>
+                            <div class="step-label">5. Upload Signature</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. Bill & Submit</div>
+                            <div class="step-label">6. Terms & Conditions</div>
+                        </div>
+                        <div class="step-item" id="step7-indicator">
+                            <div class="step-bar">
+                                <div class="step-bar-fill"></div>
+                            </div>
+                            <div class="step-label">7. Activation Pending</div>
                         </div>
                         @else
                         <!-- Personal KYC (CSB-IV): 7 Steps -->
@@ -875,13 +896,13 @@
                                             style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                             onclick="document.getElementById('bizGstCertFileInput').click()">
                                             <input type="file" id="bizGstCertFileInput"
-                                                accept="image/png, image/jpeg, image/jpg, application/pdf" style="display: none;">
+                                                accept=".pdf,application/pdf" style="display: none;">
                                             <div id="bizGstCertUploadPlaceholder">
                                                 <i class="fas fa-file-invoice"
                                                     style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
                                                 <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                    upload GST Certificate</p>
-                                                <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
+                                                    upload GST Certificate PDF</p>
+                                                <p class="text-muted small mb-0">PDF only (max 5MB)</p>
                                             </div>
                                             <div id="bizGstCertPreview" style="display: none;">
                                                 <i class="fas fa-check-circle"
@@ -970,8 +991,19 @@
 
                         <!-- Step 2 Content: Verify Aadhar -->
                         <div id="step2-content" class="step-content">
-                            <h3 class="kyc-card-title">Verify <span class="gradient-text">Aadhar</span></h3>
-                            <p class="text-muted mb-4">Enter your 12-digit Aadhar number and upload front & back photos to verify your identity.</p>
+                            <h3 class="kyc-card-title">
+                                Verify <span class="gradient-text">Aadhar</span>
+                                @if($isAadhaarOptional)
+                                    <small class="text-muted fs-6">(Optional)</small>
+                                @endif
+                            </h3>
+                            <p class="text-muted mb-4">
+                                @if($isAadhaarOptional)
+                                    Aadhaar is optional for Courier / Aggregator customers. You may skip this step, or enter your 12-digit Aadhaar number and upload both images to provide it.
+                                @else
+                                    Enter your 12-digit Aadhaar number and upload front & back photos to verify your identity.
+                                @endif
+                            </p>
 
                             <div class="row g-3 mb-4">
                                 <div class="col-md-8">
@@ -997,13 +1029,13 @@
                                     <div id="aadharFrontUploadArea"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('aadharFrontFileInput').click()">
-                                        <input type="file" id="aadharFrontFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                        <input type="file" id="aadharFrontFileInput" accept=".jpg,.jpeg,.png"
                                             style="display: none;">
                                         <div id="aadharFrontUploadPlaceholder">
                                             <i class="fas fa-id-card"
                                                 style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload Aadhaar front</p>
-                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                            <p class="text-muted small mb-0">PNG or JPG (max 5MB)</p>
                                         </div>
                                         <div id="aadharFrontPreview" style="display: none;">
                                             <i class="fas fa-check-circle" style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
@@ -1016,13 +1048,13 @@
                                     <div id="aadharBackUploadArea"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('aadharBackFileInput').click()">
-                                        <input type="file" id="aadharBackFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                        <input type="file" id="aadharBackFileInput" accept=".jpg,.jpeg,.png"
                                             style="display: none;">
                                         <div id="aadharBackUploadPlaceholder">
                                             <i class="fas fa-id-card"
                                                 style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload Aadhaar back</p>
-                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                            <p class="text-muted small mb-0">PNG or JPG (max 5MB)</p>
                                         </div>
                                         <div id="aadharBackPreview" style="display: none;">
                                             <i class="fas fa-check-circle" style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
@@ -1042,7 +1074,7 @@
                                     onclick="nextStep(1)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;" id="aadharContinueBtn"
-                                    onclick="nextStep(3)">Continue</button>
+                                    onclick="nextStep(3)">{{ $isAadhaarOptional ? 'Skip / Continue' : 'Continue' }}</button>
                             </div>
                         </div>
 
@@ -1084,13 +1116,13 @@
                                     <div id="panUploadArea"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('panFileInput').click()">
-                                        <input type="file" id="panFileInput" accept="image/png, image/jpeg, image/jpg, application/pdf"
+                                        <input type="file" id="panFileInput" accept=".jpg,.jpeg,.png"
                                             style="display: none;">
                                         <div id="panUploadPlaceholder">
                                             <i class="fas fa-file-invoice"
                                                 style="font-size: 28px; color: #6366f1; margin-bottom: 6px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 13px;">Click to upload PAN card</p>
-                                            <p class="text-muted small mb-0">PNG, JPG or PDF</p>
+                                            <p class="text-muted small mb-0">PNG or JPG (max 5MB)</p>
                                         </div>
                                         <div id="panPreview" style="display: none;">
                                             <i class="fas fa-check-circle" style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
@@ -1123,7 +1155,7 @@
                         </div>
 
                         @if($userType === 'Business')
-                        <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-6 ===== -->
+                        <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-7 ===== -->
 
                         <!-- Business Step 4: CSB-V (Export Codes + LUT + Banking + Billing merged) -->
                         <div id="step4-content" class="step-content">
@@ -1139,7 +1171,9 @@
                                     <label class="form-label-custom">IEC Number</label>
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom"
-                                            placeholder="10-digit IEC number" id="bizIecNumber" maxlength="10">
+                                            placeholder="10-character IEC number" id="bizIecNumber" maxlength="10"
+                                            pattern="[A-Za-z0-9]{10}" title="IEC Number must be exactly 10 letters or digits"
+                                            oninput="this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10)">
                                         <i class="fas fa-file-export"></i>
                                     </div>
                                 </div>
@@ -1173,9 +1207,13 @@
                                     <label class="form-label-custom">AD Code (Authorized Dealer Code)</label>
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom"
-                                            placeholder="Enter AD Code" id="bizAdCode">
+                                            placeholder="Enter 14-digit AD Code" id="bizAdCode"
+                                            inputmode="numeric" maxlength="14" pattern="[0-9]{14}"
+                                            title="AD Code must be exactly 14 digits"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 14)">
                                         <i class="fas fa-university"></i>
                                     </div>
+                                    <small class="text-muted">AD Code must be exactly 14 numeric digits.</small>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label-custom">Upload AD Code Document</label>
@@ -1207,40 +1245,53 @@
                             <!-- ===== LUT Details Section ===== -->
                             <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-contract me-2"></i>LUT Details</h5>
 
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">LUT Expiry Date</label>
+                            <div class="row g-3 align-items-end mb-3">
+                                <div class="col-12 col-lg-4">
+                                    <label class="form-label-custom" for="bizLutBondStartYear">LUT Bond Start Year</label>
+                                    <div class="input-group-custom">
+                                        <select class="form-control input-custom" style="height:100%" id="bizLutBondStartYear">
+                                            <option value="">Select Start Year</option>
+                                            @foreach(range(now()->year, now()->year + 5) as $lutStartYear)
+                                                <option value="{{ $lutStartYear }}">{{ $lutStartYear }}</option>
+                                            @endforeach
+                                        </select>
+                                        <i class="fas fa-calendar-day"></i>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-lg-4">
+                                    <label class="form-label-custom" for="bizLutBondEndYear">LUT Bond End Year</label>
+                                    <div class="input-group-custom">
+                                        <select class="form-control input-custom" style="height:100%" id="bizLutBondEndYear" disabled>
+                                            <option value="">Select Start Year First</option>
+                                        </select>
+                                        <i class="fas fa-calendar-day"></i>
+                                    </div>
+                                    <input type="hidden" id="bizLutBondYear">
+                                </div>
+                                <div class="col-12 col-lg-4">
+                                    <label class="form-label-custom" for="bizLutExpiry">LUT Expiry Date</label>
                                     <div class="input-group-custom">
                                         <input type="date" class="form-control input-custom" id="bizLutExpiry">
                                         <i class="fas fa-calendar"></i>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">LUT Bond Year</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom"
-                                            placeholder="e.g. 2026-27" id="bizLutBondYear">
-                                        <i class="fas fa-calendar-alt"></i>
-                                    </div>
-                                </div>
                             </div>
 
-                            <div class="row g-4 mb-4">
-                                <div class="col-md-12">
-                                    <label class="form-label-custom">Upload LUT Document</label>
+                            <div class="row g-3 mb-4">
+                                <div class="col-12">
+                                    <label class="form-label-custom" for="bizLutFileInput">Upload LUT Document</label>
                                     <div id="bizLutUploadArea"
-                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; min-height: 180px; padding: 24px; display: flex; align-items: center; justify-content: center; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('bizLutFileInput').click()">
                                         <input type="file" id="bizLutFileInput" accept="application/pdf"
                                             style="display: none;">
-                                        <div id="bizLutUploadPlaceholder">
+                                        <div id="bizLutUploadPlaceholder" style="width: 100%; text-align: center;">
                                             <i class="fas fa-file-contract"
                                                 style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
-                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                upload LUT Document</p>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload LUT Document</p>
                                             <p class="text-muted small mb-0">PDF only (max 5MB)</p>
                                         </div>
-                                        <div id="bizLutPreview" style="display: none;">
+                                        <div id="bizLutPreview" style="display: none; width: 100%; text-align: center;">
                                             <i class="fas fa-check-circle"
                                                 style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
                                             <p class="mb-0 fw-semibold small" id="bizLutFileName"
@@ -1259,7 +1310,7 @@
                                 <div class="col-md-6">
                                     <label class="form-label-custom">Bank Category</label>
                                     <div class="input-group-custom">
-                                        <select class="form-control input-custom" id="bizBankType">
+                                        <select class="form-control input-custom" style="height:100%" id="bizBankType">
                                             <option value="">Select bank category</option>
                                             <option value="government">Public Sector Bank</option>
                                             <option value="private">Private Sector Bank</option>
@@ -1272,7 +1323,9 @@
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom"
                                             placeholder="Enter bank account number" id="bizBankAccount"
-                                            inputmode="numeric">
+                                            inputmode="numeric" minlength="9" maxlength="18" pattern="[0-9]{9,18}"
+                                            title="Bank Account Number must contain 9 to 18 digits"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 18)">
                                         <i class="fas fa-wallet"></i>
                                     </div>
                                 </div>
@@ -1296,8 +1349,11 @@
                                 <div class="col-md-6">
                                     <label class="form-label-custom">Billing Contact Number</label>
                                     <div class="input-group-custom">
-                                        <input type="text" class="form-control input-custom"
-                                            placeholder="Contact number" id="bizBillingContact" inputmode="numeric">
+                                        <input type="tel" class="form-control input-custom"
+                                            placeholder="10-digit mobile number" id="bizBillingContact" inputmode="numeric"
+                                            maxlength="10" pattern="[6-9][0-9]{9}"
+                                            title="Billing Contact Number must contain 10 digits and start with 6, 7, 8, or 9"
+                                            oninput="this.value = this.value.replace(/\D/g, '').slice(0, 10); if (/^[0-5]/.test(this.value)) { this.value = ''; }">
                                         <i class="fas fa-phone"></i>
                                     </div>
                                 </div>
@@ -1335,55 +1391,33 @@
                             </div>
                         </div>
 
-                        <!-- Business Step 5: Signature & Agreement -->
+                        <!-- Business Step 5: Upload Signature -->
                         <div id="step5-content" class="step-content">
-                            <h3 class="kyc-card-title">Signature & <span class="gradient-text">Agreement</span></h3>
-                            <p class="text-muted mb-4">Upload your authorized signature with company stamp and the signed
-                                Merchant Agreement.</p>
+                            <h3 class="kyc-card-title">Upload <span class="gradient-text">Signature</span></h3>
+                            <p class="text-muted small mb-4">Upload your authorized signature with company stamp to be appended to the agreement.</p>
 
-                            <div class="row g-4 mb-4">
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">Upload Authorized Signature (with Company Stamp)</label>
-                                    <div id="bizSignatureUploadArea"
-                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
-                                        onclick="document.getElementById('bizSignatureFileInput').click()">
-                                        <input type="file" id="bizSignatureFileInput"
-                                            accept="image/png, image/jpeg, image/jpg, application/pdf"
-                                            style="display: none;">
+                            <div class="row g-4">
+                                <div class="col-12">
+                                    <label class="form-label-custom">Authorized Signature (with Company Stamp)</label>
+                                    <div id="bizSignatureUploadArea" role="button" tabindex="0"
+                                        style="display: block; border: 2px dashed #c7d2fe; border-radius: 16px; padding: 24px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                        onclick="document.getElementById('bizSignatureFileInput').click()"
+                                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('bizSignatureFileInput').click(); }">
+                                        <input type="file" id="bizSignatureFileInput" name="signature_document"
+                                            accept=".png,.jpg,.jpeg,image/png,image/jpeg" style="display: none;"
+                                            onclick="event.stopPropagation()">
                                         <div id="bizSignatureUploadPlaceholder">
                                             <i class="fas fa-signature"
-                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
-                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                upload signature</p>
-                                            <p class="text-muted small mb-0">PNG, JPG or PDF (max 5MB)</p>
+                                                style="font-size: 48px; color: #6366f1; margin-bottom: 12px; display: block;"></i>
+                                            <p class="mb-1 fw-semibold" style="color: #4338ca;">Click to upload your signature</p>
+                                            <p class="text-muted small mb-0">PNG or JPG, transparent background preferred (max 5MB)</p>
                                         </div>
-                                        <div id="bizSignaturePreview" style="display: none;">
-                                            <i class="fas fa-check-circle"
-                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
-                                            <p class="mb-0 fw-semibold small" id="bizSignatureFileName"
-                                                style="color: #166534;"></p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">Upload Signed Merchant Agreement</label>
-                                    <div id="bizAgreementUploadArea"
-                                        style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
-                                        onclick="document.getElementById('bizMerchantAgreementFileInput').click()">
-                                        <input type="file" id="bizMerchantAgreementFileInput" accept="application/pdf"
-                                            style="display: none;">
-                                        <div id="bizAgreementUploadPlaceholder">
-                                            <i class="fas fa-file-signature"
-                                                style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
-                                            <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                upload Merchant Agreement</p>
-                                            <p class="text-muted small mb-0">PDF only (max 10MB)</p>
-                                        </div>
-                                        <div id="bizAgreementPreview" style="display: none;">
-                                            <i class="fas fa-check-circle"
-                                                style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
-                                            <p class="mb-0 fw-semibold small" id="bizAgreementFileName"
-                                                style="color: #166534;"></p>
+                                        <div id="bizSignaturePreviewWrap" style="display: none;">
+                                            <img id="bizSignaturePreviewImg" alt="Authorized signature preview"
+                                                style="max-height: 140px; max-width: 100%; object-fit: contain; border-radius: 8px; background: #fff; padding: 8px;">
+                                            <p class="text-muted small mt-2 mb-0">
+                                                <a href="#" onclick="event.stopPropagation(); resetBusinessSignatureUpload(); return false;">Remove & re-upload</a>
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -1399,23 +1433,8 @@
                             </div>
                         </div>
 
-                        <!-- Business Step 6: Bill & Submit (Activation Pending) -->
-                        <div id="step6-content" class="step-content text-center py-4">
-                            <div class="mb-4">
-                                <i class="fas fa-check-circle text-success" style="font-size: 80px;"></i>
-                            </div>
-                            <h3 class="kyc-card-title mb-2">Activation <span class="gradient-text">Pending</span></h3>
-                            <p class="text-muted mx-auto" style="max-width: 500px;">We have received your Business KYC
-                                documents. Our verification team will review your application within 24 hours. CSB-5 will
-                                be enabled upon approval.</p>
-                            <div class="mx-auto" style="max-width: 300px;">
-                                <button class="btn btn-primary-custom mt-4" onclick="location.reload()">Go to
-                                    Dashboard</button>
-                            </div>
-                        </div>
-
                         @else
-                        <!-- ===== PERSONAL KYC (CSB-IV) STEPS 4-7 ===== -->
+                        <!-- ===== PERSONAL KYC (CSB-IV) STEPS 4-5 ===== -->
 
                         <!-- Step 4 Content -->
                         <div id="step4-content" class="step-content">
@@ -1488,8 +1507,9 @@
                                     onclick="nextStep(6)">Continue</button>
                             </div>
                         </div>
+                        @endif
 
-                        <!-- Step 6 Content - Bill -->
+                        <!-- Step 6 Content - Bill / Terms & Conditions -->
                         <div id="step6-content" class="step-content">
                             <!-- <h3 class="kyc-card-title">Bill</h3> -->
 
@@ -2018,23 +2038,27 @@
                                 <i class="fas fa-check-circle text-success" style="font-size: 80px;"></i>
                             </div>
                             <h3 class="kyc-card-title mb-2">Activation <span class="gradient-text">Pending</span></h3>
-                            <p class="text-muted mx-auto" style="max-width: 500px;">We have received your KYC
-                                documents. Our verification team will review your application within 24 hours.</p>
+                            <p class="text-muted mx-auto" style="max-width: 500px;">
+                                @if($userType === 'Business')
+                                    We have received your Business KYC and CSB-V documents. Our verification team will review your application within 24 hours.
+                                @else
+                                    We have received your KYC documents. Our verification team will review your application within 24 hours.
+                                @endif
+                            </p>
                             <div class="mx-auto" style="max-width: 300px;">
                                 <button class="btn btn-primary-custom mt-4" onclick="location.reload()">Go to
                                     Dashboard</button>
                             </div>
                         </div>
 
-                        @endif
-
                     </div>
 
                     <script>
-                    // Auto-show KYC welcome popup (blocking) on page load
+                    // Only show the welcome popup for a new KYC; resumed drafts open on their saved step.
                     document.addEventListener('DOMContentLoaded', function() {
+                        const hasSavedKycDraft = @json((bool) $kycDraft);
                         const welcomeModalEl = document.getElementById('kycWelcomeModal');
-                        if (welcomeModalEl) {
+                        if (welcomeModalEl && !hasSavedKycDraft) {
                             const welcomeModal = new bootstrap.Modal(welcomeModalEl, {
                                 backdrop: 'static',
                                 keyboard: false
@@ -2051,7 +2075,6 @@
                         aadhar_verified: false,
                         organization_name: '',
                         authorized_signatory: '',
-                        signature: '',
                         billing_address: '',
                         billing_gst: '',
                         billing_contact: '',
@@ -2068,14 +2091,108 @@
                         lut_expiry_date: '',
                         lut_bond_year: '',
                         bank_account_number: '',
-                        bank_type: '',
-                        biz_signature_file: null,
-                        merchant_agreement_file: null
+                        bank_type: ''
                     };
 
-                    // Detect Business vs Personal flow
+                    // Detect Business vs Personal flow and merge any server-side draft.
                     const isBusinessFlow = @json($userType === 'Business');
-                    const totalSteps = isBusinessFlow ? 6 : 7;
+                    const isAadhaarOptional = @json($isAadhaarOptional);
+                    const totalSteps = 7;
+                    const savedKycDraft = @json($kycDraft?->form_data ?? []);
+                    const savedKycStep = Math.min(totalSteps - 1, Math.max(1,
+                        Number(@json($kycDraft?->current_step ?? 1)) || 1));
+                    const kycDraftSaveUrl = @json(route('customer.kyc.draft.save'));
+                    const kycType = isBusinessFlow ? 'business' : 'personal';
+                    let kycDraftTimer = null;
+                    let kycDraftSaving = false;
+                    let kycDraftQueuedStep = null;
+                    kycData = Object.assign(kycData, savedKycDraft || {});
+
+                    function getActiveKycStep() {
+                        const active = document.querySelector('.step-content.active');
+                        const match = active && active.id.match(/step(\d+)-content/);
+                        return match ? Number(match[1]) : 1;
+                    }
+
+                    function readKycField(id, key, transform) {
+                        const field = document.getElementById(id);
+                        if (!field) return;
+                        const value = transform ? transform(field.value) : field.value.trim();
+                        kycData[key] = value;
+                    }
+
+                    function captureKycDraftData() {
+                        readKycField('gstInput', 'gst_number', value => value.trim().toUpperCase());
+                        readKycField('aadharInput', 'aadhar_number', value => value.replace(/\s+/g, ''));
+                        readKycField('panInput', 'pan_number', value => value.trim().toUpperCase());
+                        readKycField('panHolderName', 'pan_holder_name');
+                        readKycField('panDob', 'pan_dob', value => value);
+                        readKycField('bizGstCertNumber', 'gst_certificate_number', value => value.trim().toUpperCase());
+                        readKycField('bizIecNumber', 'iec_number');
+                        readKycField('bizAdCode', 'ad_code', value => value.replace(/\D/g, '').slice(0, 14));
+                        kycData.is_lut = true;
+                        syncBusinessLutBondYear();
+                        readKycField('bizLutExpiry', 'lut_expiry_date', value => value);
+                        readKycField('bizLutBondYear', 'lut_bond_year');
+                        readKycField('bizBankType', 'bank_type', value => value);
+                        readKycField('bizBankAccount', 'bank_account_number');
+                        readKycField('bizBillingGst', 'billing_gst', value => value.trim().toUpperCase());
+                        readKycField('bizBillingContact', 'billing_contact');
+                        readKycField('bizBillingEmail', 'billing_email');
+                        readKycField('bizBillingAddress', 'billing_address');
+
+                        const organization = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
+                        const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
+                        if (!isBusinessFlow && organization) kycData.organization_name = organization.value.trim();
+                        if (!isBusinessFlow && signatory) kycData.authorized_signatory = signatory.value.trim();
+
+                        return Object.keys(kycData).reduce(function(draft, key) {
+                            const value = kycData[key];
+                            const isSignaturePreview = key === 'signature' || key === 'business_signature';
+                            if (!isSignaturePreview && !(value instanceof File) && value !== null && value !== undefined) {
+                                draft[key] = value;
+                            }
+                            return draft;
+                        }, {});
+                    }
+
+                    function saveKycDraft(stepNumber) {
+                        const step = Math.min(totalSteps - 1, Math.max(1, Number(stepNumber) || getActiveKycStep()));
+                        if (kycDraftSaving) {
+                            kycDraftQueuedStep = step;
+                            return;
+                        }
+                        kycDraftSaving = true;
+                        fetch(kycDraftSaveUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: JSON.stringify({
+                                kyc_type: kycType,
+                                current_step: step,
+                                form_data: captureKycDraftData()
+                            })
+                        }).catch(error => console.error('Unable to save KYC draft:', error))
+                            .finally(function() {
+                                kycDraftSaving = false;
+                                if (kycDraftQueuedStep !== null) {
+                                    const queuedStep = kycDraftQueuedStep;
+                                    kycDraftQueuedStep = null;
+                                    saveKycDraft(queuedStep);
+                                }
+                            });
+                    }
+
+                    function queueKycDraftSave(stepNumber) {
+                        clearTimeout(kycDraftTimer);
+                        kycDraftTimer = setTimeout(function() {
+                            saveKycDraft(stepNumber || getActiveKycStep());
+                        }, 600);
+                    }
 
                     // Clone the T&C document into the popup modal (avoids duplicating the large legal text)
                     (function cloneTermsIntoModal() {
@@ -2092,21 +2209,41 @@
                         }
                     })();
 
-                    // Signature upload handling (FileReader -> base64 preview)
-                    let signatureDataUrl = '';
+                    // Signature previews use temporary object URLs. Only the actual File
+                    // is submitted; preview data is never saved in the draft or database.
+                    let signaturePreviewUrl = '';
+                    let businessSignaturePreviewUrl = '';
                     const signatureFileInput = document.getElementById('signatureFileInput');
+                    const businessSignatureFileInput = document.getElementById('bizSignatureFileInput');
                     const signaturePreviewWrap = document.getElementById('signaturePreviewWrap');
                     const signaturePreviewImg = document.getElementById('signaturePreviewImg');
                     const signatureUploadPlaceholder = document.getElementById('signatureUploadPlaceholder');
                     const signatureUploadArea = document.getElementById('signatureUploadArea');
+                    const businessSignaturePreviewWrap = document.getElementById('bizSignaturePreviewWrap');
+                    const businessSignaturePreviewImg = document.getElementById('bizSignaturePreviewImg');
+                    const businessSignatureUploadPlaceholder = document.getElementById('bizSignatureUploadPlaceholder');
 
                     function resetSignatureUpload() {
                         if (signatureFileInput) signatureFileInput.value = '';
-                        signatureDataUrl = '';
-                        kycData.signature = '';
+                        if (signaturePreviewUrl) URL.revokeObjectURL(signaturePreviewUrl);
+                        signaturePreviewUrl = '';
+                        delete kycData.signature;
+                        delete kycData.signature_file;
                         if (signaturePreviewImg) signaturePreviewImg.src = '';
                         if (signaturePreviewWrap) signaturePreviewWrap.style.display = 'none';
                         if (signatureUploadPlaceholder) signatureUploadPlaceholder.style.display = 'block';
+                        queueKycDraftSave();
+                    }
+
+                    function resetBusinessSignatureUpload() {
+                        if (businessSignatureFileInput) businessSignatureFileInput.value = '';
+                        if (businessSignaturePreviewUrl) URL.revokeObjectURL(businessSignaturePreviewUrl);
+                        businessSignaturePreviewUrl = '';
+                        delete kycData.business_signature;
+                        if (businessSignaturePreviewImg) businessSignaturePreviewImg.src = '';
+                        if (businessSignaturePreviewWrap) businessSignaturePreviewWrap.style.display = 'none';
+                        if (businessSignatureUploadPlaceholder) businessSignatureUploadPlaceholder.style.display = 'block';
+                        queueKycDraftSave();
                     }
 
                     if (signatureFileInput) {
@@ -2123,15 +2260,35 @@
                                 resetSignatureUpload();
                                 return;
                             }
-                            const reader = new FileReader();
-                            reader.onload = function(ev) {
-                                signatureDataUrl = ev.target.result;
-                                kycData.signature = signatureDataUrl;
-                                if (signaturePreviewImg) signaturePreviewImg.src = signatureDataUrl;
-                                if (signaturePreviewWrap) signaturePreviewWrap.style.display = 'block';
-                                if (signatureUploadPlaceholder) signatureUploadPlaceholder.style.display = 'none';
-                            };
-                            reader.readAsDataURL(file);
+                            if (signaturePreviewUrl) URL.revokeObjectURL(signaturePreviewUrl);
+                            signaturePreviewUrl = URL.createObjectURL(file);
+                            delete kycData.signature;
+                            kycData.signature_file = file;
+                            if (signaturePreviewImg) signaturePreviewImg.src = signaturePreviewUrl;
+                            if (signaturePreviewWrap) signaturePreviewWrap.style.display = 'block';
+                            if (signatureUploadPlaceholder) signatureUploadPlaceholder.style.display = 'none';
+                            saveKycDraft(getActiveKycStep());
+                        });
+                    }
+
+                    if (businessSignatureFileInput) {
+                        businessSignatureFileInput.addEventListener('change', function(e) {
+                            const file = e.target.files && e.target.files[0];
+                            if (!file) {
+                                resetBusinessSignatureUpload();
+                                return;
+                            }
+                            if (!validateBusinessSignatureFile(file, businessSignatureFileInput)) {
+                                resetBusinessSignatureUpload();
+                                return;
+                            }
+                            if (businessSignaturePreviewUrl) URL.revokeObjectURL(businessSignaturePreviewUrl);
+                            businessSignaturePreviewUrl = URL.createObjectURL(file);
+                            delete kycData.business_signature;
+                            if (businessSignaturePreviewImg) businessSignaturePreviewImg.src = businessSignaturePreviewUrl;
+                            if (businessSignaturePreviewWrap) businessSignaturePreviewWrap.style.display = 'block';
+                            if (businessSignatureUploadPlaceholder) businessSignatureUploadPlaceholder.style.display = 'none';
+                            queueKycDraftSave();
                         });
                     }
 
@@ -2158,6 +2315,46 @@
                                 signatureFileInput.dispatchEvent(new Event('change'));
                             }
                         });
+                    }
+
+                    function syncBusinessLutBondYear() {
+                        const startYear = document.getElementById('bizLutBondStartYear');
+                        const endYear = document.getElementById('bizLutBondEndYear');
+                        const combinedYear = document.getElementById('bizLutBondYear');
+                        if (!startYear || !endYear || !combinedYear) return;
+                        combinedYear.value = startYear.value && endYear.value
+                            ? `${startYear.value}-${endYear.value.slice(-2)}`
+                            : '';
+                    }
+
+                    function populateBusinessLutEndYears(savedEndYear) {
+                        const startYearField = document.getElementById('bizLutBondStartYear');
+                        const endYearField = document.getElementById('bizLutBondEndYear');
+                        const expiryField = document.getElementById('bizLutExpiry');
+                        if (!startYearField || !endYearField || !expiryField) return;
+
+                        const startYear = Number(startYearField.value);
+                        endYearField.innerHTML = '';
+                        if (!Number.isInteger(startYear) || startYear < 1000) {
+                            endYearField.add(new Option('Select Start Year First', ''));
+                            endYearField.disabled = true;
+                            expiryField.removeAttribute('min');
+                            syncBusinessLutBondYear();
+                            return;
+                        }
+
+                        expiryField.min = `${startYear + 1}-01-01`;
+                        if (expiryField.value && expiryField.value < expiryField.min) expiryField.value = '';
+                        endYearField.add(new Option('Select End Year', ''));
+                        for (let offset = 1; offset <= 5; offset += 1) {
+                            const endYear = String(startYear + offset);
+                            endYearField.add(new Option(endYear, endYear));
+                        }
+                        endYearField.disabled = false;
+                        endYearField.value = savedEndYear && endYearField.querySelector(`option[value="${savedEndYear}"]`)
+                            ? String(savedEndYear)
+                            : String(startYear + 1);
+                        syncBusinessLutBondYear();
                     }
 
                     // GST input formatting: auto-uppercase
@@ -2230,6 +2427,7 @@
                                 if (data.success) {
                                     kycData.gst_number = gst;
                                     kycData.gst_verified = true;
+                                    saveKycDraft(getActiveKycStep());
 
                                     gstStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message ||
                                         'GST verified successfully!');
@@ -2341,6 +2539,7 @@
                                 if (data.success) {
                                     kycData.aadhar_number = aadhar;
                                     kycData.aadhar_verified = true;
+                                    saveKycDraft(getActiveKycStep());
 
                                     aadharStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data
                                         .message || 'Aadhar verified successfully!');
@@ -2441,6 +2640,7 @@
                                     kycData.pan_holder_name = holderField ? holderField.value.trim() : '';
                                     kycData.pan_dob = dobField ? dobField.value : '';
                                     kycData.pan_verified = true;
+                                    saveKycDraft(getActiveKycStep());
 
                                     panStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'PAN verified successfully!');
                                     panStatus.style.display = 'block';
@@ -2475,13 +2675,79 @@
                             });
                     }
 
-                    // File upload preview handlers for Aadhaar front/back and PAN card
+                    const imageOnlyKycInputIds = new Set([
+                        'aadharFrontFileInput',
+                        'aadharBackFileInput',
+                        'panFileInput'
+                    ]);
+
+                    function validateImageOnlyKycFile(file, input) {
+                        const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+                        const allowedExtensions = ['jpg', 'jpeg', 'png'];
+                        const allowedMimeTypes = ['image/jpeg', 'image/png'];
+                        if (!allowedExtensions.includes(extension) || !allowedMimeTypes.includes(file.type)) {
+                            alert('Only JPG, JPEG, or PNG images are allowed for GST, Aadhaar, and PAN documents.');
+                            input.value = '';
+                            return false;
+                        }
+                        if (file.size > 5 * 1024 * 1024) {
+                            alert('The selected image must not exceed 5 MB.');
+                            input.value = '';
+                            return false;
+                        }
+                        return true;
+                    }
+
+                    function validatePdfOnlyKycFile(file, input) {
+                        const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+                        if (extension !== 'pdf' || file.type !== 'application/pdf') {
+                            alert('Only a PDF file is allowed for the GST Certificate.');
+                            input.value = '';
+                            return false;
+                        }
+                        if (file.size > 5 * 1024 * 1024) {
+                            alert('The GST Certificate PDF must not exceed 5 MB.');
+                            input.value = '';
+                            return false;
+                        }
+                        return true;
+                    }
+
+                    function validateBusinessSignatureFile(file, input) {
+                        const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+                        const allowedExtensions = ['jpg', 'jpeg', 'png'];
+                        if (!allowedExtensions.includes(extension)) {
+                            alert('Authorized Signature must be a JPG, JPEG, or PNG image.');
+                            input.value = '';
+                            return false;
+                        }
+                        if (file.size > 5 * 1024 * 1024) {
+                            alert('Authorized Signature must not exceed 5 MB.');
+                            input.value = '';
+                            return false;
+                        }
+                        return true;
+                    }
+
+                    // File upload preview handlers for KYC documents.
                     function handleFilePreview(fileInputId, placeholderId, previewId, fileNameId, dataKey) {
                         const input = document.getElementById(fileInputId);
                         if (!input) return;
                         input.addEventListener('change', function () {
                             if (this.files && this.files[0]) {
                                 const file = this.files[0];
+                                if (fileInputId === 'bizGstCertFileInput' && !validatePdfOnlyKycFile(file, this)) {
+                                    delete kycData[dataKey];
+                                    return;
+                                }
+                                if (imageOnlyKycInputIds.has(fileInputId) && !validateImageOnlyKycFile(file, this)) {
+                                    delete kycData[dataKey];
+                                    return;
+                                }
+                                if (fileInputId === 'bizSignatureFileInput' && !validateBusinessSignatureFile(file, this)) {
+                                    delete kycData[dataKey];
+                                    return;
+                                }
                                 const placeholder = document.getElementById(placeholderId);
                                 const preview = document.getElementById(previewId);
                                 const fileNameEl = document.getElementById(fileNameId);
@@ -2489,6 +2755,7 @@
                                 if (preview) preview.style.display = 'block';
                                 if (fileNameEl) fileNameEl.textContent = file.name;
                                 kycData[dataKey] = file;
+                                queueKycDraftSave();
                             }
                         });
                     }
@@ -2503,8 +2770,6 @@
                         handleFilePreview('bizIecFileInput', 'bizIecUploadPlaceholder', 'bizIecPreview', 'bizIecFileName', 'iec_file');
                         handleFilePreview('bizAdCodeFileInput', 'bizAdCodeUploadPlaceholder', 'bizAdCodePreview', 'bizAdCodeFileName', 'ad_code_file');
                         handleFilePreview('bizLutFileInput', 'bizLutUploadPlaceholder', 'bizLutPreview', 'bizLutFileName', 'lut_file');
-                        handleFilePreview('bizSignatureFileInput', 'bizSignatureUploadPlaceholder', 'bizSignaturePreview', 'bizSignatureFileName', 'biz_signature_file');
-                        handleFilePreview('bizMerchantAgreementFileInput', 'bizAgreementUploadPlaceholder', 'bizAgreementPreview', 'bizAgreementFileName', 'merchant_agreement_file');
                     }
 
                     if (document.readyState === 'loading') {
@@ -2516,7 +2781,7 @@
                     // Validate that the current step is complete before allowing forward navigation
                     function validateStep(step) {
                         if (isBusinessFlow) {
-                            // ===== BUSINESS FLOW (6 steps) =====
+                            // ===== BUSINESS FLOW (7 steps) =====
                             if (step === 1) {
                                 // Step 1: Verify GST Certificate
                                 if (!kycData.gst_certificate_verified) {
@@ -2529,20 +2794,30 @@
                                     return false;
                                 }
                             } else if (step === 2) {
-                                // Step 2: Verify Aadhar
-                                if (!kycData.aadhar_verified) {
-                                    alert('Please verify your Aadhar number before continuing.');
-                                    return false;
-                                }
+                                // Step 2: Aadhaar is optional only for Courier / Aggregator.
                                 const frontFile = document.getElementById('aadharFrontFileInput');
                                 const backFile = document.getElementById('aadharBackFileInput');
-                                if (!frontFile || !frontFile.files || !frontFile.files[0]) {
-                                    alert('Please upload the front side of your Aadhaar before continuing.');
-                                    return false;
-                                }
-                                if (!backFile || !backFile.files || !backFile.files[0]) {
-                                    alert('Please upload the back side of your Aadhaar before continuing.');
-                                    return false;
+                                const hasFrontFile = Boolean(frontFile && frontFile.files && frontFile.files[0]);
+                                const hasBackFile = Boolean(backFile && backFile.files && backFile.files[0]);
+                                const aadharInput = document.getElementById('aadharInput');
+                                const hasAadhaarNumber = Boolean(aadharInput && aadharInput.value.replace(/\s+/g, ''));
+                                const hasAnyAadhaarData = hasAadhaarNumber || kycData.aadhar_verified || hasFrontFile || hasBackFile;
+
+                                if (!isAadhaarOptional || hasAnyAadhaarData) {
+                                    if (!kycData.aadhar_verified) {
+                                        alert(isAadhaarOptional
+                                            ? 'Complete Aadhaar verification, or clear Aadhaar details to skip this optional step.'
+                                            : 'Please verify your Aadhaar number before continuing.');
+                                        return false;
+                                    }
+                                    if (!hasFrontFile) {
+                                        alert('Please upload the front side of your Aadhaar before continuing.');
+                                        return false;
+                                    }
+                                    if (!hasBackFile) {
+                                        alert('Please upload the back side of your Aadhaar before continuing.');
+                                        return false;
+                                    }
                                 }
                             } else if (step === 3) {
                                 // Step 3: Verify PAN
@@ -2556,38 +2831,79 @@
                                     return false;
                                 }
                             } else if (step === 4) {
-                                // Step 4: CSB-V (Export Codes + LUT + Banking + Billing)
+                                // Step 4: validate every CSB-V field and upload before Continue.
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
+                                const lutStartYear = document.getElementById('bizLutBondStartYear');
+                                const lutEndYear = document.getElementById('bizLutBondEndYear');
                                 const lutExpiry = document.getElementById('bizLutExpiry');
                                 const lutBondYear = document.getElementById('bizLutBondYear');
                                 const bankType = document.getElementById('bizBankType');
                                 const bankAccount = document.getElementById('bizBankAccount');
+                                const billingGst = document.getElementById('bizBillingGst');
                                 const billingContact = document.getElementById('bizBillingContact');
                                 const billingEmail = document.getElementById('bizBillingEmail');
                                 const billingAddress = document.getElementById('bizBillingAddress');
                                 const iecFile = document.getElementById('bizIecFileInput');
                                 const adCodeFile = document.getElementById('bizAdCodeFileInput');
                                 const lutFile = document.getElementById('bizLutFileInput');
+                                const allowedDocumentTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+                                const fiveMb = 5 * 1024 * 1024;
+                                const fail = (message, field) => {
+                                    alert(message);
+                                    if (field) {
+                                        field.focus();
+                                        if (field.type === 'file') {
+                                            const area = field.closest('[id$="UploadArea"]');
+                                            if (area) area.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                    }
+                                    return false;
+                                };
+                                const validateFile = (input, label, allowedTypes, maxBytes) => {
+                                    if (!input || !input.files || !input.files[0]) return fail(`Please upload your ${label}.`, input);
+                                    const file = input.files[0];
+                                    const extension = file.name.split('.').pop().toLowerCase();
+                                    const extensionAllowed = allowedTypes.includes(file.type)
+                                        || (allowedTypes.includes('application/pdf') && extension === 'pdf')
+                                        || (allowedTypes.includes('image/jpeg') && ['jpg', 'jpeg'].includes(extension))
+                                        || (allowedTypes.includes('image/png') && extension === 'png');
+                                    if (!extensionAllowed) return fail(`${label} must be a PDF, JPG, JPEG or PNG file.`, input);
+                                    if (file.size > maxBytes) return fail(`${label} must not exceed 5 MB.`, input);
+                                    return true;
+                                };
 
-                                if (!iecInput || !iecInput.value.trim()) { alert('Please enter your IEC Number.'); return false; }
-                                if (!iecFile || !iecFile.files || !iecFile.files[0]) { alert('Please upload your IEC Certificate.'); return false; }
-                                if (!adCodeInput || !adCodeInput.value.trim()) { alert('Please enter your AD Code.'); return false; }
-                                if (!adCodeFile || !adCodeFile.files || !adCodeFile.files[0]) { alert('Please upload your AD Code Document.'); return false; }
-                                if (!lutExpiry || !lutExpiry.value) { alert('Please select your LUT Expiry Date.'); return false; }
-                                if (!lutBondYear || !lutBondYear.value.trim()) { alert('Please enter your LUT Bond Year.'); return false; }
-                                if (!lutFile || !lutFile.files || !lutFile.files[0]) { alert('Please upload your LUT Document.'); return false; }
-                                if (!bankType || !bankType.value) { alert('Please select your Bank Category.'); return false; }
-                                if (!bankAccount || !bankAccount.value.trim()) { alert('Please enter your Bank Account Number.'); return false; }
-                                if (!billingContact || !billingContact.value.trim()) { alert('Please enter your Billing Contact Number.'); return false; }
-                                if (!billingEmail || !billingEmail.value.trim()) { alert('Please enter your Billing Email.'); return false; }
-                                if (!billingAddress || !billingAddress.value.trim()) { alert('Please enter your Billing Address.'); return false; }
+                                if (!iecInput || !/^[A-Z0-9]{10}$/.test(iecInput.value.trim().toUpperCase())) return fail('IEC Number must be exactly 10 letters or digits.', iecInput);
+                                if (!validateFile(iecFile, 'IEC Certificate', allowedDocumentTypes, fiveMb)) return false;
+                                if (!adCodeInput || !/^\d{14}$/.test(adCodeInput.value.trim())) return fail('AD Code must be exactly 14 numeric digits.', adCodeInput);
+                                if (!validateFile(adCodeFile, 'AD Code Document', allowedDocumentTypes, fiveMb)) return false;
+                                syncBusinessLutBondYear();
+                                const startYear = Number(lutStartYear && lutStartYear.value);
+                                const endYear = Number(lutEndYear && lutEndYear.value);
+                                if (!startYear) return fail('Please select the LUT Bond Start Year.', lutStartYear);
+                                if (!endYear) return fail('Please select the LUT Bond End Year.', lutEndYear);
+                                if (endYear < startYear + 1 || endYear > startYear + 5) return fail('LUT Bond End Year must be within five years after the Start Year.', lutEndYear);
+                                if (!lutExpiry || !lutExpiry.value) return fail('Please select the LUT Expiry Date.', lutExpiry);
+                                const minimumExpiryDate = `${startYear + 1}-01-01`;
+                                if (lutExpiry.value < minimumExpiryDate) return fail(`LUT Expiry Date must be on or after ${minimumExpiryDate}.`, lutExpiry);
+                                if (!lutBondYear || !/^\d{4}-\d{2}$/.test(lutBondYear.value)) return fail('Please select valid LUT Bond Start and End Years.', lutStartYear);
+                                if (!validateFile(lutFile, 'LUT Document', ['application/pdf'], fiveMb)) return false;
+                                if (!bankType || !['private', 'government'].includes(bankType.value)) return fail('Please select your Bank Category.', bankType);
+                                if (!bankAccount || !/^\d{9,18}$/.test(bankAccount.value.trim())) return fail('Bank Account Number must contain 9 to 18 digits.', bankAccount);
+                                if (billingGst && billingGst.value.trim() && !/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(billingGst.value.trim().toUpperCase())) return fail('Billing GST Number must be a valid 15-character GSTIN.', billingGst);
+                                if (!billingContact || !/^[6-9]\d{9}$/.test(billingContact.value.trim())) return fail('Billing Contact Number must be a valid 10-digit Indian mobile number.', billingContact);
+                                if (!billingEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingEmail.value.trim())) return fail('Please enter a valid Billing Email address.', billingEmail);
+                                if (!billingAddress || billingAddress.value.trim().length < 10) return fail('Billing Address must contain at least 10 characters.', billingAddress);
+                                if (billingAddress.value.trim().length > 1000) return fail('Billing Address must not exceed 1000 characters.', billingAddress);
                             } else if (step === 5) {
-                                // Step 5: Signature & Agreement
+                                // Step 5: Upload Signature
                                 const sigFile = document.getElementById('bizSignatureFileInput');
-                                const agreementFile = document.getElementById('bizMerchantAgreementFileInput');
-                                if (!sigFile || !sigFile.files || !sigFile.files[0]) { alert('Please upload your Authorized Signature.'); return false; }
-                                if (!agreementFile || !agreementFile.files || !agreementFile.files[0]) { alert('Please upload the signed Merchant Agreement.'); return false; }
+                                const selectedSignature = sigFile && sigFile.files && sigFile.files[0];
+                                if (!selectedSignature) {
+                                    alert('Please upload your Authorized Signature.');
+                                    return false;
+                                }
+                                if (!validateBusinessSignatureFile(selectedSignature, sigFile)) return false;
                             }
                         } else {
                             // ===== PERSONAL FLOW (7 steps) =====
@@ -2612,20 +2928,48 @@
                                 if (!signatory || !signatory.value.trim()) { alert('Please enter the Authorized Signatory name.'); return false; }
                             } else if (step === 5) {
                                 // Step 5: Upload Signature
-                                if (!signatureDataUrl) { alert('Please upload your signature before continuing.'); return false; }
+                                const selectedSignature = signatureFileInput
+                                    && signatureFileInput.files
+                                    && signatureFileInput.files[0];
+                                if (!selectedSignature) { alert('Please upload your signature before continuing.'); return false; }
                             }
                         }
                         return true;
                     }
 
+                    function renderKycStep(stepNumber, shouldScroll) {
+                        document.querySelectorAll('.step-content').forEach(content => content.classList.remove('active'));
+                        const target = document.getElementById('step' + stepNumber + '-content');
+                        if (target) target.classList.add('active');
+
+                        document.querySelectorAll('.step-item').forEach((item, index) => {
+                            const currentIdx = index + 1;
+                            item.classList.remove('active', 'completed');
+                            if (currentIdx < stepNumber) item.classList.add('completed');
+                            else if (currentIdx === stepNumber) item.classList.add('active');
+                        });
+
+                        if (stepNumber === 6) {
+                            const billSignatureImg = document.getElementById('billSignatureImg');
+                            const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
+                            const termsSignaturePreviewUrl = isBusinessFlow
+                                ? businessSignaturePreviewUrl
+                                : signaturePreviewUrl;
+                            if (billSignatureImg) {
+                                billSignatureImg.src = termsSignaturePreviewUrl || '';
+                                billSignatureImg.style.display = termsSignaturePreviewUrl ? 'block' : 'none';
+                            }
+                            if (billSignaturePlaceholder) {
+                                billSignaturePlaceholder.style.display = termsSignaturePreviewUrl ? 'none' : 'flex';
+                            }
+                        }
+
+                        if (shouldScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+
                     function nextStep(stepNumber) {
                         // Determine the currently active step to detect forward vs backward navigation
-                        const activeStepEl = document.querySelector('.step-content.active');
-                        let activeStepNum = 0;
-                        if (activeStepEl) {
-                            const match = activeStepEl.id.match(/step(\d+)-content/);
-                            if (match) activeStepNum = parseInt(match[1]);
-                        }
+                        const activeStepNum = getActiveKycStep();
 
                         // Only validate when moving FORWARD (target step > current step)
                         if (stepNumber > activeStepNum) {
@@ -2636,7 +2980,7 @@
 
                         // Save data from current step before moving
                         if (isBusinessFlow) {
-                            // ===== BUSINESS FLOW (6 steps) =====
+                            // ===== BUSINESS FLOW (7 steps) =====
                             if (stepNumber === 2) {
                                 // Leaving step 1 (Verify GST Certificate) -> save GST certificate number
                                 const gstCertInput = document.getElementById('bizGstCertNumber');
@@ -2654,7 +2998,9 @@
                                 const billingEmail = document.getElementById('bizBillingEmail');
                                 const billingAddress = document.getElementById('bizBillingAddress');
                                 if (iecInput) kycData.iec_number = iecInput.value.trim();
-                                if (adCodeInput) kycData.ad_code = adCodeInput.value.trim();
+                                if (adCodeInput) kycData.ad_code = adCodeInput.value.replace(/\D/g, '').slice(0, 14);
+                                kycData.is_lut = true;
+                                syncBusinessLutBondYear();
                                 if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
                                 if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
                                 if (bankType) kycData.bank_type = bankType.value;
@@ -2663,8 +3009,8 @@
                                 if (billingContact) kycData.billing_contact = billingContact.value.trim();
                                 if (billingEmail) kycData.billing_email = billingEmail.value.trim();
                                 if (billingAddress) kycData.billing_address = billingAddress.value.trim();
-                            } else if (stepNumber === 6) {
-                                // Leaving step 5 (Signature & Agreement) -> submit Business KYC
+                            } else if (stepNumber === 7) {
+                                // Leaving step 6 (Terms & Conditions) -> submit Business KYC
                                 submitBusinessKYC();
                             }
                         } else {
@@ -2681,53 +3027,22 @@
                                 const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
                                 if (orgName) kycData.organization_name = orgName.value;
                                 if (signatory) kycData.authorized_signatory = signatory.value;
-                            } else if (stepNumber === 6) {
-                                // Leaving step 5 (Upload Signature) -> save signature
-                                kycData.signature = signatureDataUrl || '';
                             } else if (stepNumber === 7) {
                                 // Leaving step 6 (Bill) -> submit KYC data
                                 submitKYC();
                             }
                         }
 
-                        // When entering the Bill step (6 for Personal), render the uploaded signature at the bottom
-                        if (!isBusinessFlow && stepNumber === 6) {
-                            const billSignatureImg = document.getElementById('billSignatureImg');
-                            const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
-                            if (signatureDataUrl) {
-                                if (billSignatureImg) {
-                                    billSignatureImg.src = signatureDataUrl;
-                                    billSignatureImg.style.display = 'block';
-                                }
-                                if (billSignaturePlaceholder) billSignaturePlaceholder.style.display = 'none';
-                            } else {
-                                if (billSignatureImg) billSignatureImg.style.display = 'none';
-                                if (billSignaturePlaceholder) billSignaturePlaceholder.style.display = 'flex';
-                            }
-                        }
-
-                        document.querySelectorAll('.step-content').forEach(content => content.classList.remove(
-                            'active'));
-                        const target = document.getElementById('step' + stepNumber + '-content');
-                        if (target) target.classList.add('active');
-
-                        document.querySelectorAll('.step-item').forEach((item, index) => {
-                            const currentIdx = index + 1;
-                            item.classList.remove('active', 'completed');
-                            if (currentIdx < stepNumber) item.classList.add('completed');
-                            else if (currentIdx === stepNumber) item.classList.add('active');
-                        });
-
-                        // Scroll to top of card on step change
-                        window.scrollTo({
-                            top: 0,
-                            behavior: 'smooth'
-                        });
+                        captureKycDraftData();
+                        renderKycStep(stepNumber, true);
+                        // Terminal steps submit final KYC and the controller removes the draft on success.
+                        if (stepNumber < totalSteps) saveKycDraft(stepNumber);
                     }
 
                     // ===== Business KYC: Verify GST Certificate =====
                     function verifyGstBiz() {
                         const gstField = document.getElementById('bizGstCertNumber');
+                        const gstFileInput = document.getElementById('bizGstCertFileInput');
                         const verifyBtn = document.getElementById('bizVerifyGstCertBtn');
                         const statusDiv = document.getElementById('bizGstStatus');
                         const continueBtn = document.getElementById('bizGstContinueBtn');
@@ -2740,6 +3055,17 @@
                             alert('Please enter a valid 15-character GST number.');
                             return;
                         }
+                        if (!gstFileInput || !gstFileInput.files || !gstFileInput.files[0]) {
+                            alert('Please upload the GST Certificate PDF before verification.');
+                            return;
+                        }
+                        if (!validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
+                            return;
+                        }
+
+                        const verifyData = new FormData();
+                        verifyData.append('gst_number', gstValue);
+                        verifyData.append('gst_certificate_document', gstFileInput.files[0]);
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
                         verifyBtn.disabled = true;
@@ -2747,11 +3073,11 @@
                         fetch('{{ route("customer.verify.gst") }}', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'X-Requested-With': 'XMLHttpRequest'
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
                                 },
-                                body: JSON.stringify({ gst_number: gstValue })
+                                body: verifyData
                             })
                             .then(response => response.json())
                             .then(data => {
@@ -2760,6 +3086,7 @@
                                     kycData.gst_certificate_verified = true;
                                     kycData.gst_number = gstValue;
                                     kycData.gst_verified = true;
+                                    saveKycDraft(getActiveKycStep());
 
                                     if (statusDiv) {
                                         statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> GST Certificate verified successfully!';
@@ -2798,9 +3125,122 @@
                             });
                     }
 
+                    function restoreVerifiedState(fieldId, buttonId, statusId, verified, message) {
+                        if (!verified) return;
+                        const field = document.getElementById(fieldId);
+                        const button = document.getElementById(buttonId);
+                        const status = document.getElementById(statusId);
+                        if (field) field.readOnly = true;
+                        if (button) {
+                            button.innerHTML = '<i class="fas fa-check"></i> Verified';
+                            button.disabled = true;
+                        }
+                        if (status) {
+                            status.innerHTML = '<i class="fas fa-check-circle"></i> ' + message;
+                            status.style.display = 'block';
+                            status.style.color = '#10b981';
+                        }
+                    }
+
+                    function restoreKycDraft() {
+                        const values = {
+                            gstInput: kycData.gst_number,
+                            aadharInput: kycData.aadhar_number ? String(kycData.aadhar_number).replace(/(.{4})(?=.)/g, '$1 ') : '',
+                            panInput: kycData.pan_number,
+                            panHolderName: kycData.pan_holder_name,
+                            panDob: kycData.pan_dob,
+                            bizGstCertNumber: kycData.gst_certificate_number,
+                            bizIecNumber: kycData.iec_number,
+                            bizAdCode: kycData.ad_code,
+                            bizLutExpiry: kycData.lut_expiry_date,
+                            bizBankType: kycData.bank_type,
+                            bizBankAccount: kycData.bank_account_number,
+                            bizBillingGst: kycData.billing_gst || kycData.gst_number,
+                            bizBillingContact: kycData.billing_contact,
+                            bizBillingEmail: kycData.billing_email,
+                            bizBillingAddress: kycData.billing_address
+                        };
+                        Object.keys(values).forEach(function(id) {
+                            const field = document.getElementById(id);
+                            if (field && values[id] !== undefined && values[id] !== null) field.value = values[id];
+                        });
+
+                        kycData.is_lut = true;
+                        const bondYearMatch = String(kycData.lut_bond_year || '').match(/^(\d{4})-(\d{2})$/);
+                        const startYearField = document.getElementById('bizLutBondStartYear');
+                        if (bondYearMatch && startYearField) {
+                            const startYear = Number(bondYearMatch[1]);
+                            let endYear = (Math.floor(startYear / 100) * 100) + Number(bondYearMatch[2]);
+                            if (endYear <= startYear) endYear += 100;
+                            if (!startYearField.querySelector(`option[value="${startYear}"]`)) {
+                                startYearField.add(new Option(String(startYear), String(startYear)));
+                            }
+                            startYearField.value = String(startYear);
+                            populateBusinessLutEndYears(String(endYear));
+                        } else {
+                            populateBusinessLutEndYears('');
+                        }
+
+                        const organization = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
+                        const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
+                        if (!isBusinessFlow && organization) organization.value = kycData.organization_name || '';
+                        if (!isBusinessFlow && signatory) signatory.value = kycData.authorized_signatory || '';
+
+                        // File inputs cannot be restored from a JSON draft. Remove any
+                        // legacy base64 signature values and require file reselection.
+                        delete kycData.signature;
+                        delete kycData.business_signature;
+
+                        restoreVerifiedState('gstInput', 'verifyGstBtn', 'gstStatus', kycData.gst_verified,
+                            'GST verification restored from your saved KYC.');
+                        restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus', kycData.aadhar_verified,
+                            'Aadhar verification restored from your saved KYC.');
+                        restoreVerifiedState('panInput', 'verifyPanBtn', 'panStatus', kycData.pan_verified,
+                            'PAN verification restored from your saved KYC.');
+                        restoreVerifiedState('bizGstCertNumber', 'bizVerifyGstCertBtn', 'bizGstStatus',
+                            kycData.gst_certificate_verified, 'GST Certificate verification restored from your saved KYC.');
+                        if (kycData.pan_verified) {
+                            const holder = document.getElementById('panHolderName');
+                            const dob = document.getElementById('panDob');
+                            if (holder) holder.readOnly = true;
+                            if (dob) dob.readOnly = true;
+                        }
+                        if (kycData.gst_verified) {
+                            const otpSection = document.getElementById('otpSection');
+                            if (otpSection) otpSection.style.display = 'block';
+                        }
+
+                        renderKycStep(savedKycStep, false);
+                    }
+
+                    function initKycDraftAutosave() {
+                        const lutStartYear = document.getElementById('bizLutBondStartYear');
+                        const lutEndYear = document.getElementById('bizLutBondEndYear');
+                        if (lutStartYear) {
+                            lutStartYear.addEventListener('change', function() {
+                                populateBusinessLutEndYears('');
+                            });
+                        }
+                        if (lutEndYear) lutEndYear.addEventListener('change', syncBusinessLutBondYear);
+
+                        document.querySelectorAll('.step-content input:not([type="file"]), .step-content select, .step-content textarea')
+                            .forEach(function(field) {
+                                field.addEventListener(field.tagName === 'SELECT' ? 'change' : 'input', function() {
+                                    queueKycDraftSave(getActiveKycStep());
+                                });
+                            });
+                        restoreKycDraft();
+                    }
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initKycDraftAutosave);
+                    } else {
+                        initKycDraftAutosave();
+                    }
+
                     // ===== Business KYC: Submit via FormData (file uploads) =====
                     function submitBusinessKYC() {
-                        const submitBtn = document.querySelector('#step6-content button');
+                        const submitBtn = document.querySelector('#step7-content button');
                         if (submitBtn) {
                             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
                             submitBtn.disabled = true;
@@ -2810,8 +3250,11 @@
                         const formData = new FormData();
                         formData.append('is_csb_v', kycData.is_csb_v ? 1 : 0);
                         formData.append('is_gst', kycData.is_gst ? 1 : 0);
-                        formData.append('is_lut', kycData.is_lut ? 1 : 0);
+                        formData.append('is_lut', 1);
                         formData.append('gst_certificate_number', kycData.gst_certificate_number || kycData.gst_number || '');
+                        formData.append('pan_number', kycData.pan_number || '');
+                        formData.append('pan_holder_name', kycData.pan_holder_name || '');
+                        formData.append('pan_dob', kycData.pan_dob || '');
                         formData.append('iec_number', kycData.iec_number || '');
                         formData.append('ad_code', kycData.ad_code || '');
                         formData.append('lut_expiry_date', kycData.lut_expiry_date || '');
@@ -2825,7 +3268,9 @@
                         formData.append('billing_email', kycData.billing_email || '');
                         formData.append('terms_accepted', kycData.terms_accepted ? 1 : 0);
 
-                        // Append files if present
+                        // Append every Business KYC document using the field names
+                        // expected by the controller. The GST certificate is stored in
+                        // both CSB GST path columns for backwards compatibility.
                         const fileFields = {
                             'gst_certificate_document': 'bizGstCertFileInput',
                             'gst_document': 'bizGstCertFileInput',
@@ -2833,8 +3278,10 @@
                             'ad_code_document': 'bizAdCodeFileInput',
                             'lut_document': 'bizLutFileInput',
                             'aadhar_document': 'aadharFrontFileInput',
-                            'signature_document': 'bizSignatureFileInput',
-                            'merchant_agreement': 'bizMerchantAgreementFileInput'
+                            'aadhar_front_document': 'aadharFrontFileInput',
+                            'aadhar_back_document': 'aadharBackFileInput',
+                            'pan_document': 'panFileInput',
+                            'signature_document': 'bizSignatureFileInput'
                         };
 
                         Object.keys(fileFields).forEach(function(fieldName) {
@@ -2855,7 +3302,7 @@
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    const messageDiv = document.querySelector('#step6-content p.text-muted');
+                                    const messageDiv = document.querySelector('#step7-content p.text-muted');
                                     if (messageDiv) {
                                         messageDiv.innerHTML = '<strong>' + data.message + '</strong>';
                                         messageDiv.className = 'text-success mx-auto';
@@ -2871,7 +3318,10 @@
                                         };
                                     }
                                 } else {
-                                    alert('Error: ' + (data.message || 'Unknown error'));
+                                    const validationErrors = data.errors
+                                        ? Object.values(data.errors).flat().join('\n')
+                                        : '';
+                                    alert('Error: ' + (validationErrors || data.message || 'Unknown error'));
                                     if (submitBtn) {
                                         submitBtn.innerHTML = 'Go to Dashboard';
                                         submitBtn.disabled = false;
@@ -2898,10 +3348,11 @@
 
                         // Build FormData so that File objects are transmitted correctly
                         const formData = new FormData();
-                        // Append all text fields (skip File objects, append them separately)
+                        // Append all text fields (skip File objects and legacy signature previews)
                         Object.keys(kycData).forEach(function (key) {
                             const value = kycData[key];
                             if (value === null || value === undefined) return;
+                            if (key === 'signature' || key === 'business_signature') return;
                             if (value instanceof File) return; // handled below
                             // Convert booleans to 1/0 (FormData stringifies, and Laravel's
                             // boolean rule rejects the string "false")

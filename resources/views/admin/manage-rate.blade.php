@@ -611,17 +611,18 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-info py-2">
+                    <div class="alert alert-info py-2" id="bulkUploadInstructions">
                         <i class="ti ti-info-circle me-1"></i>
                         Select a country and one or more zones, then download the sample. The Excel file places each selected zone horizontally with its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. During upload, only the currently checked zones are imported; all other zone columns are skipped. Existing duplicate rates are also skipped.
                     </div>
                     <form id="bulkUploadForm" method="POST" action="{{ route('admin.manage-rate.upload') }}" enctype="multipart/form-data">
                         @csrf
+                        <input type="hidden" name="without_zone" id="bulkWithoutZone" value="0">
                         <div class="row g-3">
                             <!-- Country (used to populate available zones) -->
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Country</label>
-                                <select class="form-select" id="bulkCountry">
+                                <select class="form-select" id="bulkCountry" name="country">
                                     <option value="">— All Countries —</option>
                                     @foreach($destinations as $dest)
                                         <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
@@ -1503,17 +1504,7 @@
 
             // ===== Bulk Upload Rate Modal =====
 
-            function populateBulkZoneCheckboxes(country) {
-                var zoneSection = document.getElementById('bulkZoneSection');
-                var container = document.getElementById('bulkZoneCheckboxes');
-                container.innerHTML = '';
-
-                if (!country) {
-                    zoneSection.classList.add('d-none');
-                    container.innerHTML = '<div class="col-12 text-muted">Select a country to view its zones.</div>';
-                    return;
-                }
-
+            function getBulkCountryZones(country) {
                 var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
                 var zoneMap = destId ? zoneLookup[destId] : null;
                 var zoneKeys = zoneMap ? Object.keys(zoneMap)
@@ -1521,11 +1512,38 @@
                     .filter(function(zone) { return !isNaN(zone); })
                     .sort(function(a, b) { return a - b; }) : [];
 
-                zoneSection.classList.remove('d-none');
-                if (!zoneKeys.length) {
-                    container.innerHTML = '<div class="col-12 text-warning">No zones are configured for this country.</div>';
+                return { map: zoneMap || {}, keys: zoneKeys };
+            }
+
+            function populateBulkZoneCheckboxes(country) {
+                var zoneSection = document.getElementById('bulkZoneSection');
+                var container = document.getElementById('bulkZoneCheckboxes');
+                var withoutZoneInput = document.getElementById('bulkWithoutZone');
+                var instructions = document.getElementById('bulkUploadInstructions');
+                var defaultInstructions = '<i class="ti ti-info-circle me-1"></i>Select a country and one or more zones, then download the sample. The Excel file places each selected zone horizontally with its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. During upload, only the currently checked zones are imported; all other zone columns are skipped. Existing duplicate rates are also skipped.';
+                container.innerHTML = '';
+                withoutZoneInput.value = '0';
+                instructions.innerHTML = defaultInstructions;
+
+                if (!country) {
+                    zoneSection.classList.add('d-none');
+                    container.innerHTML = '<div class="col-12 text-muted">Select a country to view its zones.</div>';
                     return;
                 }
+
+                var zoneData = getBulkCountryZones(country);
+                var zoneMap = zoneData.map;
+                var zoneKeys = zoneData.keys;
+
+                zoneSection.classList.remove('d-none');
+                if (!zoneKeys.length) {
+                    withoutZoneInput.value = '1';
+                    container.innerHTML = '<div class="col-12 text-success">This country has no configured zones. The sample and uploaded rates will use the without-zone format.</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>This country has no configured zones. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.';
+                    return;
+                }
+
+                instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.';
 
                 zoneKeys.forEach(function(zone) {
                     var info = zoneMap[zone] || {};
@@ -1581,13 +1599,15 @@
                 var country = document.getElementById('bulkCountry').value;
                 var serviceId = document.getElementById('bulkService').value;
                 var zones = getCheckedBulkZones();
+                var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
                 if (!country) { alert('Please select a country first.'); return; }
                 if (!serviceId) { alert('Please select a service.'); return; }
-                if (!zones.length) { alert('Please select at least one zone.'); return; }
+                if (!withoutZone && !zones.length) { alert('Please select at least one zone.'); return; }
 
                 var params = new URLSearchParams();
                 params.append('service_id', serviceId);
                 params.append('country', country);
+                params.append('without_zone', withoutZone ? '1' : '0');
                 zones.forEach(function(zone) { params.append('zone_nos[]', zone); });
                 window.location.href = "{{ route('admin.manage-rate.sample') }}" + '?' + params.toString();
             });
@@ -1599,9 +1619,10 @@
                 var form = document.getElementById('bulkUploadForm');
                 var serviceId = document.getElementById('bulkService').value;
                 var zones = getCheckedBulkZones();
+                var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
                 var fileInput = form.querySelector('input[name="rate_file"]');
                 if (!serviceId) { alert('Please select a service.'); return; }
-                if (!zones.length) { alert('Please select at least one zone to upload.'); return; }
+                if (!withoutZone && !zones.length) { alert('Please select at least one zone to upload.'); return; }
                 if (!fileInput.files || !fileInput.files.length) { alert('Please choose an Excel/CSV file.'); return; }
                 var btn = this;
                 btn.disabled = true;

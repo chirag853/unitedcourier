@@ -55,6 +55,7 @@ Route::prefix('admin')->group(function () {
     
     // Public Authentication Routes (No Middleware)
     Route::get('/', [AdminController::class, 'login'])->name('admin.login');
+    Route::get('/login', [AdminController::class, 'login']);
     Route::post('/login', [AdminController::class, 'loginPost'])->name('admin.login.post');
     Route::get('/register', [AdminController::class, 'register'])->name('admin.register');
     Route::get('/forgot-password', [AdminController::class, 'forgotPassword'])->name('admin.forgot-password');
@@ -590,7 +591,6 @@ Route::prefix('customer')->name('customer.')->group(function () {
     // Route::get('/index', [customerController::class, 'index'])->name('customer.index');
     Route::post('/register', [customerController::class, 'register'])->name('customer.register');
     Route::post('/login', [customerController::class, 'login'])->name('customer.login');
-    Route::post('/logout', [customerController::class, 'logout'])->name('customer.logout');
     Route::get('/about', [customerController::class, 'about'])->name('customer.about');
     Route::get('/contact', [customerController::class, 'contact'])->name('customer.contact');
     Route::get('/privacy-policy', [customerController::class, 'privacyPolicy'])->name('customer.privacy-policy');
@@ -621,6 +621,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/zones-by-destination', [customerController::class, 'getZonesByDestination'])->name('zones-by-destination');
     Route::get('/csb5-form', [customerController::class, 'csb5Form'])->name('csb5-form');
     Route::post('/csb5-form', [customerController::class, 'storeCsb5Form'])->name('csb5-form.store');
+    Route::post('/kyc-draft', [customerController::class, 'saveKycDraft'])->name('kyc.draft.save');
     Route::post('/kyc-submit', [customerController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/verify-gst', [customerController::class, 'verifyGst'])->name('verify.gst');
     Route::post('/verify-aadhar', [customerController::class, 'verifyAadhar'])->name('verify.aadhar');

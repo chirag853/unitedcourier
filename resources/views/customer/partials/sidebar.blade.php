@@ -2,9 +2,10 @@
     $sidebarCustomer = auth()->guard('customer')->user();
     $sidebarBizCat = $sidebarCustomer?->businessCategory;
     $sidebarUserType = $sidebarBizCat?->user_type ?: 'Personal';
-    $sidebarIsExporter = $sidebarBizCat && (
-        strtolower(trim((string) $sidebarBizCat->category_slug)) === 'exporter'
-        || strtolower(trim((string) $sidebarBizCat->category_name)) === 'exporter'
+    $sidebarSavedCustomerCategories = ['courier-or-aggregator', 'courier or aggregator'];
+    $sidebarCanManageSavedCustomers = $sidebarBizCat && (
+        in_array(strtolower(trim((string) $sidebarBizCat->category_slug)), $sidebarSavedCustomerCategories, true)
+        || in_array(strtolower(trim((string) $sidebarBizCat->category_name)), $sidebarSavedCustomerCategories, true)
     );
 @endphp
 <div class="sidebar" id="sidebar">
@@ -71,7 +72,7 @@
                                     </a>
                                     <ul>
                                         <!-- <li><a href="/customer/companies" class="active">View Customer List</a></li> -->
-                                        @if($sidebarIsExporter)
+                                        @if($sidebarCanManageSavedCustomers)
                                             <li><a href="{{ route('customer.exporter-customers') }}" class="{{ request()->routeIs('customer.exporter-customers*') ? 'active' : '' }}">Add Customer</a></li>
                                         @endif
                                         <li><a href="{{ url('/customer/create-shipment') }}" class="{{ request()->routeIs('customer.create-shipment*') ? 'active' : '' }}">Add Shipment</a></li>
@@ -145,7 +146,12 @@
                                     <a href="{{ route('customer.my-profile') }}" class="{{ request()->routeIs('customer.my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
                                 <li>
-                                    <a href="{{ url('logout') }}"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
+                                    <form action="{{ route('customer.logout') }}" method="POST" class="mb-0">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item border-0 bg-transparent w-100 text-start">
+                                            <i class="ti ti-logout me-1"></i><span>Logout</span>
+                                        </button>
+                                    </form>
                                 </li>
                             </ul>
                         </li>

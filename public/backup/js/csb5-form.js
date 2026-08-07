@@ -1,5 +1,5 @@
 // ============================================================
-// CSB5 Form - Upload, Verify & Submit Logic
+// CSB5 Form - Upload & Submit Logic
 // ============================================================
 
 /**
@@ -75,7 +75,7 @@ function initDocUploader(cfg) {
 }
 
 // ------------------------------------------------------------
-// LUT document uploader (original widget, kept for reference)
+// LUT document uploader
 // ------------------------------------------------------------
 initDocUploader({
     container: '#lutDocContainer',
@@ -84,29 +84,6 @@ initDocUploader({
     removeBtn: '#removeFile',
     fileInfo: '#fileInfo',
     nameDisplay: '#fileNameDisplay',
-    onUpload: function () {
-        // Enable the verify button once a file is uploaded
-        const verifyBtn = document.getElementById('lutVerifyBtn');
-        if (verifyBtn) {
-            verifyBtn.disabled = false;
-        }
-    },
-    onRemove: function () {
-        // Disable verify + reset verified state when file removed
-        const verifyBtn = document.getElementById('lutVerifyBtn');
-        const verifiedBadge = document.getElementById('lutVerifiedBadge');
-        const verifiedInput = document.getElementById('lutVerifiedInput');
-        if (verifyBtn) {
-            verifyBtn.disabled = true;
-            verifyBtn.style.display = 'inline-block';
-        }
-        if (verifiedBadge) {
-            verifiedBadge.style.display = 'none';
-        }
-        if (verifiedInput) {
-            verifiedInput.value = '0';
-        }
-    },
 });
 
 // ------------------------------------------------------------
@@ -144,40 +121,6 @@ initDocUploader({
     fileInfo: '#iecFileInfo',
     nameDisplay: '#iecFileNameDisplay',
 });
-
-// ------------------------------------------------------------
-// LUT Verify button logic
-// ------------------------------------------------------------
-const lutVerifyBtn = document.getElementById('lutVerifyBtn');
-if (lutVerifyBtn) {
-    lutVerifyBtn.addEventListener('click', function () {
-        const lutFileInput = document.getElementById('lutFileInput');
-        const verifiedBadge = document.getElementById('lutVerifiedBadge');
-        const verifiedInput = document.getElementById('lutVerifiedInput');
-
-        // Require a file before verifying
-        if (!lutFileInput || lutFileInput.files.length === 0) {
-            alert('Please upload the LUT document before verifying.');
-            return;
-        }
-
-        const originalHTML = this.innerHTML;
-        this.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> VERIFYING...';
-        this.disabled = true;
-
-        // Simulate a verification request (replace with real API call if available)
-        setTimeout(() => {
-            this.style.display = 'none';
-            if (verifiedBadge) {
-                verifiedBadge.style.display = 'inline-flex';
-            }
-            if (verifiedInput) {
-                verifiedInput.value = '1';
-            }
-            this.innerHTML = originalHTML;
-        }, 1200);
-    });
-}
 
 // ------------------------------------------------------------
 // Aadhaar input formatting (digits only, max 12)
@@ -238,34 +181,18 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
     // Prepare form data
     const formData = new FormData(form);
 
-    // Handle checkboxes - send as boolean
-    formData.set('is_csb_v', document.getElementById('csbvToggle').checked ? '1' : '0');
-    formData.set('is_gst', document.getElementById('gstType').checked ? '1' : '0');
+    // CSB-V is fixed for this form; GST has been removed.
+    formData.set('is_csb_v', '1');
+    formData.set('is_gst', '0');
     formData.set('is_lut', document.getElementById('lutType').checked ? '1' : '0');
-
-    // LUT verified flag
-    const lutVerifiedInput = document.getElementById('lutVerifiedInput');
-    formData.set('lut_verified', lutVerifiedInput ? lutVerifiedInput.value : '0');
+    formData.set('lut_verified', '0');
 
     // Basic validation checks
-    // If LUT tax type is selected, require the document + verification
+    // If LUT tax type is selected, require the document.
     if (document.getElementById('lutType').checked) {
         const lutFileInput = document.getElementById('lutFileInput');
         if (!lutFileInput || lutFileInput.files.length === 0) {
             alert('Please upload the LUT document before continuing.');
-            return;
-        }
-        if (lutVerifiedInput && lutVerifiedInput.value !== '1') {
-            alert('Please verify the LUT document before continuing.');
-            return;
-        }
-    }
-
-    // If GST tax type is selected, require the GST document
-    if (document.getElementById('gstType').checked) {
-        const gstFileInput = document.getElementById('gstFileInput');
-        if (!gstFileInput || gstFileInput.files.length === 0) {
-            alert('Please upload the GST document before continuing.');
             return;
         }
     }
@@ -273,24 +200,6 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
     // ------------------------------------------------------------
     // New Business KYC field validations
     // ------------------------------------------------------------
-
-    // Aadhaar number - required, 12 digits, valid format
-    const businessAadharNumberEl = document.getElementById('businessAadharNumber');
-    if (businessAadharNumberEl) {
-        const aadharValue = businessAadharNumberEl.value.trim();
-        const aadharRegex = /^[2-9][0-9]{11}$/;
-        if (!aadharRegex.test(aadharValue)) {
-            alert('Please enter a valid 12-digit Aadhaar number (must not start with 0 or 1).');
-            return;
-        }
-    }
-
-    // Aadhaar document - required
-    const businessAadharFileInput = document.getElementById('businessAadharFileInput');
-    if (!businessAadharFileInput || businessAadharFileInput.files.length === 0) {
-        alert('Please upload the Aadhaar document before continuing.');
-        return;
-    }
 
     // Signature document - required
     const businessSignatureFileInput = document.getElementById('businessSignatureFileInput');

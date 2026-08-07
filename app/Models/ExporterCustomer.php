@@ -8,6 +8,7 @@ class ExporterCustomer extends Model
 {
     protected $fillable = [
         'exporter_id',
+        'business_category_id',
         'company_name',
         'contact_person',
         'address_line1',
@@ -21,15 +22,41 @@ class ExporterCustomer extends Model
         'email_opt_out',
         'kyc_type',
         'kyc_number',
+        'csb_type',
+        'is_lut',
+        'ad_code',
+        'ad_code_document',
+        'iec_number',
+        'iec_document',
+        'bank_account_number',
+        'bank_type',
+        'lut_bond_year',
+        'lut_expiry_date',
+        'lut_document',
+        'billing_address',
+        'billing_contact',
+        'billing_email',
+        'merchant_agreement',
+        'terms_accepted',
+        'merchant_agreement_accepted_at',
     ];
 
     protected $casts = [
         'email_opt_out' => 'boolean',
+        'is_lut' => 'boolean',
+        'terms_accepted' => 'boolean',
+        'lut_expiry_date' => 'date',
+        'merchant_agreement_accepted_at' => 'datetime',
     ];
 
     public function exporter()
     {
         return $this->belongsTo(Customer::class, 'exporter_id');
+    }
+
+    public function businessCategory()
+    {
+        return $this->belongsTo(BusinessCategory::class, 'business_category_id');
     }
 
     public function toShipperArray(): array

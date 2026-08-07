@@ -41,6 +41,24 @@ class CourierRate extends Model
     ];
 
     /**
+     * Get the complete shipping charge, including fuel and GST.
+     *
+     * Stored fixed charges take precedence over percentage-based charges.
+     */
+    public function getInclusiveTotalAttribute(): float
+    {
+        $base = (float) $this->price;
+        $fuel = (float) $this->fuel_charge > 0
+            ? (float) $this->fuel_charge
+            : ($base * (float) $this->fuel_percentage / 100);
+        $gst = (float) $this->gst_amount > 0
+            ? (float) $this->gst_amount
+            : (($base + $fuel) * (float) $this->gst_percentage / 100);
+
+        return round($base + $fuel + $gst, 2);
+    }
+
+    /**
      * Get the courier service that this rate belongs to.
      */
     public function service()

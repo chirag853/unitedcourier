@@ -34,6 +34,12 @@
     .tab-pills .pill:not(.active):hover {
       background: rgba(255,255,255,0.3);
     }
+
+    /* OTP login is temporarily hidden from the frontend only. */
+    #otp-tab,
+    #otp-pane {
+      display: none !important;
+    }
 </style>
 <link href="{{ asset('css/uc-login.css') }}" rel="stylesheet">
 
@@ -123,7 +129,7 @@
 
                     <div class="mb-4">
                         <h3 class="h4-title">Login to <span class="gradient-text">Your Account</span></h3>
-                        <p class="text-muted small">Choose your preferred login method to continue</p>
+                        <!-- <p class="text-muted small">Choose your preferred login method to continue</p> -->
                     </div>
 
                     <!-- Segmented Tabs -->
@@ -142,16 +148,16 @@
                         </li>
                     </ul> -->
 
-                        <div class="tab-pills" id="tabPills" role="tablist">
-                            <button type="button" class="pill active" id="otp-tab" role="tab" aria-selected="true" data-pane="otp-pane"><i class="fas fa-mobile-alt"></i> OTP</button>
-                            <button type="button" class="pill" id="password-tab" role="tab" aria-selected="false" data-pane="password-pane"><i class="fas fa-envelope"></i> Email / Password</button>
-                        </div>
+                        <!-- <div class="tab-pills" id="tabPills" role="tablist">
+                            <button type="button" class="pill" id="otp-tab" role="tab" aria-selected="false" data-pane="otp-pane"><i class="fas fa-mobile-alt"></i> OTP</button>
+                            <button type="button" class="pill active" id="password-tab" role="tab" aria-selected="true" data-pane="password-pane"><i class="fas fa-envelope"></i> Email / Password</button>
+                        </div> -->
 
 
                     <div class="tab-content" id="loginTabsContent">
 
-                        <!-- OTP Login Pane -->
-                        <div class="tab-pane fade show active" id="otp-pane" role="tabpanel" aria-labelledby="otp-tab">
+                        <!-- OTP Login Pane (hidden from the frontend via CSS) -->
+                        <div class="tab-pane fade" id="otp-pane" role="tabpanel" aria-labelledby="otp-tab">
                             <form id="loginForm">
 
                                 <!-- Mobile Row with OTP -->
@@ -193,7 +199,7 @@
                         </div>
 
                         <!-- Email / Password Pane -->
-                        <div class="tab-pane fade" id="password-pane" role="tabpanel" aria-labelledby="password-tab">
+                        <div class="tab-pane fade show active" id="password-pane" role="tabpanel" aria-labelledby="password-tab">
                             <form id="passwordLoginForm">
 
                                 <div class="mb-4">
@@ -370,15 +376,18 @@ function checkPhoneNumber() {
                 phone_number: cleanPhone
             })
         })
-        .then(response => {
+        .then(async response => {
             clearTimeout(timeoutId);
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
+            const data = await response.json();
+            return {
+                ok: response.ok,
+                data: data
+            };
         })
-        .then(data => {
+        .then(result => {
+            const data = result.data;
+
             if (data.success) {
                 currentPhoneNumber = cleanPhone;
 

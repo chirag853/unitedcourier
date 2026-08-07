@@ -73,6 +73,14 @@ class ShipperInfo extends Model
     }
 
     /**
+     * Get the selected courier service rate for this shipper.
+     */
+    public function serviceRate()
+    {
+        return $this->belongsTo(CourierRate::class, 'service_rate_id');
+    }
+
+    /**
      * Get the CSB information for this shipper.
      */
     public function csbInformation()

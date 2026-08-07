@@ -180,7 +180,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="aadharFrontFileInput" name="aadhar_front_document"
-                                                    style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                    style="display: none;" accept=".jpg,.jpeg,.png"
                                                     onchange="handleDocSelect(this, 'aadharFrontFileNameDisplay', 'aadharFrontFileInfo', 'aadharFrontRemoveFile', '.aadharFrontUploadBtn', '#aadharFrontDocContainer');">
                                                 <button type="button"
                                                     class="link-alt border-0 bg-transparent aadharFrontUploadBtn"
@@ -205,7 +205,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="aadharBackFileInput" name="aadhar_back_document"
-                                                    style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                    style="display: none;" accept=".jpg,.jpeg,.png"
                                                     onchange="handleDocSelect(this, 'aadharBackFileNameDisplay', 'aadharBackFileInfo', 'aadharBackRemoveFile', '.aadharBackUploadBtn', '#aadharBackDocContainer');">
                                                 <button type="button"
                                                     class="link-alt border-0 bg-transparent aadharBackUploadBtn"
@@ -300,7 +300,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="panFileInput" name="pan_document"
-                                                    style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                    style="display: none;" accept=".jpg,.jpeg,.png"
                                                     onchange="handleDocSelect(this, 'panFileNameDisplay', 'panFileInfo', 'panRemoveFile', '.panUploadBtn', '#panDocContainer');">
                                                 <button type="button"
                                                     class="link-alt border-0 bg-transparent panUploadBtn"
@@ -535,7 +535,18 @@
                     // Inline helpers so the upload widgets work even if external JS is cached
                     function handleDocSelect(input, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
                         if (input.files && input.files.length > 0) {
-                            var name = input.files[0].name;
+                            var file = input.files[0];
+                            var imageOnlyFields = ['aadhar_front_document', 'aadhar_back_document', 'pan_document'];
+                            var extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+                            if (imageOnlyFields.indexOf(input.name) !== -1 &&
+                                (['jpg', 'jpeg', 'png'].indexOf(extension) === -1 ||
+                                    ['image/jpeg', 'image/png'].indexOf(file.type) === -1 ||
+                                    file.size > 5 * 1024 * 1024)) {
+                                input.value = '';
+                                alert('Aadhaar and PAN documents must be JPG, JPEG, or PNG images up to 5 MB.');
+                                return;
+                            }
+                            var name = file.name;
                             var nameEl = document.getElementById(nameId);
                             if (nameEl) { nameEl.textContent = name; }
                             var infoEl = document.getElementById(infoId);

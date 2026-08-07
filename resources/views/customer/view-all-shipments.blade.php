@@ -293,6 +293,26 @@
                         <i class="ti ti-package-export me-1"></i> Bulk Manifest
                     </button>
                 </div>
+
+                <div id="draftBulkActions" class="d-flex align-items-center gap-2 mb-3" style="display:none;">
+                    <button type="button" class="btn btn-success btn-sm" id="bulkDraftPayBtn" disabled>
+                        <i class="ti ti-credit-card me-1"></i>Pay Selected
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="bulkDraftCancelBtn" disabled>
+                        <i class="ti ti-ban me-1"></i>Cancel Selected
+                    </button>
+                    <span id="draftBulkTotal" class="fw-bold text-success"></span>
+                </div>
+
+                <div id="readyBulkActions" class="d-flex align-items-center gap-2 mb-3" style="display:none;">
+                    <button type="button" class="btn btn-primary btn-sm" id="bulkReadyPrintBtn" disabled>
+                        <i class="ti ti-printer me-1"></i>Print Selected
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="bulkReadyCancelBtn" disabled>
+                        <i class="ti ti-ban me-1"></i>Cancel Selected
+                    </button>
+                    <span id="readyBulkTotal" class="fw-bold text-primary"></span>
+                </div>
                 <!-- Shipments Table Card -->
                 <div class="card border shadow">
                     <div class="card-body">
@@ -334,6 +354,13 @@
                                             } elseif ($invoice->shipperInfo && $invoice->shipperInfo->status) {
                                                 $rowStatus = $invoice->shipperInfo->status;
                                             }
+
+                                            $selectedRate = $invoice->shipperInfo
+                                                ? $invoice->shipperInfo->serviceRate
+                                                : null;
+                                            $shipmentAmount = $selectedRate
+                                                ? $selectedRate->inclusive_total
+                                                : round((float) $invoice->total_amount, 2);
                                         @endphp
                                         <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
                                             <td class="text-center">
@@ -363,7 +390,7 @@
                                                 <span>{{ $shipTo }}</span>
                                             </td>
                                             <!-- <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td> -->
-                                            <td>{{ number_format($invoice->total_amount, 2) }}</td>
+                                            <td>{{ number_format($shipmentAmount, 2) }}</td>
                                             <td>{{ $invoice->invoice_currency }}</td>
                                             <td>{{ $invoice->incoterms }}</td>
                                             <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
@@ -427,7 +454,7 @@
                                                     <button class="btn btn-sm btn-success pay-now-btn"
                                                             data-invoice-id="{{ $invoice->id }}"
                                                             data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
-                                                            data-amount="{{ $invoice->total_amount }}"
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
                                                             style="padding:4px 12px;font-size:13px;border-radius:4px;">
                                                         <i class="ti ti-credit-card me-1"></i>Pay Now
                                                     </button>
@@ -461,8 +488,8 @@
                                                     <button class="btn btn-cancel cancel-btn"
                                                             data-id="{{ $invoice->id }}"
                                                             data-invoice="{{ $invoice->invoice_number }}"
-                                                            data-amount="{{ $invoice->total_amount }}"
-                                                            data-paid="{{ $invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft' ? '1' : '0' }}">
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                            data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}">
                                                         <i class="ti ti-ban"></i> Cancel
                                                     </button>
                                                 @endif
@@ -1114,9 +1141,78 @@
                 }
             });
 
-            // Status filter button click handler
-            $('.status-filter-btn').on('click', function () {
+            // Keep status counters mutable so AJAX status changes are reflected immediately.
+            const liveStatusCounts = @json($statusCounts);
+
+            function refreshStatusCounters() {
+                $('.status-filter-btn').each(function () {
+                    const filter = $(this).data('filter');
+                    $(this).find('.badge').text(liveStatusCounts[filter] || 0);
+                });
+
+                const activeFilter = $('.status-filter-btn.btn-primary').data('filter') || 'all';
+                const visibleCount = liveStatusCounts[activeFilter] || 0;
+                $('#shipmentCountInfo').text('Showing ' + visibleCount + ' of ' + liveStatusCounts.all + ' shipments');
+            }
+
+            function getSelectedRowsByStatus(status) {
+                return $('tr[data-status="' + status + '"] .shipment-checkbox:checked').closest('tr');
+            }
+
+            function getRowAmount(row) {
+                const $row = $(row);
+                const payAmount = $row.find('.pay-now-btn').data('amount');
+                const cancelAmount = $row.find('.cancel-btn').data('amount');
+                const fallbackText = $row.find('td').eq(4).text();
+                const raw = payAmount || cancelAmount || fallbackText;
+                const numeric = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+                return isNaN(numeric) ? 0 : numeric;
+            }
+
+            function sumSelectedAmounts(rows) {
+                let total = 0;
+                rows.each(function () {
+                    total += getRowAmount(this);
+                });
+                return total;
+            }
+
+            function updateBulkSelectionTotals() {
+                const draftRows = getSelectedRowsByStatus('draft');
+                const draftTotal = sumSelectedAmounts(draftRows);
+                const draftDisabled = draftRows.length === 0;
+                $('#bulkDraftPayBtn').prop('disabled', draftDisabled);
+                $('#bulkDraftCancelBtn').prop('disabled', draftDisabled);
+                $('#draftBulkTotal').text(draftDisabled ? '' : 'Selected total: ₹' + number_format(draftTotal, 2));
+
+                const readyRows = getSelectedRowsByStatus('ready');
+                const readyTotal = sumSelectedAmounts(readyRows);
+                const readyDisabled = readyRows.length === 0;
+                $('#bulkReadyPrintBtn').prop('disabled', readyDisabled);
+                $('#bulkReadyCancelBtn').prop('disabled', readyDisabled);
+                $('#readyBulkTotal').text(readyDisabled ? '' : 'Selected total: ₹' + number_format(readyTotal, 2));
+            }
+
+            function showBulkDraftActions(show) {
+                $('#draftBulkActions').toggle(show);
+            }
+
+            function showBulkReadyActions(show) {
+                $('#readyBulkActions').toggle(show);
+            }
+
+            // Status filter button click handler. A real user click reloads the page
+            // with the selected status in the URL; the programmatic click after reload
+            // restores that same filter without causing another refresh loop.
+            $('.status-filter-btn').on('click', function (event) {
                 const filter = $(this).data('filter');
+
+                if (event.originalEvent) {
+                    const pageUrl = new URL(window.location.href);
+                    pageUrl.searchParams.set('status', filter);
+                    window.location.assign(pageUrl.toString());
+                    return;
+                }
 
                 // Update button active state
                 $('.status-filter-btn').removeClass('btn-primary').addClass('btn-light');
@@ -1138,28 +1234,37 @@
                     dt.column(12).visible(false); // Hide Cancel
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
                     $('#bulkManifestBtn').hide();
+                    showBulkDraftActions(false);
+                    showBulkReadyActions(false);
                     dt.draw();
                     $('#shipmentCountInfo').text('Showing {{ $statusCounts["all"] }} of {{ $statusCounts["all"] }} shipments');
                     return;
                 } else if (filter === 'draft') {
-                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(0).visible(true);   // Show Checkbox for Draft multi-select
                     dt.column(8).visible(false);  // Hide Print Label
                     dt.column(9).visible(true);   // Show Pay Now
                     dt.column(10).visible(false); // Hide Manifest
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    dt.column(12).visible(true);  // Show Cancel
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
                     $('#bulkManifestBtn').hide();
+                    showBulkDraftActions(true);
+                    showBulkReadyActions(false);
                 } else if (filter === 'ready') {
-                    dt.column(0).visible(false);  // Hide Checkbox
+                    dt.column(0).visible(true);   // Show Checkbox
                     dt.column(8).visible(true);   // Show Print Label
                     dt.column(9).visible(false);  // Hide Pay Now
                     dt.column(10).visible(false); // Hide Manifest
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
+                    dt.column(12).visible(true);  // Show Cancel
+                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
                     $('#bulkManifestBtn').hide();
+                    showBulkDraftActions(false);
+                    showBulkReadyActions(true);
                 } else if (filter === 'packed') {
                     dt.column(0).visible(true);   // Show Checkbox
                     dt.column(8).visible(true);   // Show Print Label
                     dt.column(9).visible(false);  // Hide Pay Now
                     dt.column(10).visible(true);  // Show Manifest
+                    dt.column(12).visible(true);  // Show Cancel
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
                     $('#bulkManifestBtn').show();
                 } else if (filter === 'manifested') {
@@ -1184,26 +1289,16 @@
                     return $(tr).data('status') === filter;
                 });
                 dt.draw();
+                updateBulkSelectionTotals();
 
-                // Update the "Showing X of Y" indicator with the filtered count
-                @php
-                    $filterCountMap = [
-                        'draft' => $statusCounts['draft'],
-                        'ready' => $statusCounts['ready'],
-                        'packed' => $statusCounts['packed'],
-                        'manifested' => $statusCounts['manifested'],
-                        'received' => $statusCounts['received'],
-                        'dispatched' => $statusCounts['dispatched'],
-                        'cancelled' => $statusCounts['cancelled'],
-                        'delivered' => $statusCounts['delivered'],
-                        'disputed' => $statusCounts['disputed'],
-                        'on_hold' => $statusCounts['on_hold'],
-                    ];
-                @endphp
-                const filterCounts = @json($filterCountMap);
-                const filteredCount = filterCounts[filter] !== undefined ? filterCounts[filter] : 0;
-                $('#shipmentCountInfo').text('Showing ' + filteredCount + ' of {{ $statusCounts["all"] }} shipments');
+                // Update the indicator using live counters (including AJAX status changes).
+                refreshStatusCounters();
             });
+
+            // Restore the selected status after every page refresh.
+            const requestedStatus = new URLSearchParams(window.location.search).get('status') || 'all';
+            const $requestedStatusButton = $('.status-filter-btn[data-filter="' + requestedStatus + '"]');
+            ($requestedStatusButton.length ? $requestedStatusButton : $('.status-filter-btn[data-filter="all"]')).trigger('click');
 
             // Print Label button click handler (delegated)
             $('#shipmentsTable').on('click', '.print-label-btn', function () {
@@ -1300,21 +1395,22 @@
                         },
                         success: function (response) {
                             if (response.success) {
-                                // Update row data-status for DataTable filtering
-                                $row.attr('data-status', 'packed');
-                                // Update status badge
+                                // Update the complete shipments table as soon as the print modal opens.
+                                // This moves the shipment from Ready to Packed without reloading/closing the modal.
+                                $row.attr('data-status', 'packed').data('status', 'packed');
+
                                 const $badge = $row.find('td:eq(7) span');
                                 $badge.removeClass().addClass('badge bg-primary').text('Packed');
-                                // Update shipmentData cache
+
+                                // Keep the client-side print data and top counters in sync.
                                 shipmentData[invoiceId].status = 'packed';
-                                
+                                liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                                liveStatusCounts.packed += 1;
+                                refreshStatusCounters();
 
-                                // Trigger event so modal close handler knows to redraw table
-                                $(document).trigger('print-status-changed');
-
-                                setTimeout(() => {
-                                    window.location.reload(); // Reload to update all data - can be optimized to just redraw table row if needed
-                                }, 1500);
+                                const shipmentsTable = $('#shipmentsTable').DataTable();
+                                shipmentsTable.row($row).invalidate('dom');
+                                shipmentsTable.draw(false);
                             }
                         },
                         error: function () {
@@ -1324,20 +1420,6 @@
                 }
 
                 $('#printLabelModal').modal('show');
-            });
-
-            // When Print Label modal closes, redraw table if status was changed
-            let printStatusChanged = false;
-            $('#printLabelModal').on('hidden.bs.modal', function () {
-                if (printStatusChanged) {
-                    printStatusChanged = false;
-                    $('#shipmentsTable').DataTable().draw();
-                }
-            });
-
-            // Track when Print Label triggers a status change
-            $(document).on('print-status-changed', function () {
-                printStatusChanged = true;
             });
 
             // Cancel button click handler
@@ -1377,27 +1459,9 @@
                     },
                     success: function (response) {
                         if (response.success) {
-                            // Update row UI - set status to cancelled
-                            const row = $('#invoice-row-' + cancelId);
-                            row.attr('data-status', 'cancelled');
-                            row.find('.badge').removeClass().addClass('badge bg-danger').text('Cancelled');
-                            row.find('.cancel-btn, .btn-cancel').prop('disabled', true)
-                                .html('<i class="ti ti-x"></i> Cancelled')
-                                .removeClass('cancel-btn')
-                                .addClass('disabled');
-
-                            // Update Pay Now column to show N/A
-                            row.find('.pay-now-btn').replaceWith('<span class="text-muted" style="font-size:12px;">N/A</span>');
-
-                            // Update wallet balance display if refund was issued
-                            if (response.refund_amount > 0 && response.new_balance) {
-                                // Update wallet balance in header
-                                const formattedBalance = '₹' + number_format(response.new_balance, 2);
-                                const spans = document.querySelectorAll('#walletBalanceBtn span');
-                                spans.forEach(function(el) { el.textContent = formattedBalance; });
-                            }
-
-                            showAlert('success', response.message);
+                            // Refresh immediately so table + wallet balance + counters reflect the cancellation.
+                            window.location.reload();
+                            return;
                         } else {
                             showAlert('danger', response.message);
                         }
@@ -1423,13 +1487,21 @@
             @endphp
             let payInvoiceId = null;
             let payShipperId = null;
+            let bulkPayQueue = [];
             const walletBalance = {{ $currentWalletBalance }};
 
             // Update wallet balance display in modal
             $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
 
+            $('#payNowModal').on('hidden.bs.modal', function () {
+                bulkPayQueue = [];
+                payInvoiceId = null;
+                payShipperId = null;
+            });
+
             // Pay Now button click handler (delegated)
             $('#shipmentsTable').on('click', '.pay-now-btn', function () {
+                bulkPayQueue = [];
                 payInvoiceId = $(this).data('invoice-id');
                 payShipperId = $(this).data('shipper-id');
                 const amount = $(this).data('amount');
@@ -1445,8 +1517,6 @@
 
             // Confirm Pay Now
             $('#confirmPayNowBtn').on('click', function () {
-                if (!payInvoiceId || !payShipperId) return;
-
                 const amount = parseFloat($('#payAmount').val());
                 if (!amount || amount <= 0) {
                     showAlert('danger', 'Please enter a valid amount to pay.');
@@ -1460,48 +1530,66 @@
                 const btn = $(this);
                 btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
 
-                $.ajax({
-                    url: '{{ url("/customer/pay-now") }}',
-                    type: 'POST',
-                    data: {
-                        _token: $('meta[name="csrf-token"]').attr('content'),
-                        invoice_id: payInvoiceId,
-                        shipper_id: payShipperId,
-                        amount: amount
-                    },
-                    success: function (response) {
-                        if (response.success) {
-                            $('#payNowModal').modal('hide');
-                            // Show success popup
-                            const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + response.message + '<br>New wallet balance: ₹' + number_format(response.new_balance, 2) + '</p><button class="btn btn-success px-4" id="paymentSuccessOkBtn">OK</button></div></div></div></div>';
-                            $('body').append(popupHtml);
-                            const successPopup = new bootstrap.Modal(document.getElementById('paymentSuccessPopup'), { backdrop: 'static', keyboard: false });
-                            successPopup.show();
+                const queue = bulkPayQueue.length ? bulkPayQueue : [{
+                    invoice_id: payInvoiceId,
+                    shipper_id: payShipperId,
+                    amount: amount
+                }];
 
-                            // Reload page when OK is clicked or modal is hidden
-                            $('#paymentSuccessOkBtn').on('click', function () {
-                                window.location.reload();
-                            });
-                            document.getElementById('paymentSuccessPopup').addEventListener('hidden.bs.modal', function () {
-                                window.location.reload();
-                                this.remove();
-                            });
-                        } else {
-                            showAlert('danger', response.message);
-                            $('#payNowModal').modal('hide');
-                        }
-                        btn.prop('disabled', false).html('<i class="ti ti-credit-card me-1"></i>Confirm Payment');
-                    },
-                    error: function (xhr) {
-                        let msg = 'Error processing payment.';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            msg = xhr.responseJSON.message;
-                        }
-                        showAlert('danger', msg);
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
                         $('#payNowModal').modal('hide');
-                        btn.prop('disabled', false).html('<i class="ti ti-credit-card me-1"></i>Confirm Payment');
+                        if (bulkPayQueue.length) {
+                            window.location.reload();
+                            return;
+                        }
+
+                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">Payment has been processed successfully.<br>New wallet balance: ₹' + number_format(walletBalance, 2) + '</p><button class="btn btn-success px-4" id="paymentSuccessOkBtn">OK</button></div></div></div></div>';
+                        $('body').append(popupHtml);
+                        const successPopup = new bootstrap.Modal(document.getElementById('paymentSuccessPopup'), { backdrop: 'static', keyboard: false });
+                        successPopup.show();
+
+                        $('#paymentSuccessOkBtn').on('click', function () {
+                            window.location.reload();
+                        });
+                        document.getElementById('paymentSuccessPopup').addEventListener('hidden.bs.modal', function () {
+                            window.location.reload();
+                            this.remove();
+                        });
+                        return;
                     }
-                });
+
+                    const item = queue[index];
+                    index++;
+
+                    $.ajax({
+                        url: '{{ url("/customer/pay-now") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            invoice_id: item.invoice_id,
+                            shipper_id: item.shipper_id,
+                            amount: item.amount
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Payment failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            let msg = 'Error processing payment.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            }
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
             });
 
             // number_format helper for JS
@@ -1879,6 +1967,7 @@
             $('#selectAllCheckbox').on('change', function () {
                 const isChecked = $(this).is(':checked');
                 $('.bulk-manifest-checkbox:visible').prop('checked', isChecked);
+                updateBulkSelectionTotals();
             });
 
             // Uncheck "Select All" if any individual checkbox is unchecked
@@ -1888,9 +1977,313 @@
                 } else if ($('.bulk-manifest-checkbox:visible:checked').length === $('.bulk-manifest-checkbox:visible').length) {
                     $('#selectAllCheckbox').prop('checked', true);
                 }
+                updateBulkSelectionTotals();
+            });
+
+            $('#bulkDraftPayBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('draft');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Draft shipment to pay.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                bulkPayQueue = rows.map(function () {
+                    const $row = $(this);
+                    return {
+                        invoice_id: $row.find('.pay-now-btn').data('invoice-id'),
+                        shipper_id: $row.find('.pay-now-btn').data('shipper-id'),
+                        amount: parseFloat($row.find('.pay-now-btn').data('amount') || 0)
+                    };
+                }).get();
+
+                payInvoiceId = null;
+                payShipperId = null;
+                $('#payShipmentRef').val('Selected Draft Shipment(s) (' + rows.length + ')');
+                $('#payAmount').val(total);
+                $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+                $('#payNowModal').modal('show');
+            });
+
+            $('#bulkDraftCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('draft');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Draft shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Draft shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return $row.find('.cancel-btn').data('id');
+                }).get();
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            $('#bulkReadyPrintBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('ready');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Ready shipment to print.');
+                    return;
+                }
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return {
+                        invoice_id: $row.find('.print-label-btn').data('invoice-id'),
+                        shipper_id: $row.data('shipper-id') || $row.find('.print-label-btn').data('shipper-id')
+                    };
+                }).get().filter(function (item) {
+                    return item.invoice_id && item.shipper_id;
+                });
+
+                const invoiceIds = queue.map(function (item) {
+                    return item.invoice_id;
+                });
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        printSelectedLabelsByInvoiceIds(invoiceIds);
+                        return;
+                    }
+
+                    const item = queue[index];
+                    index++;
+
+                    $.ajax({
+                        url: '{{ url("/customer/mark-packed") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: item.shipper_id
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
+                                if ($row.length) {
+                                    $row.attr('data-status', 'packed').data('status', 'packed');
+                                    const $badge = $row.find('td:eq(7) span');
+                                    $badge.removeClass().addClass('badge bg-primary').text('Packed');
+                                    if (shipmentData[item.invoice_id]) {
+                                        shipmentData[item.invoice_id].status = 'packed';
+                                    }
+                                    liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                                    liveStatusCounts.packed += 1;
+                                    refreshStatusCounters();
+
+                                    const shipmentsTable = $('#shipmentsTable').DataTable();
+                                    shipmentsTable.row($row).invalidate('dom');
+                                    shipmentsTable.draw(false);
+                                }
+                            } else {
+                                showAlert('danger', response.message || 'Failed to move shipment to Packed.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Failed to move shipment to Packed.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            $('#bulkReadyCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('ready');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Ready shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Ready shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return $row.find('.cancel-btn').data('id');
+                }).get();
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
             });
 
         });
+
+        function buildBulkLabelHtml(data) {
+            const shipper = data.shipper || {};
+            const consignee = data.consignee || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            const packages = Array.isArray(data.packages) ? data.packages : [];
+            const itemsHtml = items.length ? items.map(function (item) {
+                return '<tr>' +
+                    '<td>' + (item.box_no || '-') + '</td>' +
+                    '<td>' + (item.description || '-') + '</td>' +
+                    '<td>' + (item.hs_code || '-') + '</td>' +
+                    '<td>' + (item.qty || '-') + '</td>' +
+                    '<td>' + (item.unit_rate || '-') + '</td>' +
+                    '<td>' + (item.igst_percentage || '-') + '</td>' +
+                    '<td>' + (item.igst_amount || '-') + '</td>' +
+                    '<td>' + (item.amount || '0.00') + '</td>' +
+                    '</tr>';
+            }).join('') : '<tr><td colspan="8">No items</td></tr>';
+
+            const packageHtml = packages.length ? packages.map(function (pkg) {
+                return '<div style="border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;">' +
+                    '<strong>Box #' + (pkg.index || '-') + '</strong>: ' +
+                    'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
+                    'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
+                    'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg' +
+                    '</div>';
+            }).join('') : '<div class="text-muted">No package details</div>';
+
+            return '<div style="border:1px solid #ddd;padding:16px;margin:20px 0;border-radius:10px;page-break-inside:avoid;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                '<img src="{{ asset("assets/img/logo.png") }}" alt="United Courier" style="max-height:50px;">' +
+                '<svg style="width:100%;max-width:260px;height:auto;" id="bulk-barcode-' + (data.awb_number || 'label') + '"></svg>' +
+                '</div>' +
+                '<div style="display:flex;gap:20px;margin-bottom:12px;">' +
+                '<div style="flex:1;border:1px solid #ddd;padding:8px;border-radius:6px;">' +
+                '<strong>SHIP FROM</strong><br>' +
+                '<span>' + (shipper.company || '-') + '</span><br>' +
+                '<span>' + (shipper.contact || '-') + '</span><br>' +
+                '<span>' + (shipper.address || '-') + '</span><br>' +
+                '<span>' + (shipper.city_state_pin || '-') + '</span><br>' +
+                '<span>Phone: ' + (shipper.phone || '-') + '</span>' +
+                '</div>' +
+                '<div style="flex:1;border:1px solid #ddd;padding:8px;border-radius:6px;">' +
+                '<strong>SHIP TO</strong><br>' +
+                '<span>' + (consignee.name || '-') + '</span><br>' +
+                '<span>' + (consignee.contact || '-') + '</span><br>' +
+                '<span>' + (consignee.address || '-') + '</span><br>' +
+                '<span>' + (consignee.city_state_zip || '-') + '</span><br>' +
+                '<span>Phone: ' + (consignee.phone || '-') + '</span>' +
+                '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                '<strong>INVOICE ITEMS</strong>' +
+                '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;">' +
+                '<thead><tr><th style="border:1px solid #333;padding:4px;">Box</th><th style="border:1px solid #333;padding:4px;">Description</th><th style="border:1px solid #333;padding:4px;">HS Code</th><th style="border:1px solid #333;padding:4px;">Qty</th><th style="border:1px solid #333;padding:4px;">Rate</th><th style="border:1px solid #333;padding:4px;">IGST(%)</th><th style="border:1px solid #333;padding:4px;">IGST</th><th style="border:1px solid #333;padding:4px;">Amount</th></tr></thead>' +
+                '<tbody>' + itemsHtml + '</tbody>' +
+                '</table>' +
+                '<div style="text-align:right;margin-top:6px;font-size:12px;"><strong>Total: ' + (data.items_total || '0.00') + '</strong></div>' +
+                '</div>' +
+                '<div>' +
+                '<strong>PACKAGE DIMENSIONS</strong>' +
+                '<div style="margin-top:8px;">' + packageHtml + '</div>' +
+                '</div>' +
+                '</div>';
+        }
+
+        function printSelectedLabelsByInvoiceIds(invoiceIds) {
+            if (!invoiceIds || !invoiceIds.length) {
+                showAlert('warning', 'Please select at least one shipment to print.');
+                return;
+            }
+
+            const selectedData = invoiceIds
+                .map(function (invoiceId) {
+                    return shipmentData[invoiceId];
+                })
+                .filter(Boolean);
+
+            if (!selectedData.length) {
+                showAlert('danger', 'No print data found for the selected shipments.');
+                return;
+            }
+
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            if (!printWindow) {
+                showAlert('danger', 'Popup blocked. Allow popups to print labels.');
+                return;
+            }
+
+            let html = '<!DOCTYPE html><html><head><title>Print Selected Labels</title><style>' +
+                'body{font-family:Arial,sans-serif;padding:18px;color:#000;font-size:12px;} ' +
+                'table{border-collapse:collapse;width:100%;} ' +
+                'th,td{border:1px solid #333;padding:4px;text-align:left;} ' +
+                '@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}' +
+                '</style></head><body>';
+
+            selectedData.forEach(function (data) {
+                html += buildBulkLabelHtml(data);
+            });
+
+            html += '</body></html>';
+            printWindow.document.write(html);
+            printWindow.document.close();
+
+            setTimeout(function () {
+                printWindow.focus();
+                printWindow.print();
+                printWindow.onafterprint = function () {
+                    printWindow.close();
+                };
+            }, 300);
+        }
 
         // Print Label function (outside document.ready so it's globally accessible)
         function printLabel() {

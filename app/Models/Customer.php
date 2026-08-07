@@ -10,7 +10,19 @@ class Customer extends Authenticatable
 {
     use Notifiable;
 
+    protected static function booted(): void
+    {
+        static::created(function (Customer $customer) {
+            if (!$customer->customer_code) {
+                $customer->updateQuietly([
+                    'customer_code' => 'UWC' . str_pad((string) $customer->getKey(), 6, '0', STR_PAD_LEFT),
+                ]);
+            }
+        });
+    }
+
     protected $fillable = [
+        'customer_code',
         'first_name',
         'last_name',
         'email',
