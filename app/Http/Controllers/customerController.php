@@ -1268,12 +1268,10 @@ class customerController extends Controller
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            if ($panNumber && $this->isBusinessCustomer($customer) && $this->isIndividualPan($panNumber)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
-                ], 422);
-            }
+            // A sole proprietorship and several other business structures use the
+            // proprietor's individual PAN. PAN category is therefore not rejected
+            // here; Cashfree verification and the duplicate-identifier check still
+            // validate ownership and prevent reuse by another customer.
 
             // Ensure upload directories exist
             $uploadDirs = [
@@ -1950,12 +1948,10 @@ class customerController extends Controller
                 ], 422);
             }
 
-            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($pan)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.',
-                ], 422);
-            }
+            // Business accounts may legitimately use the proprietor's individual
+            // PAN (for example, a sole proprietorship). Keep PAN format, OCR,
+            // holder-name, DOB, and uniqueness validation below instead of
+            // rejecting the PAN based only on its fourth character.
 
             if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, null, $pan)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
@@ -2246,12 +2242,9 @@ class customerController extends Controller
             if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, $panNumber)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
-            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($panNumber)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
-                ], 422);
-            }
+            // A business account can be a sole proprietorship, where the valid
+            // PAN is the proprietor's individual PAN. The PAN has already passed
+            // Cashfree verification and the uniqueness check above.
 
             // Ensure upload directories exist
             $uploadDirs = [
