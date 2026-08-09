@@ -10,6 +10,7 @@ class KycDetail extends Model
         'customer_id',
         'kyc_type',
         'gst_number',
+        'gst_certificate_document',
         'gst_verified',
         'otp_verified',
         'aadhar_number',

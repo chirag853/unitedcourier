@@ -41,6 +41,16 @@ return [
         'country_code' => env('SMS_COUNTRY_CODE', '91'),
     ],
 
+    'cashfree' => [
+        'verification_base_url' => env(
+            'CASHFREE_VERIFICATION_BASE_URL',
+            'https://api.cashfree.com/verification'
+        ),
+        'verification_client_id' => env('CASHFREE_VERIFICATION_CLIENT_ID'),
+        'verification_client_secret' => env('CASHFREE_VERIFICATION_CLIENT_SECRET'),
+        'verification_timeout' => (int) env('CASHFREE_VERIFICATION_TIMEOUT', 30),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | PostShipping (DPD/UK) API

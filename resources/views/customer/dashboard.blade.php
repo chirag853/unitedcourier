@@ -889,6 +889,18 @@
                                     </div>
                                 </div>
 
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-12">
+                                        <label class="form-label-custom" for="bizGstBusinessName">Business Name</label>
+                                        <div class="input-group-custom">
+                                            <input type="text" class="form-control input-custom"
+                                                placeholder="Enter the name registered under this GSTIN"
+                                                id="bizGstBusinessName" maxlength="255" autocomplete="organization" required>
+                                            <i class="fas fa-building"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="row g-4 mb-4">
                                     <div class="col-md-12">
                                         <label class="form-label-custom">Upload GST Certificate</label>
@@ -950,41 +962,48 @@
                                     </div>
                                 </div>
 
-                                <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
-
-                                <div id="otpSection" style="display: none;">
-                                    <div class="row g-3 mb-3">
-                                        <div class="col-md-8">
-                                            <label class="form-label-custom">Send OTP</label>
-                                            <p class="text-muted small mb-2">GST verified. Send an OTP to your
-                                                registered mobile/email to continue.</p>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <button class="btn btn-primary-custom" style="padding: 14px;"
-                                                id="sendOtpBtn" onclick="sendOTP()">Send OTP</button>
-                                        </div>
-                                    </div>
-
-                                    <div id="otpStatus" class="otp-sent-status" style="display: none;">
-                                        <i class="fas fa-check-circle"></i> OTP has been sent to your registered
-                                        mobile/email
-                                    </div>
-
-                                    <!-- OTP Field (Visible only after sendOTP) -->
-                                    <div id="otpContainer" style="display: none;">
-                                        <label class="form-label-custom">Enter 6-Digit OTP</label>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-12">
+                                        <label class="form-label-custom" for="gstBusinessName">Business Name</label>
                                         <div class="input-group-custom">
-                                            <input type="text" class="form-control input-custom" placeholder="******"
-                                                maxlength="6" id="otpInput">
-                                            <i class="fas fa-key"></i>
+                                            <input type="text" class="form-control input-custom"
+                                                placeholder="Enter the name registered under this GSTIN"
+                                                id="gstBusinessName" maxlength="255" autocomplete="organization">
+                                            <i class="fas fa-building"></i>
                                         </div>
-                                        <button class="btn btn-primary-custom mt-2" onclick="nextStep(2)">Verify &
-                                            Continue</button>
                                     </div>
                                 </div>
 
+                                <div class="row g-4 mb-4">
+                                    <div class="col-md-12">
+                                        <label class="form-label-custom">Upload GST Certificate</label>
+                                        <div id="gstCertUploadArea"
+                                            style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
+                                            onclick="document.getElementById('gstCertFileInput').click()">
+                                            <input type="file" id="gstCertFileInput"
+                                                accept=".pdf,application/pdf" style="display: none;">
+                                            <div id="gstCertUploadPlaceholder">
+                                                <i class="fas fa-file-invoice"
+                                                    style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
+                                                <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">
+                                                    Click to upload GST Certificate PDF
+                                                </p>
+                                                <p class="text-muted small mb-0">PDF only (max 5MB)</p>
+                                            </div>
+                                            <div id="gstCertPreview" style="display: none;">
+                                                <i class="fas fa-check-circle"
+                                                    style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
+                                                <p class="mb-0 fw-semibold small" id="gstCertFileName"
+                                                    style="color: #166534;"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
+
                                 <div class="text-center mt-4">
-                                    <button class="btn btn-outline-custom" onclick="nextStep(2)">Skip For Now</button>
+                                    <button class="btn btn-primary-custom" onclick="nextStep(2)">Continue</button>
                                 </div>
                             </div>
                         @endif
@@ -2069,8 +2088,8 @@
 
                     let kycData = {
                         gst_number: '',
+                        gst_business_name: '',
                         gst_verified: false,
-                        otp_verified: false,
                         aadhar_number: '',
                         aadhar_verified: false,
                         organization_name: '',
@@ -2123,6 +2142,8 @@
 
                     function captureKycDraftData() {
                         readKycField('gstInput', 'gst_number', value => value.trim().toUpperCase());
+                        readKycField('gstBusinessName', 'gst_business_name');
+                        readKycField('bizGstBusinessName', 'gst_business_name');
                         readKycField('aadharInput', 'aadhar_number', value => value.replace(/\s+/g, ''));
                         readKycField('panInput', 'pan_number', value => value.trim().toUpperCase());
                         readKycField('panHolderName', 'pan_holder_name');
@@ -2357,35 +2378,144 @@
                         syncBusinessLutBondYear();
                     }
 
-                    // GST input formatting: auto-uppercase
+                    function invalidateGstVerification(isBusiness) {
+                        const verified = isBusiness
+                            ? kycData.gst_certificate_verified || kycData.gst_verified
+                            : kycData.gst_verified;
+                        if (!verified) return;
+
+                        kycData.gst_verified = false;
+                        kycData.gst_certificate_verified = false;
+
+                        const button = document.getElementById(isBusiness ? 'bizVerifyGstCertBtn' : 'verifyGstBtn');
+                        const status = document.getElementById(isBusiness ? 'bizGstStatus' : 'gstStatus');
+                        if (button) {
+                            button.innerHTML = 'Verify GST';
+                            button.disabled = false;
+                        }
+                        if (status) {
+                            status.innerHTML = '';
+                            status.style.display = 'none';
+                        }
+
+                        queueKycDraftSave(getActiveKycStep());
+                    }
+
+                    function invalidateAadharVerification() {
+                        if (!kycData.aadhar_verified) return;
+
+                        kycData.aadhar_verified = false;
+
+                        const field = document.getElementById('aadharInput');
+                        const button = document.getElementById('verifyAadharBtn');
+                        const status = document.getElementById('aadharStatus');
+                        if (field) field.readOnly = false;
+                        if (button) {
+                            button.innerHTML = 'Verify Aadhar';
+                            button.disabled = false;
+                        }
+                        if (status) {
+                            status.innerHTML = '';
+                            status.style.display = 'none';
+                        }
+
+                        queueKycDraftSave(getActiveKycStep());
+                    }
+
+                    function invalidatePanVerification() {
+                        if (!kycData.pan_verified) return;
+
+                        kycData.pan_verified = false;
+
+                        const panField = document.getElementById('panInput');
+                        const holderField = document.getElementById('panHolderName');
+                        const dobField = document.getElementById('panDob');
+                        const button = document.getElementById('verifyPanBtn');
+                        const status = document.getElementById('panStatus');
+                        if (panField) panField.readOnly = false;
+                        if (holderField) holderField.readOnly = false;
+                        if (dobField) dobField.readOnly = false;
+                        if (button) {
+                            button.innerHTML = 'Verify PAN';
+                            button.disabled = false;
+                        }
+                        if (status) {
+                            status.innerHTML = '';
+                            status.style.display = 'none';
+                        }
+
+                        queueKycDraftSave(getActiveKycStep());
+                    }
+
+                    // GST identity inputs invalidate any verification tied to their old values.
                     const gstInput = document.getElementById('gstInput');
+                    const gstBusinessName = document.getElementById('gstBusinessName');
+                    const bizGstInput = document.getElementById('bizGstCertNumber');
+                    const bizGstBusinessName = document.getElementById('bizGstBusinessName');
                     if (gstInput) {
                         gstInput.addEventListener('input', function(e) {
-                            e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0,
-                                15);
+                            e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
+                            invalidateGstVerification(false);
+                        });
+                    }
+                    if (gstBusinessName) {
+                        gstBusinessName.addEventListener('input', function() {
+                            invalidateGstVerification(false);
+                        });
+                    }
+                    if (bizGstInput) {
+                        bizGstInput.addEventListener('input', function(e) {
+                            e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
+                            invalidateGstVerification(true);
+                        });
+                    }
+                    if (bizGstBusinessName) {
+                        bizGstBusinessName.addEventListener('input', function() {
+                            invalidateGstVerification(true);
                         });
                     }
 
-                    // Aadhar input formatting: auto-insert spaces (XXXX XXXX XXXX)
+                    // Identity changes invalidate verification tied to the old number or image.
                     const aadharInput = document.getElementById('aadharInput');
                     if (aadharInput) {
                         aadharInput.addEventListener('input', function(e) {
-                            let value = e.target.value.replace(/\D/g, '').slice(0, 12);
-                            // Format as XXXX XXXX XXXX
-                            let formatted = value.match(/.{1,4}/g);
+                            invalidateAadharVerification();
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 12);
+                            const formatted = value.match(/.{1,4}/g);
                             e.target.value = formatted ? formatted.join(' ') : '';
                         });
                     }
 
+                    const panInput = document.getElementById('panInput');
+                    const panHolderName = document.getElementById('panHolderName');
+                    const panDob = document.getElementById('panDob');
+                    if (panInput) {
+                        panInput.addEventListener('input', function(e) {
+                            invalidatePanVerification();
+                            e.target.value = e.target.value
+                                .toUpperCase()
+                                .replace(/[^A-Z0-9]/g, '')
+                                .slice(0, 10);
+                        });
+                    }
+                    if (panHolderName) {
+                        panHolderName.addEventListener('input', invalidatePanVerification);
+                    }
+                    if (panDob) {
+                        panDob.addEventListener('change', invalidatePanVerification);
+                    }
+
                     function verifyGst() {
                         const gstField = document.getElementById('gstInput');
+                        const businessNameField = document.getElementById('gstBusinessName');
+                        const gstFileInput = document.getElementById('gstCertFileInput');
                         const verifyBtn = document.getElementById('verifyGstBtn');
                         const gstStatus = document.getElementById('gstStatus');
-                        const otpSection = document.getElementById('otpSection');
 
-                        if (!gstField) return;
+                        if (!gstField || !businessNameField || !verifyBtn) return;
 
                         const gst = gstField.value.trim().toUpperCase();
+                        const businessName = businessNameField.value.trim();
 
                         if (!gst) {
                             alert('Please enter your GST number.');
@@ -2395,6 +2525,23 @@
                             alert('GST number must be exactly 15 characters.');
                             return;
                         }
+                        if (!businessName) {
+                            alert('Please enter the Business Name registered under this GSTIN.');
+                            businessNameField.focus();
+                            return;
+                        }
+                        if (!gstFileInput || !gstFileInput.files || !gstFileInput.files[0]) {
+                            alert('Please upload the GST Certificate PDF before verification.');
+                            return;
+                        }
+                        if (!validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
+                            return;
+                        }
+
+                        const verifyData = new FormData();
+                        verifyData.append('gst_number', gst);
+                        verifyData.append('business_name', businessName);
+                        verifyData.append('gst_certificate_document', gstFileInput.files[0]);
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
                         verifyBtn.disabled = true;
@@ -2402,13 +2549,11 @@
                         fetch('{{ route("customer.verify.gst") }}', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'X-Requested-With': 'XMLHttpRequest'
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
                                 },
-                                body: JSON.stringify({
-                                    gst_number: gst
-                                })
+                                body: verifyData
                             })
                             .then(response => {
                                 const contentType = response.headers.get('content-type');
@@ -2426,6 +2571,7 @@
                             .then(data => {
                                 if (data.success) {
                                     kycData.gst_number = gst;
+                                    kycData.gst_business_name = businessName;
                                     kycData.gst_verified = true;
                                     saveKycDraft(getActiveKycStep());
 
@@ -2437,11 +2583,7 @@
                                     verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
                                     verifyBtn.disabled = true;
                                     gstField.readOnly = true;
-
-                                    // Reveal the OTP section now that GST is verified
-                                    if (otpSection) {
-                                        otpSection.style.display = 'block';
-                                    }
+                                    businessNameField.readOnly = true;
                                 } else {
                                     gstStatus.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message ||
                                         'GST verification failed.');
@@ -2467,46 +2609,36 @@
                             });
                     }
 
-                    function sendOTP() {
-                        // Require GST verification before sending OTP
-                        if (!kycData.gst_verified) {
-                            alert('Please verify your GST number first.');
-                            return;
-                        }
-
-                        const btn = document.getElementById('sendOtpBtn');
-                        if (!btn) return;
-                        const originalText = btn.innerHTML;
-                        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-                        btn.disabled = true;
-
-                        setTimeout(() => {
-                            document.getElementById('otpStatus').style.display = 'block';
-                            document.getElementById('otpContainer').style.display = 'block';
-                            btn.innerHTML = 'Resend';
-                            btn.disabled = false;
-                        }, 1000);
-                    }
-
                     function verifyAadhar() {
                         const aadharField = document.getElementById('aadharInput');
+                        const frontFileInput = document.getElementById('aadharFrontFileInput');
                         const verifyBtn = document.getElementById('verifyAadharBtn');
                         const aadharStatus = document.getElementById('aadharStatus');
                         const continueBtn = document.getElementById('aadharContinueBtn');
 
-                        if (!aadharField) return;
+                        if (!aadharField || !frontFileInput || !verifyBtn || !aadharStatus) return;
 
-                        // Strip spaces to get raw 12-digit number
                         const aadhar = aadharField.value.replace(/\s+/g, '');
 
                         if (!aadhar) {
                             alert('Please enter your Aadhar number.');
                             return;
                         }
-                        if (aadhar.length !== 12) {
-                            alert('Aadhar number must be 12 digits.');
+                        if (!/^[2-9][0-9]{11}$/.test(aadhar)) {
+                            alert('Please enter a valid 12-digit Aadhar number.');
                             return;
                         }
+                        if (!frontFileInput.files || !frontFileInput.files[0]) {
+                            alert('Please upload the Aadhaar front image before verification.');
+                            return;
+                        }
+                        if (!validateImageOnlyKycFile(frontFileInput.files[0], frontFileInput)) {
+                            return;
+                        }
+
+                        const verifyData = new FormData();
+                        verifyData.append('aadhar_number', aadhar);
+                        verifyData.append('aadhar_front_document', frontFileInput.files[0]);
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
                         verifyBtn.disabled = true;
@@ -2514,13 +2646,11 @@
                         fetch('{{ route("customer.verify.aadhar") }}', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'X-Requested-With': 'XMLHttpRequest'
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
                                 },
-                                body: JSON.stringify({
-                                    aadhar_number: aadhar
-                                })
+                                body: verifyData
                             })
                             .then(response => {
                                 const contentType = response.headers.get('content-type');
@@ -2582,10 +2712,11 @@
                         const panField = document.getElementById('panInput');
                         const holderField = document.getElementById('panHolderName');
                         const dobField = document.getElementById('panDob');
+                        const panFileInput = document.getElementById('panFileInput');
                         const verifyBtn = document.getElementById('verifyPanBtn');
                         const panStatus = document.getElementById('panStatus');
 
-                        if (!panField) return;
+                        if (!panField || !holderField || !dobField || !panFileInput || !verifyBtn || !panStatus) return;
 
                         // Normalize PAN to uppercase, no spaces
                         const pan = panField.value.replace(/\s+/g, '').toUpperCase();
@@ -2598,14 +2729,27 @@
                             alert('Invalid PAN number. It must be 10 characters: 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).');
                             return;
                         }
-                        if (holderField && !holderField.value.trim()) {
+                        if (!holderField.value.trim()) {
                             alert('Please enter the PAN holder name.');
                             return;
                         }
-                        if (dobField && !dobField.value) {
+                        if (!dobField.value) {
                             alert('Please select your date of birth.');
                             return;
                         }
+                        if (!panFileInput.files || !panFileInput.files[0]) {
+                            alert('Please upload the PAN image before verification.');
+                            return;
+                        }
+                        if (!validateImageOnlyKycFile(panFileInput.files[0], panFileInput)) {
+                            return;
+                        }
+
+                        const verifyData = new FormData();
+                        verifyData.append('pan_number', pan);
+                        verifyData.append('pan_holder_name', holderField.value.trim());
+                        verifyData.append('pan_dob', dobField.value);
+                        verifyData.append('pan_document', panFileInput.files[0]);
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
                         verifyBtn.disabled = true;
@@ -2613,13 +2757,11 @@
                         fetch('{{ route("customer.verify.pan") }}', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'X-Requested-With': 'XMLHttpRequest'
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
                                 },
-                                body: JSON.stringify({
-                                    pan_number: pan
-                                })
+                                body: verifyData
                             })
                             .then(response => {
                                 const contentType = response.headers.get('content-type');
@@ -2637,8 +2779,8 @@
                             .then(data => {
                                 if (data.success) {
                                     kycData.pan_number = pan;
-                                    kycData.pan_holder_name = holderField ? holderField.value.trim() : '';
-                                    kycData.pan_dob = dobField ? dobField.value : '';
+                                    kycData.pan_holder_name = holderField.value.trim();
+                                    kycData.pan_dob = dobField.value;
                                     kycData.pan_verified = true;
                                     saveKycDraft(getActiveKycStep());
 
@@ -2679,6 +2821,10 @@
                         'aadharFrontFileInput',
                         'aadharBackFileInput',
                         'panFileInput'
+                    ]);
+                    const gstCertificateInputIds = new Set([
+                        'gstCertFileInput',
+                        'bizGstCertFileInput'
                     ]);
 
                     function validateImageOnlyKycFile(file, input) {
@@ -2734,9 +2880,18 @@
                         const input = document.getElementById(fileInputId);
                         if (!input) return;
                         input.addEventListener('change', function () {
+                            if (gstCertificateInputIds.has(fileInputId)) {
+                                invalidateGstVerification(fileInputId === 'bizGstCertFileInput');
+                            }
+                            if (fileInputId === 'aadharFrontFileInput') {
+                                invalidateAadharVerification();
+                            }
+                            if (fileInputId === 'panFileInput') {
+                                invalidatePanVerification();
+                            }
                             if (this.files && this.files[0]) {
                                 const file = this.files[0];
-                                if (fileInputId === 'bizGstCertFileInput' && !validatePdfOnlyKycFile(file, this)) {
+                                if (gstCertificateInputIds.has(fileInputId) && !validatePdfOnlyKycFile(file, this)) {
                                     delete kycData[dataKey];
                                     return;
                                 }
@@ -2761,6 +2916,7 @@
                     }
 
                     function initFileUploadPreviews() {
+                        handleFilePreview('gstCertFileInput', 'gstCertUploadPlaceholder', 'gstCertPreview', 'gstCertFileName', 'gst_certificate_file');
                         handleFilePreview('aadharFrontFileInput', 'aadharFrontUploadPlaceholder', 'aadharFrontPreview', 'aadharFrontFileName', 'aadhar_front_file');
                         handleFilePreview('aadharBackFileInput', 'aadharBackUploadPlaceholder', 'aadharBackPreview', 'aadharBackFileName', 'aadhar_back_file');
                         handleFilePreview('panFileInput', 'panUploadPlaceholder', 'panPreview', 'panFileName', 'pan_file');
@@ -2783,8 +2939,15 @@
                         if (isBusinessFlow) {
                             // ===== BUSINESS FLOW (7 steps) =====
                             if (step === 1) {
-                                // Step 1: Verify GST Certificate
-                                if (!kycData.gst_certificate_verified) {
+                                // Step 1: Verify GST Certificate and its registered business name.
+                                const businessName = document.getElementById('bizGstBusinessName');
+                                if (!businessName || !businessName.value.trim()) {
+                                    alert('Please enter the Business Name registered under this GSTIN.');
+                                    if (businessName) businessName.focus();
+                                    return false;
+                                }
+                                if (!kycData.gst_certificate_verified
+                                    || businessName.value.trim() !== String(kycData.gst_business_name || '').trim()) {
                                     alert('Please verify your GST Certificate number before continuing.');
                                     return false;
                                 }
@@ -2907,8 +3070,39 @@
                             }
                         } else {
                             // ===== PERSONAL FLOW (7 steps) =====
-                            // Step 1 (Complete KYC) is not validated - it has a "Skip For Now" option
-                            if (step === 2) {
+                            if (step === 1) {
+                                // GST remains optional, but partially entered GST details must be completed and verified.
+                                const gstField = document.getElementById('gstInput');
+                                const businessName = document.getElementById('gstBusinessName');
+                                const gstFile = document.getElementById('gstCertFileInput');
+                                const gstNumber = gstField ? gstField.value.trim().toUpperCase() : '';
+                                const businessNameValue = businessName ? businessName.value.trim() : '';
+                                const hasGstFile = Boolean(gstFile && gstFile.files && gstFile.files[0]);
+                                const hasAnyGstData = Boolean(gstNumber || businessNameValue || hasGstFile);
+
+                                if (hasAnyGstData) {
+                                    if (gstNumber.length !== 15) {
+                                        alert('Please enter a valid 15-character GST number.');
+                                        if (gstField) gstField.focus();
+                                        return false;
+                                    }
+                                    if (!businessNameValue) {
+                                        alert('Please enter the Business Name registered under this GSTIN.');
+                                        if (businessName) businessName.focus();
+                                        return false;
+                                    }
+                                    if (!hasGstFile) {
+                                        alert('Please upload your GST Certificate PDF before continuing.');
+                                        return false;
+                                    }
+                                    if (!kycData.gst_verified
+                                        || gstNumber !== String(kycData.gst_number || '').trim().toUpperCase()
+                                        || businessNameValue !== String(kycData.gst_business_name || '').trim()) {
+                                        alert('Please verify your GST details before continuing.');
+                                        return false;
+                                    }
+                                }
+                            } else if (step === 2) {
                                 // Step 2: Verify Aadhar
                                 if (!kycData.aadhar_verified) { alert('Please verify your Aadhar number before continuing.'); return false; }
                                 const frontFile = document.getElementById('aadharFrontFileInput');
@@ -3015,13 +3209,7 @@
                             }
                         } else {
                             // ===== PERSONAL FLOW (7 steps) =====
-                            if (stepNumber === 2) {
-                                // Save OTP verification
-                                const otpInput = document.querySelector('#otpContainer input');
-                                if (otpInput && otpInput.value.length === 6) {
-                                    kycData.otp_verified = true;
-                                }
-                            } else if (stepNumber === 5) {
+                            if (stepNumber === 5) {
                                 // Leaving step 4 (Business Details) -> save business details
                                 const orgName = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
                                 const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
@@ -3042,17 +3230,24 @@
                     // ===== Business KYC: Verify GST Certificate =====
                     function verifyGstBiz() {
                         const gstField = document.getElementById('bizGstCertNumber');
+                        const businessNameField = document.getElementById('bizGstBusinessName');
                         const gstFileInput = document.getElementById('bizGstCertFileInput');
                         const verifyBtn = document.getElementById('bizVerifyGstCertBtn');
                         const statusDiv = document.getElementById('bizGstStatus');
                         const continueBtn = document.getElementById('bizGstContinueBtn');
 
-                        if (!gstField || !verifyBtn) return;
+                        if (!gstField || !businessNameField || !verifyBtn) return;
 
                         const gstValue = gstField.value.trim().toUpperCase();
+                        const businessName = businessNameField.value.trim();
 
                         if (gstValue.length !== 15) {
                             alert('Please enter a valid 15-character GST number.');
+                            return;
+                        }
+                        if (!businessName) {
+                            alert('Please enter the Business Name registered under this GSTIN.');
+                            businessNameField.focus();
                             return;
                         }
                         if (!gstFileInput || !gstFileInput.files || !gstFileInput.files[0]) {
@@ -3065,6 +3260,7 @@
 
                         const verifyData = new FormData();
                         verifyData.append('gst_number', gstValue);
+                        verifyData.append('business_name', businessName);
                         verifyData.append('gst_certificate_document', gstFileInput.files[0]);
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
@@ -3083,6 +3279,7 @@
                             .then(data => {
                                 if (data.success) {
                                     kycData.gst_certificate_number = gstValue;
+                                    kycData.gst_business_name = businessName;
                                     kycData.gst_certificate_verified = true;
                                     kycData.gst_number = gstValue;
                                     kycData.gst_verified = true;
@@ -3098,8 +3295,10 @@
                                     const billingGst = document.getElementById('bizBillingGst');
                                     if (billingGst) billingGst.value = gstValue;
 
-                                    verifyBtn.innerHTML = 'Verified';
+                                    verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
                                     verifyBtn.disabled = true;
+                                    gstField.readOnly = true;
+                                    businessNameField.readOnly = true;
                                     if (continueBtn) continueBtn.focus();
                                 } else {
                                     if (statusDiv) {
@@ -3125,12 +3324,14 @@
                             });
                     }
 
-                    function restoreVerifiedState(fieldId, buttonId, statusId, verified, message) {
+                    function restoreVerifiedState(fieldId, buttonId, statusId, verified, message, relatedFieldId) {
                         if (!verified) return;
                         const field = document.getElementById(fieldId);
+                        const relatedField = relatedFieldId ? document.getElementById(relatedFieldId) : null;
                         const button = document.getElementById(buttonId);
                         const status = document.getElementById(statusId);
                         if (field) field.readOnly = true;
+                        if (relatedField) relatedField.readOnly = true;
                         if (button) {
                             button.innerHTML = '<i class="fas fa-check"></i> Verified';
                             button.disabled = true;
@@ -3145,11 +3346,13 @@
                     function restoreKycDraft() {
                         const values = {
                             gstInput: kycData.gst_number,
+                            gstBusinessName: kycData.gst_business_name,
                             aadharInput: kycData.aadhar_number ? String(kycData.aadhar_number).replace(/(.{4})(?=.)/g, '$1 ') : '',
                             panInput: kycData.pan_number,
                             panHolderName: kycData.pan_holder_name,
                             panDob: kycData.pan_dob,
                             bizGstCertNumber: kycData.gst_certificate_number,
+                            bizGstBusinessName: kycData.gst_business_name,
                             bizIecNumber: kycData.iec_number,
                             bizAdCode: kycData.ad_code,
                             bizLutExpiry: kycData.lut_expiry_date,
@@ -3187,29 +3390,17 @@
                         if (!isBusinessFlow && signatory) signatory.value = kycData.authorized_signatory || '';
 
                         // File inputs cannot be restored from a JSON draft. Remove any
-                        // legacy base64 signature values and require file reselection.
+                        // file-bound state and require file reselection and identity re-verification.
                         delete kycData.signature;
                         delete kycData.business_signature;
+                        kycData.aadhar_verified = false;
+                        kycData.pan_verified = false;
 
                         restoreVerifiedState('gstInput', 'verifyGstBtn', 'gstStatus', kycData.gst_verified,
-                            'GST verification restored from your saved KYC.');
-                        restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus', kycData.aadhar_verified,
-                            'Aadhar verification restored from your saved KYC.');
-                        restoreVerifiedState('panInput', 'verifyPanBtn', 'panStatus', kycData.pan_verified,
-                            'PAN verification restored from your saved KYC.');
+                            'GST verification restored from your saved KYC.', 'gstBusinessName');
                         restoreVerifiedState('bizGstCertNumber', 'bizVerifyGstCertBtn', 'bizGstStatus',
-                            kycData.gst_certificate_verified, 'GST Certificate verification restored from your saved KYC.');
-                        if (kycData.pan_verified) {
-                            const holder = document.getElementById('panHolderName');
-                            const dob = document.getElementById('panDob');
-                            if (holder) holder.readOnly = true;
-                            if (dob) dob.readOnly = true;
-                        }
-                        if (kycData.gst_verified) {
-                            const otpSection = document.getElementById('otpSection');
-                            if (otpSection) otpSection.style.display = 'block';
-                        }
-
+                            kycData.gst_certificate_verified, 'GST Certificate verification restored from your saved KYC.',
+                            'bizGstBusinessName');
                         renderKycStep(savedKycStep, false);
                     }
 
@@ -3251,6 +3442,7 @@
                         formData.append('is_csb_v', kycData.is_csb_v ? 1 : 0);
                         formData.append('is_gst', kycData.is_gst ? 1 : 0);
                         formData.append('is_lut', 1);
+                        formData.append('gst_business_name', kycData.gst_business_name || '');
                         formData.append('gst_certificate_number', kycData.gst_certificate_number || kycData.gst_number || '');
                         formData.append('pan_number', kycData.pan_number || '');
                         formData.append('pan_holder_name', kycData.pan_holder_name || '');
@@ -3371,6 +3563,9 @@
                         }
                         if (kycData.pan_file instanceof File) {
                             formData.append('pan_document', kycData.pan_file);
+                        }
+                        if (kycData.gst_certificate_file instanceof File) {
+                            formData.append('gst_certificate_document', kycData.gst_certificate_file);
                         }
                         if (kycData.signature_file instanceof File) {
                             formData.append('signature_document', kycData.signature_file);

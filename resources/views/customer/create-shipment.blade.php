@@ -9159,7 +9159,7 @@
                                             <div class="service-info">
                                             <div class="service-title">${r.method}</div>
                                             <div class="service-tat" style="color: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important; font-weight: bold; font-size: 14px;"><i class="fas fa-clock me-1"></i>${r.tat || 'N/A'}</div>
-                                            ${r.zone_no ? '<div class="service-zone" style="font-size: 12px; color: #666;"><i class="fas fa-map-marker-alt me-1"></i>' + (r.zone_name ? r.zone_name + ' (' + r.zone_code + ')' : 'Zone ' + r.zone_no) + '</div>' : ''}
+                                            ${r.zone_no ? '<div class="service-zone" style="font-size: 12px; color: #666;"><i class="fas fa-map-marker-alt me-1"></i>' + (r.zone_name ? r.zone_name + (r.zone_code ? ' (' + r.zone_code + ')' : '') : 'Zone ' + r.zone_no) + '</div>' : ''}
                                             <span class="status-badge">
                                                     <i class="fas fa-check-circle"></i>
                                                     Available
@@ -11192,9 +11192,19 @@ if (rateRadio && rateRadio.dataset.rate) {
 
         function getCountryCode() {
             const opt = getSelectedOption();
-            if (opt && opt.dataset.countryCode) return opt.dataset.countryCode.toLowerCase();
-            // Fallback: derive from the name (e.g. "US- United State of America" → "us")
             const name = getDestinationName();
+            const configuredCode = opt && opt.dataset.countryCode
+                ? opt.dataset.countryCode.trim().toUpperCase()
+                : '';
+
+            // Some destination records may identify the UAE as Dubai or use
+            // a non-standard country code. Normalize those values to ISO AE.
+            if (configuredCode === 'AE' || configuredCode === 'UAE' || configuredCode === 'ARE'
+                || /dubai|united arab emirates|uae/i.test(name)) {
+                return 'ae';
+            }
+
+            // Fallback: derive from the name (e.g. "US- United State of America" → "us")
             const match = name.match(/^([A-Za-z]{2})/);
             return match ? match[1].toLowerCase() : 'us';
         }
@@ -11273,7 +11283,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                 'NZL': 'NZ', 'ZAF': 'ZA', 'SGP': 'SG', 'HKG': 'HK',
                 'JPN': 'JP', 'KOR': 'KR', 'CHN': 'CN', 'BRA': 'BR',
                 'MEX': 'MX', 'ARG': 'AR', 'RUS': 'RU', 'TUR': 'TR',
-                'ARE': 'AE', 'SAU': 'SA', 'THA': 'TH', 'MYS': 'MY',
+                'ARE': 'AE', 'UAE': 'AE', 'SAU': 'SA', 'THA': 'TH', 'MYS': 'MY',
                 'IDN': 'ID', 'PHL': 'PH', 'VNM': 'VN', 'EGY': 'EG',
                 'NGA': 'NG', 'KEN': 'KE', 'GHA': 'GH', 'PAK': 'PK',
                 'BGD': 'BD', 'LKA': 'LK', 'NPL': 'NP', 'BTN': 'BT',
@@ -11294,6 +11304,22 @@ if (rateRadio && rateRadio.dataset.rate) {
             };
             if (iso3to2[cc]) {
                 cc = iso3to2[cc];
+            }
+
+            // UAE has seven emirates. Render them directly so the dropdown
+            // always shows the correct UAE list when Dubai/UAE is selected,
+            // even if the public states API is slow or unavailable.
+            if (cc === 'AE') {
+                renderStates([
+                    { name: 'Abu Dhabi', state_code: 'AZ' },
+                    { name: 'Ajman', state_code: 'AJ' },
+                    { name: 'Dubai', state_code: 'DU' },
+                    { name: 'Fujairah', state_code: 'FU' },
+                    { name: 'Ras Al Khaimah', state_code: 'RK' },
+                    { name: 'Sharjah', state_code: 'SH' },
+                    { name: 'Umm Al Quwain', state_code: 'UQ' }
+                ]);
+                return;
             }
 
             // Show a loading placeholder while we fetch / filter.
@@ -11607,6 +11633,14 @@ if (rateRadio && rateRadio.dataset.rate) {
 
             if (!destId) {
                 clearStateDropdown();
+                return;
+            }
+
+            // UAE/Dubai uses the seven emirates as consignee states. Handle it
+            // before the database-zone request so any existing UAE zone rows
+            // cannot replace the required emirate list.
+            if (getCountryCode().toUpperCase() === 'AE') {
+                populateStateDropdownFromApi('AE');
                 return;
             }
 

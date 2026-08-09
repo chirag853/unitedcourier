@@ -642,7 +642,7 @@ class customerController extends Controller
         }
 
         $allowedFields = [
-            'gst_number', 'gst_verified', 'otp_verified', 'aadhar_number',
+            'gst_number', 'gst_business_name', 'gst_verified', 'otp_verified', 'aadhar_number',
             'aadhar_verified', 'aadhar_address', 'pan_number', 'pan_holder_name',
             'pan_dob', 'pan_verified', 'organization_name', 'authorized_signatory',
             'billing_address', 'billing_gst', 'billing_contact', 'billing_email',
@@ -1134,6 +1134,8 @@ class customerController extends Controller
             // Validate the request (text fields + file fields)
             $validated = $request->validate([
                 'gst_number' => 'nullable|string|size:15|regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
+                'gst_business_name' => 'required_with:gst_number|string|max:255',
+                'gst_certificate_document' => 'required_with:gst_number|file|mimes:pdf|max:5120',
                 'gst_verified' => 'nullable|boolean',
                 'otp_verified' => 'nullable|boolean',
                 'aadhar_number' => 'nullable|string|max:20',
@@ -1141,7 +1143,7 @@ class customerController extends Controller
                 'aadhar_address' => 'nullable|string|max:1000',
                 'pan_number' => 'nullable|string|max:20',
                 'pan_holder_name' => 'nullable|string|max:255',
-                'pan_dob' => 'nullable|string|max:20',
+                'pan_dob' => 'nullable|date|before:today',
                 'pan_verified' => 'nullable|boolean',
                 'organization_name' => 'nullable|string|max:255',
                 'authorized_signatory' => 'nullable|string|max:255',
@@ -1159,6 +1161,9 @@ class customerController extends Controller
             ], [
                 'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
                 'gst_number.size' => 'The GST number must be exactly 15 characters.',
+                'gst_certificate_document.required_with' => 'Upload the GST Certificate PDF when submitting GST details.',
+                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
+                'gst_certificate_document.max' => 'The GST Certificate PDF must not exceed 5 MB.',
             ]);
 
             // Get current customer
@@ -1173,12 +1178,61 @@ class customerController extends Controller
             $gstNumber = $request->gst_number
                 ? strtoupper(preg_replace('/\s+/', '', $request->gst_number))
                 : null;
+            $gstBusinessName = trim((string) $request->input('gst_business_name'));
+
+            if ($gstNumber && (
+                !$request->boolean('gst_verified')
+                || session('kyc_gst_number') !== $gstNumber
+                || !session('kyc_gst_cashfree_verified')
+                || !hash_equals(
+                    (string) session('kyc_gst_business_name', ''),
+                    $this->normalizeGstBusinessName($gstBusinessName)
+                )
+            )) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verify the submitted GSTIN through Cashfree before submitting KYC.',
+                ], 422);
+            }
+
             $aadharNumber = $request->aadhar_number
                 ? preg_replace('/\s+/', '', $request->aadhar_number)
                 : null;
             $panNumber = $request->pan_number
                 ? strtoupper(preg_replace('/\s+/', '', $request->pan_number))
                 : null;
+            $panHolderName = $this->normalizePanHolderName((string) $request->input('pan_holder_name'));
+            $panDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+            $hasAnyPanData = $panNumber
+                || $panHolderName
+                || $panDob
+                || $request->boolean('pan_verified')
+                || $request->hasFile('pan_document');
+
+            if ($hasAnyPanData) {
+                $panFile = $request->file('pan_document');
+                $panDocumentHash = $panFile
+                    ? hash_file('sha256', $panFile->getRealPath())
+                    : null;
+                if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', (string) $panNumber)
+                    || $panHolderName === ''
+                    || $panDob === null
+                    || !$request->boolean('pan_verified')
+                    || !$panFile
+                    || !session('kyc_pan_cashfree_verified')
+                    || session('kyc_pan_number') !== $panNumber
+                    || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
+                    || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
+                    || !hash_equals(
+                        (string) session('kyc_pan_document_hash', ''),
+                        (string) $panDocumentHash
+                    )) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before submitting KYC.',
+                    ], 422);
+                }
+            }
 
             $isAadhaarOptional = $this->isCourierOrAggregator($customer);
             $hasAnyAadhaarData = $aadharNumber
@@ -1187,15 +1241,25 @@ class customerController extends Controller
                 || $request->hasFile('aadhar_back_document');
 
             if (!$isAadhaarOptional || $hasAnyAadhaarData) {
+                $aadharFrontFile = $request->file('aadhar_front_document');
+                $aadharFrontHash = $aadharFrontFile
+                    ? hash_file('sha256', $aadharFrontFile->getRealPath())
+                    : null;
                 if (!preg_match('/^[2-9][0-9]{11}$/', (string) $aadharNumber)
                     || !$request->boolean('aadhar_verified')
-                    || !$request->hasFile('aadhar_front_document')
-                    || !$request->hasFile('aadhar_back_document')) {
+                    || !$aadharFrontFile
+                    || !$request->hasFile('aadhar_back_document')
+                    || !session('kyc_aadhar_cashfree_verified')
+                    || session('kyc_aadhar_number') !== $aadharNumber
+                    || !hash_equals(
+                        (string) session('kyc_aadhar_front_hash', ''),
+                        (string) $aadharFrontHash
+                    )) {
                     return response()->json([
                         'success' => false,
                         'message' => $isAadhaarOptional
-                            ? 'Complete Aadhaar verification and upload both Aadhaar images, or leave all Aadhaar fields empty.'
-                            : 'A verified Aadhaar and both Aadhaar images are required before submitting KYC.'
+                            ? 'Complete Cashfree Aadhaar verification with the selected front image and upload both Aadhaar images, or leave all Aadhaar fields empty.'
+                            : 'Cashfree verification of the submitted Aadhaar number and front image, plus both Aadhaar images, is required before submitting KYC.'
                     ], 422);
                 }
             }
@@ -1213,6 +1277,7 @@ class customerController extends Controller
 
             // Ensure upload directories exist
             $uploadDirs = [
+                'uploads/gst_certificate_documents',
                 'uploads/aadhar_front_documents',
                 'uploads/aadhar_back_documents',
                 'uploads/pan_documents',
@@ -1223,6 +1288,16 @@ class customerController extends Controller
                 if (!file_exists($path)) {
                     mkdir($path, 0755, true);
                 }
+            }
+
+            // Handle GST Certificate upload
+            $gstCertificatePath = null;
+            if ($request->hasFile('gst_certificate_document')) {
+                $file = $request->file('gst_certificate_document');
+                $filename = time() . '_gst_certificate_' . Str::uuid()
+                    . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/gst_certificate_documents'), $filename);
+                $gstCertificatePath = 'uploads/gst_certificate_documents/' . $filename;
             }
 
             // Handle Aadhaar front document upload
@@ -1264,6 +1339,7 @@ class customerController extends Controller
                 'customer_id' => $customer->id,
                 'kyc_type' => 'personal',
                 'gst_number' => $gstNumber,
+                'gst_certificate_document' => $gstCertificatePath,
                 'gst_verified' => $request->gst_verified ?? false,
                 'otp_verified' => $request->otp_verified ?? false,
                 'aadhar_number' => $aadharNumber,
@@ -1321,14 +1397,7 @@ class customerController extends Controller
     }
 
     /**
-     * Verify GST number during KYC.
-     * Validates the GSTIN format:
-     *   - 2-digit state code (01-38)
-     *   - 10-character PAN (5 letters + 4 digits + 1 letter)
-     *   - 1-char entity code (1-9, A-Z)
-     *   - 1 char (default 'Z')
-     *   - 1-char checksum (alphanumeric)
-     * Example: 22AAAAA0000A1Z5
+     * Verify GSTIN through Cashfree during either KYC flow.
      */
     public function verifyGst(Request $request)
     {
@@ -1337,15 +1406,14 @@ class customerController extends Controller
             if (!$customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You must be logged in to verify your GST number.'
+                    'message' => 'You must be logged in to verify your GST number.',
                 ], 401);
             }
 
             $validated = $request->validate([
                 'gst_number' => ['required', 'string', 'size:15'],
-                'gst_certificate_document' => $this->isBusinessCustomer($customer)
-                    ? 'required|file|mimes:pdf|max:5120'
-                    : 'nullable|file|mimes:pdf|max:5120',
+                'business_name' => ['required', 'string', 'max:255'],
+                'gst_certificate_document' => ['required', 'file', 'mimes:pdf', 'max:5120'],
             ], [
                 'gst_certificate_document.required' => 'Upload the GST Certificate PDF before verification.',
                 'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
@@ -1353,40 +1421,25 @@ class customerController extends Controller
             ]);
 
             $gst = strtoupper(preg_replace('/\s+/', '', $validated['gst_number']));
-
-            // GSTIN format validation:
-            // [0-3][0-9]  -> state code 01-38
-            // [A-Z]{5}    -> first 5 letters of PAN
-            // [0-9]{4}    -> 4 digits of PAN
-            // [A-Z]       -> last letter of PAN
-            // [1-9A-Z]    -> entity code
-            // Z           -> default 'Z'
-            // [0-9A-Z]    -> checksum (alphanumeric)
             if (!preg_match('/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', $gst)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid GST number format. A valid GSTIN is 15 characters: 2-digit state code, 10-char PAN, entity code, Z, and checksum (e.g. 22AAAAA0000A1Z5).'
+                    'message' => 'Invalid GST number format. Please enter a valid 15-character GSTIN.',
                 ], 422);
             }
 
-            // Validate state code is within 01-38
-            $stateCode = substr($gst, 0, 2);
-            if ((int) $stateCode < 1 || (int) $stateCode > 38) {
+            $stateCode = (int) substr($gst, 0, 2);
+            if ($stateCode < 1 || $stateCode > 38) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid state code in GST number. State code must be between 01 and 38.'
+                    'message' => 'Invalid state code in GST number. State code must be between 01 and 38.',
                 ], 422);
             }
 
-            // Validate checksum digit using the official GSTIN checksum algorithm
-            $gstWithoutChecksum = substr($gst, 0, 14);
-            $actualChecksum = substr($gst, 14, 1);
-            $computedChecksum = $this->computeGstChecksum($gstWithoutChecksum);
-            
-            if ($computedChecksum !== $actualChecksum) {
+            if ($this->computeGstChecksum(substr($gst, 0, 14)) !== substr($gst, 14, 1)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid GST number. The checksum digit does not match. Please verify your GSTIN.'
+                    'message' => 'Invalid GST number. The checksum digit does not match.',
                 ], 422);
             }
 
@@ -1394,29 +1447,164 @@ class customerController extends Controller
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
+            $businessName = trim($validated['business_name']);
+
+            $clientId = config('services.cashfree.verification_client_id');
+            $clientSecret = config('services.cashfree.verification_client_secret');
+            if (!$clientId || !$clientSecret) {
+                \Log::error('Cashfree GST verification credentials are not configured.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'GST verification is temporarily unavailable.',
+                ], 503);
+            }
+
+            $cashfreeResponse = Http::acceptJson()
+                ->withHeaders([
+                    'x-client-id' => $clientId,
+                    'x-client-secret' => $clientSecret,
+                    'Content-Type' => 'application/json',
+                ])
+                ->timeout((int) config('services.cashfree.verification_timeout', 30))
+                ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/gstin', [
+                    'GSTIN' => $gst,
+                    'business_name' => $businessName,
+                ]);
+
+            $cashfreeData = $cashfreeResponse->json();
+            if (!$cashfreeResponse->successful()) {
+                \Log::warning('Cashfree GST verification rejected.', [
+                    'customer_id' => $customer->id,
+                    'http_status' => $cashfreeResponse->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not verify this GSTIN.',
+                ], 422);
+            }
+
+            $providerStatus = strtoupper((string) (
+                data_get($cashfreeData, 'verification_status')
+                ?? data_get($cashfreeData, 'status')
+                ?? data_get($cashfreeData, 'status_code')
+                ?? ''
+            ));
+            $providerValid = data_get($cashfreeData, 'valid');
+            $providerSuccess = data_get($cashfreeData, 'success');
+            if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
+                || $providerValid === false
+                || $providerSuccess === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not verify this GSTIN.',
+                ], 422);
+            }
+
+            $legalName = trim((string) (
+                data_get($cashfreeData, 'legal_name_of_business')
+                ?? data_get($cashfreeData, 'data.legal_name_of_business')
+                ?? data_get($cashfreeData, 'legal_name')
+                ?? data_get($cashfreeData, 'data.legal_name')
+                ?? ''
+            ));
+            $tradeName = trim((string) (
+                data_get($cashfreeData, 'trade_name_of_business')
+                ?? data_get($cashfreeData, 'data.trade_name_of_business')
+                ?? data_get($cashfreeData, 'trade_name')
+                ?? data_get($cashfreeData, 'data.trade_name')
+                ?? ''
+            ));
+            $normalizedBusinessName = $this->normalizeGstBusinessName($businessName);
+            $providerNames = array_values(array_filter([$legalName, $tradeName]));
+            $nameMatches = collect($providerNames)->contains(
+                fn (string $providerName) => hash_equals(
+                    $this->normalizeGstBusinessName($providerName),
+                    $normalizedBusinessName
+                )
+            );
+
+            if (!$providerNames) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree did not return the registered business name for this GSTIN.',
+                ], 422);
+            }
+
+            if (!$nameMatches) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The entered Business Name does not match the name registered for this GSTIN.',
+                ], 422);
+            }
+
             session([
                 'kyc_gst_number' => $gst,
+                'kyc_gst_business_name' => $normalizedBusinessName,
                 'kyc_gst_verified' => true,
+                'kyc_gst_cashfree_verified' => true,
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'GST number verified successfully!',
+                'message' => 'GST number and Business Name verified successfully through Cashfree.',
                 'gst_number' => $gst,
+                'business_name' => $legalName ?: $tradeName,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
-        } catch (\Throwable $e) {
-            \Log::error('GST verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Cashfree GST verification connection failed.', [
+                'message' => $e->getMessage(),
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'GST verification failed. Please try again.'
+                'message' => 'Unable to reach Cashfree for GST verification. Please try again.',
+            ], 503);
+        } catch (\Throwable $e) {
+            \Log::error('GST verification error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'GST verification failed. Please try again.',
             ], 500);
         }
+    }
+
+    private function normalizeGstBusinessName(string $name): string
+    {
+        $asciiName = Str::ascii($name);
+
+        return strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $asciiName) ?? '');
+    }
+
+    private function normalizePanHolderName(string $name): string
+    {
+        $asciiName = Str::ascii($name);
+
+        return strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $asciiName) ?? '');
+    }
+
+    private function normalizePanDob(string $dob): ?string
+    {
+        $dob = trim($dob);
+        if ($dob === '') {
+            return null;
+        }
+
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
+            $date = \DateTimeImmutable::createFromFormat('!' . $format, $dob);
+            $errors = \DateTimeImmutable::getLastErrors();
+            if ($date && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+                return $date->format('Y-m-d');
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1546,109 +1734,226 @@ class customerController extends Controller
     }
 
     /**
-     * Verify Aadhar number during KYC.
-     * Accepts an Aadhar number, validates the format, and marks it as verified.
+     * Verify an Aadhaar front image through Cashfree Bharat OCR during KYC.
      */
     public function verifyAadhar(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
-            ]);
-
-            // Get current customer
             $customer = auth()->guard('customer')->user();
             if (!$customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You must be logged in to verify your Aadhar.'
+                    'message' => 'You must be logged in to verify your Aadhaar.',
                 ], 401);
             }
 
-            // Normalize the Aadhaar number before every lookup and write.
-            $aadhar = preg_replace('/\s+/', '', $validated['aadhar_number']);
+            session()->forget([
+                'kyc_aadhar_number',
+                'kyc_aadhar_verified',
+                'kyc_aadhar_cashfree_verified',
+                'kyc_aadhar_front_hash',
+                'kyc_aadhar_verification_id',
+            ]);
 
+            $validated = $request->validate([
+                'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
+                'aadhar_front_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            ], [
+                'aadhar_front_document.required' => 'Upload the Aadhaar front image before verification.',
+                'aadhar_front_document.mimes' => 'The Aadhaar front document must be a JPG, JPEG, or PNG image.',
+                'aadhar_front_document.max' => 'The Aadhaar front image must not exceed 5 MB.',
+            ]);
+
+            $aadhar = preg_replace('/\s+/', '', $validated['aadhar_number']);
             if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, null)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            // Store verification in session only after the unique ownership check succeeds.
+            $clientId = config('services.cashfree.verification_client_id');
+            $clientSecret = config('services.cashfree.verification_client_secret');
+            if (!$clientId || !$clientSecret) {
+                \Log::error('Cashfree Aadhaar OCR credentials are not configured.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aadhaar verification is temporarily unavailable.',
+                ], 503);
+            }
+
+            $frontFile = $request->file('aadhar_front_document');
+            $verificationId = (string) random_int(1000, 9999);
+            $fileStream = fopen($frontFile->getRealPath(), 'r');
+            if ($fileStream === false) {
+                throw new \RuntimeException('Unable to read the uploaded Aadhaar front image.');
+            }
+
+            try {
+                $cashfreeResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'x-client-id' => $clientId,
+                        'x-client-secret' => $clientSecret,
+                        'x-api-version' => '2024-12-01',
+                    ])
+                    ->attach('file', $fileStream, $frontFile->getClientOriginalName())
+                    ->timeout((int) config('services.cashfree.verification_timeout', 30))
+                    ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
+                        'verification_id' => $verificationId,
+                        'document_type' => 'AADHAAR',
+                        'do_verification' => 'false',
+                    ]);
+            } finally {
+                fclose($fileStream);
+            }
+
+            $cashfreeData = $cashfreeResponse->json();
+            if (!$cashfreeResponse->successful()) {
+                \Log::warning('Cashfree Aadhaar OCR rejected.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'http_status' => $cashfreeResponse->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this Aadhaar image.',
+                ], 422);
+            }
+
+            $providerStatus = strtoupper((string) (
+                data_get($cashfreeData, 'verification_status')
+                ?? data_get($cashfreeData, 'status')
+                ?? data_get($cashfreeData, 'status_code')
+                ?? ''
+            ));
+            if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
+                || data_get($cashfreeData, 'success') === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this Aadhaar image.',
+                ], 422);
+            }
+
+            $ocrAadhaar = preg_replace(
+                '/\D+/',
+                '',
+                (string) data_get($cashfreeData, 'document_fields.uid', '')
+            );
+
+            if (!preg_match('/^[2-9][0-9]{11}$/', $ocrAadhaar)) {
+                \Log::warning('Cashfree Aadhaar OCR response did not contain a valid document_fields.uid.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid Aadhaar number from the uploaded image.',
+                ], 422);
+            }
+
+            if (!hash_equals($aadhar, $ocrAadhaar)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The Aadhaar number entered does not match the UID read from the uploaded Aadhaar image.',
+                ], 422);
+            }
+
+            $frontHash = hash_file('sha256', $frontFile->getRealPath());
             session([
                 'kyc_aadhar_number' => $aadhar,
                 'kyc_aadhar_verified' => true,
+                'kyc_aadhar_cashfree_verified' => true,
+                'kyc_aadhar_front_hash' => $frontHash,
+                'kyc_aadhar_verification_id' => $verificationId,
             ]);
 
-            // Persist the verified Aadhaar against the authenticated customer.
             $customer->aadhar_number = $aadhar;
             $customer->aadhar_verified = true;
             $customer->save();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Aadhaar number verified successfully!',
+                'message' => 'Aadhaar document verified successfully through Cashfree!',
                 'aadhar_number' => $aadhar,
+                'verification_id' => $verificationId,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Illuminate\Database\QueryException $e) {
-            \Log::error('Aadhar verification database error: ' . $e->getMessage());
+            \Log::error('Aadhaar verification database error: ' . $e->getMessage());
             if ($e->getCode() === '23000' && str_contains(strtolower($e->getMessage()), 'aadhar_number')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This Aadhaar number is already registered with another account.'
+                    'message' => 'This Aadhaar number is already registered with another account.',
                 ], 409);
             }
 
             return response()->json([
                 'success' => false,
-                'message' => 'Aadhaar verification failed. Please try again.'
+                'message' => 'Aadhaar verification failed. Please try again.',
             ], 500);
         } catch (\Throwable $e) {
-            \Log::error('Aadhar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            \Log::error('Aadhaar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Aadhaar verification failed. Please try again.'
+                'message' => 'Aadhaar verification failed. Please try again.',
             ], 500);
         }
     }
 
     /**
-     * Verify PAN number during Personal KYC.
-     * Accepts a PAN number, validates the format, and marks it as verified.
+     * Verify a PAN number and its image through Cashfree Bharat OCR.
      */
     public function verifyPan(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'pan_number' => 'required|string|size:10',
-            ]);
-
-            // Get current customer
             $customer = auth()->guard('customer')->user();
             if (!$customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You must be logged in to verify your PAN.'
+                    'message' => 'You must be logged in to verify your PAN.',
                 ], 401);
             }
 
-            // PAN format validation: 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)
-            $pan = strtoupper(preg_replace('/\s+/', '', $request->pan_number));
+            session()->forget([
+                'kyc_pan_number',
+                'kyc_pan_holder_name',
+                'kyc_pan_dob',
+                'kyc_pan_verified',
+                'kyc_pan_cashfree_verified',
+                'kyc_pan_document_hash',
+                'kyc_pan_verification_id',
+            ]);
+
+            $validated = $request->validate([
+                'pan_number' => ['required', 'string', 'regex:/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/'],
+                'pan_holder_name' => ['required', 'string', 'max:255'],
+                'pan_dob' => ['required', 'date', 'before:today'],
+                'pan_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            ], [
+                'pan_document.required' => 'Upload the PAN image before verification.',
+                'pan_document.mimes' => 'The PAN document must be a JPG, JPEG, or PNG image.',
+                'pan_document.max' => 'The PAN image must not exceed 5 MB.',
+            ]);
+
+            $pan = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', $validated['pan_number']));
+            $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
+            $panDob = $this->normalizePanDob($validated['pan_dob']);
             if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', $pan)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid PAN number. It must be 10 characters: 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).'
+                    'message' => 'Invalid PAN number. It must be 10 characters: 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).',
                 ], 422);
             }
 
             if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($pan)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.'
+                    'message' => 'Individual PAN details cannot be used for a business account. Please enter the business PAN.',
                 ], 422);
             }
 
@@ -1656,13 +1961,154 @@ class customerController extends Controller
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            // Store PAN verification in session only after all checks succeed.
+            $clientId = config('services.cashfree.verification_client_id');
+            $clientSecret = config('services.cashfree.verification_client_secret');
+            if (!$clientId || !$clientSecret) {
+                \Log::error('Cashfree PAN OCR credentials are not configured.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'PAN verification is temporarily unavailable.',
+                ], 503);
+            }
+
+            $panFile = $validated['pan_document'];
+            $fileStream = fopen($panFile->getRealPath(), 'r');
+            if ($fileStream === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN image could not be read. Please upload it again.',
+                ], 422);
+            }
+
+            $verificationId = (string) random_int(1000, 9999);
+            try {
+                $cashfreeResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'x-client-id' => $clientId,
+                        'x-client-secret' => $clientSecret,
+                        'x-api-version' => '2024-12-01',
+                    ])
+                    ->attach('file', $fileStream, $panFile->getClientOriginalName())
+                    ->timeout((int) config('services.cashfree.verification_timeout', 30))
+                    ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
+                        'verification_id' => $verificationId,
+                        'document_type' => 'PAN',
+                        'do_verification' => 'false',
+                    ]);
+            } finally {
+                fclose($fileStream);
+            }
+
+            $cashfreeData = $cashfreeResponse->json();
+            if (!$cashfreeResponse->successful()) {
+                \Log::warning('Cashfree PAN OCR rejected.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'http_status' => $cashfreeResponse->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this PAN image.',
+                ], 422);
+            }
+
+            $providerStatus = strtoupper((string) (
+                data_get($cashfreeData, 'verification_status')
+                ?? data_get($cashfreeData, 'status')
+                ?? data_get($cashfreeData, 'status_code')
+                ?? ''
+            ));
+            if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
+                || data_get($cashfreeData, 'success') === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this PAN image.',
+                ], 422);
+            }
+
+            $ocrPan = strtoupper(preg_replace(
+                '/[^A-Z0-9]+/',
+                '',
+                (string) data_get($cashfreeData, 'document_fields.pan', '')
+            ));
+            $ocrPanHolderNameValue = collect([
+                data_get($cashfreeData, 'document_fields.name'),
+                data_get($cashfreeData, 'document_fields.pan_name'),
+                data_get($cashfreeData, 'document_fields.full_name'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '');
+            $ocrPanDobValue = collect([
+                data_get($cashfreeData, 'document_fields.dob'),
+                data_get($cashfreeData, 'document_fields.date_of_birth'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '');
+            $ocrPanHolderName = $this->normalizePanHolderName((string) $ocrPanHolderNameValue);
+            $ocrPanDob = $this->normalizePanDob((string) $ocrPanDobValue);
+            if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', $ocrPan)) {
+                \Log::warning('Cashfree PAN OCR response did not contain a valid document_fields.pan.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid PAN number from the uploaded image.',
+                ], 422);
+            }
+
+            if (!hash_equals($pan, $ocrPan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN number entered does not match the PAN read from the uploaded image.',
+                ], 422);
+            }
+
+            if ($ocrPanHolderName === '') {
+                \Log::warning('Cashfree PAN OCR response did not contain a holder name.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read the holder name from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if (!hash_equals($panHolderName, $ocrPanHolderName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN holder name entered does not match the name read from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if ($ocrPanDob === null) {
+                \Log::warning('Cashfree PAN OCR response did not contain a valid date of birth.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid date of birth from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if ($panDob === null || !hash_equals($panDob, $ocrPanDob)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN date of birth entered does not match the date read from the uploaded PAN image.',
+                ], 422);
+            }
+
+            $documentHash = hash_file('sha256', $panFile->getRealPath());
             session([
                 'kyc_pan_number' => $pan,
+                'kyc_pan_holder_name' => $panHolderName,
+                'kyc_pan_dob' => $panDob,
                 'kyc_pan_verified' => true,
+                'kyc_pan_cashfree_verified' => true,
+                'kyc_pan_document_hash' => $documentHash,
+                'kyc_pan_verification_id' => $verificationId,
             ]);
 
-            // Also update the customer record if a pan_number column exists
             if (\Schema::hasColumn('customers', 'pan_number')) {
                 $customer->pan_number = $pan;
                 $customer->pan_verified = true;
@@ -1671,20 +2117,34 @@ class customerController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'PAN number verified successfully!',
+                'message' => 'PAN document verified successfully through Cashfree!',
                 'pan_number' => $pan,
+                'verification_id' => $verificationId,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('PAN verification database error: ' . $e->getMessage());
+            if ($e->getCode() === '23000' && str_contains(strtolower($e->getMessage()), 'pan_number')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This PAN number is already registered with another account.',
+                ], 409);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'PAN verification failed. Please try again.',
+            ], 500);
         } catch (\Throwable $e) {
             \Log::error('PAN verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'PAN verification failed. Please try again.'
+                'message' => 'PAN verification failed. Please try again.',
             ], 500);
         }
     }
@@ -1763,6 +2223,25 @@ class customerController extends Controller
             }
 
             $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
+            $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
+            $panDob = $this->normalizePanDob($validated['pan_dob']);
+            $panFile = $request->file('pan_document');
+            $panDocumentHash = hash_file('sha256', $panFile->getRealPath());
+
+            if (!session('kyc_pan_cashfree_verified')
+                || session('kyc_pan_number') !== $panNumber
+                || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
+                || $panDob === null
+                || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
+                || !hash_equals(
+                    (string) session('kyc_pan_document_hash', ''),
+                    (string) $panDocumentHash
+                )) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before submitting Personal KYC.',
+                ], 422);
+            }
 
             if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, $aadhar, $panNumber)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
@@ -1979,6 +2458,7 @@ class customerController extends Controller
             // required only when the customer has not uploaded that document previously.
             $validated = $request->validate([
                 'is_csb_v' => 'required|boolean',
+                'gst_business_name' => ['required', 'string', 'max:255'],
                 'is_gst' => 'required|boolean',
                 'is_lut' => 'required|boolean',
                 'gst_certificate_number' => ['required', 'string', 'size:15'],
@@ -1996,10 +2476,7 @@ class customerController extends Controller
                 'pan_number' => ['required', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
                 'pan_holder_name' => ['required', 'string', 'max:255'],
                 'pan_dob' => ['required', 'date', 'before:today'],
-                'pan_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$existingBusinessKyc?->pan_document),
-                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
-                ],
+                'pan_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'ad_code' => ['required', 'digits:14'],
                 'ad_code_document' => [
                     \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->ad_code_document),
@@ -2042,6 +2519,26 @@ class customerController extends Controller
                 'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
                 'terms_accepted.accepted' => 'You must accept the declaration and terms.',
             ]);
+
+            $gstNumber = strtoupper(preg_replace(
+                '/\s+/',
+                '',
+                $validated['gst_certificate_number']
+            ));
+
+            if (
+                session('kyc_gst_number') !== $gstNumber
+                || !session('kyc_gst_cashfree_verified')
+                || !hash_equals(
+                    (string) session('kyc_gst_business_name', ''),
+                    $this->normalizeGstBusinessName($validated['gst_business_name'])
+                )
+            ) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verify the submitted GSTIN through Cashfree before submitting the CSB-V form.',
+                ], 422);
+            }
 
             if (!empty($validated['lut_bond_year'])) {
                 [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
@@ -2110,10 +2607,21 @@ class customerController extends Controller
             }
 
             $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
-            $storedPan = strtoupper(preg_replace('/\s+/', '', (string) $customer->pan_number));
-            if (!(bool) $customer->pan_verified || !hash_equals($storedPan, $panNumber)) {
+            $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
+            $panDob = $this->normalizePanDob($validated['pan_dob']);
+            $panFile = $request->file('pan_document');
+            $panDocumentHash = hash_file('sha256', $panFile->getRealPath());
+            if (!session('kyc_pan_cashfree_verified')
+                || session('kyc_pan_number') !== $panNumber
+                || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
+                || $panDob === null
+                || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
+                || !hash_equals(
+                    (string) session('kyc_pan_document_hash', ''),
+                    (string) $panDocumentHash
+                )) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'pan_number' => 'Verify the submitted PAN number before completing Business KYC.',
+                    'pan_number' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before completing Business KYC.',
                 ]);
             }
 
@@ -2225,7 +2733,7 @@ class customerController extends Controller
                 'is_csb_v' => $validated['is_csb_v'],
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
-                'gst_certificate_number' => strtoupper($validated['gst_certificate_number']),
+                'gst_certificate_number' => $gstNumber,
                 'gst_certificate_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_certificate_document ?? null)
                     ?? ($existingCsbForm->gst_document ?? null),
@@ -2269,7 +2777,7 @@ class customerController extends Controller
             $businessKycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'business',
-                'gst_number' => strtoupper($validated['gst_certificate_number']),
+                'gst_number' => $gstNumber,
                 'gst_verified' => true,
                 'aadhar_number' => $aadhar,
                 'aadhar_verified' => $aadharVerified,
@@ -2282,7 +2790,7 @@ class customerController extends Controller
                 'pan_dob' => $validated['pan_dob'],
                 'pan_document' => $panDocumentPath ?? ($existingBusinessKyc->pan_document ?? null),
                 'pan_verified' => true,
-                'organization_name' => $customer->first_name . ' ' . $customer->last_name,
+                'organization_name' => $validated['gst_business_name'],
                 'authorized_signatory' => $customer->first_name . ' ' . $customer->last_name,
                 'signature_document' => $signaturePath
                     ?? ($existingBusinessKyc->signature_document ?? null)
@@ -3692,9 +4200,10 @@ class customerController extends Controller
                 $defaultRate = null; // first available rate as default selection
 
                 foreach ($allServices as $service) {
-                    // Country-based filtering: a service is shown only when its
-                    // `country` column matches the destination country.
-                    if (strcasecmp($service->country ?? 'US', $destinationCountry) !== 0) {
+                    // Country-based filtering: destination-specific services and
+                    // services explicitly configured for ALL countries are eligible.
+                    $serviceCountry = strtoupper(trim((string) ($service->country ?? 'US')));
+                    if ($serviceCountry !== 'ALL' && strcasecmp($serviceCountry, $destinationCountry) !== 0) {
                         continue; // country mismatch → skip this service
                     }
 
@@ -4035,57 +4544,85 @@ class customerController extends Controller
                 ]);
             }
 
-            // 4. Get zone
-            // Zone lookup is category-aware:
-            //   - state-category destinations (e.g. US) store state codes as
-            //     zone_code, so we look up by consignee_state.
-            //   - zipcode-category destinations (e.g. UK/Canada) store postcodes
-            //     as zone_code, so we look up by consignee_zip_code.
-            // To stay backward-compatible we first try consignee_state, and
-            // only fall back to consignee_zip_code when no state match is found.
+            // 4. Resolve destination and its zone.
+            // The frontend normally sends the destination name, but API/bulk
+            // callers may send the numeric destinations.id instead.
+            $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
+            $destination = null;
+            if (ctype_digit(trim((string) $deliveryDestination))) {
+                $destination = \App\Models\Destination::find((int) $deliveryDestination);
+            } elseif (!empty($deliveryDestination)) {
+                $destinationValue = trim((string) $deliveryDestination);
+                $destination = \App\Models\Destination::where(function ($query) use ($destinationValue) {
+                    $query->whereRaw('UPPER(name) = ?', [strtoupper($destinationValue)])
+                        ->orWhereRaw('UPPER(code) = ?', [strtoupper($destinationValue)]);
+                })->first();
+            }
+
+            // Limit state/emirate matching to the selected destination whenever
+            // possible. This prevents values such as "Dubai" from resolving to
+            // an unrelated country's zone. Match both stored codes and names
+            // because the UAE dropdown submits full emirate names.
             $zone = null;
             if (!empty($consigneeState)) {
-                $zone = \DB::select(
-                    "SELECT * FROM zone WHERE zone_code = ? LIMIT 1",
-                    [$consigneeState]
-                );
-                $zone = !empty($zone) ? $zone[0] : null;
+                $stateValue = trim((string) $consigneeState);
+                $stateAliases = [$stateValue];
+                $uaeEmirateCodes = [
+                    'ABU DHABI' => 'AZ',
+                    'AJMAN' => 'AJ',
+                    'DUBAI' => 'DU',
+                    'FUJAIRAH' => 'FU',
+                    'RAS AL KHAIMAH' => 'RK',
+                    'SHARJAH' => 'SH',
+                    'UMM AL QUWAIN' => 'UQ',
+                ];
+                if ($destinationCountry === 'UAE' && isset($uaeEmirateCodes[strtoupper($stateValue)])) {
+                    $stateAliases[] = $uaeEmirateCodes[strtoupper($stateValue)];
+                }
+
+                $zoneQuery = \App\Models\Zone::query();
+                if ($destination) {
+                    $zoneQuery->where('destination_id', $destination->id);
+                }
+                $zone = $zoneQuery->where(function ($query) use ($stateAliases) {
+                    foreach ($stateAliases as $alias) {
+                        $query->orWhereRaw('UPPER(zone_code) = ?', [strtoupper($alias)])
+                            ->orWhereRaw('UPPER(zone_name) = ?', [strtoupper($alias)]);
+                    }
+                })->first();
             }
+
             if (empty($zone) && !empty($consigneeZipCode)) {
                 // Normalise the postcode (uppercase, trim spaces) for matching.
                 $zipNorm = strtoupper(preg_replace('/\s+/', '', trim($consigneeZipCode)));
                 if ($zipNorm !== '') {
-                    // Try an exact match first, then a prefix match (UK outward
-                    // codes like "SW1" / Canada FSAs like "M5H" are stored as
-                    // zone_code, while the user may type a full postcode such as
-                    // "SW1A 1AA" or "M5H 2N2").
-                    $zone = \DB::select(
-                        "SELECT * FROM zone WHERE UPPER(zone_code) = ? LIMIT 1",
-                        [$zipNorm]
-                    );
-                    $zone = !empty($zone) ? $zone[0] : null;
+                    // Try an exact match first, scoped to the selected destination.
+                    $exactZipQuery = \App\Models\Zone::query();
+                    if ($destination) {
+                        $exactZipQuery->where('destination_id', $destination->id);
+                    }
+                    $zone = $exactZipQuery
+                        ->whereRaw("UPPER(REPLACE(zone_code, ' ', '')) = ?", [$zipNorm])
+                        ->first();
 
                     if (empty($zone)) {
-                        // Prefix match: find the longest stored zone_code that is
-                        // a prefix of the typed postcode (e.g. "SW1" matches
-                        // "SW1A1AA"). This covers UK outward codes and Canada
-                        // forward sortation areas.
-                        $zone = \DB::select(
-                            "SELECT * FROM zone
-                             WHERE zone_category = 'zipcode'
-                             AND ? LIKE CONCAT(UPPER(zone_code), '%')
-                             ORDER BY LENGTH(zone_code) DESC
-                             LIMIT 1",
-                            [$zipNorm]
-                        );
-                        $zone = !empty($zone) ? $zone[0] : null;
+                        // Find the longest stored outward/FSA code that prefixes
+                        // the full postcode, e.g. SW1 for SW1A1AA or M5H for M5H2N2.
+                        $prefixZipQuery = \App\Models\Zone::where('zone_category', 'zipcode');
+                        if ($destination) {
+                            $prefixZipQuery->where('destination_id', $destination->id);
+                        }
+                        $zone = $prefixZipQuery
+                            ->whereRaw("? LIKE CONCAT(UPPER(REPLACE(zone_code, ' ', '')), '%')", [$zipNorm])
+                            ->orderByRaw("LENGTH(REPLACE(zone_code, ' ', '')) DESC")
+                            ->first();
                     }
                 }
             }
-            $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
-            $zoneNumber = !empty($zone) ? $zone->zone_number_testing : null;
-            $zoneName = !empty($zone) ? $zone->zone_name : null;
-            $zoneCode = !empty($zone) ? $zone->zone_code : null;
+
+            $zoneNumber = $zone?->zone_number_testing;
+            $zoneName = $zone?->zone_name;
+            $zoneCode = $zone?->zone_code;
 
             // 5. Get services
             /*$serviceRows = \DB::select(
@@ -4587,6 +5124,16 @@ class customerController extends Controller
                 $gst  = floatval($r['gst_amount'] ?? 0);
                 return ($base + $fuel + $gst) > 0;
             }));
+
+            // Attach consistent selected-zone metadata to every card. Several
+            // calculation branches previously omitted zone_code, which caused
+            // the frontend to render labels such as "Remote (undefined)".
+            $allRates = array_map(function ($rate) use ($zoneNumber, $zoneName, $zoneCode) {
+                $rate['zone_no'] = $rate['zone_no'] ?? $zoneNumber;
+                $rate['zone_name'] = $zoneName;
+                $rate['zone_code'] = $zoneCode;
+                return $rate;
+            }, $allRates);
 
             // 7. Build response
             $response = [
@@ -7749,9 +8296,8 @@ class customerController extends Controller
     }
 
     /**
-     * Normalize a delivery-destination string into the short country code
-     * that matches the `country` column on the courier_services table
-     * (which stores the same code as destinations.country_code).
+     * Normalize a delivery-destination name, code, or numeric destination ID
+     * into the short code used by the courier_services.country column.
      *
      * Returns one of: "UK", "CA", "AUS", "UAE", "NZ", "SG", "MY", "US".
      *
@@ -7769,11 +8315,23 @@ class customerController extends Controller
      */
     private function resolveDestinationCountry($destination)
     {
-        $destUpper = strtoupper(trim($destination ?? ''));
-
-        if ($destUpper === '') {
+        $destinationValue = trim((string) ($destination ?? ''));
+        if ($destinationValue === '') {
             return 'US';
         }
+
+        // Resolve numeric dropdown/API values through the destination record so
+        // country selection never depends on a display-name fallback.
+        if (ctype_digit($destinationValue)) {
+            $destinationRecord = \App\Models\Destination::find((int) $destinationValue);
+            if ($destinationRecord) {
+                $destinationValue = $destinationRecord->country_code
+                    ?: $destinationRecord->code
+                    ?: $destinationRecord->name;
+            }
+        }
+
+        $destUpper = strtoupper($destinationValue);
 
         // UK detection — covers "UK", "GB", "United Kingdom", "UK - United Kingdom",
         // "Great Britain", and any string starting with "UK -".
@@ -7811,17 +8369,21 @@ class customerController extends Controller
             return 'AUS';
         }
 
-        // UAE detection — covers "United Arab Emirates", "UAE", and "ARE".
+        // UAE detection also covers the destination display name "Dubai".
         $isUae = (
+            // $destUpper === 'DUBAI'
             $destUpper === 'UNITED ARAB EMIRATES'
             || $destUpper === 'UAE'
+            || $destUpper === 'AE'
             || $destUpper === 'ARE'
+            || str_contains($destUpper, 'DUBAI')
             || str_contains($destUpper, 'UNITED ARAB EMIRATES')
         );
 
         if ($isUae) {
             return 'UAE';
         }
+
 
         // i want to add newzealand as well so i am adding it here
         // New Zealand detection — covers "New Zealand", "NZ", "NZL",
@@ -7850,7 +8412,7 @@ class customerController extends Controller
 
         // Malaysia detection — covers "Malaysia", "MY", and "MYS".
         $isMalaysia = (
-            $destUpper === 'Malaysia'
+            $destUpper === 'MALAYSIA'
             || $destUpper === 'MY'
             || $destUpper === 'MYS'
             || str_contains($destUpper, 'MALAYSIA')
