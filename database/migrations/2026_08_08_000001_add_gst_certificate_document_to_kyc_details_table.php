@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('kyc_details') || Schema::hasColumn('kyc_details', 'gst_certificate_document')) {
+            return;
+        }
+
         Schema::table('kyc_details', function (Blueprint $table) {
             $table->string('gst_certificate_document', 500)
                 ->nullable()
@@ -24,6 +28,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('kyc_details') || !Schema::hasColumn('kyc_details', 'gst_certificate_document')) {
+            return;
+        }
+
         Schema::table('kyc_details', function (Blueprint $table) {
             $table->dropColumn('gst_certificate_document');
         });

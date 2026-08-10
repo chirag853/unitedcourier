@@ -343,7 +343,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="signatureFileInput" name="signature_document"
-                                                    style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
+                                                    style="display: none;" accept=".jpg,.jpeg,.png"
                                                     onchange="handleDocSelect(this, 'signatureFileNameDisplay', 'signatureFileInfo', 'signatureRemoveFile', '.signatureUploadBtn', '#signatureDocContainer');">
                                                 <button type="button" id="signatureUploadBtn"
                                                     class="link-alt border-0 bg-transparent signatureUploadBtn"

@@ -158,9 +158,13 @@
 
         var panVerifyBtn = document.getElementById('panVerifyBtn');
         var panVerifiedBadge = document.getElementById('panVerifiedBadge');
+        var panVerified = false;
         if (panVerifyBtn) {
             panVerifyBtn.addEventListener('click', function () {
                 var panInput = document.getElementById('panNumber');
+                var holderInput = document.getElementById('panHolderName');
+                var dobInput = document.getElementById('panDob');
+                var documentInput = document.getElementById('panFileInput');
                 if (!panInput || !panInput.value) {
                     showAlert('Please enter your PAN number first.', 'error');
                     return;
@@ -170,8 +174,26 @@
                     showAlert('Invalid PAN format. It must be 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).', 'error');
                     return;
                 }
+                if (!holderInput || !holderInput.value.trim()) {
+                    showAlert('Please enter the PAN holder name before verification.', 'error');
+                    return;
+                }
+                if (!dobInput || !dobInput.value) {
+                    showAlert('Please enter the PAN date of birth before verification.', 'error');
+                    return;
+                }
+                if (!validateImageDocument(documentInput, true)) {
+                    return;
+                }
 
                 var verifyUrl = form.getAttribute('data-verify-pan-url');
+                var verifyData = new FormData();
+                verifyData.append('pan_number', pan);
+                verifyData.append('pan_holder_name', holderInput.value.trim());
+                verifyData.append('pan_dob', dobInput.value);
+                verifyData.append('pan_document', documentInput.files[0]);
+
+                panVerified = false;
                 panVerifyBtn.disabled = true;
                 panVerifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Verifying...';
 
@@ -179,35 +201,68 @@
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': getCsrfToken(),
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ pan_number: pan })
+                    body: verifyData
                 })
-                    .then(function (res) { return res.json(); })
-                    .then(function (data) {
-                        if (data.success) {
+                    .then(function (res) {
+                        return res.json().then(function (data) {
+                            return { ok: res.ok, data: data };
+                        });
+                    })
+                    .then(function (result) {
+                        var data = result.data || {};
+                        if (result.ok && data.success) {
+                            panVerified = true;
                             panVerifyBtn.style.display = 'none';
                             if (panVerifiedBadge) {
                                 panVerifiedBadge.style.display = 'inline-block';
                             }
                             panInput.setAttribute('readonly', 'readonly');
-                            showAlert('PAN verified successfully!', 'success');
+                            holderInput.setAttribute('readonly', 'readonly');
+                            dobInput.setAttribute('readonly', 'readonly');
+                            documentInput.disabled = false;
+                            showAlert(data.message || 'PAN verified successfully!', 'success');
                         } else {
-                            showAlert(data.message || 'PAN verification failed.', 'error');
+                            var message = data.message || 'PAN verification failed.';
+                            if (data.errors) {
+                                message = Object.values(data.errors).flat().join(' ');
+                            }
+                            showAlert(message, 'error');
                             panVerifyBtn.disabled = false;
                             panVerifyBtn.innerHTML = '<i class="fas fa-shield-halved me-1"></i> Verify PAN';
                         }
                     })
                     .catch(function () {
-                        panVerifyBtn.style.display = 'none';
+                        panVerified = false;
+                        panVerifyBtn.style.display = '';
                         if (panVerifiedBadge) {
-                            panVerifiedBadge.style.display = 'inline-block';
+                            panVerifiedBadge.style.display = 'none';
                         }
-                        panInput.setAttribute('readonly', 'readonly');
+                        panInput.removeAttribute('readonly');
+                        holderInput.removeAttribute('readonly');
+                        dobInput.removeAttribute('readonly');
                         panVerifyBtn.disabled = false;
                         panVerifyBtn.innerHTML = '<i class="fas fa-shield-halved me-1"></i> Verify PAN';
+                        showAlert('PAN verification could not be completed. Please check your connection and try again.', 'error');
                     });
+            });
+
+            ['panNumber', 'panHolderName', 'panDob', 'panFileInput'].forEach(function (id) {
+                var input = document.getElementById(id);
+                if (input) {
+                    input.addEventListener('change', function () {
+                        if (!panVerified) {
+                            return;
+                        }
+                        panVerified = false;
+                        panVerifyBtn.style.display = '';
+                        panVerifyBtn.disabled = false;
+                        if (panVerifiedBadge) {
+                            panVerifiedBadge.style.display = 'none';
+                        }
+                    });
+                }
             });
         }
 
@@ -219,6 +274,11 @@
             var terms = document.getElementById('termsAccepted');
             if (terms && !terms.checked) {
                 showAlert('Please accept the terms and conditions to continue.', 'error');
+                return;
+            }
+            if (!panVerified) {
+                showAlert('Please verify the PAN details and PAN image before submitting KYC.', 'error');
+                showPanel(2);
                 return;
             }
 
