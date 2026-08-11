@@ -636,6 +636,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/ups-rate', [customerController::class, 'getUpsRate'])->name('ups.rate');
     Route::post('/ups-ship', [customerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [customerController::class, 'viewAllShipments'])->name('view-all-shipments');
+    Route::get('/shipment-label/{invoiceId}', [customerController::class, 'getShipmentLabel'])->name('shipment-label');
     Route::get('/transaction-history', [customerController::class, 'transactionHistory'])->name('transaction-history');
     Route::get('/wallet-history', [customerController::class, 'walletHistory'])->name('wallet-history');
     Route::get('/my-profile', [customerController::class, 'myProfile'])->name('my-profile');

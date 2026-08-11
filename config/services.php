@@ -135,6 +135,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Primus Logistics API
+    |--------------------------------------------------------------------------
+    | Authentication uses the OAuth password grant with form-encoded
+    | credentials. The returned access token is used as a Bearer token.
+    */
+    'primus' => [
+        'base_url' => env('PRIMUS_BASE_URL', 'http://api.primuslogistics.in'),
+        'token_url' => env('PRIMUS_TOKEN_URL', 'http://api.primuslogistics.in/token'),
+        'shipment_url' => env(
+            'PRIMUS_SHIPMENT_URL',
+            'http://api.primuslogistics.in/api/ShippingFedEx/AddShipment'
+        ),
+        'username' => env('PRIMUS_USERNAME'),
+        'password' => env('PRIMUS_PASSWORD'),
+        'grant_type' => env('PRIMUS_GRANT_TYPE', 'password'),
+        'account_code' => env('PRIMUS_ACCOUNT_CODE', env('PRIMUS_USERNAME')),
+        'access_key' => env('PRIMUS_ACCESS_KEY', env('PRIMUS_PASSWORD')),
+        'customer_name' => env('PRIMUS_CUSTOMER_NAME', 'UNITED WORLDWIDE COURIERS PVT LTD'),
+        'timeout' => (int) env('PRIMUS_TIMEOUT', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | ShipUniversal API
     |--------------------------------------------------------------------------
     | Token authentication uses HTTP Basic Auth. The returned token is sent as

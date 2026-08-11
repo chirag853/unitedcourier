@@ -435,6 +435,8 @@
     <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
     <!-- Flatpickr JS -->
     <script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}"></script>
+    <!-- Main theme JS initializes sidebar dropdowns -->
+    <script src="{{ asset('assets/js/script.js') }}"></script>
 
     <script>
         $(document).ready(function () {

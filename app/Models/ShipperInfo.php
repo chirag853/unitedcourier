@@ -32,6 +32,7 @@ class ShipperInfo extends Model
         'service_rate_id',
         'service_id',
         'status',
+        'custom_label',
     ];
 
     protected $casts = [

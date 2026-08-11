@@ -13741,7 +13741,8 @@ html[data-bs-theme=dark] #light-dark-mode .ti-moon::before {
   overflow: hidden;
   margin-bottom: 5px;
 }
-.sidebar .sidebar-menu > ul > li ul li a {
+.sidebar .sidebar-menu > ul > li ul li a,
+.sidebar .sidebar-menu > ul > li ul li .sidebar-logout {
   display: -webkit-box;
   border-radius: 6px;
   display: -ms-flexbox;
@@ -13756,7 +13757,8 @@ html[data-bs-theme=dark] #light-dark-mode .ti-moon::before {
   width: 100%;
   padding: 4px 4px;
 }
-.sidebar .sidebar-menu > ul > li ul li a i {
+.sidebar .sidebar-menu > ul > li ul li a i,
+.sidebar .sidebar-menu > ul > li ul li .sidebar-logout i {
   font-size: 16px;
   width: 28px;
   height: 28px;
@@ -13767,9 +13769,20 @@ html[data-bs-theme=dark] #light-dark-mode .ti-moon::before {
   border-radius: 0.3125rem;
   flex-shrink: 0;
 }
-.sidebar .sidebar-menu > ul > li ul li a span {
+.sidebar .sidebar-menu > ul > li ul li a span,
+.sidebar .sidebar-menu > ul > li ul li .sidebar-logout span {
   white-space: nowrap;
   margin-left: 8px;
+}
+.sidebar .sidebar-menu > ul > li ul li .sidebar-logout {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar .sidebar-menu > ul > li ul li .sidebar-logout:hover {
+  color: var(--crms-menu-item-hover-color);
 }
 .sidebar .sidebar-menu > ul > li ul li a.active {
   color: var(--crms-menu-item-hover-color);
@@ -14000,7 +14013,9 @@ html[data-bs-theme=dark] #light-dark-mode .ti-moon::before {
     width: var(--crms-sidenav-width-sm);
     overflow: hidden;
   }
-  .mini-sidebar .sidebar .sidebar-menu ul li a span, .mini-sidebar .sidebar .sidebar-menu ul li a .count {
+  .mini-sidebar .sidebar .sidebar-menu ul li a span,
+  .mini-sidebar .sidebar .sidebar-menu ul li a .count,
+  .mini-sidebar .sidebar .sidebar-menu ul li .sidebar-logout span {
     display: none;
   }
   .mini-sidebar .sidebar .sidebar-menu ul li .menu-title {

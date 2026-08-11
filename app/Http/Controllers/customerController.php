@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Customer;
@@ -25,9 +26,11 @@ use App\Models\Tracking;
 use App\Models\ShipmentLog;
 use App\Models\WalletTransaction;
 use App\Models\CourierService;
+use App\Services\PrimusShipmentService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
@@ -6051,13 +6054,29 @@ class customerController extends Controller
         $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
 
         // Get all invoices and the selected rate used to calculate the complete shipping charge.
+        // Performance: only the columns actually needed by the page are selected. The heavy JSON
+        // columns (package_results, raw_response, custom_label) are intentionally excluded here and
+        // are fetched on-demand via the shipment-label endpoint when a label is actually requested.
         $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
             ->with([
-                'invoiceItems',
-                'shipperInfo.shipmentTracking',
-                'shipperInfo.consigneeInfo',
-                'shipperInfo.packageDimensions',
-                'shipperInfo.serviceRate',
+                'invoiceItems' => function ($q) {
+                    $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
+                },
+                'shipperInfo' => function ($q) {
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
+                },
+                'shipperInfo.shipmentTracking' => function ($q) {
+                    $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
+                },
+                'shipperInfo.consigneeInfo' => function ($q) {
+                    $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'phone_number', 'email', 'address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code', 'delivery_destination', 'origin_type');
+                },
+                'shipperInfo.packageDimensions' => function ($q) {
+                    $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
+                },
+                'shipperInfo.serviceRate' => function ($q) {
+                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
+                },
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -6072,28 +6091,13 @@ class customerController extends Controller
             $selectedRate = $shipper ? $shipper->serviceRate : null;
             $displayAmount = $selectedRate
                 ? (float) $selectedRate->inclusive_total
-                : round((float) $invoice->total_amount, 2);
+                : round((float) $invoice->invoiceItems->sum('amount'), 2);
 
-            // Extract label data from package_results
-            // UPS Ship API uses "ShippingLabel" key (not "LabelImage")
-            // Structure: ShippingLabel.ImageFormat.Code + ShippingLabel.GraphicImage
+            // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
+            // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
             $hasLabel = false;
             $labelFormat = null;
             $graphicImage = null;
-            if ($tracking && $tracking->package_results) {
-                $pkgResults = $tracking->package_results;
-                $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
-                if (isset($firstPkg['ShippingLabel'])) {
-                    $hasLabel = true;
-                    $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
-                    $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
-                } elseif (isset($firstPkg['LabelImage'])) {
-                    // Fallback for older/different UPS response format
-                    $hasLabel = true;
-                    $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
-                    $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
-                }
-            }
             return [
                 $invoice->id => [
                     'shipper_id' => $shipper ? $shipper->id : null,
@@ -6101,7 +6105,7 @@ class customerController extends Controller
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
-                    'invoice_amount' => number_format($invoice->total_amount, 2),
+                    'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
                     'invoice_currency' => $invoice->invoice_currency,
                     'incoterms' => $invoice->incoterms,
                     'reference_number' => $invoice->reference_number,
@@ -6174,6 +6178,59 @@ class customerController extends Controller
         });
 
         return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails'));
+    }
+
+    /**
+     * Fetch the shipping label (base64 graphic image) for a shipment on demand.
+     *
+     * The label data is intentionally NOT embedded in the view-all-shipments page because
+     * base64 label images are very large and slow down page loading. This endpoint is
+     * called only when the user actually requests a label.
+     */
+    public function getShipmentLabel($invoiceId)
+    {
+        if (!auth()->guard('customer')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $invoice = ShipmentInvoice::where('id', $invoiceId)
+            ->whereHas('shipperInfo', function ($q) use ($customerId) {
+                $q->where('customer_id', $customerId);
+            })
+            ->with('shipperInfo.shipmentTracking')
+            ->first();
+
+        if (!$invoice || !$invoice->shipperInfo || !$invoice->shipperInfo->shipmentTracking) {
+            return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
+        }
+
+        $tracking = $invoice->shipperInfo->shipmentTracking;
+        $pkgResults = $tracking->package_results;
+        $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
+
+        $labelFormat = null;
+        $graphicImage = null;
+        if (isset($firstPkg['ShippingLabel'])) {
+            $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+            $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+        } elseif (isset($firstPkg['LabelImage'])) {
+            // Fallback for older/different UPS response format
+            $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+            $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+        }
+
+        if (!$graphicImage) {
+            return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'awb_number' => $invoice->shipperInfo->awb_number,
+            'label_format' => $labelFormat,
+            'graphic_image' => $graphicImage,
+        ]);
     }
 
     /**
@@ -6647,54 +6704,148 @@ class customerController extends Controller
      */
     public function markPacked(Request $request)
     {
+        if (!auth()->guard('customer')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'shipper_id' => ['required', 'integer'],
+            'custom_label' => ['required', 'string', 'max:1000000'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $validated = $validator->validated();
+
+        if (!ShipperInfo::whereKey($validated['shipper_id'])->where('customer_id', $customerId)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
+        }
+
+        $labelPath = null;
+        $labelUrl = null;
+
         try {
-            if (!auth()->guard('customer')->check()) {
-                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
-            }
+            DB::transaction(function () use ($validated, $customerId, &$labelPath, &$labelUrl) {
+                $shipper = ShipperInfo::whereKey($validated['shipper_id'])
+                    ->where('customer_id', $customerId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $customerId = auth()->guard('customer')->id();
-            $shipperId = $request->input('shipper_id');
+                if ($shipper->status !== 'ready') {
+                    throw new \DomainException('Shipment is not in Ready status.');
+                }
 
-            $shipper = ShipperInfo::where('id', $shipperId)
-                ->where('customer_id', $customerId)
-                ->first();
+                [$labelPath, $labelUrl] = $this->storeCustomLabelFile(
+                    $shipper,
+                    $validated['custom_label']
+                );
 
-            if (!$shipper) {
-                return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
-            }
+                $shipper->custom_label = $labelUrl;
+                $shipper->status = 'packed';
+                $shipper->save();
 
-            if ($shipper->status !== 'ready') {
-                return response()->json(['success' => false, 'message' => 'Shipment is not in Ready status.'], 400);
-            }
+                $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+                Tracking::create([
+                    'awb_number' => $shipper->awb_number,
+                    'shipper_id' => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('packed'),
+                    'status' => 'packed',
+                ]);
 
-            $shipper->status = 'packed';
-            $shipper->save();
+                ShipmentLog::logStatus(
+                    $shipper->id,
+                    $shipper->awb_number,
+                    'packed',
+                    'ready',
+                    'Shipment marked as packed and custom label URL stored.',
+                    $customerId,
+                    'customer'
+                );
+            });
 
-            // Create tracking record for packed status
-            $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
-            Tracking::create([
-                'awb_number' => $shipper->awb_number,
-                'shipper_id' => $shipper->id,
-                'shipping_id' => $createShipment ? $createShipment->id : null,
-                'uwc_id' => $shipper->awb_number,
-                'title' => Tracking::getTitleForStatus('packed'),
-                'status' => 'packed',
+            return response()->json([
+                'success' => true,
+                'message' => 'Custom label PDF stored and status updated to Packed.',
+                'custom_label_url' => $labelUrl,
+            ]);
+        } catch (\DomainException $e) {
+            $this->deleteCustomLabelFile($labelPath);
+
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $this->deleteCustomLabelFile($labelPath);
+
+            Log::error('Custom label persistence failed.', [
+                'shipper_id' => $validated['shipper_id'],
+                'customer_id' => $customerId,
+                'exception_class' => $e::class,
             ]);
 
-            // Log the packed status change
-            ShipmentLog::logStatus(
-                $shipper->id,
-                $shipper->awb_number,
-                'packed',
-                'ready',
-                'Shipment marked as packed.',
-                $customerId,
-                'customer'
-            );
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to store the custom label PDF. The shipment remains ready.',
+            ], 500);
+        }
+    }
 
-            return response()->json(['success' => true, 'message' => 'Status updated to Packed.']);
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+    private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
+    {
+        $relativeDirectory = 'uploads/custom_labels';
+        $directory = public_path($relativeDirectory);
+
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException('Unable to create the custom label directory.');
+        }
+
+        $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
+        $filename = $name . '-' . Str::uuid() . '.pdf';
+        $path = $directory . DIRECTORY_SEPARATOR . $filename;
+        $temporaryPath = $path . '.tmp';
+        $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
+        $pdfBytes = Pdf::loadHTML($document)->output();
+
+        if (file_put_contents($temporaryPath, $pdfBytes, LOCK_EX) === false) {
+            @unlink($temporaryPath);
+            throw new \RuntimeException('Unable to write the custom label file.');
+        }
+
+        if (!rename($temporaryPath, $path)) {
+            @unlink($temporaryPath);
+            throw new \RuntimeException('Unable to publish the custom label file.');
+        }
+
+        return [$path, asset($relativeDirectory . '/' . $filename)];
+    }
+
+    private function buildCustomLabelDocument(ShipperInfo $shipper, string $labelHtml): string
+    {
+        $awbNumber = htmlspecialchars((string) ($shipper->awb_number ?: $shipper->id), ENT_QUOTES, 'UTF-8');
+
+        return '<!DOCTYPE html>' . PHP_EOL
+            . '<html lang="en"><head><meta charset="UTF-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<title>Shipping Label ' . $awbNumber . '</title>'
+            . '<style>html,body{margin:0;padding:0;background:#fff;color:#000}'
+            . 'body{font-family:Arial,sans-serif}.custom-label-document{box-sizing:border-box;width:100%}'
+            . '@media print{@page{margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>'
+            . '</head><body><main class="custom-label-document">'
+            . $labelHtml
+            . '</main></body></html>';
+    }
+
+    private function deleteCustomLabelFile(?string $path): void
+    {
+        if ($path !== null && is_file($path)) {
+            @unlink($path);
         }
     }
 
@@ -6786,6 +6937,29 @@ class customerController extends Controller
                     'network' => 'ShipUniversal',
                     'shipuniversal_response' => $apiResponse,
                     'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                ]);
+            } elseif ($apiProvider === 'primus') {
+                $primusResult = app(PrimusShipmentService::class)->manifest(
+                    $shipper,
+                    (int) $customerId
+                );
+
+                if (! $primusResult['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Primus API Failed: '.($primusResult['message'] ?? 'Unknown error'),
+                        'request_payload' => $primusResult['payload'] ?? null,
+                    ], 422);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Primus!',
+                    'tracking_number' => $primusResult['tracking_number'],
+                    'label_url' => $primusResult['label'] ?? null,
+                    'shipper_id' => $shipperId,
+                    'network' => 'Primus',
+                    'request_payload' => $primusResult['payload'] ?? null,
                 ]);
             // Priority 0: Overseas Logistic for UNITED CANADA DDP /
             //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
@@ -7316,6 +7490,31 @@ class customerController extends Controller
                         ];
 
                         \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via ShipUniversal.');
+                    } elseif ($apiProvider === 'primus') {
+                        $primusResult = app(PrimusShipmentService::class)->manifest(
+                            $shipper,
+                            (int) $customerId,
+                            true
+                        );
+
+                        if (! $primusResult['success']) {
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Primus API error: '.($primusResult['message'] ?? 'Unknown'),
+                                'request_payload' => $primusResult['payload'] ?? null,
+                            ];
+                            continue;
+                        }
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $primusResult['tracking_number'],
+                            'label_url' => $primusResult['label'] ?? null,
+                            'network' => 'Primus',
+                            'request_payload' => $primusResult['payload'] ?? null,
+                        ];
+
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Primus.');
                     // Priority 0: Overseas Logistic for UNITED CANADA DDP /
                     //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
                     } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
@@ -9264,8 +9463,8 @@ class customerController extends Controller
      *
      * Database-first with fallback:
      *   1. If the matched CourierService has a non-empty `api_provider`
-     *      column, that value wins (e.g. "shipuniversal", "overseas",
-     *      "postshipping", "flyingtigers", "shipglobal", "ups").
+     *      column, that value wins (e.g. "shipuniversal", "primus",
+     *      "overseas", "postshipping", "flyingtigers", "shipglobal", "ups").
      *   2. Otherwise, fall back to the legacy string-matching methods so
      *      existing services keep working until their rows are populated.
      *
@@ -9278,7 +9477,7 @@ class customerController extends Controller
      * @param \App\Models\ShipperInfo $shipper
      * @param \App\Models\CourierService|null $courierService  Optional
      *        pre-resolved service to avoid a redundant lookup.
-     * @return string  One of: shipuniversal, overseas, postshipping,
+     * @return string  One of: shipuniversal, primus, overseas, postshipping,
      *                 flyingtigers, shipglobal, ups.
      */
     private function resolveApiProvider($shippingMethod, $shipper, $courierService = null)

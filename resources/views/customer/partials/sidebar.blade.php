@@ -145,14 +145,14 @@
                                 <li>
                                     <a href="{{ route('customer.my-profile') }}" class="{{ request()->routeIs('customer.my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
-                                <li>
+                                <!-- <li>
                                     <form action="{{ route('customer.logout') }}" method="POST" class="mb-0">
                                         @csrf
-                                        <button type="submit" class="dropdown-item border-0 bg-transparent w-100 text-start">
-                                            <i class="ti ti-logout me-1"></i><span>Logout</span>
+                                        <button type="submit" class="sidebar-logout border-0 bg-transparent">
+                                            <i class="ti ti-logout"></i><span>Logout</span>
                                         </button>
                                     </form>
-                                </li>
+                                </li> -->
                             </ul>
                         </li>
                     </ul>

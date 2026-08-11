@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <!-- Meta Tags -->
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -23,7 +24,7 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <!-- Tabler Icon CSS -->
     <!-- <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}"> -->
-    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+    <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
 
     <!-- Select2 CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
@@ -31,11 +32,76 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/simplebar/simplebar.min.css') }}">
     <!-- Main CSS -->
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
-
+    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
     <style>
         .card {
             background: #fff;
             border-radius: 20px;
+        }
+
+        .shipment-status-filters {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 7px !important;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 3px 2px 7px;
+            scrollbar-width: none;
+        }
+
+        .shipment-status-filters::-webkit-scrollbar {
+            display: none;
+        }
+
+        .shipment-status-filters .status-filter-btn {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 34px;
+            padding: 6px 12px !important;
+            border: 1px solid #e7ebf3;
+            border-radius: 10px !important;
+            color: #52627a;
+            background: #f8faff;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .1px;
+            line-height: 1.2;
+            transition: color .2s ease, background-color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+
+        .shipment-status-filters .status-filter-btn:hover {
+            color: #2f66f3;
+            background: #eef4ff;
+            border-color: #c9d9ff;
+            transform: translateY(-1px);
+        }
+
+        .shipment-status-filters .status-filter-btn.btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, #2f66f3, #4f87ff);
+            border-color: #2f66f3;
+            box-shadow: 0 4px 10px rgba(47, 102, 243, .2);
+        }
+
+        .shipment-status-filters .status-filter-btn .badge {
+            min-width: 19px;
+            height: 19px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 6px !important;
+            padding: 2px 5px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .shipment-status-filters .status-filter-btn.btn-primary .badge {
+            color: #2f66f3 !important;
+            background: rgba(255, 255, 255, .95) !important;
         }
 
         .btn-light {
@@ -54,6 +120,48 @@
         .rounded-pill {
             border-radius: 50px !important;
         }
+        .shipment-heading-row {
+            flex-wrap: nowrap;
+        }
+
+        .bulk-actions-row {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: flex-end;
+            width: auto;
+            margin-left: auto;
+        }
+
+        .bulk-action-bar {
+            display: none;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            width: auto;
+        }
+
+        .bulk-action-bar.is-visible {
+            display: flex;
+        }
+
+        @media (max-width: 575.98px) {
+            .shipment-heading-row {
+                align-items: flex-start !important;
+                flex-direction: column;
+            }
+
+            .bulk-actions-row {
+                width: 100%;
+            }
+
+            .bulk-action-bar.is-visible {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+        }
+
         .btn-cancel {
             background-color: #dc3545;
             border-color: #dc3545;
@@ -163,6 +271,10 @@
             color: #c82333;
             text-decoration: underline;
         }
+
+        .page-wrapper .content{
+            padding:0.5rem !important;
+        }
     </style>
 </head>
 
@@ -204,17 +316,47 @@
             <div class="content pb-0">
 
                 <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
                     <div>
                         <h4 class="mb-1">View All Shipments</h4>
-                        <nav aria-label="breadcrumb">
-                            <ol class="breadcrumb mb-0 p-0">
-                                <li class="breadcrumb-item"><a href="{{ url('/customer/dashboard') }}">Home</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">View All Shipments</li>
-                            </ol>
-                        </nav>
                     </div>
-                    <div class="gap-2 d-flex align-items-center flex-wrap">
+                    <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
+                        <div class="bulk-actions-row">
+                            <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
+                                <i class="ti ti-package-export me-1"></i> Bulk Manifest
+                            </button>
+
+                            <div id="draftBulkActions" class="bulk-action-bar">
+                                <span id="draftBulkTotal" class="fw-bold text-success"></span>
+                                <button type="button" class="btn btn-success btn-sm" id="bulkDraftPayBtn" disabled>
+                                    <i class="ti ti-credit-card me-1"></i>Pay Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkDraftCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+
+                            <div id="readyBulkActions" class="bulk-action-bar">
+                                <span id="readyBulkTotal" class="fw-bold text-primary"></span>
+                                <button type="button" class="btn btn-primary btn-sm" id="bulkReadyPrintBtn" disabled>
+                                    <i class="ti ti-printer me-1"></i>Print Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkReadyCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+
+                            <div id="packedBulkActions" class="bulk-action-bar">
+                                <span id="packedBulkTotal" class="fw-bold text-primary"></span>
+                                <button type="button" class="btn btn-primary btn-sm" id="bulkPackedPrintBtn" disabled>
+                                    <i class="ti ti-printer me-1"></i>Print Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkPackedCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+                        </div>
+
                         <a href="{{ url('/customer/create-shipment') }}" class="btn btn-primary d-flex align-items-center">
                             <i class="ti ti-plus me-1"></i> Add New Shipment
                         </a>
@@ -223,8 +365,8 @@
 
                 <!-- Success/Error Messages -->
                 <div id="alertContainer"></div>
-                <div class="card border-0 shadow-sm rounded-4">
-                    <div class="card-body p-4">
+                <div class="card border-0 shadow-sm rounded-4 shipment-status-card">
+                    <div class="card-body p-3">
                         @php
                             // Compute status counts from the invoices collection (no extra DB query)
                             $statusCounts = ['all' => $invoices->count(), 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'received' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
@@ -235,83 +377,54 @@
                                 }
                             }
                         @endphp
-                        <div class="d-flex flex-wrap gap-3">
+                        <div class="shipment-status-filters" aria-label="Shipment status filters">
 
-                            <button class="btn btn-primary rounded-pill px-4 py-2 status-filter-btn" data-filter="all">
+                            <button class="btn btn-primary rounded-pill status-filter-btn" data-filter="all">
                                 All Orders <span class="badge bg-light text-dark ms-1">{{ $statusCounts['all'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="draft">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="draft">
                                 Drafts <span class="badge bg-secondary ms-1">{{ $statusCounts['draft'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="ready">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="ready">
                                 Ready <span class="badge bg-secondary ms-1">{{ $statusCounts['ready'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="packed">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="packed">
                                 Packed <span class="badge bg-secondary ms-1">{{ $statusCounts['packed'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="manifested">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="manifested">
                                 Manifested <span class="badge bg-secondary ms-1">{{ $statusCounts['manifested'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="received">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="received">
                                 Received <span class="badge bg-secondary ms-1">{{ $statusCounts['received'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="dispatched">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="dispatched">
                                 Dispatched <span class="badge bg-secondary ms-1">{{ $statusCounts['dispatched'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="cancelled">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="cancelled">
                                 Cancelled <span class="badge bg-secondary ms-1">{{ $statusCounts['cancelled'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="delivered">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="delivered">
                                 Delivered <span class="badge bg-secondary ms-1">{{ $statusCounts['delivered'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="disputed">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="disputed">
                                 Disputed <span class="badge bg-secondary ms-1">{{ $statusCounts['disputed'] }}</span>
                             </button>
 
-                            <button class="btn btn-light rounded-pill px-4 py-2 status-filter-btn" data-filter="on_hold">
+                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="on_hold">
                                 On Hold <span class="badge bg-secondary ms-1">{{ $statusCounts['on_hold'] }}</span>
                             </button>
 
                         </div>
                     </div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h5 class="fw-bold mb-0" id="statusFilterHeading">All Orders</h5>
-                        <small class="text-muted" id="shipmentCountInfo">Showing {{ $statusCounts['all'] }} of {{ $statusCounts['all'] }} shipments</small>
-                    </div>
-                    <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
-                        <i class="ti ti-package-export me-1"></i> Bulk Manifest
-                    </button>
-                </div>
-
-                <div id="draftBulkActions" class="d-flex align-items-center gap-2 mb-3" style="display:none;">
-                    <button type="button" class="btn btn-success btn-sm" id="bulkDraftPayBtn" disabled>
-                        <i class="ti ti-credit-card me-1"></i>Pay Selected
-                    </button>
-                    <button type="button" class="btn btn-outline-danger btn-sm" id="bulkDraftCancelBtn" disabled>
-                        <i class="ti ti-ban me-1"></i>Cancel Selected
-                    </button>
-                    <span id="draftBulkTotal" class="fw-bold text-success"></span>
-                </div>
-
-                <div id="readyBulkActions" class="d-flex align-items-center gap-2 mb-3" style="display:none;">
-                    <button type="button" class="btn btn-primary btn-sm" id="bulkReadyPrintBtn" disabled>
-                        <i class="ti ti-printer me-1"></i>Print Selected
-                    </button>
-                    <button type="button" class="btn btn-outline-danger btn-sm" id="bulkReadyCancelBtn" disabled>
-                        <i class="ti ti-ban me-1"></i>Cancel Selected
-                    </button>
-                    <span id="readyBulkTotal" class="fw-bold text-primary"></span>
                 </div>
                 <!-- Shipments Table Card -->
                 <div class="card border shadow">
@@ -360,7 +473,7 @@
                                                 : null;
                                             $shipmentAmount = $selectedRate
                                                 ? $selectedRate->inclusive_total
-                                                : round((float) $invoice->total_amount, 2);
+                                                : round((float) $invoice->invoiceItems->sum('amount'), 2);
                                         @endphp
                                         <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
                                             <td class="text-center">
@@ -422,7 +535,7 @@
                                                         'on_hold' => 'On Hold',
                                                     ];
                                                 @endphp
-                                                <span class="{{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
+                                                <span class="shipment-status-badge {{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
                                             </td>
                                             <td class="text-center">
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
@@ -1066,15 +1179,30 @@
     }
 
     function viewLabel(invoiceId) {
-        const data = shipmentData[invoiceId];
-        if (!data || !data.has_label || !data.graphic_image) {
-            alert('Label not available for this shipment.');
-            return;
-        }
+        // The base64 label image is intentionally not embedded in the page for performance.
+        // Fetch it on-demand from the server when the user actually requests the label.
+        fetch('{{ url("/customer/shipment-label") }}/' + invoiceId, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (response) {
+            if (!response.success || !response.graphic_image) {
+                alert(response.message || 'Label not available for this shipment.');
+                return;
+            }
+            openLabelFromBase64(response.graphic_image, response.label_format || 'PDF', response.awb_number || invoiceId);
+        })
+        .catch(function () {
+            alert('Failed to load the label. Please try again.');
+        });
+    }
 
+    function openLabelFromBase64(base64Data, format, awbNumber) {
         // Decode base64 GraphicImage and open as PDF
-        const base64Data = data.graphic_image;
-        const format = (data.label_format || 'PDF').toUpperCase();
+        format = (format || 'PDF').toUpperCase();
 
         // Convert base64 to binary
         const byteCharacters = atob(base64Data);
@@ -1111,7 +1239,7 @@
             // If popup blocked, try downloading
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'label_' + (data.awb_number || invoiceId) + '.' + extension;
+            a.download = 'label_' + (awbNumber || 'shipment') + '.' + extension;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1191,35 +1319,46 @@
                 $('#bulkReadyPrintBtn').prop('disabled', readyDisabled);
                 $('#bulkReadyCancelBtn').prop('disabled', readyDisabled);
                 $('#readyBulkTotal').text(readyDisabled ? '' : 'Selected total: ₹' + number_format(readyTotal, 2));
+
+                const packedRows = getSelectedRowsByStatus('packed');
+                const packedTotal = sumSelectedAmounts(packedRows);
+                const packedDisabled = packedRows.length === 0;
+                $('#bulkPackedPrintBtn').prop('disabled', packedDisabled);
+                $('#bulkPackedCancelBtn').prop('disabled', packedDisabled);
+                $('#packedBulkTotal').text(packedDisabled ? '' : 'Selected total: ₹' + number_format(packedTotal, 2));
             }
 
             function showBulkDraftActions(show) {
-                $('#draftBulkActions').toggle(show);
+                $('#draftBulkActions').toggleClass('is-visible', show);
             }
 
             function showBulkReadyActions(show) {
-                $('#readyBulkActions').toggle(show);
+                $('#readyBulkActions').toggleClass('is-visible', show);
             }
 
-            // Status filter button click handler. A real user click reloads the page
-            // with the selected status in the URL; the programmatic click after reload
-            // restores that same filter without causing another refresh loop.
+            function showBulkPackedActions(show) {
+                $('#packedBulkActions').toggleClass('is-visible', show);
+            }
+
+            // Filter the already-loaded DataTable immediately. Keep the selected status in
+            // the URL without reloading so refresh/back navigation can restore the same view.
             $('.status-filter-btn').on('click', function (event) {
                 const filter = $(this).data('filter');
 
-                if (event.originalEvent) {
+                // Reset action bars first so each filter only enables its own actions.
+                showBulkDraftActions(false);
+                showBulkReadyActions(false);
+                showBulkPackedActions(false);
+
+                if (event.originalEvent && window.history && window.history.pushState) {
                     const pageUrl = new URL(window.location.href);
                     pageUrl.searchParams.set('status', filter);
-                    window.location.assign(pageUrl.toString());
-                    return;
+                    window.history.pushState({ shipmentStatus: filter }, '', pageUrl.toString());
                 }
 
                 // Update button active state
                 $('.status-filter-btn').removeClass('btn-primary').addClass('btn-light');
                 $(this).removeClass('btn-light').addClass('btn-primary');
-
-                // Update heading
-                $('#statusFilterHeading').text($(this).text());
 
                 // Filter DataTable using custom search on data-status attribute
                 const dt = $('#shipmentsTable').DataTable();
@@ -1237,7 +1376,6 @@
                     showBulkDraftActions(false);
                     showBulkReadyActions(false);
                     dt.draw();
-                    $('#shipmentCountInfo').text('Showing {{ $statusCounts["all"] }} of {{ $statusCounts["all"] }} shipments');
                     return;
                 } else if (filter === 'draft') {
                     dt.column(0).visible(true);   // Show Checkbox for Draft multi-select
@@ -1267,6 +1405,7 @@
                     dt.column(12).visible(true);  // Show Cancel
                     $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
                     $('#bulkManifestBtn').show();
+                    showBulkPackedActions(true);
                 } else if (filter === 'manifested') {
                     dt.column(0).visible(false);  // Hide Checkbox
                     dt.column(8).visible(false);  // Hide Print Label
@@ -1295,10 +1434,15 @@
                 refreshStatusCounters();
             });
 
-            // Restore the selected status after every page refresh.
-            const requestedStatus = new URLSearchParams(window.location.search).get('status') || 'all';
-            const $requestedStatusButton = $('.status-filter-btn[data-filter="' + requestedStatus + '"]');
-            ($requestedStatusButton.length ? $requestedStatusButton : $('.status-filter-btn[data-filter="all"]')).trigger('click');
+            function applyStatusFromUrl() {
+                const requestedStatus = new URLSearchParams(window.location.search).get('status') || 'all';
+                const $requestedStatusButton = $('.status-filter-btn[data-filter="' + requestedStatus + '"]');
+                ($requestedStatusButton.length ? $requestedStatusButton : $('.status-filter-btn[data-filter="all"]')).trigger('click');
+            }
+
+            // Restore the selected status on refresh and browser back/forward navigation.
+            applyStatusFromUrl();
+            window.addEventListener('popstate', applyStatusFromUrl);
 
             // Print Label button click handler (delegated)
             $('#shipmentsTable').on('click', '.print-label-btn', function () {
@@ -1383,40 +1527,47 @@
                     packagesSection.style.display = 'none';
                 }
 
-                // If status is ready, mark as packed via AJAX before showing modal
+                // A Ready shipment becomes Packed only after its rendered label is stored.
                 const $row = $(this).closest('tr');
                 if (data.status === 'ready' && data.shipper_id) {
+                    const customLabel = document.getElementById('printLabelBody').innerHTML;
                     $.ajax({
                         url: '{{ url("/customer/mark-packed") }}',
                         type: 'POST',
                         data: {
                             _token: $('meta[name="csrf-token"]').attr('content'),
-                            shipper_id: data.shipper_id
+                            shipper_id: data.shipper_id,
+                            custom_label: customLabel
                         },
                         success: function (response) {
-                            if (response.success) {
-                                // Update the complete shipments table as soon as the print modal opens.
-                                // This moves the shipment from Ready to Packed without reloading/closing the modal.
-                                $row.attr('data-status', 'packed').data('status', 'packed');
-
-                                const $badge = $row.find('td:eq(7) span');
-                                $badge.removeClass().addClass('badge bg-primary').text('Packed');
-
-                                // Keep the client-side print data and top counters in sync.
-                                shipmentData[invoiceId].status = 'packed';
-                                liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
-                                liveStatusCounts.packed += 1;
-                                refreshStatusCounters();
-
-                                const shipmentsTable = $('#shipmentsTable').DataTable();
-                                shipmentsTable.row($row).invalidate('dom');
-                                shipmentsTable.draw(false);
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Failed to store the custom label.');
+                                return;
                             }
+
+                            $row.attr('data-status', 'packed').data('status', 'packed');
+
+                            const $badge = $row.find('td:eq(7) span');
+                            $badge.removeClass().addClass('badge bg-primary').text('Packed');
+
+                            shipmentData[invoiceId].status = 'packed';
+                            liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                            liveStatusCounts.packed += 1;
+                            refreshStatusCounters();
+
+                            const shipmentsTable = $('#shipmentsTable').DataTable();
+                            shipmentsTable.row($row).invalidate('dom');
+                            shipmentsTable.draw(false);
+                            $('#printLabelModal').modal('show');
                         },
-                        error: function () {
-                            // Silently fail - modal still opens
+                        error: function (xhr) {
+                            const message = xhr.responseJSON && xhr.responseJSON.message
+                                ? xhr.responseJSON.message
+                                : 'Failed to store the custom label.';
+                            showAlert('danger', message);
                         }
                     });
+                    return;
                 }
 
                 $('#printLabelModal').modal('show');
@@ -1488,7 +1639,7 @@
             let payInvoiceId = null;
             let payShipperId = null;
             let bulkPayQueue = [];
-            const walletBalance = {{ $currentWalletBalance }};
+            let walletBalance = {{ $currentWalletBalance }};
 
             // Update wallet balance display in modal
             $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
@@ -1537,26 +1688,49 @@
                 }];
 
                 let index = 0;
+                let successfulPayments = 0;
+
+                const markRowReady = function (item, response) {
+                    const $row = $('#invoice-row-' + item.invoice_id);
+                    if (!$row.length) return;
+
+                    $row.attr('data-status', 'ready').data('status', 'ready');
+                    $row.find('.shipment-status-badge')
+                        .removeClass()
+                        .addClass('shipment-status-badge badge bg-info')
+                        .text('Ready');
+
+                    if (shipmentData[item.invoice_id]) {
+                        shipmentData[item.invoice_id].status = 'ready';
+                    }
+
+                    liveStatusCounts.draft = Math.max(0, liveStatusCounts.draft - 1);
+                    liveStatusCounts.ready += 1;
+                    walletBalance = Number(response.new_balance ?? walletBalance);
+                    $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+
+                    const shipmentsTable = $('#shipmentsTable').DataTable();
+                    shipmentsTable.row($row).invalidate('dom');
+                    shipmentsTable.draw(false);
+                    refreshStatusCounters();
+                };
+
                 const processNext = function () {
                     if (index >= queue.length) {
                         $('#payNowModal').modal('hide');
-                        if (bulkPayQueue.length) {
-                            window.location.reload();
-                            return;
-                        }
+                        btn.prop('disabled', false).text('Pay Now');
 
-                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">Payment has been processed successfully.<br>New wallet balance: ₹' + number_format(walletBalance, 2) + '</p><button class="btn btn-success px-4" id="paymentSuccessOkBtn">OK</button></div></div></div></div>';
+                        if (!successfulPayments) return;
+
+                        $('#paymentSuccessPopup').remove();
+                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + successfulPayments + ' shipment(s) moved to Ready.<br>New wallet balance: ₹' + number_format(walletBalance, 2) + '</p><button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
                         $('body').append(popupHtml);
-                        const successPopup = new bootstrap.Modal(document.getElementById('paymentSuccessPopup'), { backdrop: 'static', keyboard: false });
-                        successPopup.show();
-
-                        $('#paymentSuccessOkBtn').on('click', function () {
-                            window.location.reload();
-                        });
-                        document.getElementById('paymentSuccessPopup').addEventListener('hidden.bs.modal', function () {
-                            window.location.reload();
+                        const popupElement = document.getElementById('paymentSuccessPopup');
+                        const successPopup = new bootstrap.Modal(popupElement);
+                        popupElement.addEventListener('hidden.bs.modal', function () {
                             this.remove();
                         });
+                        successPopup.show();
                         return;
                     }
 
@@ -1573,7 +1747,10 @@
                             amount: item.amount
                         },
                         success: function (response) {
-                            if (!response.success) {
+                            if (response.success) {
+                                successfulPayments++;
+                                markRowReady(item, response);
+                            } else {
                                 showAlert('danger', response.message || 'Payment failed for one shipment.');
                             }
                             processNext();
@@ -2069,29 +2246,36 @@
                     return item.invoice_id && item.shipper_id;
                 });
 
-                const invoiceIds = queue.map(function (item) {
-                    return item.invoice_id;
-                });
-
+                const storedInvoiceIds = [];
                 let index = 0;
                 const processNext = function () {
                     if (index >= queue.length) {
-                        printSelectedLabelsByInvoiceIds(invoiceIds);
+                        printSelectedLabelsByInvoiceIds(storedInvoiceIds);
                         return;
                     }
 
                     const item = queue[index];
                     index++;
 
+                    const labelData = shipmentData[item.invoice_id];
+                    if (!labelData) {
+                        showAlert('danger', 'No label data found for one selected shipment.');
+                        processNext();
+                        return;
+                    }
+
+                    const customLabel = buildBulkLabelHtml(labelData);
                     $.ajax({
                         url: '{{ url("/customer/mark-packed") }}',
                         type: 'POST',
                         data: {
                             _token: $('meta[name="csrf-token"]').attr('content'),
-                            shipper_id: item.shipper_id
+                            shipper_id: item.shipper_id,
+                            custom_label: customLabel
                         },
                         success: function (response) {
                             if (response.success) {
+                                storedInvoiceIds.push(item.invoice_id);
                                 const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
                                 if ($row.length) {
                                     $row.attr('data-status', 'packed').data('status', 'packed');
@@ -2171,6 +2355,67 @@
                 processNext();
             });
 
+            $('#bulkPackedPrintBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('packed');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Packed shipment to print.');
+                    return;
+                }
+
+                const invoiceIds = rows.map(function () {
+                    return $(this).find('.print-label-btn').data('invoice-id');
+                }).get().filter(Boolean);
+
+                printSelectedLabelsByInvoiceIds(invoiceIds);
+            });
+
+            $('#bulkPackedCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('packed');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Packed shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Packed shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    return $(this).find('.cancel-btn').data('id');
+                }).get().filter(Boolean);
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
         });
 
         function buildBulkLabelHtml(data) {
@@ -2200,10 +2445,10 @@
                     '</div>';
             }).join('') : '<div class="text-muted">No package details</div>';
 
-            return '<div style="border:1px solid #ddd;padding:16px;margin:20px 0;border-radius:10px;page-break-inside:avoid;">' +
+            const labelHtml = '<div style="border:1px solid #ddd;padding:16px;margin:20px 0;border-radius:10px;page-break-inside:avoid;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
                 '<img src="{{ asset("assets/img/logo.png") }}" alt="United Courier" style="max-height:50px;">' +
-                '<svg style="width:100%;max-width:260px;height:auto;" id="bulk-barcode-' + (data.awb_number || 'label') + '"></svg>' +
+                '<svg data-label-barcode style="width:100%;max-width:260px;height:auto;"></svg>' +
                 '</div>' +
                 '<div style="display:flex;gap:20px;margin-bottom:12px;">' +
                 '<div style="flex:1;border:1px solid #ddd;padding:8px;border-radius:6px;">' +
@@ -2236,6 +2481,21 @@
                 '<div style="margin-top:8px;">' + packageHtml + '</div>' +
                 '</div>' +
                 '</div>';
+
+            const container = document.createElement('div');
+            container.innerHTML = labelHtml;
+            const barcode = container.querySelector('[data-label-barcode]');
+            JsBarcode(barcode, data.awb_number || 'N/A', {
+                format: 'CODE128',
+                lineColor: '#000',
+                width: 2,
+                height: 100,
+                displayValue: true,
+                fontSize: 16
+            });
+            barcode.removeAttribute('data-label-barcode');
+
+            return container.firstElementChild.outerHTML;
         }
 
         function printSelectedLabelsByInvoiceIds(invoiceIds) {
