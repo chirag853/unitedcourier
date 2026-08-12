@@ -6226,36 +6226,178 @@ class customerController extends Controller
 
     // created by anil sir
     
-    public function viewAllShipments()
+    // public function viewAllShipments(Request $request)
+    // {
+    //     if (!auth()->guard('customer')->check()) {
+    //         return redirect()->route('login');
+    //     }
+
+    //     $customerId = auth()->guard('customer')->id();
+
+    //     $query = ShipmentInvoice::query()
+    //         ->select([
+    //             'shipment_invoice.id',
+    //             'shipment_invoice.shipper_id',
+    //             'shipment_invoice.invoice_amount',
+    //             'shipment_invoice.invoice_currency',
+    //             'shipment_invoice.incoterms',
+    //             'shipment_invoice.created_at',
+    //         ])
+    //         ->whereHas('shipperInfo', function ($q) use ($customerId, $request) {
+
+    //             // Logged-in customer
+    //             $q->where('customer_id', $customerId);
+
+    //             // Shipper Name
+    //             if ($request->filled('shipper_name')) {
+    //                 $q->where('company_name', 'LIKE', '%' . $request->shipper_name . '%');
+    //             }
+
+    //             // AWB Number
+    //             if ($request->filled('awb_number')) {
+    //                 $q->where('awb_number', 'LIKE', '%' . $request->awb_number . '%');
+    //             }
+
+    //             // Status
+    //             if ($request->filled('status')) {
+    //                 $q->where('status', $request->status);
+    //             }
+    //         })
+
+    //         // Consignee Name
+    //         ->when($request->filled('consignee_name'), function ($q) use ($request) {
+
+    //             $q->whereHas('shipperInfo.consigneeInfo', function ($cq) use ($request) {
+    //                 $cq->where(
+    //                     'consignee_name',
+    //                     'LIKE',
+    //                     '%' . $request->consignee_name . '%'
+    //                 );
+    //             });
+
+    //         })
+
+    //         // Created date
+    //         ->when($request->filled('created_date'), function ($q) use ($request) {
+
+    //             $q->whereDate(
+    //                 'shipment_invoice.created_at',
+    //                 $request->created_date
+    //             );
+
+    //         })
+
+    //         ->with([
+    //             'shipperInfo:id,customer_id,awb_number,company_name,status',
+    //             'shipperInfo.consigneeInfo:id,shipper_id,consignee_name,city,state,zip_code',
+    //         ])
+
+    //         ->orderByDesc('shipment_invoice.created_at');
+
+    //     // Pagination
+    //     $invoices = $query
+    //         ->paginate(1)
+    //         ->withQueryString();
+
+    //     DB::listen(function ($query) {
+    //         logger()->info('SQL', [
+    //             'sql' => $query->sql,
+    //             'bindings' => $query->bindings,
+    //             'time_ms' => $query->time,
+    //         ]);
+    //     });
+
+    //     return view(
+    //         'customer.view-all-shipments',
+    //         compact('invoices')
+    //     );
+    // }
+
+
+
+    // created by chirag
+    public function viewAllShipments(Request $request)
     {
-        // Check if customer is logged in
         if (!auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
         $customerId = auth()->guard('customer')->id();
+        $status = $request->input('status');
 
-        // Get all shipper IDs for this customer
-        $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
-        
-        //print_r($shipperIds); exit;
+        $query = ShipmentInvoice::query()
+            ->whereHas('shipperInfo', function ($q) use ($customerId, $request) {
+                $q->where('customer_id', $customerId)
+                    ->when($request->filled('shipper_name'), function ($q) use ($request) {
+                        $q->where(function ($nameQuery) use ($request) {
+                            $nameQuery->where('company_name', 'like', '%' . $request->shipper_name . '%')
+                                ->orWhere('contact_person', 'like', '%' . $request->shipper_name . '%');
+                        });
+                    })
+                    ->when($request->filled('awb_number'), function ($q) use ($request) {
+                        $q->where('awb_number', 'like', '%' . $request->awb_number . '%');
+                    });
+            })
+            ->when($request->filled('customer_name'), function ($q) use ($request) {
+                $q->whereHas('shipperInfo.consigneeInfo', function ($consigneeQuery) use ($request) {
+                    $consigneeQuery->where('consignee_name', 'like', '%' . $request->customer_name . '%');
+                });
+            })
+            ->when($request->filled('date_from'), function ($q) use ($request) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->filled('date_to'), function ($q) use ($request) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            })
+            ->when($status && $status !== 'all', function ($q) use ($status) {
+                if ($status === 'cancelled') {
+                    $q->where('status', 'cancelled');
+                } else {
+                    $q->whereHas('shipperInfo', function ($shipperQuery) use ($status) {
+                        $shipperQuery->where('status', $status);
+                    });
+                }
+            });
 
-        // Get all invoices and the selected rate used to calculate the complete shipping charge.
-        $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
+        $invoices = $query
             ->with([
-                'invoiceItems',
-                'shipperInfo.shipmentTracking',
-                'shipperInfo.consigneeInfo',
-                'shipperInfo.packageDimensions',
-                'shipperInfo.serviceRate',
+                'invoiceItems' => function ($q) {
+                    $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
+                },
+                'shipperInfo' => function ($q) {
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
+                },
+                'shipperInfo.shipmentTracking' => function ($q) {
+                    $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
+                },
+                'shipperInfo.consigneeInfo' => function ($q) {
+                    $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'phone_number', 'email', 'address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code', 'delivery_destination', 'origin_type');
+                },
+                'shipperInfo.packageDimensions' => function ($q) {
+                    $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
+                },
+                'shipperInfo.serviceRate' => function ($q) {
+                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
+                },
             ])
             ->orderBy('created_at', 'desc')
-            ->get();
-            
-       //print_r($invoices); exit;    
+            ->paginate(25)
+            ->withQueryString();
+
+        $statusCounts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'received' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
+        $countInvoices = ShipmentInvoice::whereHas('shipperInfo', function ($q) use ($customerId) {
+            $q->where('customer_id', $customerId);
+        })->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
+        $statusCounts['all'] = $countInvoices->count();
+        foreach ($countInvoices as $countInvoice) {
+            $countStatus = $countInvoice->status === 'cancelled' ? 'cancelled' : ($countInvoice->shipperInfo?->status ?: 'draft');
+            if (isset($statusCounts[$countStatus])) {
+                $statusCounts[$countStatus]++;
+            }
+        }
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
-        $shipmentDetails = $invoices->mapWithKeys(function($invoice) {
+        $shipmentDetails = $invoices->getCollection()->mapWithKeys(function($invoice) {
             $shipper = $invoice->shipperInfo;
             $consignee = $shipper ? $shipper->consigneeInfo : null;
             $tracking = $shipper ? $shipper->shipmentTracking : null;
@@ -6264,30 +6406,13 @@ class customerController extends Controller
             $selectedRate = $shipper ? $shipper->serviceRate : null;
             $displayAmount = $selectedRate
                 ? (float) $selectedRate->inclusive_total
-                : round((float) $invoice->total_amount, 2);
+                : round((float) $invoice->invoiceItems->sum('amount'), 2);
 
-            // Extract label data from package_results
-            // UPS Ship API uses "ShippingLabel" key (not "LabelImage")
-            // Structure: ShippingLabel.ImageFormat.Code + ShippingLabel.GraphicImage
+            // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
+            // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
             $hasLabel = false;
             $labelFormat = null;
             $graphicImage = null;
-            if ($tracking && $tracking->package_results) {
-                $pkgResults = $tracking->package_results;
-                $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
-                if (isset($firstPkg['ShippingLabel'])) {
-                    $hasLabel = true;
-                    $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
-                    $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
-                } elseif (isset($firstPkg['LabelImage'])) {
-                    // Fallback for older/different UPS response format
-                    $hasLabel = true;
-                    $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
-                    $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
-                }
-            }
-            
-            
             return [
                 $invoice->id => [
                     'shipper_id' => $shipper ? $shipper->id : null,
@@ -6295,7 +6420,7 @@ class customerController extends Controller
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
-                    'invoice_amount' => number_format($invoice->total_amount, 2),
+                    'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
                     'invoice_currency' => $invoice->invoice_currency,
                     'incoterms' => $invoice->incoterms,
                     'reference_number' => $invoice->reference_number,
@@ -6366,151 +6491,15 @@ class customerController extends Controller
                 ]
             ];
         });
-
-        return view('customer.view-all-shipments1', compact('invoices', 'shipmentDetails'));
+        DB::listen(function ($query) {
+            logger()->info('SQL', [
+                'sql' => $query->sql,
+                'bindings' => $query->bindings,
+                'time_ms' => $query->time,
+            ]);
+        });
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts'));
     }
-
-
-
-    // created by chirag
-    // public function viewAllShipments()
-    // {
-    //     // Check if customer is logged in
-    //     if (!auth()->guard('customer')->check()) {
-    //         return redirect()->route('login');
-    //     }
-
-    //     $customerId = auth()->guard('customer')->id();
-
-    //     // Get all shipper IDs for this customer
-    //     $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
-
-    //     // Get all invoices and the selected rate used to calculate the complete shipping charge.
-    //     // Performance: only the columns actually needed by the page are selected. The heavy JSON
-    //     // columns (package_results, raw_response, custom_label) are intentionally excluded here and
-    //     // are fetched on-demand via the shipment-label endpoint when a label is actually requested.
-    //     $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
-    //         ->with([
-    //             'invoiceItems' => function ($q) {
-    //                 $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
-    //             },
-    //             'shipperInfo' => function ($q) {
-    //                 $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
-    //             },
-    //             'shipperInfo.shipmentTracking' => function ($q) {
-    //                 $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
-    //             },
-    //             'shipperInfo.consigneeInfo' => function ($q) {
-    //                 $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'phone_number', 'email', 'address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code', 'delivery_destination', 'origin_type');
-    //             },
-    //             'shipperInfo.packageDimensions' => function ($q) {
-    //                 $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
-    //             },
-    //             'shipperInfo.serviceRate' => function ($q) {
-    //                 $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
-    //             },
-    //         ])
-    //         ->orderBy('created_at', 'desc')
-    //         ->get();
-
-    //     // Prepare shipment details data for the detail modal (JS-friendly format)
-    //     $shipmentDetails = $invoices->mapWithKeys(function($invoice) {
-    //         $shipper = $invoice->shipperInfo;
-    //         $consignee = $shipper ? $shipper->consigneeInfo : null;
-    //         $tracking = $shipper ? $shipper->shipmentTracking : null;
-    //         $packages = $shipper ? $shipper->packageDimensions : collect([]);
-    //         $items = $invoice->invoiceItems;
-    //         $selectedRate = $shipper ? $shipper->serviceRate : null;
-    //         $displayAmount = $selectedRate
-    //             ? (float) $selectedRate->inclusive_total
-    //             : round((float) $invoice->invoiceItems->sum('amount'), 2);
-
-    //         // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
-    //         // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
-    //         $hasLabel = false;
-    //         $labelFormat = null;
-    //         $graphicImage = null;
-    //         return [
-    //             $invoice->id => [
-    //                 'shipper_id' => $shipper ? $shipper->id : null,
-    //                 'awb_number' => $shipper ? $shipper->awb_number : null,
-    //                 'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
-    //                 'invoice_number' => $invoice->invoice_number,
-    //                 'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
-    //                 'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
-    //                 'invoice_currency' => $invoice->invoice_currency,
-    //                 'incoterms' => $invoice->incoterms,
-    //                 'reference_number' => $invoice->reference_number,
-    //                 'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
-    //                 'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
-    //                 'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? '')) : null,
-    //                 'shipper' => $shipper ? [
-    //                     'company' => $shipper->company_name,
-    //                     'contact' => $shipper->contact_person,
-    //                     'phone' => $shipper->phone_number,
-    //                     'email' => $shipper->email,
-    //                     'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
-    //                     'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
-    //                 ] : null,
-    //                 'consignee' => $consignee ? [
-    //                     'name' => $consignee->consignee_name,
-    //                     'contact' => $consignee->contact_person,
-    //                     'phone' => $consignee->phone_number,
-    //                     'email' => $consignee->email,
-    //                     'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
-    //                     'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
-    //                 ] : null,
-    //                 'destination' => $consignee ? $consignee->delivery_destination : null,
-    //                 'origin_type' => $consignee ? $consignee->origin_type : null,
-    //                 'shipping_method' => $shipper ? $shipper->shipping_method : null,
-    //                 'packages' => $packages->map(function($pkg, $idx) {
-    //                     return [
-    //                         'index' => $idx + 1,
-    //                         'weight' => $pkg->actual_weight_kg,
-    //                         'length' => $pkg->length_cm,
-    //                         'width' => $pkg->width_cm,
-    //                         'height' => $pkg->height_cm,
-    //                         'volumetric' => $pkg->volumetric_weight,
-    //                         'chargeable' => $pkg->chargeable_weight,
-    //                     ];
-    //                 })->values()->toArray(),
-    //                 'items' => $items->map(function($item) {
-    //                     $qty = $item->qty ?? 0;
-    //                     $rate = $item->unit_rate ?? 0;
-    //                     $igstPct = $item->igst_percentage ?? 0;
-    //                     $igstAmt = $item->igst_amount ?? 0;
-    //                     $baseAmount = $qty * $rate;
-    //                     // Use stored amount if available, otherwise calculate
-    //                     $amount = $item->amount ?? ($baseAmount + $igstAmt);
-    //                     return [
-    //                         'box_no' => $item->box_no,
-    //                         'description' => $item->description,
-    //                         'hs_code' => $item->hs_code,
-    //                         'hts_code' => $item->hts_code,
-    //                         'unit_type' => $item->unit_type,
-    //                         'qty' => $qty,
-    //                         'unit_rate' => $rate,
-    //                         'igst_percentage' => $igstPct,
-    //                         'igst_amount' => number_format($igstAmt, 2),
-    //                         'amount' => number_format($amount, 2),
-    //                     ];
-    //                 })->values()->toArray(),
-    //                 'items_total' => number_format($displayAmount, 2),
-    //                 'charges' => $tracking ? [
-    //                     'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
-    //                     'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
-    //                     'total' => $tracking->total_charges_currency . ' ' . ($tracking->total_charges_amount ?? '-'),
-    //                     'billing_weight' => ($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'),
-    //                 ] : null,
-    //                 'has_label' => $hasLabel,
-    //                 'label_format' => $labelFormat,
-    //                 'graphic_image' => $graphicImage,
-    //             ]
-    //         ];
-    //     });
-
-    //     return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails'));
-    // }
 
     /**
      * Fetch the shipping label (base64 graphic image) for a shipment on demand.

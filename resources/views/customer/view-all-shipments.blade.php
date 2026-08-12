@@ -18,8 +18,6 @@
     <script src="{{ asset('assets/js/theme-script.js') }}" type="text/javascript"></script>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
-    <!-- Datatable CSS -->
-    <link rel="stylesheet" href="{{ asset('assets/plugins/datatables/css/dataTables.bootstrap5.min.css') }}">
     <!-- Flatpickr CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <!-- Tabler Icon CSS -->
@@ -275,6 +273,66 @@
         .page-wrapper .content{
             padding:0.5rem !important;
         }
+
+        .shipment-filter-card .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #52627a;
+            margin-bottom: 5px;
+        }
+
+        .shipment-filter-card .form-control,
+        .shipment-filter-card .form-select {
+            min-height: 40px;
+            border-radius: 9px;
+        }
+
+        .pagination-summary {
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .shipment-pagination {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+            margin: 0;
+        }
+
+        .shipment-pagination .page-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 38px;
+            min-height: 38px;
+            padding: 6px 10px;
+            border: 1px solid #dfe5ef;
+            border-radius: 6px;
+            color: #243b63;
+            background: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: none;
+        }
+
+        .shipment-pagination .page-link:hover {
+            color: #fff;
+            background: #2f66f3;
+            border-color: #2f66f3;
+        }
+
+        .shipment-pagination .page-item.active .page-link {
+            color: #fff;
+            background: #2f66f3;
+            border-color: #2f66f3;
+        }
+
+        .shipment-pagination .page-item.disabled .page-link {
+            color: #a0a9b8;
+            background: #f5f6f8;
+            border-color: #e7ebf3;
+        }
     </style>
 </head>
 
@@ -365,64 +423,57 @@
 
                 <!-- Success/Error Messages -->
                 <div id="alertContainer"></div>
+                <div class="card border-0 shadow-sm rounded-4 shipment-filter-card mb-2">
+                    <div class="card-body p-3">
+                        <form method="GET" action="{{ route('customer.view-all-shipments') }}">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Customer / Consignee</label>
+                                    <input type="search" name="customer_name" class="form-control" value="{{ request('customer_name') }}" placeholder="Customer name">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Shipper Name</label>
+                                    <input type="search" name="shipper_name" class="form-control" value="{{ request('shipper_name') }}" placeholder="Company or contact">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">AWB Number</label>
+                                    <input type="search" name="awb_number" class="form-control" value="{{ request('awb_number') }}" placeholder="Enter AWB">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Status</label>
+                                    <select name="status" class="form-select">
+                                        <option value="all">All Statuses</option>
+                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                            <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Date From</label>
+                                    <input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Date To</label>
+                                    <input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}">
+                                </div>
+                                <div class="col-12 d-flex gap-2 justify-content-end mt-3">
+                                    <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-light"><i class="ti ti-refresh me-1"></i>Reset</a>
+                                    <button type="submit" class="btn btn-primary"><i class="ti ti-search me-1"></i>Search & Filter</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
                 <div class="card border-0 shadow-sm rounded-4 shipment-status-card">
                     <div class="card-body p-3">
-                        @php
-                            // Compute status counts from the invoices collection (no extra DB query)
-                            $statusCounts = ['all' => $invoices->count(), 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'received' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
-                            foreach ($invoices as $inv) {
-                                $st = $inv->status === 'cancelled' ? 'cancelled' : ($inv->shipperInfo && $inv->shipperInfo->status ? $inv->shipperInfo->status : 'draft');
-                                if (isset($statusCounts[$st])) {
-                                    $statusCounts[$st]++;
-                                }
-                            }
-                        @endphp
                         <div class="shipment-status-filters" aria-label="Shipment status filters">
-
-                            <button class="btn btn-primary rounded-pill status-filter-btn" data-filter="all">
-                                All Orders <span class="badge bg-light text-dark ms-1">{{ $statusCounts['all'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="draft">
-                                Drafts <span class="badge bg-secondary ms-1">{{ $statusCounts['draft'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="ready">
-                                Ready <span class="badge bg-secondary ms-1">{{ $statusCounts['ready'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="packed">
-                                Packed <span class="badge bg-secondary ms-1">{{ $statusCounts['packed'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="manifested">
-                                Manifested <span class="badge bg-secondary ms-1">{{ $statusCounts['manifested'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="received">
-                                Received <span class="badge bg-secondary ms-1">{{ $statusCounts['received'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="dispatched">
-                                Dispatched <span class="badge bg-secondary ms-1">{{ $statusCounts['dispatched'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="cancelled">
-                                Cancelled <span class="badge bg-secondary ms-1">{{ $statusCounts['cancelled'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="delivered">
-                                Delivered <span class="badge bg-secondary ms-1">{{ $statusCounts['delivered'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="disputed">
-                                Disputed <span class="badge bg-secondary ms-1">{{ $statusCounts['disputed'] }}</span>
-                            </button>
-
-                            <button class="btn btn-light rounded-pill status-filter-btn" data-filter="on_hold">
-                                On Hold <span class="badge bg-secondary ms-1">{{ $statusCounts['on_hold'] }}</span>
-                            </button>
-
+                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                <a href="{{ request()->fullUrlWithQuery(['status' => $value, 'page' => null]) }}"
+                                   class="btn {{ request('status', 'all') === $value ? 'btn-primary' : 'btn-light' }} rounded-pill status-filter-btn"
+                                   data-filter="{{ $value }}">
+                                    {{ $label }} <span class="badge {{ request('status', 'all') === $value ? 'bg-light text-dark' : 'bg-secondary' }} ms-1">{{ $statusCounts[$value] }}</span>
+                                </a>
+                            @endforeach
                         </div>
                     </div>
                 </div>
@@ -432,8 +483,8 @@
                         @if($invoices->isEmpty())
                             <div class="text-center py-5">
                                 <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
-                                <p class="mt-3 text-muted">No shipments found. Create your first shipment now!</p>
-                                <a href="{{ url('/customer/create-shipment') }}" class="btn btn-primary">Create Shipment</a>
+                                <p class="mt-3 text-muted">No shipments matched the selected filters.</p>
+                                <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-primary">Clear Filters</a>
                             </div>
                         @else
                             <div class="table-responsive">
@@ -479,7 +530,7 @@
                                             <td class="text-center">
                                                 <input type="checkbox" class="shipment-checkbox bulk-manifest-checkbox" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" style="display:none;">
                                             </td>
-                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $invoices->firstItem() + $index }}</td>
                                             <td>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                     <span class="badge bg-dark" style="cursor:pointer;"
@@ -611,6 +662,44 @@
                                         @endforeach
                                     </tbody>
                                 </table>
+                            </div>
+                            <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 mt-3">
+                                <div class="pagination-summary">
+                                    Showing {{ $invoices->firstItem() }} to {{ $invoices->lastItem() }} of {{ $invoices->total() }} shipments
+                                </div>
+
+                                @if ($invoices->hasPages())
+                                    <nav aria-label="Shipment pages">
+                                        <ul class="pagination shipment-pagination">
+                                            <li class="page-item {{ $invoices->onFirstPage() ? 'disabled' : '' }}">
+                                                <a class="page-link"
+                                                   href="{{ $invoices->onFirstPage() ? '#' : $invoices->previousPageUrl() }}"
+                                                   aria-label="Previous page">
+                                                    Previous
+                                                </a>
+                                            </li>
+
+                                            @php
+                                                $firstPage = max(1, $invoices->currentPage() - 1);
+                                                $lastPage = min($invoices->lastPage(), $invoices->currentPage() + 1);
+                                            @endphp
+
+                                            @for ($page = $firstPage; $page <= $lastPage; $page++)
+                                                <li class="page-item {{ $page === $invoices->currentPage() ? 'active' : '' }}">
+                                                    <a class="page-link" href="{{ $invoices->url($page) }}">{{ $page }}</a>
+                                                </li>
+                                            @endfor
+
+                                            <li class="page-item {{ $invoices->hasMorePages() ? '' : 'disabled' }}">
+                                                <a class="page-link"
+                                                   href="{{ $invoices->hasMorePages() ? $invoices->nextPageUrl() : '#' }}"
+                                                   aria-label="Next page">
+                                                    Next
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                @endif
                             </div>
                         @endif
                     </div>
@@ -1038,11 +1127,8 @@
     <!-- JsBarcode CDN -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
-    <!-- Datatable JS -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
     <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ asset('assets/plugins/datatables/js/jquery.dataTables.min.js') }}"></script>
-    <script src="{{ asset('assets/plugins/datatables/js/dataTables.bootstrap5.min.js') }}"></script>
     <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
     <!-- Main theme JS initializes the sidebar dropdowns. -->
     <script src="{{ asset('assets/js/script.js') }}"></script>
@@ -1253,21 +1339,6 @@
     <script>
         $(document).ready(function () {
 
-            // Initialize DataTable
-            // Column layout: 0=Checkbox, 1=#, 2=AWB, 3=Consignee, 4=Amount, 5=Currency,
-            //                 6=Incoterms, 7=Status, 8=Print Label, 9=Pay Now, 10=Manifest,
-            //                 11=Created, 12=Cancel
-            $('#shipmentsTable').DataTable({
-                order: [[1, 'asc']],
-                pageLength: 25,
-                columnDefs: [
-                    { targets: [0, 8, 9, 10, 12], visible: false }
-                ],
-                language: {
-                    search: "Search shipments:",
-                    emptyTable: "No shipments found."
-                }
-            });
 
             // Keep status counters mutable so AJAX status changes are reflected immediately.
             const liveStatusCounts = @json($statusCounts);
@@ -1340,109 +1411,18 @@
                 $('#packedBulkActions').toggleClass('is-visible', show);
             }
 
-            // Filter the already-loaded DataTable immediately. Keep the selected status in
-            // the URL without reloading so refresh/back navigation can restore the same view.
-            $('.status-filter-btn').on('click', function (event) {
-                const filter = $(this).data('filter');
+            function configureBulkActionsForStatus(status) {
+                showBulkDraftActions(status === 'draft');
+                showBulkReadyActions(status === 'ready');
+                showBulkPackedActions(status === 'packed');
 
-                // Reset action bars first so each filter only enables its own actions.
-                showBulkDraftActions(false);
-                showBulkReadyActions(false);
-                showBulkPackedActions(false);
-
-                if (event.originalEvent && window.history && window.history.pushState) {
-                    const pageUrl = new URL(window.location.href);
-                    pageUrl.searchParams.set('status', filter);
-                    window.history.pushState({ shipmentStatus: filter }, '', pageUrl.toString());
-                }
-
-                // Update button active state
-                $('.status-filter-btn').removeClass('btn-primary').addClass('btn-light');
-                $(this).removeClass('btn-light').addClass('btn-primary');
-
-                // Filter DataTable using custom search on data-status attribute
-                const dt = $('#shipmentsTable').DataTable();
-                $.fn.dataTable.ext.search = []; // Clear previous custom filters
-
-                // Column visibility: Checkbox=0, Print Label=8, Pay Now=9, Manifest=10, Cancel=12
-                if (filter === 'all') {
-                    dt.column(0).visible(false);  // Hide Checkbox
-                    dt.column(8).visible(false);  // Hide Print Label
-                    dt.column(9).visible(false);  // Hide Pay Now
-                    dt.column(10).visible(false); // Hide Manifest
-                    dt.column(12).visible(false); // Hide Cancel
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
-                    $('#bulkManifestBtn').hide();
-                    showBulkDraftActions(false);
-                    showBulkReadyActions(false);
-                    dt.draw();
-                    return;
-                } else if (filter === 'draft') {
-                    dt.column(0).visible(true);   // Show Checkbox for Draft multi-select
-                    dt.column(8).visible(false);  // Hide Print Label
-                    dt.column(9).visible(true);   // Show Pay Now
-                    dt.column(10).visible(false); // Hide Manifest
-                    dt.column(12).visible(true);  // Show Cancel
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
-                    $('#bulkManifestBtn').hide();
-                    showBulkDraftActions(true);
-                    showBulkReadyActions(false);
-                } else if (filter === 'ready') {
-                    dt.column(0).visible(true);   // Show Checkbox
-                    dt.column(8).visible(true);   // Show Print Label
-                    dt.column(9).visible(false);  // Hide Pay Now
-                    dt.column(10).visible(false); // Hide Manifest
-                    dt.column(12).visible(true);  // Show Cancel
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
-                    $('#bulkManifestBtn').hide();
-                    showBulkDraftActions(false);
-                    showBulkReadyActions(true);
-                } else if (filter === 'packed') {
-                    dt.column(0).visible(true);   // Show Checkbox
-                    dt.column(8).visible(true);   // Show Print Label
-                    dt.column(9).visible(false);  // Hide Pay Now
-                    dt.column(10).visible(true);  // Show Manifest
-                    dt.column(12).visible(true);  // Show Cancel
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').show();
-                    $('#bulkManifestBtn').show();
-                    showBulkPackedActions(true);
-                } else if (filter === 'manifested') {
-                    dt.column(0).visible(false);  // Hide Checkbox
-                    dt.column(8).visible(false);  // Hide Print Label
-                    dt.column(9).visible(false);  // Hide Pay Now
-                    dt.column(10).visible(false); // Hide Manifest
-                    dt.column(12).visible(false); // Hide Cancel
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
-                    $('#bulkManifestBtn').hide();
-                } else {
-                    dt.column(0).visible(false);  // Hide Checkbox
-                    dt.column(8).visible(true);   // Show Print Label
-                    dt.column(9).visible(false);  // Hide Pay Now
-                    dt.column(10).visible(false); // Hide Manifest
-                    $('#selectAllCheckbox, .bulk-manifest-checkbox').hide();
-                    $('#bulkManifestBtn').hide();
-                }
-
-                $.fn.dataTable.ext.search.push(function (settings, rowData, rowIndex) {
-                    const tr = dt.row(rowIndex).node();
-                    return $(tr).data('status') === filter;
-                });
-                dt.draw();
-                updateBulkSelectionTotals();
-
-                // Update the indicator using live counters (including AJAX status changes).
-                refreshStatusCounters();
-            });
-
-            function applyStatusFromUrl() {
-                const requestedStatus = new URLSearchParams(window.location.search).get('status') || 'all';
-                const $requestedStatusButton = $('.status-filter-btn[data-filter="' + requestedStatus + '"]');
-                ($requestedStatusButton.length ? $requestedStatusButton : $('.status-filter-btn[data-filter="all"]')).trigger('click');
+                const selectable = ['draft', 'ready', 'packed'].includes(status);
+                $('#selectAllCheckbox, .bulk-manifest-checkbox').toggle(selectable);
+                $('#bulkManifestBtn').toggle(status === 'packed');
             }
 
-            // Restore the selected status on refresh and browser back/forward navigation.
-            applyStatusFromUrl();
-            window.addEventListener('popstate', applyStatusFromUrl);
+            configureBulkActionsForStatus(@json(request('status', 'all')));
+            updateBulkSelectionTotals();
 
             // Print Label button click handler (delegated)
             $('#shipmentsTable').on('click', '.print-label-btn', function () {
@@ -1554,10 +1534,6 @@
                             liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
                             liveStatusCounts.packed += 1;
                             refreshStatusCounters();
-
-                            const shipmentsTable = $('#shipmentsTable').DataTable();
-                            shipmentsTable.row($row).invalidate('dom');
-                            shipmentsTable.draw(false);
                             $('#printLabelModal').modal('show');
                         },
                         error: function (xhr) {
@@ -1708,10 +1684,6 @@
                     liveStatusCounts.ready += 1;
                     walletBalance = Number(response.new_balance ?? walletBalance);
                     $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
-
-                    const shipmentsTable = $('#shipmentsTable').DataTable();
-                    shipmentsTable.row($row).invalidate('dom');
-                    shipmentsTable.draw(false);
                     refreshStatusCounters();
                 };
 
@@ -2287,10 +2259,6 @@
                                     liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
                                     liveStatusCounts.packed += 1;
                                     refreshStatusCounters();
-
-                                    const shipmentsTable = $('#shipmentsTable').DataTable();
-                                    shipmentsTable.row($row).invalidate('dom');
-                                    shipmentsTable.draw(false);
                                 }
                             } else {
                                 showAlert('danger', response.message || 'Failed to move shipment to Packed.');
