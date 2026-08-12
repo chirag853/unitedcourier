@@ -146,18 +146,29 @@
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label" for="kycType">KYC Type</label>
                                         <select name="kyc_type" id="kycType" class="form-select @error('kyc_type') is-invalid @enderror">
-                                            <option value="">Select</option>
-                                            @foreach(['GST (Normal)', 'Aadhar Card', 'PAN Card', 'Passport Number'] as $kycType)
-                                                <option value="{{ $kycType }}" {{ old('kyc_type') === $kycType ? 'selected' : '' }}>{{ $kycType }}</option>
-                                            @endforeach
+                                            <option value="Aadhar Card" {{ old('kyc_type', 'Aadhar Card') === 'Aadhar Card' ? 'selected' : '' }}>Aadhar Card</option>
                                         </select>
                                         @error('kyc_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                     </div>
                                     <div class="col-md-6 mb-3">
-                                        <label class="form-label" for="kycNumber">KYC Number</label>
-                                        <input type="text" id="kycNumber" name="kyc_number" class="form-control text-uppercase @error('kyc_number') is-invalid @enderror" value="{{ old('kyc_number') }}" maxlength="15" autocomplete="off">
-                                        <div class="invalid-feedback">@error('kyc_number'){{ $message }}@else Enter a valid KYC number. @enderror</div>
-                                        <small class="text-muted" id="kycHint">Select a KYC type to see the required format.</small>
+                                        <label class="form-label" for="kycNumber">Aadhaar Number</label>
+                                        <div class="input-group">
+                                            <input type="text" id="kycNumber" name="kyc_number" class="form-control text-uppercase @error('kyc_number') is-invalid @enderror" value="{{ old('kyc_number') }}" maxlength="12" inputmode="numeric" pattern="[2-9][0-9]{11}" autocomplete="off">
+                                            <button type="button" class="btn btn-primary" id="kycVerifyBtn">
+                                                <i class="ti ti-shield-check me-1"></i>Verify
+                                            </button>
+                                        </div>
+                                        <div class="invalid-feedback">@error('kyc_number'){{ $message }}@else Enter a valid 12-digit Aadhaar number. @enderror</div>
+                                        <small class="text-muted" id="kycHint">Enter the 12-digit Aadhaar number and click Verify.</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3" id="aadharFrontUploadWrap">
+                                        <label class="form-label" for="aadharFrontDocument">Aadhaar Front Image <span class="text-danger">*</span></label>
+                                        <input type="file" id="aadharFrontDocument" name="aadhar_front_document" class="form-control @error('aadhar_front_document') is-invalid @enderror" accept=".jpg,.jpeg,.png">
+                                        <div class="form-text">Upload the Aadhaar front image (JPG, JPEG or PNG, up to 5 MB)</div>
+                                        @error('aadhar_front_document')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-12 mb-3" id="kycVerifyStatusWrap" style="display: none;">
+                                        <div id="kycVerifyStatus" class="alert alert-success mb-0"></div>
                                     </div>
                                     <!-- <div class="col-12 mb-3">
                                         <div class="form-check form-switch">
@@ -413,10 +424,7 @@
             document.getElementById('billingContact')
         ].filter(Boolean);
         const kycFormats = {
-            'GST (Normal)': { pattern: '[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]', length: 15, hint: 'Format: 22AAAAA0000A1Z5' },
-            'Aadhar Card': { pattern: '[2-9][0-9]{11}', length: 12, hint: 'Enter a 12-digit Aadhaar number.' },
-            'PAN Card': { pattern: '[A-Z]{5}[0-9]{4}[A-Z]', length: 10, hint: 'Format: AAAAA0000A' },
-            'Passport Number': { pattern: '[A-Z][0-9]{7}', length: 8, hint: 'Format: A1234567' }
+            'Aadhar Card': { pattern: '[2-9][0-9]{11}', length: 12, hint: 'Enter a 12-digit Aadhaar number.' }
         };
 
         numericFields.forEach(function (field) {
@@ -431,8 +439,8 @@
 
         function updateKycValidation() {
             const format = kycFormats[kycType.value];
-            kycNumber.required = Boolean(format);
-            kycNumber.value = kycNumber.value.toUpperCase().replace(/\s/g, '');
+            kycNumber.required = false;
+            kycNumber.value = kycNumber.value.replace(/\s/g, '');
             if (format) {
                 kycNumber.pattern = format.pattern;
                 kycNumber.maxLength = format.length;
@@ -544,10 +552,101 @@
         updateKycValidation();
         updateCustomerTypeState();
 
+        // ---------- Cashfree Aadhaar verification (same flow as KYC) ----------
+        const kycVerifyBtn = document.getElementById('kycVerifyBtn');
+        const aadharFrontDocument = document.getElementById('aadharFrontDocument');
+        const kycVerifyStatusWrap = document.getElementById('kycVerifyStatusWrap');
+        const kycVerifyStatus = document.getElementById('kycVerifyStatus');
+        let aadharVerified = false;
+
+        function showKycVerifyStatus(message, type) {
+            kycVerifyStatusWrap.style.display = 'block';
+            kycVerifyStatus.className = 'alert mb-0 alert-' + type;
+            kycVerifyStatus.innerHTML = '<i class="ti me-1 ' + (type === 'success' ? 'ti-circle-check' : 'ti-alert-triangle') + '"></i>' + message;
+        }
+
+        function verifyAadharForCustomer() {
+            const aadhar = kycNumber.value.replace(/\s+/g, '');
+
+            if (!aadhar) {
+                showKycVerifyStatus('Please enter your Aadhaar number.', 'danger');
+                kycNumber.focus();
+                return;
+            }
+            if (!/^[2-9][0-9]{11}$/.test(aadhar)) {
+                showKycVerifyStatus('Please enter a valid 12-digit Aadhaar number.', 'danger');
+                kycNumber.focus();
+                return;
+            }
+            if (!aadharFrontDocument.files || !aadharFrontDocument.files[0]) {
+                showKycVerifyStatus('Please upload the Aadhaar front image before verification.', 'danger');
+                aadharFrontDocument.focus();
+                return;
+            }
+            if (!['image/jpeg', 'image/png'].includes(aadharFrontDocument.files[0].type)) {
+                showKycVerifyStatus('The Aadhaar front image must be a JPG or PNG file.', 'danger');
+                return;
+            }
+            if (aadharFrontDocument.files[0].size > 5 * 1024 * 1024) {
+                showKycVerifyStatus('The Aadhaar front image must not exceed 5 MB.', 'danger');
+                return;
+            }
+
+            const verifyData = new FormData();
+            verifyData.append('aadhar_number', aadhar);
+            verifyData.append('aadhar_front_document', aadharFrontDocument.files[0]);
+
+            kycVerifyBtn.disabled = true;
+            kycVerifyBtn.innerHTML = '<i class="ti ti-loader ti-spin me-1"></i>Verifying...';
+
+            fetch('{{ route('customer.verify.exporter-customer-aadhar') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: verifyData
+                })
+                .then(response => response.json().catch(() => ({
+                    success: false,
+                    message: 'Server error. Please try again.'
+                })))
+                .then(data => {
+                    if (data.success) {
+                        aadharVerified = true;
+                        showKycVerifyStatus(data.message || 'Aadhaar verified successfully through Cashfree!', 'success');
+                        kycVerifyBtn.innerHTML = '<i class="ti ti-circle-check me-1"></i>Verified';
+                        kycVerifyBtn.classList.remove('btn-primary');
+                        kycVerifyBtn.classList.add('btn-success');
+                        kycVerifyBtn.disabled = true;
+                        kycNumber.readOnly = true;
+                        aadharFrontDocument.disabled = true;
+                    } else {
+                        showKycVerifyStatus(data.message || 'Aadhaar verification failed.', 'danger');
+                        kycVerifyBtn.innerHTML = '<i class="ti ti-shield-check me-1"></i>Verify';
+                        kycVerifyBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Aadhaar verify error:', error);
+                    showKycVerifyStatus('A network error occurred while verifying your Aadhaar. Please try again.', 'danger');
+                    kycVerifyBtn.innerHTML = '<i class="ti ti-shield-check me-1"></i>Verify';
+                    kycVerifyBtn.disabled = false;
+                });
+        }
+
+        kycVerifyBtn.addEventListener('click', verifyAadharForCustomer);
+
         form.addEventListener('submit', function (event) {
-            if (!form.checkValidity()) {
+            const requiresAadharVerification = kycNumber.value.trim() !== '' && !aadharVerified;
+            if (!form.checkValidity() || requiresAadharVerification) {
                 event.preventDefault();
                 event.stopPropagation();
+                if (requiresAadharVerification) {
+                    showKycVerifyStatus('Verify the Aadhaar number through Cashfree before saving the customer.', 'danger');
+                    kycNumber.focus();
+                }
                 form.querySelector(':invalid')?.focus();
             }
             form.classList.add('was-validated');

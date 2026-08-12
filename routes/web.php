@@ -617,6 +617,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::get('/companies', [customerController::class, 'companies'])->name('companies');
     Route::get('/exporter-customers', [customerController::class, 'exporterCustomers'])->name('exporter-customers');
     Route::post('/exporter-customers', [customerController::class, 'storeExporterCustomer'])->name('exporter-customers.store');
+    Route::post('/verify-exporter-customer-aadhar', [customerController::class, 'verifyExporterCustomerAadhar'])->name('verify.exporter-customer-aadhar');
     Route::get('/create-shipment', [customerController::class, 'createShipment'])->name('create-shipment');
     Route::get('/zones-by-destination', [customerController::class, 'getZonesByDestination'])->name('zones-by-destination');
     Route::get('/csb5-form', [customerController::class, 'csb5Form'])->name('csb5-form');

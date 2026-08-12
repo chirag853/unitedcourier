@@ -873,17 +873,14 @@ class customerController extends Controller
                 Rule::unique('exporter_customers', 'email')->where('exporter_id', $exporter->id),
             ],
             'email_opt_out' => ['sometimes', 'boolean'],
-            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['GST (Normal)', 'Aadhar Card', 'PAN Card', 'Passport Number'])],
+            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['Aadhar Card'])],
             'kyc_number' => [
                 'nullable',
                 'required_with:kyc_type',
                 'max:100',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $exporter): void {
                     $patterns = [
-                        'GST (Normal)' => ['/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', 'Enter a valid 15-character GST number.'],
                         'Aadhar Card' => ['/^[2-9][0-9]{11}$/', 'Enter a valid 12-digit Aadhaar number.'],
-                        'PAN Card' => ['/^[A-Z]{5}[0-9]{4}[A-Z]$/', 'Enter a valid 10-character PAN number.'],
-                        'Passport Number' => ['/^[A-Z][0-9]{7}$/', 'Enter a valid passport number (one letter followed by seven digits).'],
                     ];
                     $kycType = $request->input('kyc_type');
                     $rule = $patterns[$kycType] ?? null;
@@ -896,6 +893,7 @@ class customerController extends Controller
                         $value
                         && $kycType === 'Aadhar Card'
                         && \App\Models\ExporterCustomer::query()
+                            ->where('exporter_id', $exporter->id)
                             ->where('kyc_type', 'Aadhar Card')
                             ->where('kyc_number', (string) $value)
                             ->exists()
@@ -943,9 +941,25 @@ class customerController extends Controller
 
         $validated['email_opt_out'] = $request->boolean('email_opt_out');
         $validated['kyc_number'] = $validated['kyc_number'] ?: null;
+        if ($validated['kyc_number'] === null) {
+            $validated['kyc_type'] = null;
+        }
         $validated['is_lut'] = $usesLut;
         $validated['terms_accepted'] = $isCsbV && $request->boolean('terms_accepted');
         $validated['merchant_agreement_accepted_at'] = $validated['terms_accepted'] ? now() : null;
+
+        // An Aadhaar number entered on this page must be Cashfree-verified first,
+        // mirroring the verification required in the KYC flow.
+        if (($validated['kyc_type'] ?? null) === 'Aadhar Card' && !empty($validated['kyc_number'])) {
+            if (
+                !session('kyc_aadhar_cashfree_verified')
+                || session('kyc_aadhar_number') !== $validated['kyc_number']
+            ) {
+                throw ValidationException::withMessages([
+                    'kyc_number' => 'Verify the submitted Aadhaar number through Cashfree before saving the customer.',
+                ]);
+            }
+        }
 
         if ($isCsbV && !empty($validated['lut_bond_year'])) {
             [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
@@ -1874,7 +1888,7 @@ class customerController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Aadhaar document verified successfully through Cashfree!',
+                'message' => 'Aadhaar document verified successfully',
                 'aadhar_number' => $aadhar,
                 'verification_id' => $verificationId,
             ]);
@@ -1899,6 +1913,174 @@ class customerController extends Controller
             ], 500);
         } catch (\Throwable $e) {
             \Log::error('Aadhaar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Aadhaar verification failed. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify an Aadhaar front image through Cashfree Bharat OCR for the
+     * Add Customer (exporter-customers) page. Unlike the KYC verifyAadhar,
+     * the duplication check runs only against the logged-in exporter's own
+     * saved customers (exporter_customers) and does not write to the
+     * Customer record.
+     */
+    public function verifyExporterCustomerAadhar(Request $request)
+    {
+        try {
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to verify your Aadhaar.',
+                ], 401);
+            }
+
+            session()->forget([
+                'kyc_aadhar_number',
+                'kyc_aadhar_verified',
+                'kyc_aadhar_cashfree_verified',
+                'kyc_aadhar_front_hash',
+                'kyc_aadhar_verification_id',
+            ]);
+
+            $validated = $request->validate([
+                'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
+                'aadhar_front_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            ], [
+                'aadhar_front_document.required' => 'Upload the Aadhaar front image before verification.',
+                'aadhar_front_document.mimes' => 'The Aadhaar front document must be a JPG, JPEG, or PNG image.',
+                'aadhar_front_document.max' => 'The Aadhaar front image must not exceed 5 MB.',
+            ]);
+
+            $aadhar = preg_replace('/\s+/', '', $validated['aadhar_number']);
+
+            // Duplication is checked only within this exporter's own saved customers.
+            if (ExporterCustomer::query()
+                ->where('exporter_id', $customer->id)
+                ->where('kyc_type', 'Aadhar Card')
+                ->where('kyc_number', $aadhar)
+                ->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This Aadhaar number is already registered for another saved customer.',
+                ], 409);
+            }
+
+            $clientId = config('services.cashfree.verification_client_id');
+            $clientSecret = config('services.cashfree.verification_client_secret');
+            if (!$clientId || !$clientSecret) {
+                \Log::error('Cashfree Aadhaar OCR credentials are not configured.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aadhaar verification is temporarily unavailable.',
+                ], 503);
+            }
+
+            $frontFile = $request->file('aadhar_front_document');
+            $verificationId = (string) random_int(1000, 9999);
+            $fileStream = fopen($frontFile->getRealPath(), 'r');
+            if ($fileStream === false) {
+                throw new \RuntimeException('Unable to read the uploaded Aadhaar front image.');
+            }
+
+            try {
+                $cashfreeResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'x-client-id' => $clientId,
+                        'x-client-secret' => $clientSecret,
+                        'x-api-version' => '2024-12-01',
+                    ])
+                    ->attach('file', $fileStream, $frontFile->getClientOriginalName())
+                    ->timeout((int) config('services.cashfree.verification_timeout', 30))
+                    ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
+                        'verification_id' => $verificationId,
+                        'document_type' => 'AADHAAR',
+                        'do_verification' => 'false',
+                    ]);
+            } finally {
+                fclose($fileStream);
+            }
+
+            $cashfreeData = $cashfreeResponse->json();
+            if (!$cashfreeResponse->successful()) {
+                \Log::warning('Cashfree Aadhaar OCR rejected.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'http_status' => $cashfreeResponse->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this Aadhaar image.',
+                ], 422);
+            }
+
+            $providerStatus = strtoupper((string) (
+                data_get($cashfreeData, 'verification_status')
+                ?? data_get($cashfreeData, 'status')
+                ?? data_get($cashfreeData, 'status_code')
+                ?? ''
+            ));
+            if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
+                || data_get($cashfreeData, 'success') === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'Cashfree could not read this Aadhaar image.',
+                ], 422);
+            }
+
+            $ocrAadhaar = preg_replace(
+                '/\D+/',
+                '',
+                (string) data_get($cashfreeData, 'document_fields.uid', '')
+            );
+
+            if (!preg_match('/^[2-9][0-9]{11}$/', $ocrAadhaar)) {
+                \Log::warning('Cashfree Aadhaar OCR response did not contain a valid document_fields.uid.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid Aadhaar number from the uploaded image.',
+                ], 422);
+            }
+
+            if (!hash_equals($aadhar, $ocrAadhaar)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The Aadhaar number entered does not match the UID read from the uploaded Aadhaar image.',
+                ], 422);
+            }
+
+            $frontHash = hash_file('sha256', $frontFile->getRealPath());
+            session([
+                'kyc_aadhar_number' => $aadhar,
+                'kyc_aadhar_verified' => true,
+                'kyc_aadhar_cashfree_verified' => true,
+                'kyc_aadhar_front_hash' => $frontHash,
+                'kyc_aadhar_verification_id' => $verificationId,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Aadhaar document verified successfully',
+                'aadhar_number' => $aadhar,
+                'verification_id' => $verificationId,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('Exporter customer Aadhaar verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Aadhaar verification failed. Please try again.',
@@ -6041,6 +6223,9 @@ class customerController extends Controller
     /**
      * Show all shipments for the logged-in customer.
      */
+
+    // created by anil sir
+    
     public function viewAllShipments()
     {
         // Check if customer is logged in
@@ -6052,34 +6237,22 @@ class customerController extends Controller
 
         // Get all shipper IDs for this customer
         $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+        
+        //print_r($shipperIds); exit;
 
         // Get all invoices and the selected rate used to calculate the complete shipping charge.
-        // Performance: only the columns actually needed by the page are selected. The heavy JSON
-        // columns (package_results, raw_response, custom_label) are intentionally excluded here and
-        // are fetched on-demand via the shipment-label endpoint when a label is actually requested.
         $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
             ->with([
-                'invoiceItems' => function ($q) {
-                    $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
-                },
-                'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
-                },
-                'shipperInfo.shipmentTracking' => function ($q) {
-                    $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
-                },
-                'shipperInfo.consigneeInfo' => function ($q) {
-                    $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'phone_number', 'email', 'address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code', 'delivery_destination', 'origin_type');
-                },
-                'shipperInfo.packageDimensions' => function ($q) {
-                    $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
-                },
-                'shipperInfo.serviceRate' => function ($q) {
-                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
-                },
+                'invoiceItems',
+                'shipperInfo.shipmentTracking',
+                'shipperInfo.consigneeInfo',
+                'shipperInfo.packageDimensions',
+                'shipperInfo.serviceRate',
             ])
             ->orderBy('created_at', 'desc')
             ->get();
+            
+       //print_r($invoices); exit;    
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
         $shipmentDetails = $invoices->mapWithKeys(function($invoice) {
@@ -6091,13 +6264,30 @@ class customerController extends Controller
             $selectedRate = $shipper ? $shipper->serviceRate : null;
             $displayAmount = $selectedRate
                 ? (float) $selectedRate->inclusive_total
-                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+                : round((float) $invoice->total_amount, 2);
 
-            // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
-            // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
+            // Extract label data from package_results
+            // UPS Ship API uses "ShippingLabel" key (not "LabelImage")
+            // Structure: ShippingLabel.ImageFormat.Code + ShippingLabel.GraphicImage
             $hasLabel = false;
             $labelFormat = null;
             $graphicImage = null;
+            if ($tracking && $tracking->package_results) {
+                $pkgResults = $tracking->package_results;
+                $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
+                if (isset($firstPkg['ShippingLabel'])) {
+                    $hasLabel = true;
+                    $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                    $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+                } elseif (isset($firstPkg['LabelImage'])) {
+                    // Fallback for older/different UPS response format
+                    $hasLabel = true;
+                    $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                    $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+                }
+            }
+            
+            
             return [
                 $invoice->id => [
                     'shipper_id' => $shipper ? $shipper->id : null,
@@ -6105,7 +6295,7 @@ class customerController extends Controller
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
-                    'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
+                    'invoice_amount' => number_format($invoice->total_amount, 2),
                     'invoice_currency' => $invoice->invoice_currency,
                     'incoterms' => $invoice->incoterms,
                     'reference_number' => $invoice->reference_number,
@@ -6177,8 +6367,150 @@ class customerController extends Controller
             ];
         });
 
-        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails'));
+        return view('customer.view-all-shipments1', compact('invoices', 'shipmentDetails'));
     }
+
+
+
+    // created by chirag
+    // public function viewAllShipments()
+    // {
+    //     // Check if customer is logged in
+    //     if (!auth()->guard('customer')->check()) {
+    //         return redirect()->route('login');
+    //     }
+
+    //     $customerId = auth()->guard('customer')->id();
+
+    //     // Get all shipper IDs for this customer
+    //     $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+
+    //     // Get all invoices and the selected rate used to calculate the complete shipping charge.
+    //     // Performance: only the columns actually needed by the page are selected. The heavy JSON
+    //     // columns (package_results, raw_response, custom_label) are intentionally excluded here and
+    //     // are fetched on-demand via the shipment-label endpoint when a label is actually requested.
+    //     $invoices = ShipmentInvoice::whereIn('shipper_id', $shipperIds)
+    //         ->with([
+    //             'invoiceItems' => function ($q) {
+    //                 $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
+    //             },
+    //             'shipperInfo' => function ($q) {
+    //                 $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
+    //             },
+    //             'shipperInfo.shipmentTracking' => function ($q) {
+    //                 $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
+    //             },
+    //             'shipperInfo.consigneeInfo' => function ($q) {
+    //                 $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'phone_number', 'email', 'address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code', 'delivery_destination', 'origin_type');
+    //             },
+    //             'shipperInfo.packageDimensions' => function ($q) {
+    //                 $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
+    //             },
+    //             'shipperInfo.serviceRate' => function ($q) {
+    //                 $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
+    //             },
+    //         ])
+    //         ->orderBy('created_at', 'desc')
+    //         ->get();
+
+    //     // Prepare shipment details data for the detail modal (JS-friendly format)
+    //     $shipmentDetails = $invoices->mapWithKeys(function($invoice) {
+    //         $shipper = $invoice->shipperInfo;
+    //         $consignee = $shipper ? $shipper->consigneeInfo : null;
+    //         $tracking = $shipper ? $shipper->shipmentTracking : null;
+    //         $packages = $shipper ? $shipper->packageDimensions : collect([]);
+    //         $items = $invoice->invoiceItems;
+    //         $selectedRate = $shipper ? $shipper->serviceRate : null;
+    //         $displayAmount = $selectedRate
+    //             ? (float) $selectedRate->inclusive_total
+    //             : round((float) $invoice->invoiceItems->sum('amount'), 2);
+
+    //         // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
+    //         // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
+    //         $hasLabel = false;
+    //         $labelFormat = null;
+    //         $graphicImage = null;
+    //         return [
+    //             $invoice->id => [
+    //                 'shipper_id' => $shipper ? $shipper->id : null,
+    //                 'awb_number' => $shipper ? $shipper->awb_number : null,
+    //                 'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+    //                 'invoice_number' => $invoice->invoice_number,
+    //                 'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
+    //                 'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
+    //                 'invoice_currency' => $invoice->invoice_currency,
+    //                 'incoterms' => $invoice->incoterms,
+    //                 'reference_number' => $invoice->reference_number,
+    //                 'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
+    //                 'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
+    //                 'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? '')) : null,
+    //                 'shipper' => $shipper ? [
+    //                     'company' => $shipper->company_name,
+    //                     'contact' => $shipper->contact_person,
+    //                     'phone' => $shipper->phone_number,
+    //                     'email' => $shipper->email,
+    //                     'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
+    //                     'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+    //                 ] : null,
+    //                 'consignee' => $consignee ? [
+    //                     'name' => $consignee->consignee_name,
+    //                     'contact' => $consignee->contact_person,
+    //                     'phone' => $consignee->phone_number,
+    //                     'email' => $consignee->email,
+    //                     'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
+    //                     'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+    //                 ] : null,
+    //                 'destination' => $consignee ? $consignee->delivery_destination : null,
+    //                 'origin_type' => $consignee ? $consignee->origin_type : null,
+    //                 'shipping_method' => $shipper ? $shipper->shipping_method : null,
+    //                 'packages' => $packages->map(function($pkg, $idx) {
+    //                     return [
+    //                         'index' => $idx + 1,
+    //                         'weight' => $pkg->actual_weight_kg,
+    //                         'length' => $pkg->length_cm,
+    //                         'width' => $pkg->width_cm,
+    //                         'height' => $pkg->height_cm,
+    //                         'volumetric' => $pkg->volumetric_weight,
+    //                         'chargeable' => $pkg->chargeable_weight,
+    //                     ];
+    //                 })->values()->toArray(),
+    //                 'items' => $items->map(function($item) {
+    //                     $qty = $item->qty ?? 0;
+    //                     $rate = $item->unit_rate ?? 0;
+    //                     $igstPct = $item->igst_percentage ?? 0;
+    //                     $igstAmt = $item->igst_amount ?? 0;
+    //                     $baseAmount = $qty * $rate;
+    //                     // Use stored amount if available, otherwise calculate
+    //                     $amount = $item->amount ?? ($baseAmount + $igstAmt);
+    //                     return [
+    //                         'box_no' => $item->box_no,
+    //                         'description' => $item->description,
+    //                         'hs_code' => $item->hs_code,
+    //                         'hts_code' => $item->hts_code,
+    //                         'unit_type' => $item->unit_type,
+    //                         'qty' => $qty,
+    //                         'unit_rate' => $rate,
+    //                         'igst_percentage' => $igstPct,
+    //                         'igst_amount' => number_format($igstAmt, 2),
+    //                         'amount' => number_format($amount, 2),
+    //                     ];
+    //                 })->values()->toArray(),
+    //                 'items_total' => number_format($displayAmount, 2),
+    //                 'charges' => $tracking ? [
+    //                     'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
+    //                     'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
+    //                     'total' => $tracking->total_charges_currency . ' ' . ($tracking->total_charges_amount ?? '-'),
+    //                     'billing_weight' => ($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'),
+    //                 ] : null,
+    //                 'has_label' => $hasLabel,
+    //                 'label_format' => $labelFormat,
+    //                 'graphic_image' => $graphicImage,
+    //             ]
+    //         ];
+    //     });
+
+    //     return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails'));
+    // }
 
     /**
      * Fetch the shipping label (base64 graphic image) for a shipment on demand.
