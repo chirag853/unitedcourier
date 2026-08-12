@@ -12,6 +12,11 @@
     <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
     <link rel="stylesheet" href="{{ asset('assets/plugins/simplebar/simplebar.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
+    <style>
+        .page-wrapper .content{
+            padding:0.5rem;
+        }
+    </style>
 </head>
 <body>
 <div class="main-wrapper">
@@ -19,11 +24,11 @@
     @include('customer.partials.sidebar')
 
     <div class="page-wrapper">
-        <div class="content pb-4">
+        <div class="content">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
                 <div>
                     <h4 class="mb-1">Customer Management</h4>
-                    <p class="text-muted mb-0">Add and manage your saved customers.</p>
+                    <!-- <p class="text-muted mb-0">Add and manage your saved customers.</p> -->
                 </div>
                 <a href="{{ route('customer.create-shipment') }}" class="btn btn-outline-primary">
                     <i class="ti ti-package-export me-1"></i>Create Shipment
@@ -615,7 +620,7 @@
                 .then(data => {
                     if (data.success) {
                         aadharVerified = true;
-                        showKycVerifyStatus(data.message || 'Aadhaar verified successfully through Cashfree!', 'success');
+                        showKycVerifyStatus(data.message || 'Aadhaar verified successfully', 'success');
                         kycVerifyBtn.innerHTML = '<i class="ti ti-circle-check me-1"></i>Verified';
                         kycVerifyBtn.classList.remove('btn-primary');
                         kycVerifyBtn.classList.add('btn-success');

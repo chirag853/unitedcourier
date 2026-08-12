@@ -122,6 +122,44 @@
             flex-wrap: nowrap;
         }
 
+        .shipment-route-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            transform: translateY(-50%);
+            background: repeating-linear-gradient(
+                90deg,
+                #9ca3af 0 7px,
+                transparent 7px 12px
+            );
+            background-size: 12px 2px;
+            animation: shipment-route-flow .6s linear infinite;
+        }
+
+        .shipment-route-plane {
+            position: absolute;
+            left: 50%;
+            z-index: 1;
+            padding: 0 4px;
+            line-height: 1;
+            background: #fff;
+            transform: translateX(-50%);
+        }
+
+        @keyframes shipment-route-flow {
+            to {
+                background-position: 12px 0;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .shipment-route-line {
+                animation: none;
+            }
+        }
+
         .bulk-actions-row {
             display: flex;
             flex: 0 0 auto;
@@ -487,6 +525,17 @@
                                 <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-primary">Clear Filters</a>
                             </div>
                         @else
+                            @php
+                                $isDraftView = request('status') === 'draft';
+                                $selectedStatus = request('status');
+                                $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $postPackedStatuses = ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
+                                $hideCurrencyColumn = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideIncotermsAndPayColumns = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hidePrintLabelColumn = $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $hideCancelColumn = in_array($selectedStatus, $postPackedStatuses, true);
+                            @endphp
                             <div class="table-responsive">
                                 <table id="shipmentsTable" class="table table-bordered table-hover">
                                     <thead class="table-light">
@@ -494,19 +543,20 @@
                                             <th><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
                                             <th>#</th>
                                             <th>AWB Number</th>
+                                            <th>Created At</th>
                                             <!-- <th>Ship From → Ship To</th> -->
-                                            <th>Consignee Details</th>
+                                            <th>From / To</th>
                                             <!-- <th>Invoice Date</th> -->
                                             <th>Amount</th>
-                                            <th>Currency</th>
-                                            <th>Incoterms</th>
+                                            <th @class(['d-none' => $hideCurrencyColumn])>Currency</th>
+                                            <th @class(['d-none' => $hideIncotermsAndPayColumns])>Incoterms</th>
                                             <!-- <th>Reference No.</th> -->
                                             <th>Status</th>
-                                            <th>Print Label</th>
-                                            <th>Pay Now</th>
-                                            <th>Manifest</th>
-                                            <th>Created</th>
-                                            <th class="text-center">Cancel</th>
+                                            <th @class(['d-none' => $hidePrintLabelColumn])>Print Label</th>
+                                            <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
+                                            <th @class(['d-none' => $hideManifestColumn])>Manifest</th>
+                                            <th @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
+                                            <th @class(['text-center', 'd-none' => $hideCancelColumn || $showActionColumn])>Cancel</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -542,21 +592,35 @@
                                                     <strong>{{ $invoice->invoice_number }}</strong>
                                                 @endif
                                             </td>
-                                            <td style="font-size:12px;">
+                                            <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
+                                            <td style="font-size:12px;white-space:normal;">
                                                 @php
-                                                    $shipFrom = $invoice->shipperInfo ? trim(($invoice->shipperInfo->city ?? '') . ', ' . ($invoice->shipperInfo->state ?? '') . ', India') : 'India';
-                                                    $shipTo = $invoice->shipperInfo && $invoice->shipperInfo->consigneeInfo
-                                                        ? trim(($invoice->shipperInfo->consigneeInfo->city ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->state ?? '') . ', ' . ($invoice->shipperInfo->consigneeInfo->delivery_destination ?? ''))
-                                                        : '-';
+                                                    $shipper = $invoice->shipperInfo;
+                                                    $consignee = $shipper?->consigneeInfo;
+                                                    $senderName = $shipper?->company_name ?: ($shipper?->contact_person ?: '-');
+                                                    $receiverName = $consignee?->consignee_name ?: ($consignee?->contact_person ?: '-');
                                                 @endphp
-                                                <span>{{ $shipFrom }}</span>
-                                                <i class="ti ti-arrow-right mx-1" style="color:#6c757d;font-size:11px;"></i>
-                                                <span>{{ $shipTo }}</span>
+                                                <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div>{{ $shipper?->state ?: '-' }}, {{ $shipper?->city ?: '-' }}, India</div>
+                                                        <div class="text-muted">{{ $senderName }} - {{ $shipper?->pincode ?: '-' }}</div>
+                                                    </div>
+                                                    <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                        <span class="shipment-route-line" aria-hidden="true"></span>
+                                                        <span class="shipment-route-plane">
+                                                            <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div>{{ $consignee?->city ?: '-' }}, {{ $consignee?->state ?: '-' }}, {{ $consignee?->delivery_destination ?: '-' }}</div>
+                                                        <div class="text-muted">{{ $receiverName }} - {{ $consignee?->zip_code ?: '-' }}</div>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <!-- <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td> -->
-                                            <td>{{ number_format($shipmentAmount, 2) }}</td>
-                                            <td>{{ $invoice->invoice_currency }}</td>
-                                            <td>{{ $invoice->incoterms }}</td>
+                                            <td>INR {{ number_format($shipmentAmount, 2) }}</td>
+                                            <td @class(['d-none' => $hideCurrencyColumn])>{{ $invoice->invoice_currency }}</td>
+                                            <td @class(['d-none' => $hideIncotermsAndPayColumns])>{{ $invoice->incoterms }}</td>
                                             <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
                                             <td>
                                                 @php
@@ -588,7 +652,7 @@
                                                 @endphp
                                                 <span class="shipment-status-badge {{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
                                             </td>
-                                            <td class="text-center">
+                                            <td @class(['text-center', 'd-none' => $hidePrintLabelColumn])>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                     <button class="btn btn-sm btn-outline-primary print-label-btn"
                                                             data-invoice-id="{{ $invoice->id }}"
@@ -609,7 +673,7 @@
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
                                                 @endif
                                             </td> -->
-                                            <td class="text-center">
+                                            <td @class(['text-center', 'd-none' => $hideIncotermsAndPayColumns])>
                                                 @if($invoice->status === 'cancelled')
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
                                                 @elseif($invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft')
@@ -624,7 +688,7 @@
                                                     </button>
                                                 @endif
                                             </td>
-                                            <td class="text-center manifest-col">
+                                            <td @class(['text-center', 'manifest-col', 'd-none' => $hideManifestColumn])>
                                                 @php
                                                     $isPacked = $invoice->shipperInfo && $invoice->shipperInfo->status === 'packed';
                                                     $isManifested = $invoice->shipperInfo && $invoice->shipperInfo->status === 'manifested';
@@ -642,8 +706,54 @@
                                                     <span class="text-muted" style="font-size:12px;">-</span>
                                                 @endif
                                             </td>
-                                            <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
-                                            <td class="text-center">
+                                            <td @class(['text-center', 'd-none' => !$showActionColumn])>
+                                                <div class="d-inline-flex align-items-center gap-1">
+                                                    @if($rowStatus === 'draft')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-success pay-now-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                                data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                                title="Pay Now"
+                                                                aria-label="Pay Now"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-credit-card" aria-hidden="true"></i>
+                                                        </button>
+                                                    @elseif($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-primary print-label-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                title="Print Label"
+                                                                aria-label="Print Label"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-printer" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
+                                                    @if($rowStatus === 'packed')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-success manifest-single-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                title="Manifest Shipment"
+                                                                aria-label="Manifest Shipment"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-package-export" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-danger cancel-btn d-inline-flex align-items-center justify-content-center"
+                                                            data-id="{{ $invoice->id }}"
+                                                            data-invoice="{{ $invoice->invoice_number }}"
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                            data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}"
+                                                            title="Cancel Shipment"
+                                                            aria-label="Cancel Shipment"
+                                                            style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                        <i class="ti ti-ban" aria-hidden="true"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td @class(['text-center', 'd-none' => $showActionColumn || $hideCancelColumn || in_array($rowStatus, ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'], true)])>
                                                 @if($invoice->status === 'cancelled')
                                                     <button class="btn btn-cancel" disabled>
                                                         <i class="ti ti-x"></i> Cancelled
@@ -955,14 +1065,14 @@
                         <input type="text" class="form-control" id="payShipmentRef" readonly>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Amount to Pay (₹)</label>
+                        <label class="form-label fw-semibold">Amount to Pay (INR )</label>
                         <input type="number" disabled class="form-control" id="payAmount" min="0.01" step="0.01" placeholder="Enter amount">
                     </div>
                     <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-0" style="border-radius:8px;">
                         <i class="ti ti-wallet fs-18 me-2"></i>
                         <div>
                             <span class="fw-semibold">Wallet Balance:</span>
-                            <span class="fw-bold text-primary" id="payWalletBalance">₹0.00</span>
+                            <span class="fw-bold text-primary" id="payWalletBalance">INR 0.00</span>
                         </div>
                     </div>
                 </div>
@@ -1362,7 +1472,7 @@
                 const $row = $(row);
                 const payAmount = $row.find('.pay-now-btn').data('amount');
                 const cancelAmount = $row.find('.cancel-btn').data('amount');
-                const fallbackText = $row.find('td').eq(4).text();
+                const fallbackText = $row.find('td').eq(5).text();
                 const raw = payAmount || cancelAmount || fallbackText;
                 const numeric = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
                 return isNaN(numeric) ? 0 : numeric;
@@ -1382,21 +1492,21 @@
                 const draftDisabled = draftRows.length === 0;
                 $('#bulkDraftPayBtn').prop('disabled', draftDisabled);
                 $('#bulkDraftCancelBtn').prop('disabled', draftDisabled);
-                $('#draftBulkTotal').text(draftDisabled ? '' : 'Selected total: ₹' + number_format(draftTotal, 2));
+                $('#draftBulkTotal').text(draftDisabled ? '' : 'Selected total: INR ' + number_format(draftTotal, 2));
 
                 const readyRows = getSelectedRowsByStatus('ready');
                 const readyTotal = sumSelectedAmounts(readyRows);
                 const readyDisabled = readyRows.length === 0;
                 $('#bulkReadyPrintBtn').prop('disabled', readyDisabled);
                 $('#bulkReadyCancelBtn').prop('disabled', readyDisabled);
-                $('#readyBulkTotal').text(readyDisabled ? '' : 'Selected total: ₹' + number_format(readyTotal, 2));
+                $('#readyBulkTotal').text(readyDisabled ? '' : 'Selected total: INR ' + number_format(readyTotal, 2));
 
                 const packedRows = getSelectedRowsByStatus('packed');
                 const packedTotal = sumSelectedAmounts(packedRows);
                 const packedDisabled = packedRows.length === 0;
                 $('#bulkPackedPrintBtn').prop('disabled', packedDisabled);
                 $('#bulkPackedCancelBtn').prop('disabled', packedDisabled);
-                $('#packedBulkTotal').text(packedDisabled ? '' : 'Selected total: ₹' + number_format(packedTotal, 2));
+                $('#packedBulkTotal').text(packedDisabled ? '' : 'Selected total: INR ' + number_format(packedTotal, 2));
             }
 
             function showBulkDraftActions(show) {
@@ -1527,7 +1637,7 @@
 
                             $row.attr('data-status', 'packed').data('status', 'packed');
 
-                            const $badge = $row.find('td:eq(7) span');
+                            const $badge = $row.find('td:eq(8) span');
                             $badge.removeClass().addClass('badge bg-primary').text('Packed');
 
                             shipmentData[invoiceId].status = 'packed';
@@ -1563,7 +1673,7 @@
                 // Show refund info if shipment was paid
                 if (isPaid && amount > 0) {
                     $('#cancelRefundInfo').show();
-                    $('#cancelRefundAmount').text('₹' + number_format(amount, 2));
+                    $('#cancelRefundAmount').text('INR ' + number_format(amount, 2));
                 } else {
                     $('#cancelRefundInfo').hide();
                 }
@@ -1618,7 +1728,7 @@
             let walletBalance = {{ $currentWalletBalance }};
 
             // Update wallet balance display in modal
-            $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+            $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
 
             $('#payNowModal').on('hidden.bs.modal', function () {
                 bulkPayQueue = [];
@@ -1637,7 +1747,7 @@
                 const refText = shipmentData[payInvoiceId] ? (shipmentData[payInvoiceId].awb_number || shipmentData[payInvoiceId].invoice_number) : 'Shipment #' + payInvoiceId;
                 $('#payShipmentRef').val(refText);
                 $('#payAmount').val(amount);
-                $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+                $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
 
                 $('#payNowModal').modal('show');
             });
@@ -1650,7 +1760,7 @@
                     return;
                 }
                 if (amount > walletBalance) {
-                    showAlert('danger', 'Insufficient wallet balance! Your balance is ₹' + number_format(walletBalance, 2));
+                    showAlert('danger', 'Insufficient wallet balance! Your balance is INR ' + number_format(walletBalance, 2));
                     return;
                 }
 
@@ -1683,7 +1793,7 @@
                     liveStatusCounts.draft = Math.max(0, liveStatusCounts.draft - 1);
                     liveStatusCounts.ready += 1;
                     walletBalance = Number(response.new_balance ?? walletBalance);
-                    $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+                    $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
                     refreshStatusCounters();
                 };
 
@@ -1695,7 +1805,7 @@
                         if (!successfulPayments) return;
 
                         $('#paymentSuccessPopup').remove();
-                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + successfulPayments + ' shipment(s) moved to Ready.<br>New wallet balance: ₹' + number_format(walletBalance, 2) + '</p><button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
+                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + successfulPayments + ' shipment(s) moved to Ready.<br>New wallet balance: INR ' + number_format(walletBalance, 2) + '</p><button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
                         $('body').append(popupHtml);
                         const popupElement = document.getElementById('paymentSuccessPopup');
                         const successPopup = new bootstrap.Modal(popupElement);
@@ -1770,6 +1880,7 @@
             // =============================================
             $('#shipmentsTable').on('click', '.manifest-single-btn', function () {
                 const $btn = $(this);
+                const originalButtonHtml = $btn.html();
                 const shipperId = $btn.data('shipper-id');
                 const invoiceId = $btn.data('invoice-id');
 
@@ -1795,26 +1906,27 @@
                             const $row = $('#invoice-row-' + invoiceId);
                             $row.attr('data-status', 'manifested');
                             // Update status badge
-                            const $badge = $row.find('td:eq(7) span');
+                            const $badge = $row.find('td:eq(8) span');
                             $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
                             // Update manifest column
                             const $manifestCol = $row.find('.manifest-col');
                             $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                            $btn.remove();
                             // Update Pay Now column
-                            const $payCol = $row.find('td:eq(9)');
+                            const $payCol = $row.find('td:eq(10)');
                             $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
 
                             showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A'));
                         } else {
                             showAlert('danger', response.message || 'Manifest failed.');
-                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                            $btn.prop('disabled', false).html(originalButtonHtml);
                         }
                     },
                     error: function (xhr) {
                         // Check if this is an address error that can fall back to Ship Global
                         if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
                             showAddressErrorFallbackModal(xhr.responseJSON);
-                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                            $btn.prop('disabled', false).html(originalButtonHtml);
                             return;
                         }
                         let msg = 'Error manifesting shipment.';
@@ -1822,7 +1934,7 @@
                             msg = xhr.responseJSON.message;
                         }
                         showAlert('danger', msg);
-                        $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i>Manifest');
+                        $btn.prop('disabled', false).html(originalButtonHtml);
                     }
                 });
             });
@@ -1863,11 +1975,11 @@
                                 results.success.forEach(function (item) {
                                     const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
                                     $row.attr('data-status', 'manifested');
-                                    const $badge = $row.find('td:eq(7) span');
+                                    const $badge = $row.find('td:eq(8) span');
                                     $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
                                     const $manifestCol = $row.find('.manifest-col');
                                     $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
-                                    const $payCol = $row.find('td:eq(9)');
+                                    const $payCol = $row.find('td:eq(10)');
                                     $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
                                 });
                             }
@@ -2024,11 +2136,11 @@
                                 var $row = $('tr[data-shipper-id="' + shipperId + '"]');
                                 if ($row.length) {
                                     $row.attr('data-status', 'cancelled');
-                                    var $badge = $row.find('td:eq(7) span');
+                                    var $badge = $row.find('td:eq(8) span');
                                     $badge.removeClass().addClass('badge bg-danger').text('Cancelled');
                                     var $manifestCol = $row.find('.manifest-col');
                                     $manifestCol.html('<span class="badge bg-danger" style="font-size:11px;">Cancelled</span>');
-                                    var $payCol = $row.find('td:eq(9)');
+                                    var $payCol = $row.find('td:eq(10)');
                                     $payCol.html('<span class="text-muted" style="font-size:12px;">Refunded</span>');
                                 }
 
@@ -2067,11 +2179,11 @@
                             var $row = $('tr[data-shipper-id="' + shipperId + '"]');
                             if ($row.length) {
                                 $row.attr('data-status', 'manifested');
-                                var $badge = $row.find('td:eq(7) span');
+                                var $badge = $row.find('td:eq(8) span');
                                 $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
                                 var $manifestCol = $row.find('.manifest-col');
                                 $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
-                                var $payCol = $row.find('td:eq(9)');
+                                var $payCol = $row.find('td:eq(10)');
                                 $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
                             }
                             // Hide modal
@@ -2150,7 +2262,7 @@
                 payShipperId = null;
                 $('#payShipmentRef').val('Selected Draft Shipment(s) (' + rows.length + ')');
                 $('#payAmount').val(total);
-                $('#payWalletBalance').text('₹' + number_format(walletBalance, 2));
+                $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
                 $('#payNowModal').modal('show');
             });
 
@@ -2162,7 +2274,7 @@
                 }
 
                 const total = sumSelectedAmounts(rows);
-                const confirmed = confirm('Cancel ' + rows.length + ' selected Draft shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Draft shipment(s) and refund INR ' + number_format(total, 2) + '?');
                 if (!confirmed) return;
 
                 const queue = rows.map(function () {
@@ -2251,7 +2363,7 @@
                                 const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
                                 if ($row.length) {
                                     $row.attr('data-status', 'packed').data('status', 'packed');
-                                    const $badge = $row.find('td:eq(7) span');
+                                    const $badge = $row.find('td:eq(8) span');
                                     $badge.removeClass().addClass('badge bg-primary').text('Packed');
                                     if (shipmentData[item.invoice_id]) {
                                         shipmentData[item.invoice_id].status = 'packed';
@@ -2284,7 +2396,7 @@
                 }
 
                 const total = sumSelectedAmounts(rows);
-                const confirmed = confirm('Cancel ' + rows.length + ' selected Ready shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Ready shipment(s) and refund INR ' + number_format(total, 2) + '?');
                 if (!confirmed) return;
 
                 const queue = rows.map(function () {
@@ -2345,7 +2457,7 @@
                 }
 
                 const total = sumSelectedAmounts(rows);
-                const confirmed = confirm('Cancel ' + rows.length + ' selected Packed shipment(s) and refund ₹' + number_format(total, 2) + '?');
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Packed shipment(s) and refund INR ' + number_format(total, 2) + '?');
                 if (!confirmed) return;
 
                 const queue = rows.map(function () {

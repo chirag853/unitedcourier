@@ -50,6 +50,10 @@
         .modal-header-gradient {
     background: linear-gradient(to right, #2563eb, #9333ea);
 }
+
+.page-wrapper .content{
+    padding:0.5rem;
+}
     </style>
 </head>
 
@@ -118,12 +122,12 @@
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
                         <h4 class="mb-1">Create Shipment</h4>
-                        <nav aria-label="breadcrumb">
+                        <!-- <nav aria-label="breadcrumb">
                             <ol class="breadcrumb mb-0 p-0">
                                 <li class="breadcrumb-item"><a href="index-2.html">Home</a></li>
                                 <li class="breadcrumb-item active" aria-current="page">Create shipment</li>
                             </ol>
-                        </nav>
+                        </nav> -->
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
                         <div class="dropdown">
@@ -8271,10 +8275,10 @@
                                     </div>
                                     <div class="tips-image" style="text-align: center;">
                                         <!-- Replace with your image -->
-                                        <img src="{{ asset('assets/images/box.webp') }}" alt="Box"
-                                            style="width: 150px;">
+                                        <img src="{{ asset('assets/images/box2.png') }}" alt="Box"
+                                            style="width: 250px;">
                                     </div>
-                                    <h6>Dead Weight:</h6>
+                                    <h6 class="mt-2">Dead Weight:</h6>
                                     <p>
                                         Dead weight (or dry weight) refers to the actual weight of
                                         the package in kilograms.
@@ -9618,10 +9622,74 @@
             'shipper_phone_number', 'shipper_emails', 'shipper_email_opt_out',
             'shipper_kyc_type', 'shipper_kyc_number'
         ];
+        const sameCustomerAutofillFieldNames = [
+            'shipper_company_names', 'shipper_contact_person',
+            'shipper_address_line1', 'shipper_address_line2', 'shipper_address_line3',
+            'shipper_pincode', 'shipper_city', 'shipper_state',
+            'shipper_phone_number', 'shipper_emails'
+        ];
         const savedCustomerCsbFieldNames = [
             'bond_ut_igst', 'iec_code', 'gst_number',
             'ad_code', 'bank_account_number'
         ];
+        function setShipperFieldsLocked(names, locked) {
+            names.forEach(function (name) {
+                document.querySelectorAll('[name="' + name + '"]').forEach(function (el) {
+                    const isChoiceControl = el.matches('select, input[type="checkbox"], input[type="radio"]');
+
+                    if (!isChoiceControl) {
+                        el.readOnly = locked;
+                    }
+
+                    el.classList.toggle('bg-light', locked);
+                    el.classList.toggle('text-muted', locked);
+                    el.setAttribute('aria-readonly', locked ? 'true' : 'false');
+
+                    if (isChoiceControl) {
+                        if (locked) {
+                            if (!el.dataset.shipperLockTabindex) {
+                                el.dataset.shipperLockTabindex = el.getAttribute('tabindex') ?? '';
+                            }
+                            el.setAttribute('tabindex', '-1');
+                            el.style.pointerEvents = 'none';
+                            el.setAttribute('aria-disabled', 'true');
+                        } else {
+                            const previousTabindex = el.dataset.shipperLockTabindex;
+                            if (previousTabindex === undefined || previousTabindex === '') {
+                                el.removeAttribute('tabindex');
+                            } else {
+                                el.setAttribute('tabindex', previousTabindex);
+                            }
+                            delete el.dataset.shipperLockTabindex;
+                            el.style.pointerEvents = '';
+                            el.removeAttribute('aria-disabled');
+                        }
+                    }
+
+                    if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
+                        const $selection = jQuery(el).next('.select2-container').find('.select2-selection');
+                        $selection.css('pointer-events', locked ? 'none' : '');
+                        $selection.attr('aria-disabled', locked ? 'true' : 'false');
+                        $selection.attr('tabindex', locked ? '-1' : '0');
+                    }
+
+                    if (el.classList.contains('phone')) {
+                        const phoneContainer = el.closest('.iti');
+                        const countryButton = phoneContainer?.querySelector('.iti__selected-country, .iti__flag-container');
+                        if (countryButton) {
+                            countryButton.style.pointerEvents = locked ? 'none' : '';
+                            countryButton.setAttribute('aria-disabled', locked ? 'true' : 'false');
+                            if (locked) {
+                                countryButton.setAttribute('tabindex', '-1');
+                            } else {
+                                countryButton.removeAttribute('tabindex');
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
         const savedCustomerConsigneeFieldMap = {
             consignee_name: 'shipper_company_names',
             consignee_contact_person: 'shipper_contact_person',
@@ -9749,6 +9817,7 @@
             const selectedCustomerId = String(exporterCustomerSelect.value || '');
             const selectedCustomer = exporterCustomerData[selectedCustomerId];
             syncOriginTypeOptions(selectedCustomer ? selectedCustomer.csb_type : '');
+            setShipperFieldsLocked(fieldNames, false);
             if (!selectedCustomer) return;
 
             // Fill the actual Shipper Info fields and every matching CSB Info field.
@@ -9760,6 +9829,7 @@
             if (sameAsCustomer) {
                 sameAsCustomer.checked = false;
             }
+            setShipperFieldsLocked(fieldNames, true);
         }
 
         if (exporterCustomerSelect) {
@@ -9785,6 +9855,8 @@
 
         if (!sameAsCustomer) return;
         sameAsCustomer.addEventListener('change', function () {
+            setShipperFieldsLocked(fieldNames, false);
+
             if (this.checked) {
                 if (exporterCustomerSelect) {
                     exporterCustomerSelect.value = '';
@@ -9807,6 +9879,7 @@
                 setField('shipper_state', customerData.state || '');
                 setField('shipper_phone_number', customerData.phone_number || '');
                 setField('shipper_emails', customerData.emails || '');
+                setShipperFieldsLocked(sameCustomerAutofillFieldNames, true);
             } else {
                 // Restore previously entered values
                 fieldNames.forEach(function (n) {
@@ -9814,6 +9887,10 @@
                 });
             }
         });
+
+        if (sameAsCustomer.checked) {
+            sameAsCustomer.dispatchEvent(new Event('change', { bubbles: true }));
+        }
     });
 
     // Handle Next button click to open Consignee Info accordion
