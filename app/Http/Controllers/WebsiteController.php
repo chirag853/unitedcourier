@@ -24,6 +24,7 @@ use App\Models\ShippingRateCalculatorPage;
 use App\Models\HsnFinderPage;
 use App\Models\Faq;
 use App\Models\FactNumberSectionCommonPage;
+use App\Models\BusinessCategory;
 
 class WebsiteController extends Controller
 {
@@ -35,7 +36,10 @@ class WebsiteController extends Controller
         // Fetch hero, about without ordering (just pluck directly)
         $heroData = HomePageContent::where('section', 'hero')->pluck('content', 'field_name');
         $aboutData = HomePageContent::where('section', 'about')->pluck('content', 'field_name');
-
+$businessCategories = BusinessCategory::active()->ordered()->get();
+        $groupedBusinessCategories = $businessCategories->groupBy(function ($category) {
+            return $category->parent_group ?: 'Others';
+        });
         // Process steps – fetch sorted, group by sort_order into step arrays
         $processCollection = HomePageContent::where('section', 'process')
             ->orderBy('sort_order')
@@ -104,10 +108,16 @@ class WebsiteController extends Controller
         $testimonials = Testimonial::active()->ordered()->get();
 
         // Worldwide Marketplaces logos from partnership_page table (section = ecosystem_global)
-        $marketplaceLogos = \App\Models\PartnershipPage::bySection('ecosystem_global')->active()->ordered()->get();
+        // $marketplaceLogos = \App\Models\PartnershipPage::bySection('ecosystem_global')->active()->ordered()->get();
+        $marketplaceLogos = \App\Models\PartnershipPage::bySection('ecosystem_global')->where('status', 'Active')->ordered()->get();
 
         // FAQ grouping - fetched from unified faq table
         $faqs = Faq::byPage('home')->active()->ordered()->get();
+
+        // $countries = \App\Models\Destination::where('is_active', 1)->get();
+        $countries = \App\Models\Destination::where('is_active', 1)
+        ->orderBy('name')
+        ->get();
 
         return view('index', compact(
             'heroData',
@@ -127,7 +137,9 @@ class WebsiteController extends Controller
             'testimonialHeading',
             'testimonials',
             'marketplaceLogos',
-            'faqs'
+            'faqs',
+            'countries',
+            'groupedBusinessCategories'
         ));
     }
 
@@ -555,7 +567,7 @@ class WebsiteController extends Controller
         $faqHeader = ShippingRateCalculatorPage::bySection('faq_header')->where('status', true)->first();
         $faqs = Faq::byPage('shipping-rate-calculator')->active()->ordered()->get();
         $faqContactSidebar = ShippingRateCalculatorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
-
+ $countries = \App\Models\Destination::where('is_active', 1)->orderBy('name')->get();
         // Fetch default rates (customer_id = 0) grouped by service, ordered by weight range and zone
         $defaultRates = \App\Models\CourierRate::with('service')
             ->where('customer_id', 0)
@@ -575,7 +587,8 @@ class WebsiteController extends Controller
             'faqHeader',
             'faqs',
             'faqContactSidebar',
-            'defaultRates'
+            'defaultRates',
+            'countries'
         ));
     }
 

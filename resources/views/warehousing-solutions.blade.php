@@ -577,7 +577,7 @@
                                     @endforeach
                                 </ul>
 
-                                <a href="{{ data_get($overviewContent, 'content.button_url', '#') }}" class="sr-demo-btn-live mt-3">{{ data_get($overviewContent, 'content.button_text', 'Book Shipments') }}</a>
+                                {{-- <a href="{{ data_get($overviewContent, 'content.button_url', '#') }}" class="sr-demo-btn-live mt-3">{{ data_get($overviewContent, 'content.button_text', 'Book Shipments') }}</a> --}}
                     </div>
                 </div>
 

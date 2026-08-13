@@ -16,12 +16,14 @@
                     {{ $heroData['badge'] ?? 'Trusted by Growing Businesses Across India' }}
                 </div>
                 <h1 class="hero-title mb-4">
-                    {!! $heroData['title'] ?? 'E-commerce Speed. B2B Reliability. Ship Simply <br
-                        class="d-none d-md-block"> <span class="moving-gradient-text">United Couriers.</span>' !!}
+                    {!! $heroData['title'] ??
+                        'E-commerce Speed. B2B Reliability. Ship Simply <br
+                                            class="d-none d-md-block"> <span class="moving-gradient-text">United Couriers.</span>' !!}
                 </h1>
                 <p class="lead mb-5">
-                    {!! $heroData['subtitle'] ?? 'From First Click to Delivery. Your Gateway to Seamless Shipping
-                    Worldwide.' !!}
+                    {!! $heroData['subtitle'] ??
+                        'From First Click to Delivery. Your Gateway to Seamless Shipping
+                                        Worldwide.' !!}
                 </p>
 
                 <div class="row g-3 mb-5">
@@ -54,19 +56,19 @@
 
                 <div class="logo-slider">
                     <div class="logo-track">
-                        @if($marketplaceLogos->count() > 0)
+                        @if ($marketplaceLogos->count() > 0)
                             <!-- Original Logos -->
-                            @foreach($marketplaceLogos as $card)
-                            <div class="logo-item">
-                                <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
-                            </div>
+                            @foreach ($marketplaceLogos as $card)
+                                <div class="logo-item">
+                                    <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
+                                </div>
                             @endforeach
 
                             <!-- Cloned Logos (for seamless loop) -->
-                            @foreach($marketplaceLogos as $card)
-                            <div class="logo-item">
-                                <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
-                            </div>
+                            @foreach ($marketplaceLogos as $card)
+                                <div class="logo-item">
+                                    <img src="{{ asset($card->image) }}" alt="{{ $card->title ?? 'Marketplace' }}">
+                                </div>
                             @endforeach
                         @else
                             <div class="logo-item">
@@ -133,7 +135,17 @@
                         <div class="row g-3 mb-3">
                             <div class="col-6">
                                 <div class="input-group-custom">
-                                    <input type="text" class="form-control input-custom" placeholder="Origin">
+                                    <select class="form-select input-custom">
+                                        <option selected disabled>Origin</option>
+                                       @php
+                                            $states = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'];
+                                            sort($states);
+                                        @endphp
+
+                                        @foreach ($states as $state)
+                                            <option value="{{ $state }}">{{ $state }}</option>
+                                        @endforeach
+                                    </select>
                                     <i class="fas fa-map-marker-alt"></i>
                                 </div>
                             </div>
@@ -141,10 +153,9 @@
                                 <div class="input-group-custom">
                                     <select class="form-select input-custom">
                                         <option selected disabled>Destination</option>
-                                        <option>USA</option>
-                                        <option>UK</option>
-                                        <option>Canada</option>
-                                        <option>Australia</option>
+                                        @foreach ($countries as $country)
+                                            <option value="{{ $country->code }}">{{ $country->name }}</option>
+                                        @endforeach
                                     </select>
                                     <i class="fas fa-globe-americas"></i>
                                 </div>
@@ -153,11 +164,15 @@
 
                         <div class="mb-3">
                             <div class="input-group-custom">
-                                <select class="form-select input-custom">
-                                    <option selected disabled>Select Your Business Category</option>
-                                    <option>E-commerce</option>
-                                    <option>B2B/Export</option>
-                                    <option>Individual</option>
+                                <select name="business_category" class="form-select input-custom">
+                                    <option value="" selected disabled>Select your business category</option>
+                                    @foreach($groupedBusinessCategories as $groupName => $categories)
+                                        <optgroup label="{{ $groupName }}">
+                                            @foreach($categories as $category)
+                                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endforeach
                                 </select>
                                 <i class="fas fa-briefcase"></i>
                             </div>
@@ -177,7 +192,7 @@
                         </div>
 
                         <button type="button" class="btn moving-gradient-bg btn-primary-custom">
-                            Get Quotes
+                            Get Quote
                         </button>
                     </form>
                 </div>
@@ -196,17 +211,19 @@
             <div class="">
                 <span class="heading-badge animate-on-scroll" data-anim="animate__fadeInRight"
                     style="animation-delay: 0.2s;">{{ $aboutData['badge'] ?? 'About United Worldwide Couriers' }}</span>
-                <h2 class="about-title">{{ $aboutData['heading'] ?? 'One Partner. Infinite Logistics Possibilities.' }}
+                <h2 class="about-title">
+                    {{ $aboutData['heading'] ?? 'One Partner. Infinite Logistics Possibilities.' }}
                 </h2>
                 <p class="about-desc animate-on-scroll" data-anim="animate__fadeInUp" style="animation-delay: 0.5s;">
-                    {!! $aboutData['description'] ?? 'United Worldwide Couriers delivers integrated logistics solutions
-                    for modern B2B enterprises, e-commerce brands, and growing businesses. Our services cover
-                    international Air Express & Freight, pan-India pickup, customs clearance with documentation support,
-                    and fulfilment solutions, all managed under one reliable platform. <br> With a strong operational
-                    network and an experienced logistics team, we help clients move shipments efficiently, reduce
-                    delays, and manage complex requirements with confidence. Every shipment is handled with proactive
-                    coordination, transparent tracking, and dedicated customer support to ensure a smooth and dependable
-                    delivery experience.' !!}
+                    {!! $aboutData['description'] ??
+                        'United Worldwide Couriers delivers integrated logistics solutions
+                                        for modern B2B enterprises, e-commerce brands, and growing businesses. Our services cover
+                                        international Air Express & Freight, pan-India pickup, customs clearance with documentation support,
+                                        and fulfilment solutions, all managed under one reliable platform. <br> With a strong operational
+                                        network and an experienced logistics team, we help clients move shipments efficiently, reduce
+                                        delays, and manage complex requirements with confidence. Every shipment is handled with proactive
+                                        coordination, transparent tracking, and dedicated customer support to ensure a smooth and dependable
+                                        delivery experience.' !!}
                 </p>
             </div>
             <!-- Image Side -->
@@ -226,17 +243,19 @@
                     @php
                         $aboutMediaPath = trim((string) ($aboutData['media_path'] ?? ''));
                         $aboutMediaType = strtolower(trim((string) ($aboutData['media_type'] ?? '')));
-                        $aboutMediaUrl = $aboutMediaPath !== ''
-                            ? asset(ltrim($aboutMediaPath, '/'))
-                            : asset('website_images/truck-video.mp4');
+                        $aboutMediaUrl =
+                            $aboutMediaPath !== ''
+                                ? asset(ltrim($aboutMediaPath, '/'))
+                                : asset('website_images/truck-video.mp4');
                         $aboutMediaExtension = strtolower(pathinfo($aboutMediaPath, PATHINFO_EXTENSION));
                         $aboutVideoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
-                        $isAboutVideo = $aboutMediaType === 'video'
-                            || in_array($aboutMediaExtension, $aboutVideoExtensions, true);
+                        $isAboutVideo =
+                            $aboutMediaType === 'video' || in_array($aboutMediaExtension, $aboutVideoExtensions, true);
                     @endphp
 
-                    @if ($aboutMediaPath !== '' && ! $isAboutVideo)
-                        <img src="{{ $aboutMediaUrl }}" alt="About United Worldwide Couriers" class="main-about-img">
+                    @if ($aboutMediaPath !== '' && !$isAboutVideo)
+                        <img src="{{ $aboutMediaUrl }}" alt="About United Worldwide Couriers"
+                            class="main-about-img">
                     @else
                         <video src="{{ $aboutMediaUrl }}" autoplay muted loop playsinline preload="auto"
                             class="main-about-img">
@@ -293,8 +312,11 @@
     <section class="stack-container container">
 
         <h2 class="display-5 fw-bolder mb-3 animate-on-scroll" data-anim="animate__fadeInRight"
-            style="animation-delay: 0.2s;">{!! $servicesHeading['heading'] ?? 'Powering Your Business with <span class="moving-gradient-text"> Our Services</span>' !!}</h2>
-        <p class="about-desc mb-5 animate-on-scroll" data-anim="animate__fadeInUp" style="animation-delay: 0.5s;">{{ $servicesHeading['description'] ?? 'From urgent documents to high-volume commercial cargo, our logistics solutions are built to move every shipment with speed, precision, and complete reliability.' }}</p>
+            style="animation-delay: 0.2s;">{!! $servicesHeading['heading'] ??
+                'Powering Your Business with <span class="moving-gradient-text"> Our Services</span>' !!}</h2>
+        <p class="about-desc mb-5 animate-on-scroll" data-anim="animate__fadeInUp" style="animation-delay: 0.5s;">
+            {{ $servicesHeading['description'] ?? 'From urgent documents to high-volume commercial cargo, our logistics solutions are built to move every shipment with speed, precision, and complete reliability.' }}
+        </p>
 
         <div class="stack-wrapper">
             <!-- Card 1 -->
@@ -332,7 +354,8 @@
                     </div>
                     <div class="col-lg-5">
                         <div class="card-image-container">
-                            <img src="{{ asset($serviceCard1['image'] ?? '/website_images/air-freight.webp') }}" alt="Ocean Freight">
+                            <img src="{{ asset($serviceCard1['image'] ?? '/website_images/air-freight.webp') }}"
+                                alt="Ocean Freight">
                         </div>
                     </div>
                 </div>
@@ -417,7 +440,8 @@
                     </div>
                     <div class="col-lg-5">
                         <div class="card-image-container">
-                            <img src="{{ asset($serviceCard3['image'] ?? '/website_images/warehousing.webp') }}" alt="Warehousing">
+                            <img src="{{ asset($serviceCard3['image'] ?? '/website_images/warehousing.webp') }}"
+                                alt="Warehousing">
                         </div>
                     </div>
                 </div>
@@ -558,10 +582,12 @@
         <div class="animate-on-scroll show animate__animated animate__fadeInRight" data-anim="animate__fadeInRight"
             style="animation-delay: 0.2s;">
             @php
-            $headingRecord = $shippingSolutions->firstWhere('field_name', 'heading');
-            $descRecord = $shippingSolutions->firstWhere('field_name', 'description');
-            $shippingHeading = $headingRecord ? $headingRecord->content : 'Shipping Solutions Designed Around You!';
-            $shippingDesc = $descRecord ? $descRecord->content : 'No two businesses ship the same way. That’s why United
+                $headingRecord = $shippingSolutions->firstWhere('field_name', 'heading');
+                $descRecord = $shippingSolutions->firstWhere('field_name', 'description');
+                $shippingHeading = $headingRecord ? $headingRecord->content : 'Shipping Solutions Designed Around You!';
+                $shippingDesc = $descRecord
+                    ? $descRecord->content
+                    : 'No two businesses ship the same way. That’s why United
             Worldwide Couriers offers flexible logistics solutions built around your shipment type, delivery timeline,
             budget, and business goals. Whether you need B2B Export Support, Dropshipping Solutions, Marketplace
             shipping, or personal deliveries for friends and family, we help you choose the right service with clarity,
@@ -574,7 +600,7 @@
 
         {{-- Dynamic toggle nav: labels come from the card_label field of each shipping solution card --}}
         <div class="sr-demo-toggle-nav">
-            @foreach($shippingCards as $card)
+            @foreach ($shippingCards as $card)
                 <div class="sr-demo-nav-item {{ $loop->first ? 'sr-active' : '' }}"
                     onclick="srShowTab({{ $loop->index }}, this)">
                     {{ $card['card_label'] ?? '' }}
@@ -588,7 +614,7 @@
                 // Cycle through background classes to preserve visual variety across dynamic cards
                 $cardBgClasses = ['sr-bg-engage', 'sr-bg-shipping', 'sr-bg-checkout', 'sr-bg-checkout'];
             @endphp
-            @foreach($shippingCards as $card)
+            @foreach ($shippingCards as $card)
                 <div class="sr-demo-product-card {{ $loop->first ? 'sr-active' : '' }} animate__animated animate__fadeInLeft"
                     id="sr-card-{{ $loop->index }}">
                     <div class="sr-demo-card-content">
@@ -598,7 +624,7 @@
                             <li><strong>{!! $card['card_point1'] ?? '' !!}</strong></li>
                             <li><strong>{!! $card['card_point2'] ?? '' !!}</strong></li>
                         </ul>
-                        <a href="#" class="sr-demo-btn-live">{{ $card['card_cta'] ?? 'Start Shipping' }}</a>
+                        <a href="./get-started" class="sr-demo-btn-live">{{ $card['card_cta'] ?? 'Start Shipping' }}</a>
                     </div>
                     <div class="sr-demo-card-visual {{ $cardBgClasses[$loop->index % count($cardBgClasses)] }}">
                         <img src="{{ asset($card['card_image'] ?? '/website_images/b2b.webp') }}"
@@ -622,7 +648,8 @@
                         <img src="{{ asset('/website_images/google-review.png') }}" alt="Google">
                     </a>
                 </div>
-                <h2 class="about-title">{{ $testimonialHeading['heading'] ?? 'Trusted by Businesses. Rated by Customers' }}</h2>
+                <h2 class="about-title">
+                    {{ $testimonialHeading['heading'] ?? 'Trusted by Businesses. Rated by Customers' }}</h2>
 
                 <p class="about-desc text-center">
                     {{ $testimonialHeading['description'] ?? 'For over 30 years, United Worldwide Couriers has supported businesses and individuals with secure, timely, and dependable logistics solutions. Our clients trust us for consistent service, transparent communication, careful handling, and smooth delivery experiences across domestic and international shipments.' }}
@@ -634,35 +661,35 @@
             <div class="slider-track">
 
                 <!-- Cards -->
-                @if($testimonials->count() > 0)
-                @foreach($testimonials as $testimonial)
-                <div class="testimonial-card">
-                    <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                    <p class="testimonial-text">{!! $testimonial->content !!}</p>
-                    <div class="user-info">
-                        <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
-                            alt="{{ $testimonial->customer_name }}">
-                        <h6>{{ $testimonial->customer_name }}</h6>
-                    </div>
-                </div>
-                @endforeach
+                @if ($testimonials->count() > 0)
+                    @foreach ($testimonials as $testimonial)
+                        <div class="testimonial-card">
+                            <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
+                            <p class="testimonial-text">{!! $testimonial->content !!}</p>
+                            <div class="user-info">
+                                <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
+                                    alt="{{ $testimonial->customer_name }}">
+                                <h6>{{ $testimonial->customer_name }}</h6>
+                            </div>
+                        </div>
+                    @endforeach
                 @else
-                <p>No testimonials found.</p>
+                    <p>No testimonials found.</p>
                 @endif
 
                 <!-- Duplicate for seamless loop -->
-                @if($testimonials->count() > 0)
-                @foreach($testimonials as $testimonial)
-                <div class="testimonial-card">
-                    <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
-                    <p class="testimonial-text">{!! $testimonial->content !!}</p>
-                    <div class="user-info">
-                        <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
-                            alt="{{ $testimonial->customer_name }}">
-                        <h6>{{ $testimonial->customer_name }}</h6>
-                    </div>
-                </div>
-                @endforeach
+                @if ($testimonials->count() > 0)
+                    @foreach ($testimonials as $testimonial)
+                        <div class="testimonial-card">
+                            <div class="stars">{{ str_repeat('★', $testimonial->rating ?? 5) }}</div>
+                            <p class="testimonial-text">{!! $testimonial->content !!}</p>
+                            <div class="user-info">
+                                <img src="{{ asset($testimonial->customer_image) }}" class="img-fluid"
+                                    alt="{{ $testimonial->customer_name }}">
+                                <h6>{{ $testimonial->customer_name }}</h6>
+                            </div>
+                        </div>
+                    @endforeach
                 @endif
 
             </div>
@@ -682,32 +709,32 @@
 
         <div class="row g-4">
             <div class="col-lg-4">
-               @include('website_include.faq-support-form')
-           </div>
+                @include('website_include.faq-support-form')
+            </div>
 
 
             <div class="col-lg-8">
                 <div class="accordion" id="logisticsFaq">
                     <!-- @php
-                        echo "<pre>";
+                        echo '<pre>';
                         print_r($faqs);
-                        echo "</pre>";
+                        echo '</pre>';
                     @endphp -->
-                    @foreach($faqs as $faq)
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#faq{{ $loop->index }}">
-                                {{ $faq->question }}
-                            </button>
-                        </h2>
-                        <div id="faq{{ $loop->index }}" class="accordion-collapse collapse"
-                            data-bs-parent="#logisticsFaq">
-                            <div class="accordion-body">
-                                {!! $faq->answer !!}
+                    @foreach ($faqs as $faq)
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#faq{{ $loop->index }}">
+                                    {{ $faq->question }}
+                                </button>
+                            </h2>
+                            <div id="faq{{ $loop->index }}" class="accordion-collapse collapse"
+                                data-bs-parent="#logisticsFaq">
+                                <div class="accordion-body">
+                                    {!! $faq->answer !!}
+                                </div>
                             </div>
                         </div>
-                    </div>
                     @endforeach
                 </div>
             </div>

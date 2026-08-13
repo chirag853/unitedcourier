@@ -17,13 +17,13 @@
     $heroImage = $heroContent->content['image'] ?? 'public/website_images/air-freight-service.webp';
     $heroBadges = $heroContent->content['badges'] ?? [
         ['icon' => 'fa-clock', 'text' => '24–72 Hr Delivery'],
-        ['icon' => 'fa-shield-alt', 'text' => 'Fully Insured'],
+        ['icon' => 'fa-shield-alt', 'text' => 'Insurance is available'],
         ['icon' => 'fa-map-marker-alt', 'text' => '220+ Countries'],
     ];
     $heroStatPills = $heroContent->content['stat_pills'] ?? [
         ['icon' => 'fa-box', 'value' => '50K+', 'label' => 'Shipments/Month', 'color' => 'rgba(26,115,232,.1)', 'text_color' => 'var(--primary)'],
         ['icon' => 'fa-star', 'value' => '4.9★', 'label' => 'Avg Rating', 'color' => 'rgba(255,107,0,.1)', 'text_color' => 'var(--accent)'],
-        ['icon' => 'fa-check-circle', 'value' => '99.2%', 'label' => 'On-Time Rate', 'color' => 'rgba(40,167,69,.1)', 'text_color' => 'var(--success)'],
+        ['icon' => 'fa-check-circle', 'value' => '99.9%', 'label' => 'On-Time Rate', 'color' => 'rgba(40,167,69,.1)', 'text_color' => 'var(--success)'],
     ];
 @endphp
 <header class="hero-gradient">
@@ -49,8 +49,8 @@
                     {{ $heroDescription }}
                 </p>
 
-                <a href="{{ $heroBtnPrimaryUrl }}" class="book-btn-service"><i class="fas {{ $heroBtnPrimaryIcon }}"></i> {{ $heroBtnPrimaryText }}</a> &nbsp; <a
-                    href="{{ $heroBtnSecondaryUrl }}" class="quote-btn-service"><i class="fas {{ $heroBtnSecondaryIcon }}"></i> {{ $heroBtnSecondaryText }}</a>
+                {{-- <a href="{{ $heroBtnPrimaryUrl }}" class="book-btn-service"><i class="fas {{ $heroBtnPrimaryIcon }}"></i> {{ $heroBtnPrimaryText }}</a> &nbsp;  --}}
+                {{-- <a href="{{ $heroBtnSecondaryUrl }}" class="quote-btn-service"><i class="fas {{ $heroBtnSecondaryIcon }}"></i> {{ $heroBtnSecondaryText }}</a> --}}
 
                 <div class="hero-badges">
                     @foreach($heroBadges as $badge)

@@ -171,6 +171,10 @@
         color: rgba(255,255,255,0.85);
         font-size: 13px;
     }
+    .track-right a{
+        text-decoration: none;
+
+    }
 </style>
 
 
@@ -271,6 +275,9 @@
                                         <input type="radio" name="barcodeFormat" value="QR" class="d-none"> QR CODE
                                     </label> -->
                                 </div>
+                                <div id="formatHint" class=" mt-2">
+    CODE128: Letters, numbers & common characters. Example: SHIP123456
+</div>
                             </div>
                         </div>
 
@@ -323,7 +330,7 @@
     <div class="container">
 
 
-        <div class="row justify-content-center mb-3">
+        <div class="row justify-content-center mb-3 d-none">
             <div class="col-lg-10 text-center">
                 <h2 class="about-title">{{ $featuresHeading->title ?? 'Understanding volumetric weight' }}</h2>
 
@@ -399,9 +406,9 @@
                     <a href="{{ $trackCta->link }}"
                         class="track-btn">{{ $trackCta->page_button_text ?? 'Track Shipment →' }}</a>
                     @else
-                    <button class="track-btn">
+                    <a target="_blank" href="./tracking" class="track-btn">
                         {{ $trackCta->page_button_text ?? 'Track Shipment →' }}
-                    </button>
+                    </a>
                     @endif
                 </div>
             </section>
@@ -838,12 +845,24 @@ document.querySelectorAll('.barcode-format-label').forEach(function(label) {
 function setActiveFormat(format) {
     document.querySelectorAll('.barcode-format-label').forEach(function(el) {
         var radio = el.querySelector('input[type="radio"]');
+
         if (radio && radio.value === format) {
             el.classList.add('active-format');
         } else {
             el.classList.remove('active-format');
         }
     });
+
+    const hints = {
+        CODE128: 'Letters, numbers & common characters. Example: SHIP123456',
+        CODE39: 'A-Z, 0-9 and - . $ / + %. Example: ABC-12345',
+        EAN13: '12 or 13 digits. Example: 890123456789',
+        ITF14: '13 or 14 digits. Example: 1234567890123',
+        MSI: 'Numbers only. Example: 1234567890'
+    };
+
+    document.getElementById('formatHint').textContent =
+        hints[format] || '';
 }
 
 function generateBarcode() {

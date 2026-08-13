@@ -87,7 +87,7 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url('/') }}">Home</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url('/about') }}">About Us</a></li>
                     <li class="nav-item dropdown-mobile">
-                        <a class="nav-link" href="{{ url('/services') }}">Services <i class="fas fa-chevron-down"></i></a>
+                        <a class="nav-link">Services <i class="fas fa-chevron-down"></i></a>
                         <div class="mega-menu">
                             <div class="menu-col-left">
                                 <span class="menu-label">Our Services</span>

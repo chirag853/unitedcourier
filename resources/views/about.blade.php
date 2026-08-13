@@ -457,7 +457,7 @@
                         <h2 class="about-title"><span class="gradient-text">{{ $overview->title }}</span> </h2>
                                 <p class="lead">{!! $overview->description !!}</p>
                                 @if($overview->page_button_text)
-                                <a href="#" class="sr-demo-btn-live mt-3">{{ $overview->page_button_text }}</a>
+                                <a href="./get-started" class="sr-demo-btn-live mt-3">{{ $overview->page_button_text }}</a>
                                 @endif
                     </div>
                 </div>

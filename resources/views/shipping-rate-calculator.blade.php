@@ -251,16 +251,14 @@
             </label>
 
             <div class="input-group-custom">
-                <select class="form-control input-custom">
-                    <option selected disabled>Select a country</option>
-                    <option>United States</option>
-                    <!-- <option>Canada</option> -->
-                    <!-- <option>Australia</option> -->
-                    <option>United Kingdom</option>
-                    <!-- <option>Germany</option> -->
-                </select>
+                 <select class="form-select input-custom">
+                                        <option selected disabled>Destination</option>
+                                        @foreach ($countries as $country)
+                                            <option value="{{ $country->code }}">{{ $country->name }}</option>
+                                        @endforeach
+                                    </select>
 
-                <i class="fa-solid fa-chevron-down"></i>
+                {{-- <i class="fa-solid fa-chevron-down"></i> --}}
             </div>
         </div>
 

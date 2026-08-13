@@ -1,0 +1,2670 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <!-- Meta Tags -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>View All Shipments | United Courier</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="{{ asset('assets/img/favicon.png') }}">
+    <!-- Apple Icon -->
+    <link rel="apple-touch-icon" href="{{ asset('assets/img/apple-icon.png') }}">
+    <!-- Theme Config Js -->
+    <script src="{{ asset('assets/js/theme-script.js') }}" type="text/javascript"></script>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
+    <!-- Flatpickr CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
+    <!-- Tabler Icon CSS -->
+    <!-- <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}"> -->
+    <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
+
+    <!-- Select2 CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
+    <!-- Simplebar CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/plugins/simplebar/simplebar.min.css') }}">
+    <!-- Main CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
+    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+    <style>
+        .card {
+            background: #fff;
+            border-radius: 20px;
+        }
+
+        .shipment-status-filters {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 7px !important;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 3px 2px 7px;
+            scrollbar-width: none;
+        }
+
+        .shipment-status-filters::-webkit-scrollbar {
+            display: none;
+        }
+
+        .shipment-status-filters .status-filter-btn {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 34px;
+            padding: 6px 12px !important;
+            border: 1px solid #e7ebf3;
+            border-radius: 10px !important;
+            color: #52627a;
+            background: #f8faff;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .1px;
+            line-height: 1.2;
+            transition: color .2s ease, background-color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+
+        .shipment-status-filters .status-filter-btn:hover {
+            color: #2f66f3;
+            background: #eef4ff;
+            border-color: #c9d9ff;
+            transform: translateY(-1px);
+        }
+
+        .shipment-status-filters .status-filter-btn.btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, #2f66f3, #4f87ff);
+            border-color: #2f66f3;
+            box-shadow: 0 4px 10px rgba(47, 102, 243, .2);
+        }
+
+        .shipment-status-filters .status-filter-btn .badge {
+            min-width: 19px;
+            height: 19px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 6px !important;
+            padding: 2px 5px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .shipment-status-filters .status-filter-btn.btn-primary .badge {
+            color: #2f66f3 !important;
+            background: rgba(255, 255, 255, .95) !important;
+        }
+
+        .btn-light {
+            background: #f5f6f8;
+            border: none;
+            color: #243b63;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #2f66f3;
+            border: none;
+            font-weight: 500;
+        }
+
+        .rounded-pill {
+            border-radius: 50px !important;
+        }
+        .shipment-heading-row {
+            flex-wrap: nowrap;
+        }
+
+        .shipment-route-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            transform: translateY(-50%);
+            background: repeating-linear-gradient(
+                90deg,
+                #9ca3af 0 7px,
+                transparent 7px 12px
+            );
+            background-size: 12px 2px;
+            animation: shipment-route-flow .6s linear infinite;
+        }
+
+        .shipment-route-plane {
+            position: absolute;
+            left: 50%;
+            z-index: 1;
+            padding: 0 4px;
+            line-height: 1;
+            background: #fff;
+            transform: translateX(-50%);
+        }
+
+        @keyframes shipment-route-flow {
+            to {
+                background-position: 12px 0;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .shipment-route-line {
+                animation: none;
+            }
+        }
+
+        .bulk-actions-row {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: flex-end;
+            width: auto;
+            margin-left: auto;
+        }
+
+        .bulk-action-bar {
+            display: none;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            width: auto;
+        }
+
+        .bulk-action-bar.is-visible {
+            display: flex;
+        }
+
+        @media (max-width: 575.98px) {
+            .shipment-heading-row {
+                align-items: flex-start !important;
+                flex-direction: column;
+            }
+
+            .bulk-actions-row {
+                width: 100%;
+            }
+
+            .bulk-action-bar.is-visible {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+        }
+
+        .btn-cancel {
+            background-color: #dc3545;
+            border-color: #dc3545;
+            color: #fff;
+            padding: 4px 12px;
+            font-size: 13px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-cancel:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
+            color: #fff;
+        }
+        .btn-cancel:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .detail-section {
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+        .detail-section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 0;
+        }
+        .detail-section h6 {
+            color: #2563eb;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            font-size: 13px;
+        }
+        .detail-row .label {
+            color: #6c757d;
+            min-width: 140px;
+        }
+        .detail-row .value {
+            color: #212529;
+            font-weight: 500;
+            text-align: right;
+            flex: 1;
+        }
+        .tracking-number-box {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .tracking-number-box .tracking-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+        .tracking-number-box .tracking-value {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .route-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .route-box .route-point {
+            text-align: center;
+            flex: 1;
+        }
+        .route-box .route-point .route-city {
+            font-size: 14px;
+            font-weight: 600;
+            color: #212529;
+        }
+        .route-box .route-point .route-label {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+        .route-box .route-arrow {
+            font-size: 20px;
+            color: #2563eb;
+            flex-shrink: 0;
+        }
+        .label-link {
+            color: #dc3545;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .label-link:hover {
+            color: #c82333;
+            text-decoration: underline;
+        }
+
+        .page-wrapper .content{
+            padding:0.5rem !important;
+        }
+
+        .shipment-filter-card .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #52627a;
+            margin-bottom: 5px;
+        }
+
+        .shipment-filter-card .form-control,
+        .shipment-filter-card .form-select {
+            min-height: 40px;
+            border-radius: 9px;
+        }
+
+        .pagination-summary {
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .shipment-pagination {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
+            margin: 0;
+        }
+
+        .shipment-pagination .page-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 38px;
+            min-height: 38px;
+            padding: 6px 10px;
+            border: 1px solid #dfe5ef;
+            border-radius: 6px;
+            color: #243b63;
+            background: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: none;
+        }
+
+        .shipment-pagination .page-link:hover {
+            color: #fff;
+            background: #2f66f3;
+            border-color: #2f66f3;
+        }
+
+        .shipment-pagination .page-item.active .page-link {
+            color: #fff;
+            background: #2f66f3;
+            border-color: #2f66f3;
+        }
+
+        .shipment-pagination .page-item.disabled .page-link {
+            color: #a0a9b8;
+            background: #f5f6f8;
+            border-color: #e7ebf3;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Begin Wrapper -->
+    <div class="main-wrapper">
+
+        <!-- Topbar Start -->
+        @include('customer.partials.customer_dashboard_header')
+        <!-- Topbar End -->
+
+        <!-- Search Modal -->
+        <div class="modal fade" id="searchModal">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content bg-transparent">
+                    <div class="card shadow-none mb-0">
+                        <div class="px-3 py-2 d-flex flex-row align-items-center" id="search-top">
+                            <i class="ti ti-search fs-22"></i>
+                            <input type="search" class="form-control border-0" placeholder="Search">
+                            <button type="button" class="btn p-0" data-bs-dismiss="modal" aria-label="Close"><i
+                                    class="ti ti-x fs-22"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidenav Menu Start -->
+        @include('customer.partials.sidebar')
+        <!-- Sidenav Menu End -->
+
+        <!-- ========================
+            Start Page Content
+        ========================= -->
+        <div class="page-wrapper">
+
+            <!-- Start Content -->
+            <div class="content pb-0">
+
+                <!-- Page Header -->
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
+                    <div>
+                        <h4 class="mb-1">View All Shipments</h4>
+                    </div>
+                    <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
+                        <div class="bulk-actions-row">
+                            <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
+                                <i class="ti ti-package-export me-1"></i> Bulk Manifest
+                            </button>
+
+                            <div id="draftBulkActions" class="bulk-action-bar">
+                                <span id="draftBulkTotal" class="fw-bold text-success"></span>
+                                <button type="button" class="btn btn-success btn-sm" id="bulkDraftPayBtn" disabled>
+                                    <i class="ti ti-credit-card me-1"></i>Pay Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkDraftCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+
+                            <div id="readyBulkActions" class="bulk-action-bar">
+                                <span id="readyBulkTotal" class="fw-bold text-primary"></span>
+                                <button type="button" class="btn btn-primary btn-sm" id="bulkReadyPrintBtn" disabled>
+                                    <i class="ti ti-printer me-1"></i>Print Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkReadyCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+
+                            <div id="packedBulkActions" class="bulk-action-bar">
+                                <span id="packedBulkTotal" class="fw-bold text-primary"></span>
+                                <button type="button" class="btn btn-primary btn-sm" id="bulkPackedPrintBtn" disabled>
+                                    <i class="ti ti-printer me-1"></i>Print Selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="bulkPackedCancelBtn" disabled>
+                                    <i class="ti ti-ban me-1"></i>Cancel Selected
+                                </button>
+                            </div>
+                        </div>
+
+                        <a href="{{ url('/customer/create-shipment') }}" class="btn btn-primary d-flex align-items-center">
+                            <i class="ti ti-plus me-1"></i> Add New Shipment
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Success/Error Messages -->
+                <div id="alertContainer"></div>
+                <div class="card border-0 shadow-sm rounded-4 shipment-filter-card mb-2">
+                    <div class="card-body p-3">
+                        <form method="GET" action="{{ route('customer.view-all-shipments') }}">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Customer / Consignee</label>
+                                    <input type="search" name="customer_name" class="form-control" value="{{ request('customer_name') }}" placeholder="Customer name">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Shipper Name</label>
+                                    <input type="search" name="shipper_name" class="form-control" value="{{ request('shipper_name') }}" placeholder="Company or contact">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">AWB Number</label>
+                                    <input type="search" name="awb_number" class="form-control" value="{{ request('awb_number') }}" placeholder="Enter AWB">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Status</label>
+                                    <select name="status" class="form-select">
+                                        <option value="all">All Statuses</option>
+                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                            <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Date From</label>
+                                    <input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}">
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label">Date To</label>
+                                    <input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}">
+                                </div>
+                                <div class="col-12 d-flex gap-2 justify-content-end mt-3">
+                                    <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-light"><i class="ti ti-refresh me-1"></i>Reset</a>
+                                    <button type="submit" class="btn btn-primary"><i class="ti ti-search me-1"></i>Search & Filter</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="card border-0 shadow-sm rounded-4 shipment-status-card">
+                    <div class="card-body p-3">
+                        <div class="shipment-status-filters" aria-label="Shipment status filters">
+                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                <a href="{{ request()->fullUrlWithQuery(['status' => $value, 'page' => null]) }}"
+                                   class="btn {{ request('status', 'all') === $value ? 'btn-primary' : 'btn-light' }} rounded-pill status-filter-btn"
+                                   data-filter="{{ $value }}">
+                                    {{ $label }} <span class="badge {{ request('status', 'all') === $value ? 'bg-light text-dark' : 'bg-secondary' }} ms-1">{{ $statusCounts[$value] }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+                <!-- Shipments Table Card -->
+                <div class="card border shadow">
+                    <div class="card-body">
+                        @if($invoices->isEmpty())
+                            <div class="text-center py-5">
+                                <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
+                                <p class="mt-3 text-muted">No shipments matched the selected filters.</p>
+                                <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-primary">Clear Filters</a>
+                            </div>
+                        @else
+                            @php
+                                $isDraftView = request('status') === 'draft';
+                                $selectedStatus = request('status');
+                                $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $postPackedStatuses = ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
+                                $hideCurrencyColumn = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideIncotermsAndPayColumns = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hidePrintLabelColumn = $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $hideCancelColumn = in_array($selectedStatus, $postPackedStatuses, true);
+                            @endphp
+                            <div class="table-responsive">
+                                <table id="shipmentsTable" class="table table-bordered table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
+                                            <th>#</th>
+                                            <th>AWB Number</th>
+                                            <th>Created At</th>
+                                            <!-- <th>Ship From → Ship To</th> -->
+                                            <th>From / To</th>
+                                            <!-- <th>Invoice Date</th> -->
+                                            <th>Amount</th>
+                                            <th @class(['d-none' => $hideCurrencyColumn])>Currency</th>
+                                            <th @class(['d-none' => $hideIncotermsAndPayColumns])>Incoterms</th>
+                                            <!-- <th>Reference No.</th> -->
+                                            <th>Status</th>
+                                            <th @class(['d-none' => $hidePrintLabelColumn])>Print Label</th>
+                                            <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
+                                            <th @class(['d-none' => $hideManifestColumn])>Manifest</th>
+                                            <th @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
+                                            <th @class(['text-center', 'd-none' => $hideCancelColumn || $showActionColumn])>Cancel</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($invoices as $index => $invoice)
+                                        @php
+                                            $rowStatus = 'draft';
+                                            if ($invoice->status === 'cancelled') {
+                                                $rowStatus = 'cancelled';
+                                            } elseif ($invoice->shipperInfo && $invoice->shipperInfo->status) {
+                                                $rowStatus = $invoice->shipperInfo->status;
+                                            }
+
+                                            $selectedRate = $invoice->shipperInfo
+                                                ? $invoice->shipperInfo->serviceRate
+                                                : null;
+                                            $shipmentAmount = $selectedRate
+                                                ? $selectedRate->inclusive_total
+                                                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+                                        @endphp
+                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
+                                            <td class="text-center">
+                                                <input type="checkbox" class="shipment-checkbox bulk-manifest-checkbox" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" style="display:none;">
+                                            </td>
+                                            <td>{{ $invoices->firstItem() + $index }}</td>
+                                            <td>
+                                                @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                    <span class="badge bg-dark" style="cursor:pointer;"
+                                                          data-invoice-id="{{ $invoice->id }}"
+                                                          onclick="showShipmentDetail({{ $invoice->id }});">
+                                                        {{ $invoice->shipperInfo->awb_number }}
+                                                    </span>
+                                                @else
+                                                    <strong>{{ $invoice->invoice_number }}</strong>
+                                                @endif
+                                            </td>
+                                            <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
+                                            <td style="font-size:12px;white-space:normal;">
+                                                @php
+                                                    $shipper = $invoice->shipperInfo;
+                                                    $consignee = $shipper?->consigneeInfo;
+                                                    $senderName = $shipper?->company_name ?: ($shipper?->contact_person ?: '-');
+                                                    $receiverName = $consignee?->consignee_name ?: ($consignee?->contact_person ?: '-');
+                                                @endphp
+                                                <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div>{{ $shipper?->state ?: '-' }}, {{ $shipper?->city ?: '-' }}, India</div>
+                                                        <div class="text-muted">{{ $senderName }} - {{ $shipper?->pincode ?: '-' }}</div>
+                                                    </div>
+                                                    <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                        <span class="shipment-route-line" aria-hidden="true"></span>
+                                                        <span class="shipment-route-plane">
+                                                            <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div>{{ $consignee?->city ?: '-' }}, {{ $consignee?->state ?: '-' }}, {{ $consignee?->delivery_destination ?: '-' }}</div>
+                                                        <div class="text-muted">{{ $receiverName }} - {{ $consignee?->zip_code ?: '-' }}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <!-- <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td> -->
+                                            <td>INR {{ number_format($shipmentAmount, 2) }}</td>
+                                            <td @class(['d-none' => $hideCurrencyColumn])>{{ $invoice->invoice_currency }}</td>
+                                            <td @class(['d-none' => $hideIncotermsAndPayColumns])>{{ $invoice->incoterms }}</td>
+                                            <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
+                                            <td>
+                                                @php
+                                                    $displayStatus = $invoice->status === 'cancelled' ? 'cancelled' : ($invoice->shipperInfo && $invoice->shipperInfo->status ? $invoice->shipperInfo->status : 'draft');
+                                                    $statusBadge = [
+                                                        'draft' => 'badge bg-warning text-dark',
+                                                        'ready' => 'badge bg-info',
+                                                        'packed' => 'badge bg-primary',
+                                                        'manifested' => 'badge bg-secondary',
+                                                        'received' => 'badge bg-success',
+                                                        'dispatched' => 'badge bg-dark',
+                                                        'delivered' => 'badge bg-success',
+                                                        'cancelled' => 'badge bg-danger',
+                                                        'disputed' => 'badge bg-warning',
+                                                        'on_hold' => 'badge bg-secondary',
+                                                    ];
+                                                    $statusLabel = [
+                                                        'draft' => 'Draft',
+                                                        'ready' => 'Ready',
+                                                        'packed' => 'Packed',
+                                                        'manifested' => 'Manifested',
+                                                        'received' => 'Received',
+                                                        'dispatched' => 'Dispatched',
+                                                        'delivered' => 'Delivered',
+                                                        'cancelled' => 'Cancelled',
+                                                        'disputed' => 'Disputed',
+                                                        'on_hold' => 'On Hold',
+                                                    ];
+                                                @endphp
+                                                <span class="shipment-status-badge {{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
+                                            </td>
+                                            <td @class(['text-center', 'd-none' => $hidePrintLabelColumn])>
+                                                @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                    <button class="btn btn-sm btn-outline-primary print-label-btn"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-printer me-1"></i>Print
+                                                    </button>
+                                                @else
+                                                    <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @endif
+                                            </td>
+                                            <!-- <td class="text-center">
+                                                @if(isset($shipmentDetails[$invoice->id]) && $shipmentDetails[$invoice->id]['has_label'])
+                                                    <a href="#" class="label-link"
+                                                       onclick="viewLabel({{ $invoice->id }}); return false;">
+                                                        <i class="ti ti-file-text me-1"></i>View Label
+                                                    </a>
+                                                @else
+                                                    <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @endif
+                                            </td> -->
+                                            <td @class(['text-center', 'd-none' => $hideIncotermsAndPayColumns])>
+                                                @if($invoice->status === 'cancelled')
+                                                    <span class="text-muted" style="font-size:12px;">N/A</span>
+                                                @elseif($invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft')
+                                                    <span class="text-muted" style="font-size:12px;">Paid</span>
+                                                @else
+                                                    <button class="btn btn-sm btn-success pay-now-btn"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-credit-card me-1"></i>Pay Now
+                                                    </button>
+                                                @endif
+                                            </td>
+                                            <td @class(['text-center', 'manifest-col', 'd-none' => $hideManifestColumn])>
+                                                @php
+                                                    $isPacked = $invoice->shipperInfo && $invoice->shipperInfo->status === 'packed';
+                                                    $isManifested = $invoice->shipperInfo && $invoice->shipperInfo->status === 'manifested';
+                                                @endphp
+                                                @if($isPacked)
+                                                    <button class="btn btn-sm btn-outline-success manifest-single-btn"
+                                                            data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                            data-invoice-id="{{ $invoice->id }}"
+                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
+                                                        <i class="ti ti-package-export me-1"></i>Manifest
+                                                    </button>
+                                                @elseif($isManifested)
+                                                    <span class="badge bg-success" style="font-size:11px;">Manifested</span>
+                                                @else
+                                                    <span class="text-muted" style="font-size:12px;">-</span>
+                                                @endif
+                                            </td>
+                                            <td @class(['text-center', 'd-none' => !$showActionColumn])>
+                                                <div class="d-inline-flex align-items-center gap-1">
+                                                    @if($rowStatus === 'draft')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-success pay-now-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                                data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                                title="Pay Now"
+                                                                aria-label="Pay Now"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-credit-card" aria-hidden="true"></i>
+                                                        </button>
+                                                    @elseif($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-primary print-label-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                title="Print Label"
+                                                                aria-label="Print Label"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-printer" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
+                                                    @if($rowStatus === 'packed')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-success manifest-single-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                title="Manifest Shipment"
+                                                                aria-label="Manifest Shipment"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-package-export" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-danger cancel-btn d-inline-flex align-items-center justify-content-center"
+                                                            data-id="{{ $invoice->id }}"
+                                                            data-invoice="{{ $invoice->invoice_number }}"
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                            data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}"
+                                                            title="Cancel Shipment"
+                                                            aria-label="Cancel Shipment"
+                                                            style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                        <i class="ti ti-ban" aria-hidden="true"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td @class(['text-center', 'd-none' => $showActionColumn || $hideCancelColumn || in_array($rowStatus, ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'], true)])>
+                                                @if($invoice->status === 'cancelled')
+                                                    <button class="btn btn-cancel" disabled>
+                                                        <i class="ti ti-x"></i> Cancelled
+                                                    </button>
+                                                @else
+                                                    <button class="btn btn-cancel cancel-btn"
+                                                            data-id="{{ $invoice->id }}"
+                                                            data-invoice="{{ $invoice->invoice_number }}"
+                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                            data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}">
+                                                        <i class="ti ti-ban"></i> Cancel
+                                                    </button>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 mt-3">
+                                <div class="pagination-summary">
+                                    Showing {{ $invoices->firstItem() }} to {{ $invoices->lastItem() }} of {{ $invoices->total() }} shipments
+                                </div>
+
+                                @if ($invoices->hasPages())
+                                    <nav aria-label="Shipment pages">
+                                        <ul class="pagination shipment-pagination">
+                                            <li class="page-item {{ $invoices->onFirstPage() ? 'disabled' : '' }}">
+                                                <a class="page-link"
+                                                   href="{{ $invoices->onFirstPage() ? '#' : $invoices->previousPageUrl() }}"
+                                                   aria-label="Previous page">
+                                                    Previous
+                                                </a>
+                                            </li>
+
+                                            @php
+                                                $firstPage = max(1, $invoices->currentPage() - 1);
+                                                $lastPage = min($invoices->lastPage(), $invoices->currentPage() + 1);
+                                            @endphp
+
+                                            @for ($page = $firstPage; $page <= $lastPage; $page++)
+                                                <li class="page-item {{ $page === $invoices->currentPage() ? 'active' : '' }}">
+                                                    <a class="page-link" href="{{ $invoices->url($page) }}">{{ $page }}</a>
+                                                </li>
+                                            @endfor
+
+                                            <li class="page-item {{ $invoices->hasMorePages() ? '' : 'disabled' }}">
+                                                <a class="page-link"
+                                                   href="{{ $invoices->hasMorePages() ? $invoices->nextPageUrl() : '#' }}"
+                                                   aria-label="Next page">
+                                                    Next
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <!-- End Shipments Table Card -->
+
+            </div>
+            <!-- End Content -->
+
+        </div>
+        <!-- End Page Wrapper -->
+
+    </div>
+    <!-- End Main Wrapper -->
+
+    <!-- Shipment Detail Modal -->
+    <div class="modal fade" id="shipmentDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-package me-2"></i>Shipment Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="shipmentDetailBody">
+                    <!-- Tracking Number -->
+                    <div class="tracking-number-box" id="detailTrackingBox">
+                        <div class="tracking-label">UPS Tracking Number</div>
+                        <div class="tracking-value" id="detailTrackingNumber">-</div>
+                    </div>
+
+                    <!-- Ship From → Ship To Route -->
+                    <div class="route-box" id="detailRouteBox">
+                        <div class="route-point">
+                            <div class="route-label">SHIP FROM</div>
+                            <div class="route-city" id="detailShipFrom">-</div>
+                        </div>
+                        <div class="route-arrow">
+                            <i class="ti ti-arrow-right"></i>
+                        </div>
+                        <div class="route-point">
+                            <div class="route-label">SHIP TO</div>
+                            <div class="route-city" id="detailShipTo">-</div>
+                        </div>
+                    </div>
+
+                    <!-- AWB Number -->
+                    <div class="detail-section">
+                        <h6><i class="ti ti-clipboard me-1"></i> AWB & Invoice Info</h6>
+                        <div class="detail-row">
+                            <span class="label">AWB Number</span>
+                            <span class="value" id="detailAwbNumber">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Invoice Number</span>
+                            <span class="value" id="detailInvoiceNumber">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Invoice Date</span>
+                            <span class="value" id="detailInvoiceDate">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Invoice Amount</span>
+                            <span class="value" id="detailInvoiceAmount">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Currency</span>
+                            <span class="value" id="detailInvoiceCurrency">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Incoterms</span>
+                            <span class="value" id="detailIncoterms">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Reference No.</span>
+                            <span class="value" id="detailReferenceNumber">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Status</span>
+                            <span class="value" id="detailStatus">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Shipper Info -->
+                    <div class="detail-section">
+                        <h6><i class="ti ti-user me-1"></i> Shipper Info</h6>
+                        <div class="detail-row">
+                            <span class="label">Company</span>
+                            <span class="value" id="detailShipperCompany">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Contact Person</span>
+                            <span class="value" id="detailShipperContact">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Phone</span>
+                            <span class="value" id="detailShipperPhone">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Email</span>
+                            <span class="value" id="detailShipperEmail">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Address</span>
+                            <span class="value" id="detailShipperAddress">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">City / State / Pincode</span>
+                            <span class="value" id="detailShipperCityStatePin">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Consignee Info -->
+                    <div class="detail-section">
+                        <h6><i class="ti ti-user-check me-1"></i> Consignee Info</h6>
+                        <div class="detail-row">
+                            <span class="label">Name</span>
+                            <span class="value" id="detailConsigneeName">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Contact Person</span>
+                            <span class="value" id="detailConsigneeContact">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Phone</span>
+                            <span class="value" id="detailConsigneePhone">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Email</span>
+                            <span class="value" id="detailConsigneeEmail">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Address</span>
+                            <span class="value" id="detailConsigneeAddress">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">City / State / Zip</span>
+                            <span class="value" id="detailConsigneeCityStateZip">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Items -->
+                    <div class="detail-section" id="detailItemsSection">
+                        <h6><i class="ti ti-file-text me-1"></i> Invoice Items</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Box</th>
+                                        <th>Description</th>
+                                        <th>HS Code</th>
+                                        <th>HTS Code</th>
+                                        <th>Unit</th>
+                                        <th>Qty</th>
+                                        <th>Rate</th>
+                                        <th>IGST(%)</th>
+                                        <th>IGST</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detailItemsTable"></tbody>
+                            </table>
+                        </div>
+                        <div class="text-end mt-2">
+                            <strong>Total: <span id="detailItemsTotal">0.00</span></strong>
+                        </div>
+                    </div>
+
+                    <!-- Shipment Details -->
+                    <div class="detail-section">
+                        <h6><i class="ti ti-truck me-1"></i> Shipment Details</h6>
+                        <div class="detail-row">
+                            <span class="label">Destination</span>
+                            <span class="value" id="detailDestination">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Origin Type</span>
+                            <span class="value" id="detailOriginType">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Shipping Method</span>
+                            <span class="value" id="detailShippingMethod">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Package Dimensions -->
+                    <div class="detail-section" id="detailPackagesSection">
+                        <h6><i class="ti ti-box me-1"></i> Package Dimensions</h6>
+                        <div id="detailPackagesContainer"></div>
+                    </div>
+
+                    <!-- UPS Charges -->
+                    <div class="detail-section" id="detailChargesSection">
+                        <h6><i class="ti ti-currency-dollar me-1"></i> UPS Shipping Charges</h6>
+                        <div class="detail-row">
+                            <span class="label">Transportation Charges</span>
+                            <span class="value" id="detailTransportCharges">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Service Options Charges</span>
+                            <span class="value" id="detailServiceOptionsCharges">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Total Charges</span>
+                            <span class="value" id="detailTotalCharges">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Billing Weight</span>
+                            <span class="value" id="detailBillingWeight">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Cancel Modal -->
+    <div class="modal fade" id="cancelModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title">Confirm Cancellation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Are you sure you want to cancel shipment <strong id="cancelInvoiceRef"></strong>?</p>
+                    <p id="cancelRefundInfo" class="mt-2 mb-0" style="font-size:13px;color:#28a745;display:none;">
+                        <i class="ti ti-refund me-1"></i> <strong id="cancelRefundAmount"></strong> will be refunded to your wallet.
+                    </p>
+                    <p class="text-muted mt-2 mb-0" style="font-size:13px;">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It</button>
+                    <button type="button" class="btn btn-danger" id="confirmCancelBtn">Yes, Cancel Shipment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Now Modal -->
+    <div class="modal fade" id="payNowModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-credit-card me-2"></i>Pay Now</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Shipment AWB / Invoice</label>
+                        <input type="text" class="form-control" id="payShipmentRef" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Amount to Pay (INR )</label>
+                        <input type="number" disabled class="form-control" id="payAmount" min="0.01" step="0.01" placeholder="Enter amount">
+                    </div>
+                    <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-0" style="border-radius:8px;">
+                        <i class="ti ti-wallet fs-18 me-2"></i>
+                        <div>
+                            <span class="fw-semibold">Wallet Balance:</span>
+                            <span class="fw-bold text-primary" id="payWalletBalance">INR 0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmPayNowBtn">
+                        <i class="ti ti-credit-card me-1"></i>Confirm Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Address Error Fallback Modal (UNITED ECO POST → UNITED CLASSIC) -->
+    <div class="modal fade" id="addressErrorFallbackModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title text-danger">
+                        <i class="ti ti-alert-triangle me-2"></i>Incorrect Address
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3">
+                    <div class="alert alert-warning mb-3" role="alert">
+                        <i class="ti ti-alert-circle me-1"></i>
+                        The address provided appears to be <strong>incorrect or incomplete</strong> for <strong>UNITED ECO POST</strong>.
+                        You can choose to ship this shipment via <strong>UNITED CLASSIC (Ship Global)</strong> instead.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Select Shipping Option</label>
+                        <select class="form-select" id="addressErrorFallbackSelect">
+                            <option value="">-- Select an option --</option>
+                            <option value="ship_global">Ship via UNITED CLASSIC</option>
+                            <option value="cancel">Cancel & correct the address</option>
+                        </select>
+                    </div>
+
+                    <div id="fallbackRateInfo" style="display:none;">
+                        <div class="card bg-light border-0 p-3 mb-0">
+                            <h6 class="fw-bold mb-2 text-primary">
+                                <i class="ti ti-truck-delivery me-1"></i>UNITED CLASSIC (Ship Global) Rate Details
+                            </h6>
+                            <div class="detail-row">
+                                <span class="label">Total Weight:</span>
+                                <span class="value" id="fbTotalWeight">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">UNITED CLASSIC Rate:</span>
+                                <span class="value fw-bold text-success" id="fbClassicRate">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Amount Already Paid:</span>
+                                <span class="value" id="fbPaidAmount">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Rate Difference:</span>
+                                <span class="value" id="fbDifference">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="label">Wallet Balance:</span>
+                                <span class="value" id="fbWalletBalance">-</span>
+                            </div>
+                            <div class="detail-row" id="fbWalletActionRow" style="display:none;">
+                                <span class="label">Wallet Impact:</span>
+                                <span class="value fw-bold" id="fbWalletAction">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="confirmShipGlobalFallbackBtn" disabled>
+                        <i class="ti ti-check me-1"></i>Confirm & Manifest
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Label Modal -->
+    <div class="modal fade" id="printLabelModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-printer me-2"></i>Print Label</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3" id="printLabelBody">
+                    <!-- Company Logo + Barcode Row -->
+                    <div class="row align-items-center mb-3">
+                        <div class="col-4">
+                            <img src="{{ asset('assets/img/logo.png') }}" alt="United Courier" style="max-height:65px;">
+                        </div>
+                        <div class="col-8 text-end">
+                            <svg id="printLabelBarcode"></svg>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Ship From / Ship To -->
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <strong style="font-size:13px;">SHIP FROM</strong>
+                            <p class="mb-1" style="font-size:13px;" id="printShipperCompany">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printShipperContact">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printShipperAddress">-</p>
+                            <p class="mb-0" style="font-size:12px;" id="printShipperCityStatePin">-</p>
+                            <p class="mb-0" style="font-size:12px;">Phone: <span id="printShipperPhone">-</span></p>
+                        </div>
+                        <div class="col-6">
+                            <strong style="font-size:13px;">SHIP TO</strong>
+                            <p class="mb-1" style="font-size:13px;" id="printConsigneeName">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printConsigneeContact">-</p>
+                            <p class="mb-1" style="font-size:12px;" id="printConsigneeAddress">-</p>
+                            <p class="mb-0" style="font-size:12px;" id="printConsigneeCityStateZip">-</p>
+                            <p class="mb-0" style="font-size:12px;">Phone: <span id="printConsigneePhone">-</span></p>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Invoice Items -->
+                    <div id="printItemsSection">
+                        <strong style="font-size:13px;">INVOICE ITEMS</strong>
+                        <div class="table-responsive mt-1">
+                            <table class="table table-sm table-bordered mb-0" style="font-size:11px;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Box</th>
+                                        <th>Description</th>
+                                        <th>HS Code</th>
+                                        <th>Qty</th>
+                                        <th>Rate</th>
+                                        <th>IGST(%)</th>
+                                        <th>IGST</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="printItemsTable"></tbody>
+                            </table>
+                        </div>
+                        <div class="text-end mt-1" style="font-size:13px;">
+                            <strong>Total: <span id="printItemsTotal">0.00</span></strong>
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- Package Dimensions -->
+                    <div id="printPackagesSection">
+                        <strong style="font-size:13px;">PACKAGE DIMENSIONS</strong>
+                        <div id="printPackagesContainer" class="mt-1"></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="printLabel()">
+                        <i class="ti ti-printer me-1"></i>Print
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JsBarcode CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+    <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
+    <script src="{{ asset('assets/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
+    <!-- Main theme JS initializes the sidebar dropdowns. -->
+    <script src="{{ asset('assets/js/script.js') }}"></script>
+
+    <script>
+    // Shipment data embedded from server for detail modal
+    const shipmentData = @json($shipmentDetails);
+
+    function showShipmentDetail(invoiceId) {
+        const data = shipmentData[invoiceId];
+        if (!data) return;
+
+        // Tracking Number
+        const trackingBox = document.getElementById('detailTrackingBox');
+        const trackingNum = document.getElementById('detailTrackingNumber');
+        if (data.tracking_number) {
+            trackingBox.style.display = 'block';
+            trackingNum.textContent = data.tracking_number;
+        } else {
+            trackingBox.style.display = 'none';
+        }
+
+        // Ship From → Ship To
+        document.getElementById('detailShipFrom').textContent = data.ship_from || '-';
+        document.getElementById('detailShipTo').textContent = data.ship_to || '-';
+
+        // AWB & Invoice Info
+        document.getElementById('detailAwbNumber').textContent = data.awb_number || '-';
+        document.getElementById('detailInvoiceNumber').textContent = data.invoice_number || '-';
+        document.getElementById('detailInvoiceDate').textContent = data.invoice_date || '-';
+        document.getElementById('detailInvoiceAmount').textContent = data.invoice_amount || '-';
+        document.getElementById('detailInvoiceCurrency').textContent = data.invoice_currency || '-';
+        document.getElementById('detailIncoterms').textContent = data.incoterms || '-';
+        document.getElementById('detailReferenceNumber').textContent = data.reference_number || '-';
+        document.getElementById('detailStatus').textContent = data.status || '-';
+
+        // Shipper Info
+        if (data.shipper) {
+            document.getElementById('detailShipperCompany').textContent = data.shipper.company || '-';
+            document.getElementById('detailShipperContact').textContent = data.shipper.contact || '-';
+            document.getElementById('detailShipperPhone').textContent = data.shipper.phone || '-';
+            document.getElementById('detailShipperEmail').textContent = data.shipper.email || '-';
+            document.getElementById('detailShipperAddress').textContent = data.shipper.address || '-';
+            document.getElementById('detailShipperCityStatePin').textContent = data.shipper.city_state_pin || '-';
+        }
+
+        // Consignee Info
+        if (data.consignee) {
+            document.getElementById('detailConsigneeName').textContent = data.consignee.name || '-';
+            document.getElementById('detailConsigneeContact').textContent = data.consignee.contact || '-';
+            document.getElementById('detailConsigneePhone').textContent = data.consignee.phone || '-';
+            document.getElementById('detailConsigneeEmail').textContent = data.consignee.email || '-';
+            document.getElementById('detailConsigneeAddress').textContent = data.consignee.address || '-';
+            document.getElementById('detailConsigneeCityStateZip').textContent = data.consignee.city_state_zip || '-';
+        }
+
+        // Shipment Details
+        document.getElementById('detailDestination').textContent = data.destination || '-';
+        document.getElementById('detailOriginType').textContent = data.origin_type || '-';
+        document.getElementById('detailShippingMethod').textContent = data.shipping_method || '-';
+
+        // Package Dimensions
+        const packagesContainer = document.getElementById('detailPackagesContainer');
+        const packagesSection = document.getElementById('detailPackagesSection');
+        packagesContainer.innerHTML = '';
+        if (data.packages && data.packages.length > 0) {
+            packagesSection.style.display = 'block';
+            data.packages.forEach(function(pkg) {
+                const card = document.createElement('div');
+                card.className = 'package-card';
+                card.style.cssText = 'border:1px solid #dee2e6;border-radius:8px;padding:12px;margin-bottom:8px;background:#fff;';
+                const header = document.createElement('div');
+                header.style.cssText = 'background:#f0f0f3;border-radius:6px 6px 0 0;padding:6px 10px;margin:-12px -12px 8px -12px;font-weight:600;color:#495057;';
+                header.innerHTML = '<span style="font-size:14px;"><i class="ti ti-box me-1"></i> Box #' + pkg.index + '</span>';
+                card.appendChild(header);
+                const row1 = document.createElement('div');
+                row1.className = 'row';
+                row1.innerHTML = '<div class="col-md-3"><strong>Weight:</strong> ' + (pkg.weight || '-') + ' Kg</div>' +
+                    '<div class="col-md-3"><strong>Length:</strong> ' + (pkg.length || '-') + ' cm</div>' +
+                    '<div class="col-md-3"><strong>Width:</strong> ' + (pkg.width || '-') + ' cm</div>' +
+                    '<div class="col-md-3"><strong>Height:</strong> ' + (pkg.height || '-') + ' cm</div>';
+                card.appendChild(row1);
+                const row2 = document.createElement('div');
+                row2.className = 'row mt-1';
+                row2.innerHTML = '<div class="col-md-3"><strong>Volumetric Wt:</strong> ' + (pkg.volumetric || '-') + ' Kg</div>' +
+                    '<div class="col-md-3"><strong>Chg. Wt:</strong> ' + (pkg.chargeable || '-') + ' Kg</div>';
+                card.appendChild(row2);
+                packagesContainer.appendChild(card);
+            });
+        } else {
+            packagesSection.style.display = 'none';
+        }
+
+        // Invoice Items
+        const itemsTable = document.getElementById('detailItemsTable');
+        const itemsSection = document.getElementById('detailItemsSection');
+        itemsTable.innerHTML = '';
+        if (data.items && data.items.length > 0) {
+            itemsSection.style.display = 'block';
+            data.items.forEach(function(item) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td>' + (item.box_no || '-') + '</td>' +
+                    '<td>' + (item.description || '-') + '</td>' +
+                    '<td>' + (item.hs_code || '-') + '</td>' +
+                    '<td>' + (item.hts_code || '-') + '</td>' +
+                    '<td>' + (item.unit_type || '-') + '</td>' +
+                    '<td>' + (item.qty || '-') + '</td>' +
+                    '<td>' + (item.unit_rate || '-') + '</td>' +
+                    '<td>' + (item.igst_percentage || '-') + '</td>' +
+                    '<td>' + (item.igst_amount || '-') + '</td>' +
+                    '<td>' + item.amount + '</td>';
+                itemsTable.appendChild(row);
+            });
+            document.getElementById('detailItemsTotal').textContent = data.items_total;
+        } else {
+            itemsSection.style.display = 'none';
+        }
+
+        // UPS Charges
+        const chargesSection = document.getElementById('detailChargesSection');
+        if (data.charges) {
+            chargesSection.style.display = 'block';
+            document.getElementById('detailTransportCharges').textContent = data.charges.transport;
+            document.getElementById('detailServiceOptionsCharges').textContent = data.charges.service_options;
+            document.getElementById('detailTotalCharges').textContent = data.charges.total;
+            document.getElementById('detailBillingWeight').textContent = data.charges.billing_weight;
+        } else {
+            chargesSection.style.display = 'none';
+        }
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('shipmentDetailModal'));
+        modal.show();
+    }
+
+    function viewLabel(invoiceId) {
+        // The base64 label image is intentionally not embedded in the page for performance.
+        // Fetch it on-demand from the server when the user actually requests the label.
+        fetch('{{ url("/customer/shipment-label") }}/' + invoiceId, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (response) {
+            if (!response.success || !response.graphic_image) {
+                alert(response.message || 'Label not available for this shipment.');
+                return;
+            }
+            openLabelFromBase64(response.graphic_image, response.label_format || 'PDF', response.awb_number || invoiceId);
+        })
+        .catch(function () {
+            alert('Failed to load the label. Please try again.');
+        });
+    }
+
+    function openLabelFromBase64(base64Data, format, awbNumber) {
+        // Decode base64 GraphicImage and open as PDF
+        format = (format || 'PDF').toUpperCase();
+
+        // Convert base64 to binary
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+
+        // Determine MIME type based on label format
+        let mimeType = 'application/pdf';
+        let extension = 'pdf';
+        if (format === 'GIF') {
+            mimeType = 'image/gif';
+            extension = 'gif';
+        } else if (format === 'PNG') {
+            mimeType = 'image/png';
+            extension = 'png';
+        } else if (format === 'JPEG' || format === 'JPG') {
+            mimeType = 'image/jpeg';
+            extension = 'jpg';
+        } else if (format === 'SPL') {
+            mimeType = 'application/pdf';
+            extension = 'pdf';
+        }
+
+        // Create blob and open in new tab
+        const blob = new Blob([byteArray], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        // For PDF, open in new window; for images, open in new tab
+        const newWindow = window.open(url, '_blank');
+        if (!newWindow) {
+            // If popup blocked, try downloading
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'label_' + (awbNumber || 'shipment') + '.' + extension;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // Clean up the object URL after a delay
+        setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+    }
+    </script>
+
+    <script>
+        $(document).ready(function () {
+
+
+            // Keep status counters mutable so AJAX status changes are reflected immediately.
+            const liveStatusCounts = @json($statusCounts);
+
+            function refreshStatusCounters() {
+                $('.status-filter-btn').each(function () {
+                    const filter = $(this).data('filter');
+                    $(this).find('.badge').text(liveStatusCounts[filter] || 0);
+                });
+
+                const activeFilter = $('.status-filter-btn.btn-primary').data('filter') || 'all';
+                const visibleCount = liveStatusCounts[activeFilter] || 0;
+                $('#shipmentCountInfo').text('Showing ' + visibleCount + ' of ' + liveStatusCounts.all + ' shipments');
+            }
+
+            function getSelectedRowsByStatus(status) {
+                return $('tr[data-status="' + status + '"] .shipment-checkbox:checked').closest('tr');
+            }
+
+            function getRowAmount(row) {
+                const $row = $(row);
+                const payAmount = $row.find('.pay-now-btn').data('amount');
+                const cancelAmount = $row.find('.cancel-btn').data('amount');
+                const fallbackText = $row.find('td').eq(5).text();
+                const raw = payAmount || cancelAmount || fallbackText;
+                const numeric = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+                return isNaN(numeric) ? 0 : numeric;
+            }
+
+            function sumSelectedAmounts(rows) {
+                let total = 0;
+                rows.each(function () {
+                    total += getRowAmount(this);
+                });
+                return total;
+            }
+
+            function updateBulkSelectionTotals() {
+                const draftRows = getSelectedRowsByStatus('draft');
+                const draftTotal = sumSelectedAmounts(draftRows);
+                const draftDisabled = draftRows.length === 0;
+                $('#bulkDraftPayBtn').prop('disabled', draftDisabled);
+                $('#bulkDraftCancelBtn').prop('disabled', draftDisabled);
+                $('#draftBulkTotal').text(draftDisabled ? '' : 'Selected total: INR ' + number_format(draftTotal, 2));
+
+                const readyRows = getSelectedRowsByStatus('ready');
+                const readyTotal = sumSelectedAmounts(readyRows);
+                const readyDisabled = readyRows.length === 0;
+                $('#bulkReadyPrintBtn').prop('disabled', readyDisabled);
+                $('#bulkReadyCancelBtn').prop('disabled', readyDisabled);
+                $('#readyBulkTotal').text(readyDisabled ? '' : 'Selected total: INR ' + number_format(readyTotal, 2));
+
+                const packedRows = getSelectedRowsByStatus('packed');
+                const packedTotal = sumSelectedAmounts(packedRows);
+                const packedDisabled = packedRows.length === 0;
+                $('#bulkPackedPrintBtn').prop('disabled', packedDisabled);
+                $('#bulkPackedCancelBtn').prop('disabled', packedDisabled);
+                $('#packedBulkTotal').text(packedDisabled ? '' : 'Selected total: INR ' + number_format(packedTotal, 2));
+            }
+
+            function showBulkDraftActions(show) {
+                $('#draftBulkActions').toggleClass('is-visible', show);
+            }
+
+            function showBulkReadyActions(show) {
+                $('#readyBulkActions').toggleClass('is-visible', show);
+            }
+
+            function showBulkPackedActions(show) {
+                $('#packedBulkActions').toggleClass('is-visible', show);
+            }
+
+            function configureBulkActionsForStatus(status) {
+                showBulkDraftActions(status === 'draft');
+                showBulkReadyActions(status === 'ready');
+                showBulkPackedActions(status === 'packed');
+
+                const selectable = ['draft', 'ready', 'packed'].includes(status);
+                $('#selectAllCheckbox, .bulk-manifest-checkbox').toggle(selectable);
+                $('#bulkManifestBtn').toggle(status === 'packed');
+            }
+
+            configureBulkActionsForStatus(@json(request('status', 'all')));
+            updateBulkSelectionTotals();
+
+            // Print Label button click handler (delegated)
+            $('#shipmentsTable').on('click', '.print-label-btn', function () {
+                const invoiceId = $(this).data('invoice-id');
+                const data = shipmentData[invoiceId];
+                if (!data) return;
+
+                // Populate Barcode
+                document.getElementById('printLabelBarcode').innerHTML = '';
+                JsBarcode('#printLabelBarcode', data.awb_number || 'N/A', {
+                    format: 'CODE128',
+                    lineColor: '#000',
+                    width: 2,
+                    height: 100,
+                    displayValue: true,
+                    fontSize: 16
+                });
+
+                // Shipper Info
+                if (data.shipper) {
+                    $('#printShipperCompany').text(data.shipper.company || '-');
+                    $('#printShipperContact').text(data.shipper.contact || '-');
+                    $('#printShipperAddress').text(data.shipper.address || '-');
+                    $('#printShipperCityStatePin').text(data.shipper.city_state_pin || '-');
+                    $('#printShipperPhone').text(data.shipper.phone || '-');
+                } else {
+                    $('#printShipperCompany,#printShipperContact,#printShipperAddress,#printShipperCityStatePin').text('-');
+                    $('#printShipperPhone').text('-');
+                }
+
+                // Consignee Info
+                if (data.consignee) {
+                    $('#printConsigneeName').text(data.consignee.name || '-');
+                    $('#printConsigneeContact').text(data.consignee.contact || '-');
+                    $('#printConsigneeAddress').text(data.consignee.address || '-');
+                    $('#printConsigneeCityStateZip').text(data.consignee.city_state_zip || '-');
+                    $('#printConsigneePhone').text(data.consignee.phone || '-');
+                } else {
+                    $('#printConsigneeName,#printConsigneeContact,#printConsigneeAddress,#printConsigneeCityStateZip').text('-');
+                    $('#printConsigneePhone').text('-');
+                }
+
+                // Invoice Items
+                const itemsTable = document.getElementById('printItemsTable');
+                const itemsSection = document.getElementById('printItemsSection');
+                itemsTable.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    itemsSection.style.display = 'block';
+                    data.items.forEach(function(item) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = '<td>' + (item.box_no || '-') + '</td>' +
+                            '<td>' + (item.description || '-') + '</td>' +
+                            '<td>' + (item.hs_code || '-') + '</td>' +
+                            '<td>' + (item.qty || '-') + '</td>' +
+                            '<td>' + (item.unit_rate || '-') + '</td>' +
+                            '<td>' + (item.igst_percentage || '-') + '</td>' +
+                            '<td>' + (item.igst_amount || '-') + '</td>' +
+                            '<td>' + item.amount + '</td>';
+                        itemsTable.appendChild(row);
+                    });
+                    $('#printItemsTotal').text(data.items_total);
+                } else {
+                    itemsSection.style.display = 'none';
+                }
+
+                // Package Dimensions
+                const packagesContainer = document.getElementById('printPackagesContainer');
+                const packagesSection = document.getElementById('printPackagesSection');
+                packagesContainer.innerHTML = '';
+                if (data.packages && data.packages.length > 0) {
+                    packagesSection.style.display = 'block';
+                    data.packages.forEach(function(pkg) {
+                        const card = document.createElement('div');
+                        card.style.cssText = 'border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;';
+                        card.innerHTML = '<strong>Box #' + pkg.index + '</strong>: ' +
+                            'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
+                            'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
+                            'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg';
+                        packagesContainer.appendChild(card);
+                    });
+                } else {
+                    packagesSection.style.display = 'none';
+                }
+
+                // A Ready shipment becomes Packed only after its rendered label is stored.
+                const $row = $(this).closest('tr');
+                if (data.status === 'ready' && data.shipper_id) {
+                    const customLabel = document.getElementById('printLabelBody').innerHTML;
+                    $.ajax({
+                        url: '{{ url("/customer/mark-packed") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: data.shipper_id,
+                            custom_label: customLabel
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Failed to store the custom label.');
+                                return;
+                            }
+
+                            $row.attr('data-status', 'packed').data('status', 'packed');
+
+                            const $badge = $row.find('td:eq(8) span');
+                            $badge.removeClass().addClass('badge bg-primary').text('Packed');
+
+                            shipmentData[invoiceId].status = 'packed';
+                            liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                            liveStatusCounts.packed += 1;
+                            refreshStatusCounters();
+                            $('#printLabelModal').modal('show');
+                        },
+                        error: function (xhr) {
+                            const message = xhr.responseJSON && xhr.responseJSON.message
+                                ? xhr.responseJSON.message
+                                : 'Failed to store the custom label.';
+                            showAlert('danger', message);
+                        }
+                    });
+                    return;
+                }
+
+                $('#printLabelModal').modal('show');
+            });
+
+            // Cancel button click handler
+            let cancelId = null;
+
+            // Cancel button click handler (delegated)
+            $('#shipmentsTable').on('click', '.cancel-btn', function () {
+                cancelId = $(this).data('id');
+                const invoiceRef = $(this).data('invoice');
+                const isPaid = $(this).data('paid') == 1;
+                const amount = $(this).data('amount');
+                $('#cancelInvoiceRef').text(invoiceRef);
+
+                // Show refund info if shipment was paid
+                if (isPaid && amount > 0) {
+                    $('#cancelRefundInfo').show();
+                    $('#cancelRefundAmount').text('INR ' + number_format(amount, 2));
+                } else {
+                    $('#cancelRefundInfo').hide();
+                }
+
+                $('#cancelModal').modal('show');
+            });
+
+            // Confirm cancellation
+            $('#confirmCancelBtn').on('click', function () {
+                if (!cancelId) return;
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Cancelling...');
+
+                $.ajax({
+                    url: '{{ url("/customer/cancel-shipment") }}/' + cancelId,
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            // Refresh immediately so table + wallet balance + counters reflect the cancellation.
+                            window.location.reload();
+                            return;
+                        } else {
+                            showAlert('danger', response.message);
+                        }
+                        $('#cancelModal').modal('hide');
+                        btn.prop('disabled', false).text('Yes, Cancel Shipment');
+                    },
+                    error: function (xhr) {
+                        let msg = 'Error cancelling shipment.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $('#cancelModal').modal('hide');
+                        btn.prop('disabled', false).text('Yes, Cancel Shipment');
+                    }
+                });
+            });
+
+            // Pay Now button click handler
+            @php
+                $authCustomer = auth()->guard('customer')->user();
+                $currentWalletBalance = $authCustomer && $authCustomer->wallet ? $authCustomer->wallet->balance : 0;
+            @endphp
+            let payInvoiceId = null;
+            let payShipperId = null;
+            let bulkPayQueue = [];
+            let walletBalance = {{ $currentWalletBalance }};
+
+            // Update wallet balance display in modal
+            $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+
+            $('#payNowModal').on('hidden.bs.modal', function () {
+                bulkPayQueue = [];
+                payInvoiceId = null;
+                payShipperId = null;
+            });
+
+            // Pay Now button click handler (delegated)
+            $('#shipmentsTable').on('click', '.pay-now-btn', function () {
+                bulkPayQueue = [];
+                payInvoiceId = $(this).data('invoice-id');
+                payShipperId = $(this).data('shipper-id');
+                const amount = $(this).data('amount');
+
+                // Set reference and default amount
+                const refText = shipmentData[payInvoiceId] ? (shipmentData[payInvoiceId].awb_number || shipmentData[payInvoiceId].invoice_number) : 'Shipment #' + payInvoiceId;
+                $('#payShipmentRef').val(refText);
+                $('#payAmount').val(amount);
+                $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+
+                $('#payNowModal').modal('show');
+            });
+
+            // Confirm Pay Now
+            $('#confirmPayNowBtn').on('click', function () {
+                const amount = parseFloat($('#payAmount').val());
+                if (!amount || amount <= 0) {
+                    showAlert('danger', 'Please enter a valid amount to pay.');
+                    return;
+                }
+                if (amount > walletBalance) {
+                    showAlert('danger', 'Insufficient wallet balance! Your balance is INR ' + number_format(walletBalance, 2));
+                    return;
+                }
+
+                const btn = $(this);
+                btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+                const queue = bulkPayQueue.length ? bulkPayQueue : [{
+                    invoice_id: payInvoiceId,
+                    shipper_id: payShipperId,
+                    amount: amount
+                }];
+
+                let index = 0;
+                let successfulPayments = 0;
+
+                const markRowReady = function (item, response) {
+                    const $row = $('#invoice-row-' + item.invoice_id);
+                    if (!$row.length) return;
+
+                    $row.attr('data-status', 'ready').data('status', 'ready');
+                    $row.find('.shipment-status-badge')
+                        .removeClass()
+                        .addClass('shipment-status-badge badge bg-info')
+                        .text('Ready');
+
+                    if (shipmentData[item.invoice_id]) {
+                        shipmentData[item.invoice_id].status = 'ready';
+                    }
+
+                    liveStatusCounts.draft = Math.max(0, liveStatusCounts.draft - 1);
+                    liveStatusCounts.ready += 1;
+                    walletBalance = Number(response.new_balance ?? walletBalance);
+                    $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+                    refreshStatusCounters();
+                };
+
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        $('#payNowModal').modal('hide');
+                        btn.prop('disabled', false).text('Pay Now');
+
+                        if (!successfulPayments) return;
+
+                        $('#paymentSuccessPopup').remove();
+                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + successfulPayments + ' shipment(s) moved to Ready.<br>New wallet balance: INR ' + number_format(walletBalance, 2) + '</p><button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
+                        $('body').append(popupHtml);
+                        const popupElement = document.getElementById('paymentSuccessPopup');
+                        const successPopup = new bootstrap.Modal(popupElement);
+                        popupElement.addEventListener('hidden.bs.modal', function () {
+                            this.remove();
+                        });
+                        successPopup.show();
+                        return;
+                    }
+
+                    const item = queue[index];
+                    index++;
+
+                    $.ajax({
+                        url: '{{ url("/customer/pay-now") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            invoice_id: item.invoice_id,
+                            shipper_id: item.shipper_id,
+                            amount: item.amount
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                successfulPayments++;
+                                markRowReady(item, response);
+                            } else {
+                                showAlert('danger', response.message || 'Payment failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            let msg = 'Error processing payment.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            }
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            // number_format helper for JS
+            function number_format(num, decimals) {
+                decimals = decimals || 2;
+                num = parseFloat(num);
+                const parts = num.toFixed(decimals).split('.');
+                parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                return parts.join('.');
+            }
+
+            // Show alert helper
+            function showAlert(type, message) {
+                const alertHtml = '<div class="alert alert-' + type + ' alert-dismissible fade show" role="alert">' +
+                    message +
+                    '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
+                    '</div>';
+                $('#alertContainer').html(alertHtml);
+                // Auto scroll to top
+                $('html, body').animate({ scrollTop: 0 }, 300);
+                // Auto dismiss after 5 seconds
+                setTimeout(function () {
+                    $('.alert').alert('close');
+                }, 5000);
+            }
+
+            // =============================================
+            // MANIFEST: Single shipment manifest button
+            // =============================================
+            $('#shipmentsTable').on('click', '.manifest-single-btn', function () {
+                const $btn = $(this);
+                const originalButtonHtml = $btn.html();
+                const shipperId = $btn.data('shipper-id');
+                const invoiceId = $btn.data('invoice-id');
+
+                if (!shipperId) return;
+
+                // Confirm with user
+                if (!confirm('Are you sure you want to manifest this shipment? This will call the appropriate shipping API (UPS or Ship Global) based on the shipment network.')) {
+                    return;
+                }
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_id: shipperId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            // Update row status to manifested
+                            const $row = $('#invoice-row-' + invoiceId);
+                            $row.attr('data-status', 'manifested');
+                            // Update status badge
+                            const $badge = $row.find('td:eq(8) span');
+                            $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                            // Update manifest column
+                            const $manifestCol = $row.find('.manifest-col');
+                            $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                            $btn.remove();
+                            // Update Pay Now column
+                            const $payCol = $row.find('td:eq(10)');
+                            $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+
+                            showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A'));
+                        } else {
+                            showAlert('danger', response.message || 'Manifest failed.');
+                            $btn.prop('disabled', false).html(originalButtonHtml);
+                        }
+                    },
+                    error: function (xhr) {
+                        // Check if this is an address error that can fall back to Ship Global
+                        if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
+                            showAddressErrorFallbackModal(xhr.responseJSON);
+                            $btn.prop('disabled', false).html(originalButtonHtml);
+                            return;
+                        }
+                        let msg = 'Error manifesting shipment.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html(originalButtonHtml);
+                    }
+                });
+            });
+
+            // =============================================
+            // BULK MANIFEST: Manifest multiple selected shipments
+            // =============================================
+            $('#bulkManifestBtn').on('click', function () {
+                const $checked = $('.bulk-manifest-checkbox:checked');
+                if ($checked.length === 0) {
+                    showAlert('warning', 'Please select at least one shipment to manifest.');
+                    return;
+                }
+
+                const shipperIds = $checked.map(function () {
+                    return $(this).data('shipper-id');
+                }).get();
+
+                if (!confirm('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)? This will call the appropriate shipping API (UPS or Ship Global) based on each shipment\'s network.')) {
+                    return;
+                }
+
+                const $btn = $(this);
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting ' + shipperIds.length + ' shipment(s)...');
+
+                $.ajax({
+                    url: '{{ url("/customer/bulk-manifest") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_ids: shipperIds
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            const results = response.results;
+                            // Update each successfully manifested row
+                            if (results.success && results.success.length > 0) {
+                                results.success.forEach(function (item) {
+                                    const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
+                                    $row.attr('data-status', 'manifested');
+                                    const $badge = $row.find('td:eq(8) span');
+                                    $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                                    const $manifestCol = $row.find('.manifest-col');
+                                    $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                                    const $payCol = $row.find('td:eq(10)');
+                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                                });
+                            }
+
+                            // Uncheck all
+                            $('#selectAllCheckbox, .bulk-manifest-checkbox').prop('checked', false);
+
+                            const failedCount = results.failed ? results.failed.length : 0;
+                            const addressErrorCount = results.address_errors ? results.address_errors.length : 0;
+
+                            if (addressErrorCount > 0) {
+                                // Set up the queue and show the modal for the first address error
+                                addressErrorQueue = results.address_errors;
+                                addressErrorQueueIndex = 0;
+                                showAddressErrorFallbackModal(addressErrorQueue[0]);
+
+                                var summaryMsg = addressErrorCount + ' shipment(s) have address errors for UNITED ECO POST. Please review each and choose to ship via UNITED CLASSIC (Ship Global) or correct the address.';
+                                if (failedCount > 0) {
+                                    summaryMsg += '<br><br>Additionally, ' + failedCount + ' shipment(s) failed for other reasons.';
+                                }
+                                showAlert('warning', summaryMsg);
+                            } else if (failedCount > 0) {
+                                let failMsg = 'Some shipments failed to manifest:\n';
+                                results.failed.forEach(function (f) {
+                                    failMsg += '- Shipment #' + f.shipper_id + ': ' + f.message + '\n';
+                                });
+                                showAlert('warning', failMsg.replace(/\n/g, '<br>'));
+                            } else {
+                                showAlert('success', response.message);
+                            }
+
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                        } else {
+                            showAlert('danger', response.message || 'Bulk manifest failed.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Error during bulk manifest.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
+                    }
+                });
+            });
+
+            // =============================================
+            // ADDRESS ERROR FALLBACK: Ship via UNITED CLASSIC (Ship Global)
+            // Shows a modal with a dropdown when UNITED ECO POST returns an address error.
+            // The customer can choose to ship via Ship Global or cancel & correct the address.
+            // =============================================
+
+            // Queue for bulk address errors (processed one at a time)
+            var addressErrorQueue = [];
+            var addressErrorQueueIndex = 0;
+
+            // Populate and show the address error fallback modal
+            function showAddressErrorFallbackModal(data) {
+                // Store the shipper ID for the confirm handler
+                $('#confirmShipGlobalFallbackBtn').data('shipper-id', data.shipper_id);
+
+                // Populate rate details
+                $('#fbTotalWeight').text((data.total_weight || 0) + ' kg');
+                $('#fbClassicRate').text('\u20B9' + Number(data.classic_rate || 0).toFixed(2));
+                $('#fbPaidAmount').text('\u20B9' + Number(data.paid_amount || 0).toFixed(2));
+
+                // Format the difference
+                var diff = Number(data.difference || 0);
+                var diffText;
+                if (diff > 0.01) {
+                    diffText = '+ \u20B9' + diff.toFixed(2) + ' (extra to pay)';
+                } else if (diff < -0.01) {
+                    diffText = '- \u20B9' + Math.abs(diff).toFixed(2) + ' (to be refunded)';
+                } else {
+                    diffText = '\u20B90.00 (no difference)';
+                }
+                $('#fbDifference').text(diffText);
+                $('#fbWalletBalance').text('\u20B9' + Number(data.wallet_balance || 0).toFixed(2));
+
+                // Show wallet impact
+                if (data.wallet_action && data.wallet_action !== 'none') {
+                    var actionText = '';
+                    if (data.wallet_action === 'deduct') {
+                        actionText = '\u20B9' + Number(data.wallet_amount || 0).toFixed(2) + ' will be deducted from wallet';
+                        $('#fbWalletAction').removeClass('text-success').addClass('text-danger');
+                    } else if (data.wallet_action === 'refund') {
+                        actionText = '\u20B9' + Number(data.wallet_amount || 0).toFixed(2) + ' will be refunded to wallet';
+                        $('#fbWalletAction').removeClass('text-danger').addClass('text-success');
+                    }
+                    $('#fbWalletAction').text(actionText);
+                    $('#fbWalletActionRow').show();
+                } else {
+                    $('#fbWalletActionRow').hide();
+                }
+
+                // Reset dropdown and hide rate info
+                $('#addressErrorFallbackSelect').val('');
+                $('#fallbackRateInfo').hide();
+                $('#confirmShipGlobalFallbackBtn').prop('disabled', true);
+
+                // Show the modal
+                var modalEl = document.getElementById('addressErrorFallbackModal');
+                var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+
+            // Dropdown change handler — show/hide rate info and enable/disable confirm button
+            $('#addressErrorFallbackSelect').on('change', function () {
+                var val = $(this).val();
+                if (val === 'ship_global') {
+                    $('#fallbackRateInfo').slideDown();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', false);
+                } else if (val === 'cancel') {
+                    $('#fallbackRateInfo').hide();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', false);
+                } else {
+                    $('#fallbackRateInfo').hide();
+                    $('#confirmShipGlobalFallbackBtn').prop('disabled', true);
+                }
+            });
+
+            // Confirm button click handler — call Ship Global fallback API or cancel
+            $('#confirmShipGlobalFallbackBtn').on('click', function () {
+                var $btn = $(this);
+                var shipperId = $btn.data('shipper-id');
+                var selectedOption = $('#addressErrorFallbackSelect').val();
+
+                if (!shipperId) return;
+
+                // If user chose "Cancel & correct the address" — cancel shipment and refund wallet
+                if (selectedOption === 'cancel') {
+                    if (!confirm('Are you sure you want to cancel this shipment? The paid amount will be refunded to your wallet.')) {
+                        return;
+                    }
+                    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Cancelling...');
+
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment-by-shipper") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: shipperId
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                // Hide modal
+                                var modalEl = document.getElementById('addressErrorFallbackModal');
+                                var modal = bootstrap.Modal.getInstance(modalEl);
+                                if (modal) modal.hide();
+
+                                // Update the row in the table to show cancelled status
+                                var $row = $('tr[data-shipper-id="' + shipperId + '"]');
+                                if ($row.length) {
+                                    $row.attr('data-status', 'cancelled');
+                                    var $badge = $row.find('td:eq(8) span');
+                                    $badge.removeClass().addClass('badge bg-danger').text('Cancelled');
+                                    var $manifestCol = $row.find('.manifest-col');
+                                    $manifestCol.html('<span class="badge bg-danger" style="font-size:11px;">Cancelled</span>');
+                                    var $payCol = $row.find('td:eq(10)');
+                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Refunded</span>');
+                                }
+
+                                showAlert('success', response.message || 'Shipment cancelled and payment refunded to wallet.');
+                            } else {
+                                showAlert('danger', response.message || 'Failed to cancel shipment.');
+                                $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                            }
+                        },
+                        error: function (xhr) {
+                            var msg = 'Error cancelling shipment.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            }
+                            showAlert('danger', msg);
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                        }
+                    });
+                    return;
+                }
+
+                if (selectedOption !== 'ship_global') return;
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest-ship-global-fallback") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        shipper_id: shipperId
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            // Update the row in the table
+                            var $row = $('tr[data-shipper-id="' + shipperId + '"]');
+                            if ($row.length) {
+                                $row.attr('data-status', 'manifested');
+                                var $badge = $row.find('td:eq(8) span');
+                                $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
+                                var $manifestCol = $row.find('.manifest-col');
+                                $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                                var $payCol = $row.find('td:eq(10)');
+                                $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                            }
+                            // Hide modal
+                            var modalEl = document.getElementById('addressErrorFallbackModal');
+                            var modal = bootstrap.Modal.getInstance(modalEl);
+                            if (modal) modal.hide();
+                            showAlert('success', response.message || 'Shipment manifested via UNITED CLASSIC (Ship Global)! Tracking: ' + (response.tracking_number || 'N/A'));
+                        } else {
+                            showAlert('danger', response.message || 'Failed to manifest via Ship Global.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = 'Error manifesting via Ship Global.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
+                    }
+                });
+            });
+
+            // When modal is hidden, process next address error in the queue (bulk manifest)
+            var addressErrorModalEl = document.getElementById('addressErrorFallbackModal');
+            addressErrorModalEl.addEventListener('hidden.bs.modal', function () {
+                if (addressErrorQueue.length > 0 && (addressErrorQueueIndex + 1) < addressErrorQueue.length) {
+                    addressErrorQueueIndex++;
+                    setTimeout(function () {
+                        showAddressErrorFallbackModal(addressErrorQueue[addressErrorQueueIndex]);
+                    }, 300);
+                } else {
+                    // All address errors processed — reset queue
+                    addressErrorQueue = [];
+                    addressErrorQueueIndex = 0;
+                }
+            });
+
+            // =============================================
+            // SELECT ALL: Check/Uncheck all visible checkboxes
+            // =============================================
+            $('#selectAllCheckbox').on('change', function () {
+                const isChecked = $(this).is(':checked');
+                $('.bulk-manifest-checkbox:visible').prop('checked', isChecked);
+                updateBulkSelectionTotals();
+            });
+
+            // Uncheck "Select All" if any individual checkbox is unchecked
+            $(document).on('change', '.bulk-manifest-checkbox', function () {
+                if (!$(this).is(':checked')) {
+                    $('#selectAllCheckbox').prop('checked', false);
+                } else if ($('.bulk-manifest-checkbox:visible:checked').length === $('.bulk-manifest-checkbox:visible').length) {
+                    $('#selectAllCheckbox').prop('checked', true);
+                }
+                updateBulkSelectionTotals();
+            });
+
+            $('#bulkDraftPayBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('draft');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Draft shipment to pay.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                bulkPayQueue = rows.map(function () {
+                    const $row = $(this);
+                    return {
+                        invoice_id: $row.find('.pay-now-btn').data('invoice-id'),
+                        shipper_id: $row.find('.pay-now-btn').data('shipper-id'),
+                        amount: parseFloat($row.find('.pay-now-btn').data('amount') || 0)
+                    };
+                }).get();
+
+                payInvoiceId = null;
+                payShipperId = null;
+                $('#payShipmentRef').val('Selected Draft Shipment(s) (' + rows.length + ')');
+                $('#payAmount').val(total);
+                $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+                $('#payNowModal').modal('show');
+            });
+
+            $('#bulkDraftCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('draft');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Draft shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Draft shipment(s) and refund INR ' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return $row.find('.cancel-btn').data('id');
+                }).get();
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            $('#bulkReadyPrintBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('ready');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Ready shipment to print.');
+                    return;
+                }
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return {
+                        invoice_id: $row.find('.print-label-btn').data('invoice-id'),
+                        shipper_id: $row.data('shipper-id') || $row.find('.print-label-btn').data('shipper-id')
+                    };
+                }).get().filter(function (item) {
+                    return item.invoice_id && item.shipper_id;
+                });
+
+                const storedInvoiceIds = [];
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        printSelectedLabelsByInvoiceIds(storedInvoiceIds);
+                        return;
+                    }
+
+                    const item = queue[index];
+                    index++;
+
+                    const labelData = shipmentData[item.invoice_id];
+                    if (!labelData) {
+                        showAlert('danger', 'No label data found for one selected shipment.');
+                        processNext();
+                        return;
+                    }
+
+                    const customLabel = buildBulkLabelHtml(labelData);
+                    $.ajax({
+                        url: '{{ url("/customer/mark-packed") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: item.shipper_id,
+                            custom_label: customLabel
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                storedInvoiceIds.push(item.invoice_id);
+                                const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
+                                if ($row.length) {
+                                    $row.attr('data-status', 'packed').data('status', 'packed');
+                                    const $badge = $row.find('td:eq(8) span');
+                                    $badge.removeClass().addClass('badge bg-primary').text('Packed');
+                                    if (shipmentData[item.invoice_id]) {
+                                        shipmentData[item.invoice_id].status = 'packed';
+                                    }
+                                    liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                                    liveStatusCounts.packed += 1;
+                                    refreshStatusCounters();
+                                }
+                            } else {
+                                showAlert('danger', response.message || 'Failed to move shipment to Packed.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Failed to move shipment to Packed.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            $('#bulkReadyCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('ready');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Ready shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Ready shipment(s) and refund INR ' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    const $row = $(this);
+                    return $row.find('.cancel-btn').data('id');
+                }).get();
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+            $('#bulkPackedPrintBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('packed');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Packed shipment to print.');
+                    return;
+                }
+
+                const invoiceIds = rows.map(function () {
+                    return $(this).find('.print-label-btn').data('invoice-id');
+                }).get().filter(Boolean);
+
+                printSelectedLabelsByInvoiceIds(invoiceIds);
+            });
+
+            $('#bulkPackedCancelBtn').on('click', function () {
+                const rows = getSelectedRowsByStatus('packed');
+                if (!rows.length) {
+                    showAlert('warning', 'Please select at least one Packed shipment to cancel.');
+                    return;
+                }
+
+                const total = sumSelectedAmounts(rows);
+                const confirmed = confirm('Cancel ' + rows.length + ' selected Packed shipment(s) and refund INR ' + number_format(total, 2) + '?');
+                if (!confirmed) return;
+
+                const queue = rows.map(function () {
+                    return $(this).find('.cancel-btn').data('id');
+                }).get().filter(Boolean);
+
+                let index = 0;
+                const processNext = function () {
+                    if (index >= queue.length) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    const id = queue[index];
+                    index++;
+                    $.ajax({
+                        url: '{{ url("/customer/cancel-shipment") }}/' + id,
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (!response.success) {
+                                showAlert('danger', response.message || 'Cancel failed for one shipment.');
+                            }
+                            processNext();
+                        },
+                        error: function (xhr) {
+                            const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Cancel failed for one shipment.';
+                            showAlert('danger', msg);
+                            processNext();
+                        }
+                    });
+                };
+
+                processNext();
+            });
+
+        });
+
+        function buildBulkLabelHtml(data) {
+            const shipper = data.shipper || {};
+            const consignee = data.consignee || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            const packages = Array.isArray(data.packages) ? data.packages : [];
+            const itemsHtml = items.length ? items.map(function (item) {
+                return '<tr>' +
+                    '<td>' + (item.box_no || '-') + '</td>' +
+                    '<td>' + (item.description || '-') + '</td>' +
+                    '<td>' + (item.hs_code || '-') + '</td>' +
+                    '<td>' + (item.qty || '-') + '</td>' +
+                    '<td>' + (item.unit_rate || '-') + '</td>' +
+                    '<td>' + (item.igst_percentage || '-') + '</td>' +
+                    '<td>' + (item.igst_amount || '-') + '</td>' +
+                    '<td>' + (item.amount || '0.00') + '</td>' +
+                    '</tr>';
+            }).join('') : '<tr><td colspan="8">No items</td></tr>';
+
+            const packageHtml = packages.length ? packages.map(function (pkg) {
+                return '<div style="border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;">' +
+                    '<strong>Box #' + (pkg.index || '-') + '</strong>: ' +
+                    'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
+                    'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
+                    'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg' +
+                    '</div>';
+            }).join('') : '<div class="text-muted">No package details</div>';
+
+            const labelHtml = '<div style="border:1px solid #ddd;padding:16px;margin:20px 0;border-radius:10px;page-break-inside:avoid;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                '<img src="{{ asset("assets/img/logo.png") }}" alt="United Courier" style="max-height:50px;">' +
+                '<svg data-label-barcode style="width:100%;max-width:260px;height:auto;"></svg>' +
+                '</div>' +
+                '<div style="display:flex;gap:20px;margin-bottom:12px;">' +
+                '<div style="flex:1;border:1px solid #ddd;padding:8px;border-radius:6px;">' +
+                '<strong>SHIP FROM</strong><br>' +
+                '<span>' + (shipper.company || '-') + '</span><br>' +
+                '<span>' + (shipper.contact || '-') + '</span><br>' +
+                '<span>' + (shipper.address || '-') + '</span><br>' +
+                '<span>' + (shipper.city_state_pin || '-') + '</span><br>' +
+                '<span>Phone: ' + (shipper.phone || '-') + '</span>' +
+                '</div>' +
+                '<div style="flex:1;border:1px solid #ddd;padding:8px;border-radius:6px;">' +
+                '<strong>SHIP TO</strong><br>' +
+                '<span>' + (consignee.name || '-') + '</span><br>' +
+                '<span>' + (consignee.contact || '-') + '</span><br>' +
+                '<span>' + (consignee.address || '-') + '</span><br>' +
+                '<span>' + (consignee.city_state_zip || '-') + '</span><br>' +
+                '<span>Phone: ' + (consignee.phone || '-') + '</span>' +
+                '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                '<strong>INVOICE ITEMS</strong>' +
+                '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;">' +
+                '<thead><tr><th style="border:1px solid #333;padding:4px;">Box</th><th style="border:1px solid #333;padding:4px;">Description</th><th style="border:1px solid #333;padding:4px;">HS Code</th><th style="border:1px solid #333;padding:4px;">Qty</th><th style="border:1px solid #333;padding:4px;">Rate</th><th style="border:1px solid #333;padding:4px;">IGST(%)</th><th style="border:1px solid #333;padding:4px;">IGST</th><th style="border:1px solid #333;padding:4px;">Amount</th></tr></thead>' +
+                '<tbody>' + itemsHtml + '</tbody>' +
+                '</table>' +
+                '<div style="text-align:right;margin-top:6px;font-size:12px;"><strong>Total: ' + (data.items_total || '0.00') + '</strong></div>' +
+                '</div>' +
+                '<div>' +
+                '<strong>PACKAGE DIMENSIONS</strong>' +
+                '<div style="margin-top:8px;">' + packageHtml + '</div>' +
+                '</div>' +
+                '</div>';
+
+            const container = document.createElement('div');
+            container.innerHTML = labelHtml;
+            const barcode = container.querySelector('[data-label-barcode]');
+            JsBarcode(barcode, data.awb_number || 'N/A', {
+                format: 'CODE128',
+                lineColor: '#000',
+                width: 2,
+                height: 100,
+                displayValue: true,
+                fontSize: 16
+            });
+            barcode.removeAttribute('data-label-barcode');
+
+            return container.firstElementChild.outerHTML;
+        }
+
+        function printSelectedLabelsByInvoiceIds(invoiceIds) {
+            if (!invoiceIds || !invoiceIds.length) {
+                showAlert('warning', 'Please select at least one shipment to print.');
+                return;
+            }
+
+            const selectedData = invoiceIds
+                .map(function (invoiceId) {
+                    return shipmentData[invoiceId];
+                })
+                .filter(Boolean);
+
+            if (!selectedData.length) {
+                showAlert('danger', 'No print data found for the selected shipments.');
+                return;
+            }
+
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            if (!printWindow) {
+                showAlert('danger', 'Popup blocked. Allow popups to print labels.');
+                return;
+            }
+
+            let html = '<!DOCTYPE html><html><head><title>Print Selected Labels</title><style>' +
+                'body{font-family:Arial,sans-serif;padding:18px;color:#000;font-size:12px;} ' +
+                'table{border-collapse:collapse;width:100%;} ' +
+                'th,td{border:1px solid #333;padding:4px;text-align:left;} ' +
+                '@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}' +
+                '</style></head><body>';
+
+            selectedData.forEach(function (data) {
+                html += buildBulkLabelHtml(data);
+            });
+
+            html += '</body></html>';
+            printWindow.document.write(html);
+            printWindow.document.close();
+
+            setTimeout(function () {
+                printWindow.focus();
+                printWindow.print();
+                printWindow.onafterprint = function () {
+                    printWindow.close();
+                };
+            }, 300);
+        }
+
+        // Print Label function (outside document.ready so it's globally accessible)
+        function printLabel() {
+            const modalBody = document.getElementById('printLabelBody');
+            const content = modalBody.cloneNode(true);
+            const printWindow = window.open('', '_blank', 'width=800,height=700');
+            printWindow.document.write('<!DOCTYPE html><html><head><title>Print Label</title>');
+            printWindow.document.write('<style>');
+            printWindow.document.write('body{font-family:Arial,sans-serif;padding:15px;color:#000;font-size:12px;}');
+            printWindow.document.write('table{border-collapse:collapse;width:100%;margin-bottom:8px;}');
+            printWindow.document.write('table th,table td{border:1px solid #333;padding:3px 5px;text-align:left;}');
+            printWindow.document.write('table th{background:#eee;font-weight:bold;}');
+            printWindow.document.write('.text-center{text-align:center;}');
+            printWindow.document.write('.text-end{text-align:right;}');
+            printWindow.document.write('.fw-bold{font-weight:bold;}');
+            printWindow.document.write('.row{display:flex;gap:15px;margin-bottom:10px;}');
+            printWindow.document.write('.col-6{flex:1;border:1px solid #333;padding:8px;}');
+            printWindow.document.write('hr{border:none;border-top:1px dashed #ccc;margin:8px 0;}');
+            printWindow.document.write('svg{max-width:100%;height:auto;}');
+            printWindow.document.write('@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}');
+            printWindow.document.write('</style></head><body>');
+            printWindow.document.write(content.innerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+
+            printWindow.onload = function() {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            };
+
+            if (printWindow.document.readyState === 'complete') {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            }
+        }
+    </script>
+
+</body>
+
+</html>

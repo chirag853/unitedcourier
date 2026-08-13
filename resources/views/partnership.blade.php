@@ -254,7 +254,7 @@
             
 
             <div class="col-lg-8">
-              <div class="accordion" id="logisticsFaq" style="height: 70vh; overflow-y: auto;">
+              <div class="accordion" id="logisticsFaq" >
                 @foreach($faqItems as $faq)
                 <div class="accordion-item">
                     <h2 class="accordion-header">
