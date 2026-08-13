@@ -98,27 +98,6 @@
             padding: 50px;
         }
 
-        .form-label {
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--uwd-text-main);
-            margin-bottom: 8px;
-        }
-
-        .form-control, .form-select {
-            padding: 12px 18px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            font-size: 0.95rem;
-            background-color: #f8fafc;
-        }
-
-        .form-control:focus {
-            background-color: #fff;
-            border-color: var(--uwd-primary);
-            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
-        }
-
         .btn-send {
             background: var(--uwd-primary);
             color: white;
