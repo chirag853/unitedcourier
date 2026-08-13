@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CourierService;
 use App\Models\CreateShipment;
+use App\Models\Destination;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\ShipmentLog;
@@ -261,7 +262,7 @@ class PrimusShipmentService
                 'PackageType' => 'Your Packaging',
                 'MEIS' => $this->yesNo($csb?->scheme),
                 'DutyTax' => 'RECIPIENT',
-                'DutiesAccountNo' => '',
+                'DutyAccountNo' => '',
                 // 'ForwarderService' => '',
                 // 'InsuredValue' => '',
                 'filename' => $invoiceFilename,
@@ -476,28 +477,59 @@ class PrimusShipmentService
 
     private function destinationCode(string $destination): string
     {
-        $normalized = strtoupper(trim($destination));
-        $aliases = [
-            'US' => 'USA',
-            'UNITED STATES' => 'USA',
-            'UNITED STATES OF AMERICA' => 'USA',
-            'UK' => 'GBR',
-            'UNITED KINGDOM' => 'GBR',
-            'CANADA' => 'CAN',
-            'AUSTRALIA' => 'AUS',
-            'UNITED ARAB EMIRATES' => 'ARE',
-            'UAE' => 'ARE',
+        $destination = trim($destination);
+        $normalized = strtoupper($destination);
+
+        // Courier services store a short country code. Resolve it through the
+        // destinations table so Primus always receives the full country name.
+        $record = Destination::query()
+            ->whereRaw('UPPER(code) = ?', [$normalized])
+            ->orWhereRaw('UPPER(country_code) = ?', [$normalized])
+            ->orWhereRaw('UPPER(name) = ?', [$normalized])
+            ->first();
+
+        if ($record) {
+            $name = trim((string) $record->name);
+
+            // Stored labels can be formatted as "US- United States of America".
+            // DestinationCode must contain only the full country name.
+            $name = preg_replace('/^\s*[A-Z]{2,3}\s*[-–:]\s*/i', '', $name) ?? $name;
+
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        $fullNames = [
+            'US' => 'United States of America',
+            'USA' => 'United States of America',
+            'UNITED STATES' => 'United States of America',
+            'UNITED STATES OF AMERICA' => 'United States of America',
+            'UK' => 'United Kingdom',
+            'GB' => 'United Kingdom',
+            'GBR' => 'United Kingdom',
+            'UNITED KINGDOM' => 'United Kingdom',
+            'CA' => 'Canada',
+            'CAN' => 'Canada',
+            'CANADA' => 'Canada',
+            'AU' => 'Australia',
+            'AUS' => 'Australia',
+            'AUSTRALIA' => 'Australia',
+            'AE' => 'United Arab Emirates',
+            'ARE' => 'United Arab Emirates',
+            'UAE' => 'United Arab Emirates',
+            'UNITED ARAB EMIRATES' => 'United Arab Emirates',
         ];
 
-        if (isset($aliases[$normalized])) {
-            return $aliases[$normalized];
+        if (isset($fullNames[$normalized])) {
+            return $fullNames[$normalized];
         }
 
         if (preg_match('/\(([A-Z]{2,3})\)$/', $normalized, $matches) === 1) {
-            return $aliases[$matches[1]] ?? $matches[1];
+            return $fullNames[$matches[1]] ?? $destination;
         }
 
-        return $normalized;
+        return preg_replace('/^\s*[A-Z]{2,3}\s*[-–:]\s*/i', '', $destination) ?: $destination;
     }
 
     private function yesNo(mixed $value): string
