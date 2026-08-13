@@ -263,31 +263,32 @@
                 <div class="contact-form-panel">
                     <div id="contact-form-ui">
                         <h4 class="fw-bold mb-4" style="font-family: 'Outfit', sans-serif;">Send us a message</h4>
-                        <form id="main-contact-form">
+                        <form id="main-contact-form" action="{{ route('contact-us.submit') }}" method="POST">
+                            @csrf
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">First Name</label>
-                                    <input type="text" class="form-control" placeholder="John" required>
+                                    <input type="text" name="first_name" class="form-control" placeholder="John" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Last Name</label>
-                                    <input type="text" class="form-control" placeholder="Doe" required>
+                                    <input type="text" name="last_name" class="form-control" placeholder="Doe" required>
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Email Address</label>
-                                    <input type="email" class="form-control" placeholder="john@company.com" required>
+                                    <input type="email" name="email" class="form-control" placeholder="john@company.com" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Phone Number</label>
-                                    <input type="tel" class="form-control" placeholder="+91 XXXX XXX XXX" required>
+                                    <input type="tel" name="phone" class="form-control" placeholder="+91 XXXX XXX XXX" required>
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Service Required</label>
-                                <select class="form-select">
-                                    <option selected disabled>Select a service</option>
+                                <select name="service" class="form-select" required>
+                                    <option value="" selected disabled>Select a service</option>
                                     <option>International Shipping</option>
                                     <option>E-commerce Fulfillment</option>
                                     <option>Warehousing</option>
@@ -296,8 +297,9 @@
                             </div>
                             <div class="mb-4">
                                 <label class="form-label">Your Message</label>
-                                <textarea class="form-control" rows="4" placeholder="How can we help?"></textarea>
+                                <textarea name="message" class="form-control" rows="4" placeholder="How can we help?" required></textarea>
                             </div>
+                            <div id="contact-form-error" class="alert alert-danger mb-3" style="display: none;"></div>
                             <button type="submit" class="btn-send">Send Message</button>
                         </form>
                     </div>
@@ -325,5 +327,57 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('main-contact-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+
+    const form = this;
+    const button = form.querySelector('button[type="submit"]');
+    const errorBox = document.getElementById('contact-form-error');
+    const originalButtonText = button.innerHTML;
+
+    errorBox.style.display = 'none';
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin me-2"></i>Sending...';
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new FormData(form)
+    })
+    .then(function (response) {
+        return response.json().then(function (data) {
+            return { ok: response.ok, data: data };
+        });
+    })
+    .then(function (result) {
+        if (!result.ok || !result.data.success) {
+            let message = result.data.message || 'Unable to send your message. Please try again.';
+
+            if (result.data.errors) {
+                message = Object.values(result.data.errors).flat().join('<br>');
+            }
+
+            throw new Error(message);
+        }
+
+        form.reset();
+        document.getElementById('contact-form-ui').style.display = 'none';
+        document.getElementById('form-success').style.display = 'block';
+    })
+    .catch(function (error) {
+        errorBox.innerHTML = error.message;
+        errorBox.style.display = 'block';
+    })
+    .finally(function () {
+        button.disabled = false;
+        button.innerHTML = originalButtonText;
+    });
+});
+</script>
 
 @include('website_include.footer')

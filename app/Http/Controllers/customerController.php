@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Customer;
 use App\Models\ExporterCustomer;
@@ -1659,12 +1660,29 @@ class CustomerController extends Controller
                 'aadhar_verified' => false
             ]);
 
+            try {
+                Mail::send('emails.registration-notification', ['customer' => $customer], function ($mail) use ($customer) {
+                    $mail->to(config('mail.support_address'))
+                        ->replyTo($customer->email, trim($customer->first_name . ' ' . $customer->last_name))
+                        ->subject('New Customer Registration - ' . $customer->customer_code);
+                });
+
+                Mail::send('emails.registration-confirmation', ['customer' => $customer], function ($mail) use ($customer) {
+                    $mail->to($customer->email, trim($customer->first_name . ' ' . $customer->last_name))
+                        ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                        ->subject('Welcome to United Worldwide Couriers');
+                });
+            } catch (\Throwable $mailException) {
+                report($mailException);
+                Log::error('Registration email error for customer ' . $customer->id . ': ' . $mailException->getMessage());
+            }
+
             // Clear registration OTP session data after successful registration
             session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Registration successful! Please check your email for verification.',
+                'message' => 'Registration successful! A confirmation email has been sent to your email address.',
                 'redirect' => route('login')
             ], 200);
 

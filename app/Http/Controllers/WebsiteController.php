@@ -25,6 +25,7 @@ use App\Models\HsnFinderPage;
 use App\Models\Faq;
 use App\Models\FactNumberSectionCommonPage;
 use App\Models\BusinessCategory;
+use Illuminate\Support\Facades\Mail;
 
 class WebsiteController extends Controller
 {
@@ -324,6 +325,48 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
         $contactInfo = ContactUsPage::bySection('contact_info')->first();
         
         return view('contact-us', compact('pageMeta', 'contactInfo'));
+    }
+
+    public function submitContactQuery(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'email' => 'required|email|max:255',
+            'phone' => 'required|string|max:20',
+            'service' => 'required|string|max:100',
+            'message' => 'required|string|max:5000',
+        ]);
+
+        try {
+            Mail::send('emails.contact-query', ['contact' => $validated], function ($mail) use ($validated) {
+                $fullName = trim($validated['first_name'] . ' ' . $validated['last_name']);
+
+                $mail->to(config('mail.support_address'))
+                    ->replyTo($validated['email'], $fullName)
+                    ->subject('New Contact Us Query - ' . $validated['service']);
+            });
+
+            Mail::send('emails.contact-confirmation', ['contact' => $validated], function ($mail) use ($validated) {
+                $fullName = trim($validated['first_name'] . ' ' . $validated['last_name']);
+
+                $mail->to($validated['email'], $fullName)
+                    ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                    ->subject('We received your message');
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'The email could not be sent. Please try again shortly.',
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Thank you! A confirmation email has been sent to your email address.',
+        ]);
     }
 
     public function warehousingSolutions(){
@@ -793,24 +836,40 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
      */
     public function submitFaqQuery(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'full_name' => 'required|string|max:255',
             'email'     => 'required|email|max:255',
             'phone'     => 'required|string|max:20',
-            'message'   => 'required|string',
+            'message'   => 'required|string|max:5000',
+            'page_name' => 'nullable|string|max:255',
         ]);
 
-        \App\Models\FaqQuery::create([
-            'full_name' => $request->input('full_name'),
-            'email'     => $request->input('email'),
-            'phone'     => $request->input('phone'),
-            'message'   => $request->input('message'),
-            'page_name' => $request->input('page_name'),
-        ]);
+        $query = \App\Models\FaqQuery::create($validated);
+
+        try {
+            Mail::send('emails.faq-support-query', ['query' => $query], function ($mail) use ($query) {
+                $mail->to(config('mail.support_address'))
+                    ->replyTo($query->email, $query->full_name)
+                    ->subject('New Website Support Query - ' . ($query->page_name ?: 'Website'));
+            });
+
+            Mail::send('emails.faq-support-confirmation', ['query' => $query], function ($mail) use ($query) {
+                $mail->to($query->email, $query->full_name)
+                    ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                    ->subject('We received your support query');
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Your query was saved, but the email could not be sent. Please try again shortly.',
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Thank you! Your query has been submitted. We will get back to you shortly.',
+            'message' => 'Thank you! A confirmation email has been sent to your email address.',
         ]);
     }
 

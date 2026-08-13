@@ -10,6 +10,7 @@ use App\Models\KycDetail;
 use App\Models\KycDraft;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -326,6 +327,8 @@ class KycController extends Controller
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'personal')
                 ->delete();
+
+            $this->sendKycSubmissionConfirmation($customer, $kyc);
 
             return response()->json([
                 'success' => true,
@@ -1479,6 +1482,8 @@ class KycController extends Controller
                 ->where('kyc_type', 'personal')
                 ->delete();
 
+            $this->sendKycSubmissionConfirmation($customer, $kycDetail);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Personal KYC (CSB-IV) submitted successfully! Your application is now under review.',
@@ -1539,6 +1544,26 @@ class KycController extends Controller
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
 
         return view('customer.kyc-summary', compact('customer', 'personalKyc', 'businessKyc', 'userType', 'businessCategory'));
+    }
+
+    private function sendKycSubmissionConfirmation(Customer $customer, KycDetail $kyc): void
+    {
+        try {
+            Mail::send('emails.kyc-submission-confirmation', [
+                'customer' => $customer,
+                'kyc' => $kyc,
+            ], function ($mail) use ($customer) {
+                $mail->to(
+                    $customer->email,
+                    trim($customer->first_name . ' ' . $customer->last_name)
+                )
+                    ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                    ->subject('KYC Application Received - United Worldwide Couriers');
+            });
+        } catch (\Throwable $mailException) {
+            report($mailException);
+            \Log::error('KYC submission email error for customer ' . $customer->id . ': ' . $mailException->getMessage());
+        }
     }
 
     /**

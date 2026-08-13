@@ -72,11 +72,17 @@
             body: formData
         })
         .then(function(response) {
-            return response.json();
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data
+                };
+            });
         })
-        .then(function(data) {
+        .then(function(result) {
+            var data = result.data;
             msgDiv.style.display = 'block';
-            if (data.success) {
+            if (result.ok && data.success) {
                 form.reset();
                 msgDiv.style.color = '#28a745';
                 msgDiv.innerText = data.message;
@@ -95,10 +101,10 @@
                 }
             }
         })
-        .catch(function(error) {
+        .catch(function() {
             msgDiv.style.display = 'block';
             msgDiv.style.color = '#dc3545';
-            msgDiv.innerText = 'Something went wrong. Please try again.';
+            msgDiv.innerText = 'Unable to contact the server. Please try again.';
         })
         .finally(function() {
             button.innerHTML = originalText;

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Admin;
 use App\Models\NetworkOffice;
 use App\Models\ShipmentInvoice;
@@ -2180,6 +2181,7 @@ class AdminController extends Controller
     public function approveKyc($id)
     {
         $kycDetail = \App\Models\KycDetail::findOrFail($id);
+        $previousStatus = $kycDetail->kyc_status;
 
         $ratesCount = DB::transaction(function () use ($kycDetail) {
             $kycDetail->kyc_status = 'approved';
@@ -2234,6 +2236,27 @@ class AdminController extends Controller
 
             return $copiedRates;
         });
+
+        if ($previousStatus !== 'approved') {
+            try {
+                $customer = Customer::findOrFail($kycDetail->customer_id);
+
+                Mail::send('emails.kyc-approval', [
+                    'customer' => $customer,
+                    'kyc' => $kycDetail->fresh(),
+                ], function ($mail) use ($customer) {
+                    $mail->to(
+                        $customer->email,
+                        trim($customer->first_name . ' ' . $customer->last_name)
+                    )
+                        ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                        ->subject('Your KYC Has Been Approved - United Worldwide Couriers');
+                });
+            } catch (\Throwable $mailException) {
+                report($mailException);
+                \Log::error('KYC approval email error for customer ' . $kycDetail->customer_id . ': ' . $mailException->getMessage());
+            }
+        }
 
         return redirect()->route('admin.kyc-pending')
             ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been approved successfully. Shipment creation enabled, wallet created with ₹0 balance, and ' . $ratesCount . ' courier rates assigned.');

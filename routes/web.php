@@ -15,6 +15,7 @@ Route::get('/service', [WebsiteController::class, 'service'])->name('service');
 Route::get('/services', [WebsiteController::class, 'service'])->name('services');
 Route::get('/network', [WebsiteController::class, 'network'])->name('network');
 Route::get('/contact-us', [WebsiteController::class, 'contactUs'])->name('contact-us');
+Route::post('/contact-us', [WebsiteController::class, 'submitContactQuery'])->name('contact-us.submit');
 Route::get('/volumetric-calculator', [WebsiteController::class, 'volumetricCalculator'])->name('volumetric-calculator');
 Route::get('/terms-and-conditions', [WebsiteController::class, 'termsAndConditions'])->name('terms-and-conditions');
 Route::get('/privacy-policy', [WebsiteController::class, 'privacyPolicy'])->name('privacy-policy');
