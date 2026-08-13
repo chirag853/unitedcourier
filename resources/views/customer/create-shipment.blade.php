@@ -3719,14 +3719,6 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">City <span
-                                                                        class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control"
-                                                                    name="consignee_city" id="consignee_city" value="{{ old('consignee_city') }}" placeholder="City">
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-4">
-                                                            <div class="mb-3">
                                                                 <label class="form-label">State </label>
                                                                 <select class="form-select" name="consignee_state">
                                                                     <option value="">-- Select State --</option>
@@ -3736,6 +3728,14 @@
                                                                         </option>
                                                                     @endforeach
                                                                 </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">City <span
+                                                                        class="text-danger">*</span></label>
+                                                                <input type="text" class="form-control"
+                                                                    name="consignee_city" id="consignee_city" value="{{ old('consignee_city') }}" placeholder="City">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -11273,16 +11273,37 @@ if (rateRadio && rateRadio.dataset.rate) {
             const configuredCode = opt && opt.dataset.countryCode
                 ? opt.dataset.countryCode.trim().toUpperCase()
                 : '';
+            const destinationCode = getDestinationCode().trim().toUpperCase();
 
-            // Some destination records may identify the UAE as Dubai or use
-            // a non-standard country code. Normalize those values to ISO AE.
-            if (configuredCode === 'AE' || configuredCode === 'UAE' || configuredCode === 'ARE'
-                || /dubai|united arab emirates|uae/i.test(name)) {
-                return 'ae';
+            // Zippopotam requires ISO-2 codes. Prefer the destination record's
+            // configured country code instead of deriving two letters from its
+            // name ("Germany" previously became the invalid code "GE").
+            const isoCodeMap = {
+                'AUS': 'AU', 'USA': 'US', 'GBR': 'GB', 'UK': 'GB', 'CAN': 'CA',
+                'DEU': 'DE', 'GER': 'DE', 'ARE': 'AE', 'UAE': 'AE', 'NZL': 'NZ',
+                'SGP': 'SG', 'MYS': 'MY', 'IND': 'IN'
+            };
+            let code = configuredCode || destinationCode;
+            if (isoCodeMap[code]) code = isoCodeMap[code];
+            if (/^[A-Z]{2}$/.test(code)) return code.toLowerCase();
+
+            // Handle destination names when database codes are unavailable.
+            // Keep Canada explicit because some destination rows store its
+            // country_code as a name or a non-ISO value.
+            const countryByName = {
+                'germany': 'de', 'united kingdom': 'gb', 'great britain': 'gb',
+                'canada': 'ca', 'canadian': 'ca', 'australia': 'au', 'new zealand': 'nz',
+                'united states': 'us', 'usa': 'us', 'dubai': 'ae',
+                'united arab emirates': 'ae', 'singapore': 'sg', 'malaysia': 'my'
+            };
+            const normalizedName = name.toLowerCase();
+            for (const countryName in countryByName) {
+                if (normalizedName.indexOf(countryName) !== -1) {
+                    return countryByName[countryName];
+                }
             }
 
-            // Fallback: derive from the name (e.g. "US- United State of America" → "us")
-            const match = name.match(/^([A-Za-z]{2})/);
+            const match = name.match(/^([A-Za-z]{2})(?:\s*[-–:]|$)/);
             return match ? match[1].toLowerCase() : 'us';
         }
 
@@ -11291,11 +11312,18 @@ if (rateRadio && rateRadio.dataset.rate) {
                    getDestinationName().toUpperCase().indexOf('UK') === 0;
         }
 
+        function isCanadaDestination() {
+            const code = getCountryCode().toUpperCase();
+            const name = getDestinationName().toLowerCase();
+            return code === 'CA' || getDestinationCode().toUpperCase() === 'CA' ||
+                   name.indexOf('canada') !== -1 || name.indexOf('canadian') !== -1;
+        }
+
         // ---------------------------------------------------------------
         // Populate the consignee_state dropdown with the given zones.
         // ---------------------------------------------------------------
         function populateStateDropdown(zones) {
-            if (!stateSelect) return;
+            if (!stateSelect || stateSelect.dataset.autofilled === 'true') return;
             stateSelect.innerHTML = '';
             const placeholder = document.createElement('option');
             placeholder.value = '';
@@ -11323,6 +11351,48 @@ if (rateRadio && rateRadio.dataset.rate) {
             stateSelect.appendChild(placeholder);
             stateSelect.value = '';
             stateSelect.disabled = true;
+            removeAutoStateInput();
+        }
+
+        // A disabled select is not submitted by the browser. Keep the state
+        // returned by Zippopotam in a hidden field while locking the visible
+        // dropdown, so shipment creation and rate calculation still receive it.
+        function removeAutoStateInput() {
+            const existing = document.getElementById('consignee_state_api_value');
+            if (existing) existing.remove();
+        }
+
+        function lockStateFromApi(place) {
+            if (!stateSelect || !place) return;
+
+            const stateName = (place.state || '').trim();
+            const stateAbbr = (place['state abbreviation'] || '').trim();
+            const stateValue = stateName || stateAbbr;
+            if (!stateValue) return;
+
+            stateSelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = stateValue;
+            option.textContent = stateName && stateAbbr
+                ? stateName + ' (' + stateAbbr + ')'
+                : stateValue;
+            option.selected = true;
+            stateSelect.appendChild(option);
+            stateSelect.disabled = true;
+            stateSelect.dataset.autofilled = 'true';
+
+            removeAutoStateInput();
+            const hiddenState = document.createElement('input');
+            hiddenState.type = 'hidden';
+            hiddenState.id = 'consignee_state_api_value';
+            hiddenState.name = 'consignee_state';
+            hiddenState.value = stateValue;
+            stateSelect.insertAdjacentElement('afterend', hiddenState);
+
+            stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            if (typeof $ !== 'undefined' && $(stateSelect).hasClass('select2-hidden-accessible')) {
+                $(stateSelect).trigger('change');
+            }
         }
 
         // ---------------------------------------------------------------
@@ -11408,6 +11478,9 @@ if (rateRadio && rateRadio.dataset.rate) {
             stateSelect.disabled = false;
 
             function renderStates(states) {
+                // A slower states-list response must not overwrite the state
+                // already resolved and locked by the ZIP lookup.
+                if (stateSelect.dataset.autofilled === 'true') return;
                 stateSelect.innerHTML = '';
                 const placeholder = document.createElement('option');
                 placeholder.value = '';
@@ -11514,7 +11587,10 @@ if (rateRadio && rateRadio.dataset.rate) {
         // ---------------------------------------------------------------
         function resetConsigneeLocationFields() {
             clearZipFields();
+            removeAutoStateInput();
             if (stateSelect) {
+                delete stateSelect.dataset.autofilled;
+                stateSelect.disabled = false;
                 stateSelect.value = '';
                 if (typeof $ !== 'undefined' && $(stateSelect).hasClass('select2-hidden-accessible')) {
                     $(stateSelect).trigger('change');
@@ -11588,6 +11664,9 @@ if (rateRadio && rateRadio.dataset.rate) {
             if (zipInput) {
                 zipInput.value = z.zone_code;
                 zipInput.dataset.autofilled = 'true';
+                // Fire both events because the lookup must also run when the
+                // user selects a ZIP from the suggestions dropdown.
+                zipInput.dispatchEvent(new Event('input', { bubbles: true }));
                 zipInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
             if (cityInput) {
@@ -11833,27 +11912,33 @@ if (rateRadio && rateRadio.dataset.rate) {
         }
 
         function lookupZippopotam(zip) {
-            const countryCode = getCountryCode();
-            const url = 'https://api.zippopotam.us/' + countryCode + '/' + zip;
+            // The selected destination supplies the ISO-2 API country segment
+            // (for example Germany => DE), producing /DE/99998 for ZIP 99998.
+            const countryCode = isCanadaDestination() ? 'CA' : getCountryCode().toUpperCase();
+            if (!/^[A-Z]{2}$/.test(countryCode)) {
+                console.log('ZIP auto-fill error: invalid destination country code');
+                return;
+            }
+            const requestedDestination = destSelect.value;
+            const requestedZip = zip;
+            // Zippopotam accepts Canadian postal codes without the optional
+            // space, e.g. M5V 3A8 becomes /CA/M5V3A8.
+            const apiZip = countryCode === 'CA' ? zip.replace(/\s+/g, '') : zip;
+            const url = 'https://api.zippopotam.us/' + encodeURIComponent(countryCode) + '/' + encodeURIComponent(apiZip);
             fetch(url)
                 .then(function(r) { if (!r.ok) throw new Error('ZIP lookup failed'); return r.json(); })
                 .then(function(data) {
-                    if (data.places && data.places.length > 0 && cityInput) {
-                        cityInput.value = data.places[0]['place name'] || '';
+                    // Ignore an old response if destination/ZIP changed meanwhile.
+                    if (destSelect.value !== requestedDestination || !zipInput || zipInput.value.trim().toUpperCase() !== requestedZip.toUpperCase()) return;
+                    if (!data.places || data.places.length === 0) return;
+
+                    const place = data.places[0];
+                    if (cityInput) {
+                        cityInput.value = place['place name'] || '';
                         cityInput.dataset.autofilled = 'true';
                         cityInput.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                    if (data.places && data.places.length > 0 && stateSelect) {
-                        const stateAbbr = data.places[0]['state abbreviation'] || '';
-                        const options = stateSelect.options;
-                        for (let i = 0; i < options.length; i++) {
-                            if (options[i].value === stateAbbr) {
-                                stateSelect.value = stateAbbr;
-                                stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                                break;
-                            }
-                        }
-                    }
+                    lockStateFromApi(place);
                 })
                 .catch(function(err) { console.log('ZIP auto-fill error:', err.message); });
         }
@@ -11861,27 +11946,66 @@ if (rateRadio && rateRadio.dataset.rate) {
         if (zipInput) {
             zipInput.addEventListener('input', function() {
                 const zip = zipInput.value.trim();
-
-                // Zipcode-category destinations → show zone-table suggestions.
-                if (currentCategory === 'zipcode') {
-                    debounce(function() { showZipSuggestions(zip); }, 200);
-                    return;
-                }
-
-                // State-category destinations → external API auto-fill (legacy).
                 const uk = isUkDestination();
-                const minLen = uk ? 2 : 5;
+                const canada = isCanadaDestination();
+                // Canadian database suggestions are FSA prefixes such as V1M
+                // (3 characters), and Zippopotam supports /CA/V1M directly.
+                const minLen = uk ? 2 : (canada ? 3 : 5);
+
                 if (zip.length < minLen) {
+                    removeAutoStateInput();
+                    if (stateSelect && stateSelect.dataset.autofilled === 'true') {
+                        delete stateSelect.dataset.autofilled;
+                        stateSelect.disabled = false;
+                    }
                     if (cityInput && cityInput.dataset.autofilled === 'true') {
                         cityInput.value = '';
                         cityInput.dataset.autofilled = 'false';
                     }
-                    return;
                 }
-                debounce(function() {
+
+                // Keep database ZIP suggestions, but also resolve every complete
+                // ZIP through the destination-specific postcode API.
+                if (currentCategory === 'zipcode') {
+                    showZipSuggestions(zip);
+                }
+
+                if (zip.length < minLen) return;
+
+                // Hit the API immediately as soon as a complete ZIP is entered.
+                // No debounce delay is used, so typing/pasting the fifth digit
+                // (for example 99998) immediately requests /DE/99998.
+                clearTimeout(debounceTimer);
+                if (uk) lookupUkPostcode(zip);
+                else lookupZippopotam(zip);
+            });
+
+            // ZIP suggestions set the value programmatically and dispatch
+            // `change`, not `input`; perform the lookup in that case as well.
+            zipInput.addEventListener('change', function() {
+                const zip = zipInput.value.trim();
+                const uk = isUkDestination();
+                const canada = isCanadaDestination();
+                const minLen = uk ? 2 : (canada ? 3 : 5);
+                if (zip.length < minLen) return;
+                clearTimeout(debounceTimer);
+                if (uk) lookupUkPostcode(zip);
+                else lookupZippopotam(zip);
+            });
+
+            // Some dropdown implementations update the ZIP input without
+            // firing native input/change events. Capture the selection itself
+            // at mousedown/click level and trigger the lookup from the value.
+            zipInput.addEventListener('click', function() {
+                const zip = zipInput.value.trim();
+                const uk = isUkDestination();
+                const canada = isCanadaDestination();
+                const minLen = uk ? 2 : (canada ? 3 : 5);
+                if (zip.length >= minLen) {
+                    clearTimeout(debounceTimer);
                     if (uk) lookupUkPostcode(zip);
                     else lookupZippopotam(zip);
-                }, 500);
+                }
             });
 
             zipInput.addEventListener('focus', function() {
