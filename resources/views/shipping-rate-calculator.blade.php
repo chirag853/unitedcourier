@@ -223,91 +223,93 @@
                 <h3 class="h4-title">Calculate Your <span class="gradient-text">Shipping Rate</span></h3>
              </div>
             
-              <form>
+              <form id="shippingRateForm">
 
-    <!-- Pickup & Destination -->
+    <!-- Destination, location and postal code -->
     <div class="row g-4 mb-4">
-
         <div class="col-md-6">
-            <label class="form-label fw-bold">
-                <i class="fa-solid fa-location-dot me-2"></i>
-                Pickup Pincode
-            </label>
-
-            <div class="input-group-custom">
-                <input type="number" class="form-control input-custom" placeholder="e.g. 110001">
-            </div>
-
-            <small class="text-primary mt-2 d-block">
-                <i class="fa-regular fa-circle-check"></i>
-                Pickup available across PAN India
-            </small>
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label fw-bold">
+            <label for="destinationCountry" class="form-label fw-bold">
                 <i class="fa-solid fa-earth-asia me-2"></i>
                 Destination Country
             </label>
-
             <div class="input-group-custom">
-                 <select class="form-select input-custom">
-                                        <option selected disabled>Destination</option>
-                                        @foreach ($countries as $country)
-                                            <option value="{{ $country->code }}">{{ $country->name }}</option>
-                                        @endforeach
-                                    </select>
-
-                {{-- <i class="fa-solid fa-chevron-down"></i> --}}
+                <select id="destinationCountry" name="destination_id" class="form-select input-custom" required>
+                    <option value="" selected>Select destination</option>
+                    @foreach ($countries as $country)
+                        <option value="{{ $country->id }}">{{ $country->name }}</option>
+                    @endforeach
+                </select>
             </div>
         </div>
 
-    </div>
+        <div class="col-md-6">
+            <label for="destinationLocation" class="form-label fw-bold">
+                <i class="fa-solid fa-location-dot me-2"></i>
+                State / City
+            </label>
+            <div class="input-group-custom">
+                <select id="destinationLocation" name="location" class="form-select input-custom" disabled>
+                    <option value="">Select destination first</option>
+                </select>
+                <input type="text" id="destinationLocationText" name="location" class="form-control input-custom d-none"
+                    placeholder="Enter state or city" maxlength="100" disabled>
+            </div>
+            <small id="locationHelp" class="text-muted mt-2 d-block">Configured states and cities will appear as a dropdown; otherwise you can type the location.</small>
+        </div>
 
-    <!-- Weight -->
-    <div class="row mb-4">
-        <div class="col-md-12">
+        <div class="col-md-6">
+            <label for="destinationZipcode" class="form-label fw-bold">
+                <i class="fa-solid fa-map-pin me-2"></i>
+                ZIP / Postal Code
+            </label>
+            <div class="input-group-custom">
+                <select id="destinationZipcodeSelect" name="zipcode" class="form-select input-custom d-none" disabled>
+                    <option value="">Select ZIP / postal code</option>
+                </select>
+                <input type="text" id="destinationZipcode" name="zipcode" class="form-control input-custom"
+                    placeholder="Enter ZIP or postal code" maxlength="20" required disabled>
+            </div>
+            <small id="zipcodeHelp" class="text-muted mt-2 d-block">Configured ZIP/postal codes will appear as a dropdown; otherwise you can type one.</small>
+        </div>
 
-            <label class="form-label fw-bold">
+        <div class="col-md-6">
+            <label for="shipmentWeight" class="form-label fw-bold">
                 <i class="fa-solid fa-scale-balanced me-2"></i>
                 Shipment Weight
             </label>
-
             <div class="input-group-custom">
-                <input type="number" id="shipmentWeight" class="form-control input-custom" placeholder="Enter weight in kg">
-
-                <span style="padding: 14px 20px; border-left:1px solid #ddd;">
-                    kg
-                </span>
+                <input type="number" id="shipmentWeight" name="weight" class="form-control input-custom"
+                    placeholder="Enter weight in kg" min="0.001" max="10000" step="0.001" required>
+                <span style="padding: 14px 20px; border-left:1px solid #ddd;">kg</span>
             </div>
-
-            <!-- Weight Chips -->
-            <div class="mt-3 d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.1">0.1 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.25">0.25 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.5">0.5 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="1">1 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="2">2 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="5">5 kg</button>
-                <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="10">10 kg</button>
-            </div>
-
         </div>
     </div>
+
+    <div class="mb-4 d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.1">0.1 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.25">0.25 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="0.5">0.5 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="1">1 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="2">2 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="5">5 kg</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill weight-chip" data-weight="10">10 kg</button>
+    </div>
+
+    <div id="rateFormError" class="alert alert-danger d-none" role="alert"></div>
 
     <hr>
 
     <!-- Buttons -->
     <div class="d-flex flex-wrap gap-3 mt-4">
 
-        <button type="button" id="getRateBtn"
+        <button type="submit" id="getRateBtn"
             style="width: 320px;"
             class="btn moving-gradient-bg btn-primary-custom">
             <i class="fa-solid fa-arrow-right me-2"></i>
             Get Shipping Rate
         </button>
 
-        <button type="button"
+        <button type="reset" id="resetRateBtn"
             style="width: 150px; color: #525252; border: 1px solid #d7d7d7;"
             class="btn btn-primary-custom">
             <i class="fa-solid fa-rotate-left me-2"></i>
@@ -322,24 +324,17 @@
         </div>
 
 
-        <div class="col-md-4" id="resultBox" color: white;">
+        <div class="col-md-4" id="resultBox" style="color: white;">
             <div>
-                <h5>VOLUMETRIC WEIGHT</h5>
-                <h1 id="finalWeight">INR 2450</h1>
-                <hr syle="color=#fff">
-                <p id="divisorText">Divisor 5000 used (standard air freight).</p>
-
-                <div>
-                    <p>Volume (L × W × H) : 30 cm <span id="volume"></span></p>
-                    <p>Divisor used: 15 cm <span id="divisorUsed"></span></p>
-                    <p>Volumetric Weight: <span id="volWeight">2 kg</span></p>
-                </div>
-
+                <h5>HOW RATES ARE MATCHED</h5>
+                <h2 class="mt-3">Destination-specific pricing</h2>
+                <hr style="color: #fff;">
+                <p>Select the destination first, then choose an available state or city and enter the ZIP/postal code.</p>
                 <div class="mt-4">
-                    <h6>Medium Package</h6>
-                    <p>Mid-size package — check actual weight; carriers charge the higher of the two.</p>
+                    <p><i class="fa-solid fa-circle-check me-2"></i>ZIP-specific rate is checked first</p>
+                    <p><i class="fa-solid fa-circle-check me-2"></i>State/city rate is used as fallback</p>
+                    <p><i class="fa-solid fa-circle-check me-2"></i>Only matching weight ranges are shown</p>
                 </div>
-
             </div>
         </div>
 
@@ -351,87 +346,19 @@
 
 
 
-<!-- Default Rates Table (weight-wise) -->
+<!-- Destination-filtered rate results -->
 <section class="py-5 d-none" id="defaultRatesSection" style="background: #f8fafc;">
     <div class="container">
         <div class="row justify-content-center mb-4">
             <div class="col-lg-8 text-center">
-                <h2 class="about-title">Default <span class="gradient-text">Shipping Rates</span></h2>
-                <p class="about-desc text-center" id="ratesSubtitle">
-                    Transparent pricing based on shipment weight and destination zone. These are our standard default rates.
-                </p>
+                <h2 class="about-title">Available <span class="gradient-text">Shipping Rates</span></h2>
+                <p class="about-desc text-center" id="ratesSubtitle">Rates matching your destination, location, ZIP code and weight.</p>
             </div>
         </div>
-
-        @if($defaultRates->isNotEmpty())
-            @foreach($defaultRates as $serviceId => $rates)
-                @php
-                    $service = $rates->first()->service;
-                    $serviceName = $service ? ($service->real_name ?? $service->method ?? $service->network ?? 'Service #' . $serviceId) : 'Service #' . $serviceId;
-                    $zones = $rates->pluck('zone_no')->unique()->sort()->values();
-                @endphp
-
-                <div class="card mb-4 shadow-sm border-0" style="border-radius: 16px; overflow: hidden;">
-                    <!-- <div class="card-header py-3" style="background: linear-gradient(135deg, #1e293b, #334155); color: #fff; border: none;"> -->
-                    <div class="card-header py-3" style="background: linear-gradient(to right, #2563eb, #9333ea); color: #fff; border: none;">
-                        <h5 class="mb-0 fw-bold">
-                            <i class="fa-solid fa-truck-fast me-2"></i>{{ $serviceName }}
-                        </h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead style="background: #f1f5f9;">
-                                    <tr>
-                                        <th style="min-width: 180px;">Weight Range (kg)</th>
-                                        @foreach($zones as $zone)
-                                            <th class="text-center">Zone {{ $zone }}</th>
-                                        @endforeach
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @php
-                                        $weightRanges = $rates->groupBy(function($r) {
-                                            return $r->wt_range_start . '-' . $r->wt_range_end;
-                                        })->sortKeys();
-                                    @endphp
-                                    @foreach($weightRanges as $rangeKey => $rangeRates)
-                                        @php
-                                            $start = $rangeRates->first()->wt_range_start;
-                                            $end = $rangeRates->first()->wt_range_end;
-                                            $zoneMap = $rangeRates->keyBy('zone_no');
-                                        @endphp
-                                        <tr data-wt-start="{{ $start }}" data-wt-end="{{ $end }}">
-                                            <td class="fw-semibold">
-                                                {{ number_format((float)$start, 3) }} — {{ number_format((float)$end, 3) }}
-                                            </td>
-                                            @foreach($zones as $zone)
-                                                <td class="text-center">
-                                                    @if(isset($zoneMap[$zone]))
-                                                        <span class="fw-bold text-dark">₹ {{ number_format((float)$zoneMap[$zone]->price, 2) }}</span>
-                                                    @else
-                                                        <span class="text-muted">—</span>
-                                                    @endif
-                                                </td>
-                                            @endforeach
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            @endforeach
-        @else
-            <div class="text-center py-5">
-                <i class="fa-solid fa-box-open fa-3x text-muted mb-3"></i>
-                <p class="text-muted">No default rates available at the moment. Please check back later.</p>
-            </div>
-        @endif
-
+        <div class="row g-4 justify-content-center" id="rateResults"></div>
         <div class="text-center py-5 d-none" id="noRateMatch">
             <i class="fa-solid fa-magnifying-glass fa-3x text-muted mb-3"></i>
-            <p class="text-muted">No rates found for the entered weight. Please try a different weight.</p>
+            <p class="text-muted mb-0" id="noRateMessage">No matching shipping rate is available.</p>
         </div>
     </div>
 </section>
@@ -821,94 +748,214 @@
   <!-- MOUSE HOVER GREDIENT EFFECT ON MISSION AND VISSION SCRIPS -->
 
     <script>
-        // ============================================================
-        // Shipping Rate Calculator — show default rates by weight
-        // ============================================================
         (function () {
-            const getRateBtn = document.getElementById('getRateBtn');
+            const form = document.getElementById('shippingRateForm');
+            const destination = document.getElementById('destinationCountry');
+            const location = document.getElementById('destinationLocation');
+            const locationText = document.getElementById('destinationLocationText');
+            const zipcode = document.getElementById('destinationZipcode');
+            const zipcodeSelect = document.getElementById('destinationZipcodeSelect');
             const weightInput = document.getElementById('shipmentWeight');
+            const getRateBtn = document.getElementById('getRateBtn');
             const ratesSection = document.getElementById('defaultRatesSection');
+            const results = document.getElementById('rateResults');
             const subtitle = document.getElementById('ratesSubtitle');
             const noMatchBox = document.getElementById('noRateMatch');
+            const noRateMessage = document.getElementById('noRateMessage');
+            const errorBox = document.getElementById('rateFormError');
+            const locationHelp = document.getElementById('locationHelp');
+            const zipcodeHelp = document.getElementById('zipcodeHelp');
             const weightChips = document.querySelectorAll('.weight-chip');
+            const locationsUrl = @json(route('shipping-rate-calculator.locations'));
+            const ratesUrl = @json(route('shipping-rate-calculator.rates'));
+            const csrfToken = @json(csrf_token());
 
-            // Weight chips fill the input
+            function escapeHtml(value) {
+                const element = document.createElement('div');
+                element.textContent = value == null ? '' : String(value);
+                return element.innerHTML;
+            }
+
+            function showError(message) {
+                errorBox.textContent = message;
+                errorBox.classList.remove('d-none');
+            }
+
+            function clearError() {
+                errorBox.textContent = '';
+                errorBox.classList.add('d-none');
+            }
+
             weightChips.forEach(function (chip) {
                 chip.addEventListener('click', function () {
-                    weightInput.value = chip.getAttribute('data-weight');
-                    weightChips.forEach(function (c) { c.classList.remove('active', 'btn-secondary'); });
+                    weightInput.value = chip.dataset.weight;
+                    weightChips.forEach(function (item) { item.classList.remove('active', 'btn-secondary'); });
                     chip.classList.add('active', 'btn-secondary');
                 });
             });
 
-            function filterRatesByWeight() {
-                const weight = parseFloat(weightInput.value);
+            destination.addEventListener('change', async function () {
+                clearError();
+                location.disabled = true;
+                locationText.disabled = true;
+                zipcode.disabled = true;
+                zipcodeSelect.disabled = true;
+                location.classList.remove('d-none');
+                locationText.classList.add('d-none');
+                zipcode.classList.remove('d-none');
+                zipcodeSelect.classList.add('d-none');
+                location.innerHTML = '<option value="">Loading locations...</option>';
+                zipcode.value = '';
+                ratesSection.classList.add('d-none');
 
-                if (isNaN(weight) || weight <= 0) {
-                    alert('Please enter a valid shipment weight.');
-                    weightInput.focus();
+                if (!destination.value) {
+                    location.innerHTML = '<option value="">Select destination first</option>';
                     return;
                 }
 
-                // Show the section
-                ratesSection.classList.remove('d-none');
-
-                let matchedAny = false;
-                const cards = ratesSection.querySelectorAll('.card');
-
-                cards.forEach(function (card) {
-                    const rows = card.querySelectorAll('tbody tr');
-                    let matchedInCard = false;
-
-                    rows.forEach(function (row) {
-                        const start = parseFloat(row.getAttribute('data-wt-start'));
-                        const end = parseFloat(row.getAttribute('data-wt-end'));
-
-                        // A weight matches a range if start <= weight <= end
-                        const isMatch = weight >= start && weight <= end;
-                        row.style.display = isMatch ? '' : 'none';
-                        if (isMatch) {
-                            matchedInCard = true;
-                            matchedAny = true;
-                        }
+                try {
+                    const response = await fetch(locationsUrl + '?destination_id=' + encodeURIComponent(destination.value), {
+                        headers: { 'Accept': 'application/json' }
                     });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.message || 'Unable to load locations.');
 
-                    // Hide the entire card if no row matched in it
-                    card.style.display = matchedInCard ? '' : 'none';
-                });
+                    if (data.locations.length) {
+                        location.innerHTML = '<option value="">Select state / city</option>';
+                        data.locations.forEach(function (item) {
+                            const option = document.createElement('option');
+                            option.value = item.value;
+                            option.textContent = item.label + ' (' + item.category.charAt(0).toUpperCase() + item.category.slice(1) + ')';
+                            location.appendChild(option);
+                        });
+                        location.disabled = false;
+                        location.classList.remove('d-none');
+                        locationText.classList.add('d-none');
+                        locationHelp.textContent = 'Select the applicable state or city from the configured list.';
+                    } else {
+                        location.classList.add('d-none');
+                        locationText.classList.remove('d-none');
+                        locationText.disabled = false;
+                        locationText.value = '';
+                        locationHelp.textContent = 'No state/city list is configured. Type the state or city.';
+                    }
 
-                // Show / hide the "no match" message
-                if (matchedAny) {
-                    noMatchBox.classList.add('d-none');
-                    if (subtitle) {
-                        subtitle.textContent =
-                            'Showing default rates for shipment weight ' + weight + ' kg.';
+                    if (data.zipcodes && data.zipcodes.length) {
+                        zipcodeSelect.innerHTML = '<option value="">Select ZIP / postal code</option>';
+                        data.zipcodes.forEach(function (item) {
+                            const option = document.createElement('option');
+                            option.value = item.value;
+                            option.textContent = item.label;
+                            zipcodeSelect.appendChild(option);
+                        });
+                        zipcode.classList.add('d-none');
+                        zipcode.required = false;
+                        zipcodeSelect.classList.remove('d-none');
+                        zipcodeSelect.disabled = false;
+                        zipcodeSelect.required = true;
+                        zipcodeHelp.textContent = 'Select a configured ZIP/postal code.';
+                        zipcodeSelect.focus();
+                    } else {
+                        zipcodeSelect.classList.add('d-none');
+                        zipcodeSelect.required = false;
+                        zipcode.classList.remove('d-none');
+                        zipcode.disabled = false;
+                        zipcode.required = true;
+                        zipcodeHelp.textContent = 'No ZIP/postal-code list is configured. Type the ZIP/postal code.';
+                        zipcode.focus();
                     }
-                } else {
-                    noMatchBox.classList.remove('d-none');
-                    if (subtitle) {
-                        subtitle.textContent =
-                            'No default rate found for ' + weight + ' kg. Please try a different weight.';
-                    }
+                } catch (error) {
+                    location.innerHTML = '<option value="">Locations unavailable</option>';
+                    showError(error.message);
                 }
+            });
 
-                // Smooth scroll to the rates section
-                ratesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                clearError();
 
-            if (getRateBtn) {
-                getRateBtn.addEventListener('click', filterRatesByWeight);
-            }
+                if (!form.reportValidity()) return;
 
-            // Allow pressing Enter in the weight field to trigger the search
-            if (weightInput) {
-                weightInput.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        filterRatesByWeight();
+                getRateBtn.disabled = true;
+                getRateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Rates...';
+                results.innerHTML = '';
+                noMatchBox.classList.add('d-none');
+
+                try {
+                    const response = await fetch(ratesUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            destination_id: destination.value,
+                            location: locationText.classList.contains('d-none') ? location.value : locationText.value.trim(),
+                            zipcode: zipcodeSelect.classList.contains('d-none') ? zipcode.value.trim() : zipcodeSelect.value,
+                            weight: weightInput.value
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        const validationMessage = data.errors
+                            ? Object.values(data.errors).flat()[0]
+                            : data.message;
+                        throw new Error(validationMessage || 'Unable to calculate rates.');
                     }
-                });
-            }
+
+                    ratesSection.classList.remove('d-none');
+                    const matched = data.matched_location
+                        ? ' Matched by ' + data.matched_location.category + ': ' + data.matched_location.name + '.'
+                        : '';
+                    subtitle.textContent = 'Rates for ' + weightInput.value + ' kg.' + matched;
+
+                    if (!data.rates.length) {
+                        noRateMessage.textContent = data.message || 'No matching shipping rate is available.';
+                        noMatchBox.classList.remove('d-none');
+                    } else {
+                        results.innerHTML = data.rates.map(function (rate) {
+                            const tat = rate.tat ? '<p class="text-muted mb-2"><i class="fa-regular fa-clock me-2"></i>' + escapeHtml(rate.tat) + '</p>' : '';
+                            return '<div class="col-md-6 col-lg-4">' +
+                                '<div class="card h-100 shadow-sm border-0" style="border-radius:16px;overflow:hidden">' +
+                                '<div class="card-header py-3 text-white" style="background:linear-gradient(to right,#2563eb,#9333ea)">' +
+                                '<h5 class="mb-0"><i class="fa-solid fa-truck-fast me-2"></i>' + escapeHtml(rate.method) + '</h5></div>' +
+                                '<div class="card-body p-4">' + tat +
+                                '<p class="mb-2">Weight: <strong>' + escapeHtml(weightInput.value) + ' kg</strong></p>'+
+                                '<strong>Base Rate - INR ' + Number(rate.price).toFixed(2) + '</strong>' +
+                                '</div></div></div>';
+                        }).join('');
+                    }
+                    ratesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch (error) {
+                    showError(error.message);
+                } finally {
+                    getRateBtn.disabled = false;
+                    getRateBtn.innerHTML = '<i class="fa-solid fa-arrow-right me-2"></i>Get Shipping Rate';
+                }
+            });
+
+            form.addEventListener('reset', function () {
+                setTimeout(function () {
+                    location.disabled = true;
+                    locationText.disabled = true;
+                    zipcode.disabled = true;
+                    zipcodeSelect.disabled = true;
+                    location.classList.remove('d-none');
+                    locationText.classList.add('d-none');
+                    zipcode.classList.remove('d-none');
+                    zipcodeSelect.classList.add('d-none');
+                    zipcode.required = true;
+                    zipcodeSelect.required = false;
+                    location.innerHTML = '<option value="">Select destination first</option>';
+                    locationHelp.textContent = 'Configured states and cities will appear as a dropdown; otherwise you can type the location.';
+                    zipcodeHelp.textContent = 'Configured ZIP/postal codes will appear as a dropdown; otherwise you can type one.';
+                    ratesSection.classList.add('d-none');
+                    results.innerHTML = '';
+                    clearError();
+                    weightChips.forEach(function (item) { item.classList.remove('active', 'btn-secondary'); });
+                }, 0);
+            });
         })();
     </script>
 

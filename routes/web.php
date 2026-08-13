@@ -35,6 +35,8 @@ Route::get('/partnership', [WebsiteController::class, 'partner'])->name('partner
 Route::get('/document-download', [WebsiteController::class, 'documentDownload'])->name('document-download');
 Route::get('/barcode-generator', [WebsiteController::class, 'barcodeGenerator'])->name('barcode-generator');
 Route::get('/shipping-rate-calculator', [WebsiteController::class, 'shippingRateCalculator'])->name('shipping-rate-calculator');
+Route::get('/shipping-rate-calculator/locations', [WebsiteController::class, 'shippingRateLocations'])->name('shipping-rate-calculator.locations');
+Route::post('/shipping-rate-calculator/rates', [WebsiteController::class, 'calculateShippingRates'])->name('shipping-rate-calculator.rates');
 Route::get('/hsn-finder', [WebsiteController::class, 'hsnFinder'])->name('hsn-finder');
 
 // Newsletter Subscribe Route

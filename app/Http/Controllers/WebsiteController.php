@@ -567,15 +567,7 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
         $faqHeader = ShippingRateCalculatorPage::bySection('faq_header')->where('status', true)->first();
         $faqs = Faq::byPage('shipping-rate-calculator')->active()->ordered()->get();
         $faqContactSidebar = ShippingRateCalculatorPage::bySection('faq_contact_sidebar')->where('status', true)->first();
- $countries = \App\Models\Destination::where('is_active', 1)->orderBy('name')->get();
-        // Fetch default rates (customer_id = 0) grouped by service, ordered by weight range and zone
-        $defaultRates = \App\Models\CourierRate::with('service')
-            ->where('customer_id', 0)
-            ->orderBy('service_id')
-            ->orderBy('wt_range_start')
-            ->orderBy('zone_no')
-            ->get()
-            ->groupBy('service_id');
+        $countries = \App\Models\Destination::where('is_active', 1)->orderBy('name')->get();
 
         return view('shipping-rate-calculator', compact(
             'heroContent',
@@ -587,9 +579,155 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
             'faqHeader',
             'faqs',
             'faqContactSidebar',
-            'defaultRates',
             'countries'
         ));
+    }
+
+    /**
+     * Return state/city choices and ZIP availability for a destination.
+     */
+    public function shippingRateLocations(Request $request)
+    {
+        $validated = $request->validate([
+            'destination_id' => ['required', 'integer', 'exists:destinations,id'],
+        ]);
+
+        $destination = \App\Models\Destination::where('is_active', 1)
+            ->findOrFail($validated['destination_id']);
+        $zones = \App\Models\Zone::where('destination_id', $destination->id)
+            ->orderBy('zone_category')
+            ->orderBy('zone_name')
+            ->get();
+
+        $locations = $zones
+            ->whereIn('zone_category', ['city', 'state'])
+            ->filter(fn ($zone) => filled($zone->zone_name) || filled($zone->zone_code))
+            ->map(fn ($zone) => [
+                'value' => $zone->zone_name ?: $zone->zone_code,
+                'label' => $zone->zone_name ?: $zone->zone_code,
+                'category' => $zone->zone_category,
+            ])
+            ->unique(fn ($location) => strtolower($location['category'] . '|' . $location['value']))
+            ->values();
+
+        $zipcodes = $zones
+            ->where('zone_category', 'zipcode')
+            ->filter(fn ($zone) => filled($zone->zone_code))
+            ->map(fn ($zone) => [
+                'value' => $zone->zone_code,
+                'label' => $zone->zone_name
+                    ? $zone->zone_code . ' - ' . $zone->zone_name
+                    : $zone->zone_code,
+            ])
+            ->unique(fn ($zipcode) => strtoupper($zipcode['value']))
+            ->values();
+
+        return response()->json([
+            'destination' => [
+                'id' => $destination->id,
+                'name' => $destination->name,
+            ],
+            'locations' => $locations,
+            'zipcodes' => $zipcodes,
+            'has_zipcodes' => $zipcodes->isNotEmpty(),
+        ]);
+    }
+
+    /**
+     * Resolve the destination zone and return matching public rates.
+     */
+    public function calculateShippingRates(Request $request)
+    {
+        $validated = $request->validate([
+            'destination_id' => ['required', 'integer', 'exists:destinations,id'],
+            'location' => ['nullable', 'string', 'max:100'],
+            'zipcode' => ['required', 'string', 'max:20'],
+            'weight' => ['required', 'numeric', 'gt:0', 'max:10000'],
+        ]);
+
+        $destination = \App\Models\Destination::where('is_active', 1)
+            ->findOrFail($validated['destination_id']);
+        $zones = \App\Models\Zone::where('destination_id', $destination->id)->get();
+        $normalizedZip = strtoupper(preg_replace('/[\s-]+/', '', $validated['zipcode']));
+        $location = trim((string) ($validated['location'] ?? ''));
+
+        $zipZone = $zones
+            ->where('zone_category', 'zipcode')
+            ->filter(function ($zone) use ($normalizedZip) {
+                $code = strtoupper(preg_replace('/[\s-]+/', '', (string) $zone->zone_code));
+                return $code !== '' && str_starts_with($normalizedZip, $code);
+            })
+            ->sortByDesc(fn ($zone) => strlen((string) $zone->zone_code))
+            ->first();
+
+        $namedZone = $location === '' ? null : $zones
+            ->whereIn('zone_category', ['city', 'state'])
+            ->first(function ($zone) use ($location) {
+                return strcasecmp(trim((string) $zone->zone_name), $location) === 0
+                    || strcasecmp(trim((string) $zone->zone_code), $location) === 0;
+            });
+
+        $zone = $zipZone ?: $namedZone;
+        $zoneNumber = $zone?->zone_number_testing;
+        $countryValues = collect([
+            $destination->code,
+            $destination->country_code,
+        ])->filter()->map(fn ($value) => strtoupper(trim((string) $value)))->unique()->values();
+
+        $serviceIds = \App\Models\CourierService::where('status', 1)
+            ->whereIn(\Illuminate\Support\Facades\DB::raw('UPPER(country)'), $countryValues->all())
+            ->pluck('id');
+
+        $rates = \App\Models\CourierRate::with('service')
+            ->where('customer_id', 0)
+            ->whereIn('service_id', $serviceIds)
+            ->where('wt_range_start', '<=', $validated['weight'])
+            ->where('wt_range_end', '>=', $validated['weight'])
+            ->where(function ($query) use ($zoneNumber) {
+                $query->where(function ($general) {
+                    $general->where('zone_no', 0)->orWhereNull('zone_no');
+                });
+
+                if ($zoneNumber !== null && (int) $zoneNumber !== 0) {
+                    $query->orWhere('zone_no', (int) $zoneNumber);
+                }
+            })
+            ->where(function ($query) {
+                $query->whereNull('start_date')->orWhereDate('start_date', '<=', now());
+            })
+            ->where(function ($query) {
+                $query->whereNull('end_date')->orWhereDate('end_date', '>=', now());
+            })
+            ->orderBy('service_id')
+            ->orderByDesc('zone_no')
+            ->get()
+            ->unique('service_id')
+            ->map(function ($rate) use ($zone) {
+                return [
+                    'method' => $rate->service?->method ?: 'Courier Service',
+                    'tat' => $rate->service?->tat,
+                    'price' => (float) $rate->price,
+                    'inclusive_total' => $rate->inclusive_total,
+                    'weight_range' => number_format((float) $rate->wt_range_start, 3)
+                        . ' - ' . number_format((float) $rate->wt_range_end, 3) . ' kg',
+                    'zone' => $rate->zone_no ? [
+                        'name' => $zone?->zone_name ?: $zone?->zone_code,
+                        'category' => $zone?->zone_category,
+                    ] : null,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'rates' => $rates,
+            'matched_location' => $zone ? [
+                'name' => $zone->zone_name ?: $zone->zone_code,
+                'category' => $zone->zone_category,
+            ] : null,
+            'message' => $rates->isEmpty()
+                ? 'No rate is available for this destination, location, ZIP code and weight.'
+                : null,
+        ]);
     }
 
     /**
