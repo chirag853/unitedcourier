@@ -131,6 +131,42 @@ class StoreCustomLabelWhenPackingTest extends TestCase
         ]);
     }
 
+    public function test_it_does_not_use_laravel_storage_for_custom_label_generation(): void
+    {
+        $customer = $this->createCustomer(1, 'owner@example.com');
+        $this->createShipper(10, $customer->id, 'ready');
+        $originalStoragePath = storage_path();
+        $isolatedStoragePath = $this->testPublicPath . '-storage';
+        $legacyTemporaryPath = $isolatedStoragePath . '/app/custom-label-temp';
+
+        mkdir($isolatedStoragePath . '/app', 0777, true);
+        file_put_contents($legacyTemporaryPath, 'blocked');
+        app()->useStoragePath($isolatedStoragePath);
+
+        try {
+            $response = $this->actingAs($customer, 'customer')->postJson(
+                'http://localhost/customer/mark-packed',
+                [
+                    'shipper_id' => 10,
+                    'custom_label' => '<div>In-memory label</div>',
+                ]
+            );
+
+            $response->assertOk()->assertJsonPath('success', true);
+            $this->assertDatabaseHas('shipper_info', [
+                'id' => 10,
+                'status' => 'packed',
+            ]);
+            $this->assertCount(1, $this->customLabelFiles());
+            $this->assertFileExists($legacyTemporaryPath);
+            $this->assertSame('blocked', file_get_contents($legacyTemporaryPath));
+            $this->assertFalse(is_dir($legacyTemporaryPath));
+        } finally {
+            app()->useStoragePath($originalStoragePath);
+            $this->deleteDirectory($isolatedStoragePath);
+        }
+    }
+
     public function test_it_keeps_the_shipment_ready_when_the_public_directory_cannot_be_created(): void
     {
         $customer = $this->createCustomer(1, 'owner@example.com');

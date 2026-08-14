@@ -5823,7 +5823,6 @@ class CustomerController extends Controller
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
         $publicDirectory = public_path('uploads/custom_labels');
         $publicPath = $publicDirectory . DIRECTORY_SEPARATOR . $filename;
-        $temporaryDirectory = storage_path('app/custom-label-temp');
 
         if (!is_dir($publicDirectory)
             && !mkdir($publicDirectory, 0775, true)
@@ -5835,46 +5834,45 @@ class CustomerController extends Controller
             throw new \RuntimeException('The public custom label directory is not writable.');
         }
 
-        if (!is_dir($temporaryDirectory)
-            && !mkdir($temporaryDirectory, 0775, true)
-            && !is_dir($temporaryDirectory)) {
-            throw new \RuntimeException('Unable to create the custom label PDF temporary directory.');
-        }
-
-        $temporaryPath = $temporaryDirectory . DIRECTORY_SEPARATOR . $filename;
-        $source = null;
         $destination = null;
+        $publicFileCreated = false;
         $stored = false;
 
         try {
-            Pdf::loadHTML($document)->save($temporaryPath);
+            $pdfBytes = Pdf::loadHTML($document)->output();
 
-            if (!is_file($temporaryPath) || !is_readable($temporaryPath) || filesize($temporaryPath) === 0) {
+            if (!is_string($pdfBytes) || $pdfBytes === '') {
                 throw new \RuntimeException('The custom label PDF was not generated correctly.');
             }
 
-            $source = fopen($temporaryPath, 'rb');
-            if ($source === false) {
-                throw new \RuntimeException('Unable to open the generated custom label PDF.');
-            }
-
+            $expectedBytes = strlen($pdfBytes);
             $destination = fopen($publicPath, 'xb');
             if ($destination === false) {
                 throw new \RuntimeException('Unable to create the custom label PDF in the public directory.');
             }
 
-            $bytesWritten = stream_copy_to_stream($source, $destination);
-            if ($bytesWritten === false || $bytesWritten === 0 || !fflush($destination)) {
-                throw new \RuntimeException('Unable to write the custom label PDF to the public directory.');
+            $publicFileCreated = true;
+            $bytesWritten = 0;
+            while ($bytesWritten < $expectedBytes) {
+                $written = fwrite($destination, substr($pdfBytes, $bytesWritten));
+
+                if ($written === false || $written === 0) {
+                    throw new \RuntimeException('Unable to write the custom label PDF to the public directory.');
+                }
+
+                $bytesWritten += $written;
+            }
+
+            if (!fflush($destination)) {
+                throw new \RuntimeException('Unable to flush the custom label PDF to the public directory.');
             }
 
             fclose($destination);
             $destination = null;
-            fclose($source);
-            $source = null;
             clearstatcache(true, $publicPath);
+            $storedBytes = is_file($publicPath) ? filesize($publicPath) : false;
 
-            if (!is_file($publicPath) || !is_readable($publicPath) || filesize($publicPath) === 0) {
+            if (!is_readable($publicPath) || $storedBytes !== $expectedBytes) {
                 throw new \RuntimeException('The custom label PDF was not stored correctly in the public directory.');
             }
 
@@ -5886,15 +5884,7 @@ class CustomerController extends Controller
                 fclose($destination);
             }
 
-            if (is_resource($source)) {
-                fclose($source);
-            }
-
-            if (is_file($temporaryPath)) {
-                @unlink($temporaryPath);
-            }
-
-            if (!$stored && is_file($publicPath)) {
+            if ($publicFileCreated && !$stored && is_file($publicPath)) {
                 @unlink($publicPath);
             }
         }
