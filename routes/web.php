@@ -61,6 +61,9 @@ Route::prefix('admin')->group(function () {
     Route::get('/', [AdminController::class, 'login'])->name('admin.login');
     Route::get('/login', [AdminController::class, 'login']);
     Route::post('/login', [AdminController::class, 'loginPost'])->name('admin.login.post');
+    Route::get('/csrf-token', function () {
+        return response()->json(['token' => csrf_token()]);
+    })->name('admin.csrf-token');
     Route::get('/register', [AdminController::class, 'register'])->name('admin.register');
     Route::get('/forgot-password', [AdminController::class, 'forgotPassword'])->name('admin.forgot-password');
     Route::get('/reset-password', [AdminController::class, 'resetPassword'])->name('admin.reset-password');
@@ -420,7 +423,6 @@ Route::prefix('admin')->group(function () {
     Route::get('/track-shipment', [AdminController::class, 'trackShipment'])->name('admin.track-shipment');
     Route::get('/my-profile', [AdminController::class, 'myProfile'])->name('admin.my-profile');
     Route::post('/update-profile', [AdminController::class, 'updateProfile'])->name('admin.update-profile');
-    Route::get('/logout', [AdminController::class, 'logout'])->name('admin.logout');
     
     // Custom Form Routes
     Route::get('/csb5-form', [AdminController::class, 'csb5Form'])->name('admin.csb5-form');

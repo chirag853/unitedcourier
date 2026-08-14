@@ -41,15 +41,7 @@
             </button>
 
             <!-- Search -->
-            <div class="me-auto d-flex align-items-center header-search d-lg-flex d-none">
-                <!-- Search -->
-                <div class="input-icon position-relative me-2">
-                    <input type="text" class="form-control" placeholder="Search Keyword">
-                    <span class="input-icon-addon d-inline-flex p-0 header-search-icon"><i
-                            class="ti ti-command"></i></span>
-                </div>
-                <!-- /Search -->
-            </div>
+
 
         </div>
 
@@ -73,82 +65,28 @@
             <!-- Minimize -->
 
             <!-- Light/Dark Mode Button -->
-            <div class="header-item d-none d-sm-flex me-2">
+            <!-- <div class="header-item d-none d-sm-flex me-2">
                 <button class="topbar-link btn topbar-link" id="light-dark-mode" type="button">
                     <i class="ti ti-moon fs-16"></i>
                 </button>
-            </div>
+            </div> -->
 
             <!-- pages -->
-            <div class="header-item d-none d-sm-flex">
-                <div class="dropdown me-2">
-                    <a href="javascript:void(0);" class="btn topbar-link topbar-teal-link" data-bs-toggle="dropdown">
-                        <i class="ti ti-layout-grid-add"></i>
-                    </a>
-                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-md p-2">
-
-                        <!-- Item-->
-                        <a href="contacts.html" class="dropdown-item">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <div>
-                                    <span class="d-flex mb-1 fw-semibold text-dark">Contacts</span>
-                                    <span class="fs-13">View All the Contacts</span>
-                                </div>
-                                <i class="ti ti-chevron-right-pipe text-dark"></i>
-                            </div>
-                        </a>
-
-                        <!-- Item-->
-                        <a href="pipeline.html" class="dropdown-item">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <div>
-                                    <span class="d-flex mb-1 fw-semibold text-dark">Pipeline</span>
-                                    <span class="fs-13">View All the Pipeline</span>
-                                </div>
-                                <i class="ti ti-chevron-right-pipe text-dark"></i>
-                            </div>
-                        </a>
-
-                        <!-- Item-->
-                        <a href="activities.html" class="dropdown-item">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <div>
-                                    <span class="d-flex mb-1 fw-semibold text-dark">Activities</span>
-                                    <span class="fs-13">Activities</span>
-                                </div>
-                                <i class="ti ti-chevron-right-pipe text-dark"></i>
-                            </div>
-                        </a>
-
-                        <!-- Item-->
-                        <a href="analytics.html" class="dropdown-item">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <div>
-                                    <span class="d-flex mb-1 fw-semibold text-dark">Analytics</span>
-                                    <span class="fs-13">Analytics</span>
-                                </div>
-                                <i class="ti ti-chevron-right-pipe text-dark"></i>
-                            </div>
-                        </a>
-
-                    </div>
-                </div>
-            </div>
 
             <!-- faq -->
-            <div class="header-item d-none d-sm-flex">
+            <!-- <div class="header-item d-none d-sm-flex">
                 <div class="dropdown me-2">
                     <a href="faq.html" class="btn topbar-link topbar-indigo-link"><i class="ti ti-help-hexagon"></i></a>
                 </div>
-            </div>
+            </div> -->
 
             <!-- report -->
-            <div class="header-item d-none d-sm-flex">
+            <!-- <div class="header-item d-none d-sm-flex">
                 <div class="dropdown me-2">
                     <a href="lead-reports.html" class="btn topbar-link topbar-warning-link"><i
                             class="ti ti-chart-pie"></i></a>
                 </div>
-            </div>
+            </div> -->
 
             <div class="header-line"></div>
 
@@ -244,7 +182,8 @@
 
                     <!-- Item-->
                     <div class="pt-2 mt-2 border-top">
-                        <form action="{{ route('admin.logout') }}" method="POST" style="display: inline;">
+                        <form id="adminLogoutForm" action="{{ route('admin.logout') }}" method="POST" style="display: inline;"
+                            data-csrf-url="{{ route('admin.csrf-token') }}">
                             @csrf
                             <button type="submit" class="dropdown-item text-danger w-100 text-start">
                                 <i class="ti ti-logout me-1 fs-17 align-middle"></i>
@@ -274,6 +213,41 @@
     const BASE_URL = '{{ url('/') }}';
 
     document.addEventListener('DOMContentLoaded', function () {
+        const logoutForm = document.getElementById('adminLogoutForm');
+
+        if (logoutForm) {
+            logoutForm.addEventListener('submit', async function (event) {
+                if (logoutForm.dataset.submitting === 'true') {
+                    return;
+                }
+
+                event.preventDefault();
+
+                try {
+                    const response = await fetch(logoutForm.dataset.csrfUrl, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Unable to refresh the CSRF token.');
+                    }
+
+                    const data = await response.json();
+                    logoutForm.querySelector('input[name="_token"]').value = data.token;
+                    logoutForm.dataset.submitting = 'true';
+                    logoutForm.requestSubmit();
+                } catch (error) {
+                    window.location.reload();
+                }
+            });
+        }
+
         const dataUrl = @json(route('admin.notifications.data'));
         const readUrlTemplate = @json(route('admin.notifications.read', ['id' => '__ID__']));
         const readAllUrl = @json(route('admin.notifications.read-all'));
