@@ -78,12 +78,12 @@ class PrimusShipmentServiceTest extends TestCase
         $this->assertNotSame(base64_encode((string) $shipper->custom_label), $shipment['Base64StringInvoice']);
     }
 
-    public function test_it_reads_legacy_public_custom_label_urls(): void
+    public function test_it_reads_legacy_root_public_custom_label_urls(): void
     {
         $labelBytes = "%PDF-1.4\nLegacy public label bytes";
         $shipper = $this->createShipmentFixture('new public label bytes');
-        file_put_contents($this->testPublicPath.'/uploads/custom_labels/label-10.pdf', $labelBytes);
-        $shipper->custom_label = 'http://localhost/uploads/custom_labels/label-10.pdf';
+        file_put_contents($this->testPublicPath.'/custom_label/label-10.pdf', $labelBytes);
+        $shipper->custom_label = 'http://localhost/custom_label/label-10.pdf';
 
         $payload = $this->service()->buildPayload($shipper);
 
@@ -169,7 +169,7 @@ class PrimusShipmentServiceTest extends TestCase
     public function test_it_rejects_a_missing_custom_label_file(): void
     {
         $shipper = $this->createShipmentFixture('private label');
-        unlink($this->testPublicPath.'/custom_label/label-10.pdf');
+        unlink($this->testPublicPath.'/uploads/custom_labels/label-10.pdf');
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('The stored custom label file is missing or unreadable.');
@@ -321,7 +321,7 @@ class PrimusShipmentServiceTest extends TestCase
 
     private function createShipmentFixture(string $labelBytes): ShipperInfo
     {
-        file_put_contents($this->testPublicPath.'/custom_label/label-10.pdf', $labelBytes);
+        file_put_contents($this->testPublicPath.'/uploads/custom_labels/label-10.pdf', $labelBytes);
 
         DB::table('courier_services')->insert([
             'id' => 5,
@@ -351,7 +351,7 @@ class PrimusShipmentServiceTest extends TestCase
             'kyc_number' => 'TESTGST123',
             'service_id' => 5,
             'status' => 'packed',
-            'custom_label' => 'http://localhost/custom_label/label-10.pdf',
+            'custom_label' => 'http://localhost/uploads/custom_labels/label-10.pdf',
             'created_at' => now(),
             'updated_at' => now(),
         ]);

@@ -99,12 +99,12 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
         $storedUrl = DB::table('shipper_info')->where('id', 10)->value('custom_label');
         $this->assertIsString($storedUrl);
-        $this->assertStringStartsWith(asset('custom_label/'), $storedUrl);
+        $this->assertStringStartsWith(asset('uploads/custom_labels/'), $storedUrl);
         $this->assertStringEndsWith('.pdf', $storedUrl);
         $response->assertJsonPath('custom_label_url', $storedUrl);
 
         $filename = basename((string) parse_url($storedUrl, PHP_URL_PATH));
-        $labelPath = $this->testPublicPath . '/custom_label/' . $filename;
+        $labelPath = $this->testPublicPath . '/uploads/custom_labels/' . $filename;
         $this->assertFileExists($labelPath);
 
         $storedDocument = file_get_contents($labelPath);
@@ -135,8 +135,8 @@ class StoreCustomLabelWhenPackingTest extends TestCase
     {
         $customer = $this->createCustomer(1, 'owner@example.com');
         $this->createShipper(10, $customer->id, 'ready');
-        mkdir($this->testPublicPath, 0777, true);
-        file_put_contents($this->testPublicPath . '/custom_label', 'not a directory');
+        mkdir($this->testPublicPath . '/uploads', 0777, true);
+        file_put_contents($this->testPublicPath . '/uploads/custom_labels', 'not a directory');
 
         $response = $this->actingAs($customer, 'customer')->postJson('http://localhost/customer/mark-packed', [
             'shipper_id' => 10,
@@ -272,7 +272,7 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
     private function customLabelFiles(): array
     {
-        return glob($this->testPublicPath . '/custom_label/*.pdf') ?: [];
+        return glob($this->testPublicPath . '/uploads/custom_labels/*.pdf') ?: [];
     }
 
     private function deleteDirectory(string $directory): void

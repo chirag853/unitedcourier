@@ -417,11 +417,20 @@ class PrimusShipmentService
         }
 
         $path = str_replace('\\', '/', rawurldecode((string) ($parts['path'] ?? '')));
-        $publicMarker = '/custom_label/';
-        $publicPosition = strpos($path, $publicMarker);
+        $uploadsMarker = '/uploads/custom_labels/';
+        $uploadsPosition = strpos($path, $uploadsMarker);
 
-        if ($publicPosition !== false) {
-            $filename = substr($path, $publicPosition + strlen($publicMarker));
+        if ($uploadsPosition !== false) {
+            $filename = substr($path, $uploadsPosition + strlen($uploadsMarker));
+
+            return $this->readCustomLabelFromPublicDirectory('uploads/custom_labels', $filename);
+        }
+
+        $legacyPublicMarker = '/custom_label/';
+        $legacyPublicPosition = strpos($path, $legacyPublicMarker);
+
+        if ($legacyPublicPosition !== false) {
+            $filename = substr($path, $legacyPublicPosition + strlen($legacyPublicMarker));
 
             return $this->readCustomLabelFromPublicDirectory('custom_label', $filename);
         }
@@ -429,21 +438,13 @@ class PrimusShipmentService
         $storageMarker = '/storage/custom_labels/';
         $storagePosition = strpos($path, $storageMarker);
 
-        if ($storagePosition !== false) {
-            $filename = substr($path, $storagePosition + strlen($storageMarker));
-
-            return $this->readCustomLabelFromDisk('public', $filename);
-        }
-
-        $legacyMarker = '/uploads/custom_labels/';
-        $legacyPosition = strpos($path, $legacyMarker);
-        if ($legacyPosition === false) {
+        if ($storagePosition === false) {
             throw new RuntimeException('The stored custom label URL is outside the custom label directory.');
         }
 
-        $filename = substr($path, $legacyPosition + strlen($legacyMarker));
+        $filename = substr($path, $storagePosition + strlen($storageMarker));
 
-        return $this->readCustomLabelFromPublicDirectory('uploads/custom_labels', $filename);
+        return $this->readCustomLabelFromDisk('public', $filename);
     }
 
     /** @return array{0: string, 1: string} */

@@ -5792,7 +5792,7 @@ class CustomerController extends Controller
                 'shipper_id' => $validated['shipper_id'],
                 'customer_id' => $customerId,
                 'public_file_path' => $labelPath,
-                'public_directory' => public_path('custom_label'),
+                'public_directory' => public_path('uploads/custom_labels'),
                 'exception_class' => $e::class,
                 'exception_message' => $e->getMessage(),
                 'exception_file' => $e->getFile(),
@@ -5821,7 +5821,7 @@ class CustomerController extends Controller
         $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
         $filename = $name . '-' . Str::uuid() . '.pdf';
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
-        $publicDirectory = public_path('custom_label');
+        $publicDirectory = public_path('uploads/custom_labels');
         $publicPath = $publicDirectory . DIRECTORY_SEPARATOR . $filename;
         $temporaryDirectory = storage_path('app/custom-label-temp');
 
@@ -5880,7 +5880,7 @@ class CustomerController extends Controller
 
             $stored = true;
 
-            return [$publicPath, asset('custom_label/' . $filename)];
+            return [$publicPath, asset('uploads/custom_labels/' . $filename)];
         } finally {
             if (is_resource($destination)) {
                 fclose($destination);
@@ -5922,7 +5922,7 @@ class CustomerController extends Controller
             return;
         }
 
-        $directory = realpath(public_path('custom_label'));
+        $directory = realpath(public_path('uploads/custom_labels'));
         $file = realpath($path);
 
         if ($directory === false || $file === false || !is_file($file)) {
