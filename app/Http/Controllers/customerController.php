@@ -1108,18 +1108,56 @@ class CustomerController extends Controller
                 ->latest()
                 ->first();
 
+            $canReuseVerifiedGst = (bool) $existingBusinessKyc?->gst_verified
+                && !empty($existingBusinessKyc?->gst_number)
+                && !empty($existingBusinessKyc?->organization_name);
+            $canReuseVerifiedPan = (bool) $existingBusinessKyc?->pan_verified
+                && !empty($existingBusinessKyc?->pan_number)
+                && !empty($existingBusinessKyc?->pan_holder_name)
+                && !empty($existingBusinessKyc?->pan_dob)
+                && !empty($existingBusinessKyc?->pan_document);
+
+            // The standalone CSB-V page collects only export-specific details. Fill its
+            // omitted identity fields from the customer's already verified Business KYC.
+            $reusedGst = $canReuseVerifiedGst
+                && !$request->filled('gst_certificate_number')
+                && !$request->filled('gst_business_name');
+            $reusedPan = $canReuseVerifiedPan
+                && !$request->filled('pan_number')
+                && !$request->filled('pan_holder_name')
+                && !$request->filled('pan_dob')
+                && !$request->hasFile('pan_document');
+
+            if ($reusedGst) {
+                $request->merge([
+                    'gst_certificate_number' => $existingBusinessKyc->gst_number,
+                    'gst_business_name' => $existingBusinessKyc->organization_name,
+                ]);
+            }
+
+            if ($reusedPan) {
+                $request->merge([
+                    'pan_number' => $existingBusinessKyc->pan_number,
+                    'pan_holder_name' => $existingBusinessKyc->pan_holder_name,
+                    'pan_dob' => $existingBusinessKyc->pan_dob instanceof \DateTimeInterface
+                        ? $existingBusinessKyc->pan_dob->format('Y-m-d')
+                        : $existingBusinessKyc->pan_dob,
+                ]);
+            }
+
             // Existing documents remain valid while editing KYC. A replacement file is
             // required only when the customer has not uploaded that document previously.
             $validated = $request->validate([
-                'is_csb_v' => 'required|boolean',
-                'gst_business_name' => ['required', 'string', 'max:255'],
-                'is_gst' => 'required|boolean',
-                'is_lut' => 'required|boolean',
-                'gst_certificate_number' => ['required', 'string', 'size:15'],
+                'is_csb_v' => 'nullable|boolean',
+                'gst_business_name' => ['nullable', 'string', 'max:255'],
+                'is_gst' => 'nullable|boolean',
+                'is_lut' => 'nullable|boolean',
+                'gst_certificate_number' => ['nullable', 'string', 'size:15'],
                 'gst_certificate_document' => [
                     \Illuminate\Validation\Rule::requiredIf(
                         !$existingCsbForm?->gst_certificate_document
                         && !$existingCsbForm?->gst_document
+                        && !$existingBusinessKyc?->gst_certificate_document
                     ),
                     'nullable', 'file', 'mimes:pdf', 'max:5120'
                 ],
@@ -1127,10 +1165,13 @@ class CustomerController extends Controller
                 'aadhar_front_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'aadhar_back_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'aadhar_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
-                'pan_number' => ['required', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
-                'pan_holder_name' => ['required', 'string', 'max:255'],
-                'pan_dob' => ['required', 'date', 'before:today'],
-                'pan_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'pan_number' => ['nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
+                'pan_holder_name' => ['nullable', 'string', 'max:255'],
+                'pan_dob' => ['nullable', 'date', 'before:today'],
+                'pan_document' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$canReuseVerifiedPan),
+                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
+                ],
                 'ad_code' => ['required', 'digits:14'],
                 'ad_code_document' => [
                     \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->ad_code_document),
@@ -1180,14 +1221,24 @@ class CustomerController extends Controller
                 $validated['gst_certificate_number']
             ));
 
-            if (
+            $matchesVerifiedGst = $canReuseVerifiedGst
+                && hash_equals(
+                    strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->gst_number)),
+                    $gstNumber
+                )
+                && hash_equals(
+                    $this->normalizeGstBusinessName((string) $existingBusinessKyc->organization_name),
+                    $this->normalizeGstBusinessName($validated['gst_business_name'])
+                );
+
+            if (!$matchesVerifiedGst && (
                 session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
                 || !hash_equals(
                     (string) session('kyc_gst_business_name', ''),
                     $this->normalizeGstBusinessName($validated['gst_business_name'])
                 )
-            ) {
+            )) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Verify the submitted GSTIN through Cashfree before submitting the CSB-V form.',
@@ -1264,16 +1315,29 @@ class CustomerController extends Controller
             $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
             $panDob = $this->normalizePanDob($validated['pan_dob']);
             $panFile = $request->file('pan_document');
-            $panDocumentHash = hash_file('sha256', $panFile->getRealPath());
-            if (!session('kyc_pan_cashfree_verified')
+            $matchesVerifiedPan = $canReuseVerifiedPan
+                && hash_equals(
+                    strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->pan_number)),
+                    $panNumber
+                )
+                && hash_equals(
+                    $this->normalizePanHolderName((string) $existingBusinessKyc->pan_holder_name),
+                    $panHolderName
+                )
+                && $panDob !== null
+                && hash_equals($this->normalizePanDob((string) $existingBusinessKyc->pan_dob), $panDob);
+            $panDocumentHash = $panFile ? hash_file('sha256', $panFile->getRealPath()) : null;
+
+            if (!$matchesVerifiedPan && (!session('kyc_pan_cashfree_verified')
                 || session('kyc_pan_number') !== $panNumber
                 || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
                 || $panDob === null
                 || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
+                || !$panDocumentHash
                 || !hash_equals(
                     (string) session('kyc_pan_document_hash', ''),
                     (string) $panDocumentHash
-                )) {
+                ))) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'pan_number' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before completing Business KYC.',
                 ]);
@@ -1390,10 +1454,12 @@ class CustomerController extends Controller
                 'gst_certificate_number' => $gstNumber,
                 'gst_certificate_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_certificate_document ?? null)
-                    ?? ($existingCsbForm->gst_document ?? null),
+                    ?? ($existingCsbForm->gst_document ?? null)
+                    ?? ($existingBusinessKyc->gst_certificate_document ?? null),
                 'gst_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_document ?? null)
-                    ?? ($existingCsbForm->gst_certificate_document ?? null),
+                    ?? ($existingCsbForm->gst_certificate_document ?? null)
+                    ?? ($existingBusinessKyc->gst_certificate_document ?? null),
                 'lut_verified' => false,
                 'ad_code' => $validated['ad_code'],
                 'ad_code_document' => $adCodeDocumentPath ?? ($existingCsbForm->ad_code_document ?? null),
