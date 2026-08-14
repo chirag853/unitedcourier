@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Models\Admin;
 use App\Models\NetworkOffice;
@@ -4430,6 +4431,45 @@ class AdminController extends Controller
         $businessCategory = $customer->businessCategory;
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
         $wallet = $customer->wallet;
+
+        if ($businessKyc) {
+            $documentDiagnostics = [];
+            $documentPaths = [
+                'gst_certificate_document' => $businessKyc->gst_certificate_document,
+                'iec_document' => $businessKyc->iec_document,
+                'ad_code_document' => $businessKyc->ad_code_document,
+                'lut_document' => $businessKyc->lut_document,
+                'gst_document' => $businessKyc->gst_document,
+                'aadhar_document' => $businessKyc->aadhar_document,
+                'signature_document' => $businessKyc->signature_document,
+                'merchant_agreement' => $businessKyc->merchant_agreement,
+            ];
+
+            foreach (array_filter($documentPaths) as $field => $documentPath) {
+                $storedPath = ltrim(str_replace('\\', '/', (string) $documentPath), '/');
+                $currentUrlPath = (string) parse_url(
+                    asset('uploads/') . '/' . $storedPath,
+                    PHP_URL_PATH
+                );
+
+                $documentDiagnostics[$field] = [
+                    'stored_path_starts_with_uploads' => str_starts_with($storedPath, 'uploads/'),
+                    'current_url_has_duplicate_uploads' => str_contains($currentUrlPath, '/uploads/uploads/'),
+                ];
+            }
+
+            $hasDuplicateUploadPath = collect($documentDiagnostics)->contains(
+                fn (array $diagnostic): bool => $diagnostic['current_url_has_duplicate_uploads']
+            );
+
+            if ($hasDuplicateUploadPath) {
+                Log::warning('Duplicate uploads segment detected in admin customer profile document URLs.', [
+                    'customer_id' => $customer->id,
+                    'asset_base_path' => parse_url(asset('uploads/'), PHP_URL_PATH),
+                    'documents' => $documentDiagnostics,
+                ]);
+            }
+        }
 
         return view('admin.customer-profile', compact(
             'customer',
