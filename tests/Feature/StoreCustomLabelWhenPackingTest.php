@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Customer;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -129,6 +130,40 @@ class StoreCustomLabelWhenPackingTest extends TestCase
             'status' => 'packed',
             'previous_status' => 'ready',
         ]);
+    }
+
+    public function test_it_names_the_label_with_the_awb_ist_timestamp_and_uuid(): void
+    {
+        $customer = $this->createCustomer(1, 'owner@example.com');
+        $this->createShipper(10, $customer->id, 'ready');
+        Carbon::setTestNow(Carbon::create(2026, 8, 14, 6, 7, 8, 'UTC'));
+
+        try {
+            $response = $this->actingAs($customer, 'customer')->postJson(
+                'http://localhost/customer/mark-packed',
+                [
+                    'shipper_id' => 10,
+                    'custom_label' => '<div>Timestamped label</div>',
+                ]
+            );
+
+            $response->assertOk()->assertJsonPath('success', true);
+            $storedUrl = (string) DB::table('shipper_info')
+                ->where('id', 10)
+                ->value('custom_label');
+            $filename = basename((string) parse_url($storedUrl, PHP_URL_PATH));
+            $filenameWithoutExtension = pathinfo($filename, PATHINFO_FILENAME);
+            $expectedPrefix = 'uwc000010-20260814-113708-';
+
+            $this->assertStringStartsWith($expectedPrefix, $filenameWithoutExtension);
+            $this->assertTrue(Str::isUuid(substr($filenameWithoutExtension, strlen($expectedPrefix))));
+            $this->assertSame('pdf', pathinfo($filename, PATHINFO_EXTENSION));
+            $this->assertFileExists(
+                $this->testPublicPath . '/uploads/custom_labels/' . $filename
+            );
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_it_does_not_use_laravel_storage_for_custom_label_generation(): void

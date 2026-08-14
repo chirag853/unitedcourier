@@ -5819,7 +5819,8 @@ class CustomerController extends Controller
     private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
     {
         $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
-        $filename = $name . '-' . Str::uuid() . '.pdf';
+        $timestamp = now('Asia/Kolkata')->format('Ymd-His');
+        $filename = $name . '-' . $timestamp .'.pdf';
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
         $publicDirectory = public_path('uploads/custom_labels');
         $publicPath = $publicDirectory . DIRECTORY_SEPARATOR . $filename;
