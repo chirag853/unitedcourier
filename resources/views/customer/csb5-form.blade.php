@@ -109,7 +109,7 @@
                             <p>Provide details for the digital agreement.</p>
                         </div>
 
-                        <form id="csbvForm" action="{{ route('customer.csb5-form.store') }}" method="POST"
+                        <form id="csbvForm" action="{{ route('customer.csb5-form.standalone.store') }}" method="POST"
                             enctype="multipart/form-data" novalidate>
                             @csrf
                             {{-- Compatibility fields prevent previously cached CSB5 JavaScript from failing. --}}

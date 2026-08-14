@@ -1102,6 +1102,7 @@ class CustomerController extends Controller
                 ], 401);
             }
 
+            $isStandaloneCsb5 = $request->routeIs('customer.csb5-form.standalone.store');
             $existingCsbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();
             $existingBusinessKyc = KycDetail::where('customer_id', $customer->id)
                 ->where('kyc_type', 'business')
@@ -1149,13 +1150,20 @@ class CustomerController extends Controller
             // required only when the customer has not uploaded that document previously.
             $validated = $request->validate([
                 'is_csb_v' => 'nullable|boolean',
-                'gst_business_name' => ['nullable', 'string', 'max:255'],
+                'gst_business_name' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    'nullable', 'string', 'max:255'
+                ],
                 'is_gst' => 'nullable|boolean',
                 'is_lut' => 'nullable|boolean',
-                'gst_certificate_number' => ['nullable', 'string', 'size:15'],
+                'gst_certificate_number' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    'nullable', 'string', 'size:15'
+                ],
                 'gst_certificate_document' => [
                     \Illuminate\Validation\Rule::requiredIf(
-                        !$existingCsbForm?->gst_certificate_document
+                        !$isStandaloneCsb5
+                        && !$existingCsbForm?->gst_certificate_document
                         && !$existingCsbForm?->gst_document
                         && !$existingBusinessKyc?->gst_certificate_document
                     ),
@@ -1165,11 +1173,20 @@ class CustomerController extends Controller
                 'aadhar_front_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'aadhar_back_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'aadhar_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
-                'pan_number' => ['nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
-                'pan_holder_name' => ['nullable', 'string', 'max:255'],
-                'pan_dob' => ['nullable', 'date', 'before:today'],
+                'pan_number' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    'nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'
+                ],
+                'pan_holder_name' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    'nullable', 'string', 'max:255'
+                ],
+                'pan_dob' => [
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    'nullable', 'date', 'before:today'
+                ],
                 'pan_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$canReuseVerifiedPan),
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 && !$canReuseVerifiedPan),
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
                 ],
                 'ad_code' => ['required', 'digits:14'],
@@ -1195,7 +1212,8 @@ class CustomerController extends Controller
                 'billing_email' => 'required|email|max:255',
                 'signature_document' => [
                     \Illuminate\Validation\Rule::requiredIf(
-                        !$existingCsbForm?->signature_document
+                        !$isStandaloneCsb5
+                        && !$existingCsbForm?->signature_document
                         && !$existingBusinessKyc?->signature_document
                     ),
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
@@ -1218,25 +1236,29 @@ class CustomerController extends Controller
             $gstNumber = strtoupper(preg_replace(
                 '/\s+/',
                 '',
-                $validated['gst_certificate_number']
+                (string) ($validated['gst_certificate_number'] ?? '')
             ));
+            $gstNumber = $gstNumber !== '' ? $gstNumber : null;
+            $gstBusinessName = trim((string) ($validated['gst_business_name'] ?? ''));
+            $hasGstIdentity = $gstNumber !== null && $gstBusinessName !== '';
 
-            $matchesVerifiedGst = $canReuseVerifiedGst
+            $matchesVerifiedGst = $hasGstIdentity
+                && $canReuseVerifiedGst
                 && hash_equals(
                     strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->gst_number)),
                     $gstNumber
                 )
                 && hash_equals(
                     $this->normalizeGstBusinessName((string) $existingBusinessKyc->organization_name),
-                    $this->normalizeGstBusinessName($validated['gst_business_name'])
+                    $this->normalizeGstBusinessName($gstBusinessName)
                 );
 
-            if (!$matchesVerifiedGst && (
+            if ($hasGstIdentity && !$matchesVerifiedGst && (
                 session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
                 || !hash_equals(
                     (string) session('kyc_gst_business_name', ''),
-                    $this->normalizeGstBusinessName($validated['gst_business_name'])
+                    $this->normalizeGstBusinessName($gstBusinessName)
                 )
             )) {
                 return response()->json([
@@ -1296,7 +1318,7 @@ class CustomerController extends Controller
             $aadhar = $isValidVerifiedAadhaar ? $aadhar : null;
             $aadharVerified = $isValidVerifiedAadhaar;
 
-            if ($aadharVerified) {
+            if ($aadharVerified && !$isStandaloneCsb5) {
                 $hasAadhaarFront = $request->hasFile('aadhar_front_document')
                     || $request->hasFile('aadhar_document')
                     || !empty($existingBusinessKyc?->aadhar_front_document)
@@ -1311,11 +1333,14 @@ class CustomerController extends Controller
                 }
             }
 
-            $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
-            $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
-            $panDob = $this->normalizePanDob($validated['pan_dob']);
+            $panNumber = strtoupper(preg_replace('/\s+/', '', (string) ($validated['pan_number'] ?? '')));
+            $panNumber = $panNumber !== '' ? $panNumber : null;
+            $panHolderName = $this->normalizePanHolderName((string) ($validated['pan_holder_name'] ?? ''));
+            $panDob = $this->normalizePanDob((string) ($validated['pan_dob'] ?? ''));
             $panFile = $request->file('pan_document');
-            $matchesVerifiedPan = $canReuseVerifiedPan
+            $hasPanIdentity = $panNumber !== null && $panHolderName !== '' && $panDob !== null;
+            $matchesVerifiedPan = $hasPanIdentity
+                && $canReuseVerifiedPan
                 && hash_equals(
                     strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->pan_number)),
                     $panNumber
@@ -1324,14 +1349,12 @@ class CustomerController extends Controller
                     $this->normalizePanHolderName((string) $existingBusinessKyc->pan_holder_name),
                     $panHolderName
                 )
-                && $panDob !== null
                 && hash_equals($this->normalizePanDob((string) $existingBusinessKyc->pan_dob), $panDob);
             $panDocumentHash = $panFile ? hash_file('sha256', $panFile->getRealPath()) : null;
 
-            if (!$matchesVerifiedPan && (!session('kyc_pan_cashfree_verified')
+            if ($hasPanIdentity && !$matchesVerifiedPan && (!session('kyc_pan_cashfree_verified')
                 || session('kyc_pan_number') !== $panNumber
                 || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
-                || $panDob === null
                 || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
                 || !$panDocumentHash
                 || !hash_equals(
@@ -1451,7 +1474,9 @@ class CustomerController extends Controller
                 'is_csb_v' => $validated['is_csb_v'],
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
-                'gst_certificate_number' => $gstNumber,
+                'gst_certificate_number' => $gstNumber
+                    ?? ($existingCsbForm->gst_certificate_number ?? null)
+                    ?? ($existingBusinessKyc->gst_number ?? null),
                 'gst_certificate_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_certificate_document ?? null)
                     ?? ($existingCsbForm->gst_document ?? null)
@@ -1497,20 +1522,28 @@ class CustomerController extends Controller
             $businessKycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'business',
-                'gst_number' => $gstNumber,
-                'gst_verified' => true,
+                'gst_number' => $gstNumber ?? ($existingBusinessKyc->gst_number ?? null),
+                'gst_verified' => $hasGstIdentity
+                    ? true
+                    : (bool) ($existingBusinessKyc->gst_verified ?? false),
                 'aadhar_number' => $aadhar,
                 'aadhar_verified' => $aadharVerified,
                 'aadhar_front_document' => $aadharFrontPath
                     ?? ($existingBusinessKyc->aadhar_front_document ?? null)
                     ?? ($existingCsbForm->aadhar_document ?? null),
                 'aadhar_back_document' => $aadharBackPath ?? ($existingBusinessKyc->aadhar_back_document ?? null),
-                'pan_number' => $panNumber,
-                'pan_holder_name' => $validated['pan_holder_name'],
-                'pan_dob' => $validated['pan_dob'],
+                'pan_number' => $panNumber ?? ($existingBusinessKyc->pan_number ?? null),
+                'pan_holder_name' => ($validated['pan_holder_name'] ?? null)
+                    ?: ($existingBusinessKyc->pan_holder_name ?? null),
+                'pan_dob' => ($validated['pan_dob'] ?? null)
+                    ?: ($existingBusinessKyc->pan_dob ?? null),
                 'pan_document' => $panDocumentPath ?? ($existingBusinessKyc->pan_document ?? null),
-                'pan_verified' => true,
-                'organization_name' => $validated['gst_business_name'],
+                'pan_verified' => $hasPanIdentity
+                    ? true
+                    : (bool) ($existingBusinessKyc->pan_verified ?? false),
+                'organization_name' => $gstBusinessName !== ''
+                    ? $gstBusinessName
+                    : ($existingBusinessKyc->organization_name ?? null),
                 'authorized_signatory' => $customer->first_name . ' ' . $customer->last_name,
                 'signature_document' => $signaturePath
                     ?? ($existingBusinessKyc->signature_document ?? null)
