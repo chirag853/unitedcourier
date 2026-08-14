@@ -6,19 +6,22 @@ use App\Models\Customer;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class StoreCustomLabelWhenPackingTest extends TestCase
 {
-    private string $testStoragePath;
+    private string $originalPublicPath;
+
+    private string $testPublicPath;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->testStoragePath = storage_path('framework/testing/custom-labels-' . uniqid());
-        config()->set('filesystems.disks.public.root', $this->testStoragePath);
-        config()->set('filesystems.disks.public.url', asset('storage'));
+        $this->originalPublicPath = public_path();
+        $this->testPublicPath = storage_path('framework/testing/custom-label-public-' . uniqid());
+        app()->usePublicPath($this->testPublicPath);
 
         config()->set('database.default', 'sqlite');
         config()->set('database.connections.sqlite.database', ':memory:');
@@ -75,7 +78,8 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->deleteDirectory($this->testStoragePath);
+        $this->deleteDirectory($this->testPublicPath);
+        app()->usePublicPath($this->originalPublicPath);
 
         parent::tearDown();
     }
@@ -95,12 +99,12 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
         $storedUrl = DB::table('shipper_info')->where('id', 10)->value('custom_label');
         $this->assertIsString($storedUrl);
-        $this->assertStringStartsWith(asset('storage/custom_labels/'), $storedUrl);
+        $this->assertStringStartsWith(asset('custom_label/'), $storedUrl);
         $this->assertStringEndsWith('.pdf', $storedUrl);
         $response->assertJsonPath('custom_label_url', $storedUrl);
 
         $filename = basename((string) parse_url($storedUrl, PHP_URL_PATH));
-        $labelPath = $this->testStoragePath . '/custom_labels/' . $filename;
+        $labelPath = $this->testPublicPath . '/custom_label/' . $filename;
         $this->assertFileExists($labelPath);
 
         $storedDocument = file_get_contents($labelPath);
@@ -125,6 +129,31 @@ class StoreCustomLabelWhenPackingTest extends TestCase
             'status' => 'packed',
             'previous_status' => 'ready',
         ]);
+    }
+
+    public function test_it_keeps_the_shipment_ready_when_the_public_directory_cannot_be_created(): void
+    {
+        $customer = $this->createCustomer(1, 'owner@example.com');
+        $this->createShipper(10, $customer->id, 'ready');
+        mkdir($this->testPublicPath, 0777, true);
+        file_put_contents($this->testPublicPath . '/custom_label', 'not a directory');
+
+        $response = $this->actingAs($customer, 'customer')->postJson('http://localhost/customer/mark-packed', [
+            'shipper_id' => 10,
+            'custom_label' => '<div>Blocked public label</div>',
+        ]);
+
+        $response->assertServerError()
+            ->assertJsonPath('success', false)
+            ->assertJsonStructure(['message', 'error_reference']);
+        $this->assertDatabaseHas('shipper_info', [
+            'id' => 10,
+            'status' => 'ready',
+            'custom_label' => null,
+        ]);
+        $this->assertSame([], $this->customLabelFiles());
+        $this->assertDatabaseCount('tracking', 0);
+        $this->assertDatabaseCount('shipment_logs', 0);
     }
 
     public function test_it_requires_the_custom_label_payload(): void
@@ -159,11 +188,41 @@ class StoreCustomLabelWhenPackingTest extends TestCase
         $this->assertSame([], $this->customLabelFiles());
     }
 
-    public function test_it_removes_the_label_file_when_the_database_transaction_fails(): void
+    public function test_it_still_packs_when_an_audit_table_is_unavailable(): void
     {
         $customer = $this->createCustomer(1, 'owner@example.com');
         $this->createShipper(10, $customer->id, 'ready');
         Schema::drop('tracking');
+
+        $response = $this->actingAs($customer, 'customer')->postJson('http://localhost/customer/mark-packed', [
+            'shipper_id' => 10,
+            'custom_label' => '<div>Audit fallback label</div>',
+        ]);
+
+        $response->assertOk()->assertJsonPath('success', true);
+        $this->assertDatabaseHas('shipper_info', [
+            'id' => 10,
+            'status' => 'packed',
+        ]);
+        $this->assertCount(1, $this->customLabelFiles());
+        $this->assertDatabaseHas('shipment_logs', [
+            'shipper_id' => 10,
+            'customer_id' => $customer->id,
+            'status' => 'packed',
+        ]);
+    }
+
+    public function test_it_removes_the_label_file_when_the_essential_database_transaction_fails(): void
+    {
+        $customer = $this->createCustomer(1, 'owner@example.com');
+        $this->createShipper(10, $customer->id, 'ready');
+        DB::statement(<<<'SQL'
+            CREATE TRIGGER fail_packed_shipment_update
+            BEFORE UPDATE ON shipper_info
+            BEGIN
+                SELECT RAISE(FAIL, 'forced shipment update failure');
+            END
+        SQL);
 
         $response = $this->actingAs($customer, 'customer')->postJson('http://localhost/customer/mark-packed', [
             'shipper_id' => 10,
@@ -172,10 +231,13 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
         $response->assertServerError()
             ->assertJsonPath('success', false)
-            ->assertJsonPath(
-                'message',
-                'Unable to store the custom label PDF. The shipment remains ready.'
-            );
+            ->assertJsonStructure(['message', 'error_reference']);
+        $errorReference = (string) $response->json('error_reference');
+        $this->assertTrue(Str::isUuid($errorReference));
+        $this->assertSame(
+            'Unable to save the custom label. The shipment remains ready. Reference: ' . $errorReference,
+            $response->json('message')
+        );
         $this->assertStringNotContainsString('SQLSTATE', (string) $response->json('message'));
         $this->assertDatabaseHas('shipper_info', [
             'id' => 10,
@@ -183,6 +245,7 @@ class StoreCustomLabelWhenPackingTest extends TestCase
             'custom_label' => null,
         ]);
         $this->assertSame([], $this->customLabelFiles());
+        $this->assertDatabaseCount('tracking', 0);
         $this->assertDatabaseCount('shipment_logs', 0);
     }
 
@@ -209,7 +272,7 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
     private function customLabelFiles(): array
     {
-        return glob($this->testStoragePath . '/custom_labels/*.pdf') ?: [];
+        return glob($this->testPublicPath . '/custom_label/*.pdf') ?: [];
     }
 
     private function deleteDirectory(string $directory): void

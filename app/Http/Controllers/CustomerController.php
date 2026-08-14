@@ -33,7 +33,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Validation\Rule;
@@ -5744,9 +5743,17 @@ class CustomerController extends Controller
 
         $labelPath = null;
         $labelUrl = null;
+        $packedShipper = null;
+        $failureStage = 'database_transaction';
 
         try {
-            DB::transaction(function () use ($validated, $customerId, &$labelPath, &$labelUrl) {
+            $packedShipper = DB::transaction(function () use (
+                $validated,
+                $customerId,
+                &$labelPath,
+                &$labelUrl,
+                &$failureStage
+            ) {
                 $shipper = ShipperInfo::whereKey($validated['shipper_id'])
                     ->where('customer_id', $customerId)
                     ->lockForUpdate()
@@ -5756,78 +5763,141 @@ class CustomerController extends Controller
                     throw new \DomainException('Shipment is not in Ready status.');
                 }
 
+                $failureStage = 'pdf_storage';
                 [$labelPath, $labelUrl] = $this->storeCustomLabelFile(
                     $shipper,
                     $validated['custom_label']
                 );
 
+                $failureStage = 'shipment_update';
                 $shipper->custom_label = $labelUrl;
                 $shipper->status = 'packed';
                 $shipper->save();
 
-                $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
-                Tracking::create([
-                    'awb_number' => $shipper->awb_number,
-                    'shipper_id' => $shipper->id,
-                    'shipping_id' => $createShipment ? $createShipment->id : null,
-                    'uwc_id' => $shipper->awb_number,
-                    'title' => Tracking::getTitleForStatus('packed'),
-                    'status' => 'packed',
-                ]);
+                $failureStage = 'complete';
 
-                ShipmentLog::logStatus(
-                    $shipper->id,
-                    $shipper->awb_number,
-                    'packed',
-                    'ready',
-                    'Shipment marked as packed and custom label URL stored.',
-                    $customerId,
-                    'customer'
-                );
+                return $shipper;
             });
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Custom label PDF stored and status updated to Packed.',
-                'custom_label_url' => $labelUrl,
-            ]);
         } catch (\DomainException $e) {
             $this->deleteCustomLabelFile($labelPath);
 
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
             $this->deleteCustomLabelFile($labelPath);
+            $errorReference = (string) Str::uuid();
 
             Log::error('Custom label persistence failed.', [
+                'error_reference' => $errorReference,
+                'failure_stage' => $failureStage,
                 'shipper_id' => $validated['shipper_id'],
                 'customer_id' => $customerId,
-                'storage_disk' => 'public',
-                'storage_path' => $labelPath,
+                'public_file_path' => $labelPath,
+                'public_directory' => public_path('custom_label'),
                 'exception_class' => $e::class,
                 'exception_message' => $e->getMessage(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to store the custom label PDF. The shipment remains ready.',
+                'message' => 'Unable to save the custom label. The shipment remains ready. Reference: ' . $errorReference,
+                'error_reference' => $errorReference,
             ], 500);
         }
+
+        $this->recordPackedShipmentAudit($packedShipper, $customerId);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Custom label PDF stored and status updated to Packed.',
+            'custom_label_url' => $labelUrl,
+        ]);
     }
 
+    /** @return array{0: string, 1: string} */
     private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
     {
         $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
         $filename = $name . '-' . Str::uuid() . '.pdf';
-        $path = 'custom_labels/' . $filename;
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
-        $pdfBytes = Pdf::loadHTML($document)->output();
-        $disk = Storage::disk('public');
+        $publicDirectory = public_path('custom_label');
+        $publicPath = $publicDirectory . DIRECTORY_SEPARATOR . $filename;
+        $temporaryDirectory = storage_path('app/custom-label-temp');
 
-        if (!$disk->put($path, $pdfBytes)) {
-            throw new \RuntimeException('Unable to write the custom label file to public storage.');
+        if (!is_dir($publicDirectory)
+            && !mkdir($publicDirectory, 0775, true)
+            && !is_dir($publicDirectory)) {
+            throw new \RuntimeException('Unable to create the public custom label directory.');
         }
 
-        return [$path, asset('storage/' . $path)];
+        if (!is_writable($publicDirectory)) {
+            throw new \RuntimeException('The public custom label directory is not writable.');
+        }
+
+        if (!is_dir($temporaryDirectory)
+            && !mkdir($temporaryDirectory, 0775, true)
+            && !is_dir($temporaryDirectory)) {
+            throw new \RuntimeException('Unable to create the custom label PDF temporary directory.');
+        }
+
+        $temporaryPath = $temporaryDirectory . DIRECTORY_SEPARATOR . $filename;
+        $source = null;
+        $destination = null;
+        $stored = false;
+
+        try {
+            Pdf::loadHTML($document)->save($temporaryPath);
+
+            if (!is_file($temporaryPath) || !is_readable($temporaryPath) || filesize($temporaryPath) === 0) {
+                throw new \RuntimeException('The custom label PDF was not generated correctly.');
+            }
+
+            $source = fopen($temporaryPath, 'rb');
+            if ($source === false) {
+                throw new \RuntimeException('Unable to open the generated custom label PDF.');
+            }
+
+            $destination = fopen($publicPath, 'xb');
+            if ($destination === false) {
+                throw new \RuntimeException('Unable to create the custom label PDF in the public directory.');
+            }
+
+            $bytesWritten = stream_copy_to_stream($source, $destination);
+            if ($bytesWritten === false || $bytesWritten === 0 || !fflush($destination)) {
+                throw new \RuntimeException('Unable to write the custom label PDF to the public directory.');
+            }
+
+            fclose($destination);
+            $destination = null;
+            fclose($source);
+            $source = null;
+            clearstatcache(true, $publicPath);
+
+            if (!is_file($publicPath) || !is_readable($publicPath) || filesize($publicPath) === 0) {
+                throw new \RuntimeException('The custom label PDF was not stored correctly in the public directory.');
+            }
+
+            $stored = true;
+
+            return [$publicPath, asset('custom_label/' . $filename)];
+        } finally {
+            if (is_resource($destination)) {
+                fclose($destination);
+            }
+
+            if (is_resource($source)) {
+                fclose($source);
+            }
+
+            if (is_file($temporaryPath)) {
+                @unlink($temporaryPath);
+            }
+
+            if (!$stored && is_file($publicPath)) {
+                @unlink($publicPath);
+            }
+        }
     }
 
     private function buildCustomLabelDocument(ShipperInfo $shipper, string $labelHtml): string
@@ -5848,9 +5918,84 @@ class CustomerController extends Controller
 
     private function deleteCustomLabelFile(?string $path): void
     {
-        if ($path !== null) {
-            Storage::disk('public')->delete($path);
+        if ($path === null) {
+            return;
         }
+
+        $directory = realpath(public_path('custom_label'));
+        $file = realpath($path);
+
+        if ($directory === false || $file === false || !is_file($file)) {
+            return;
+        }
+
+        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (!str_starts_with($file, $directoryPrefix)) {
+            Log::warning('Refused to remove a file outside the public custom label directory.', [
+                'public_file_path' => $path,
+            ]);
+
+            return;
+        }
+
+        if (!@unlink($file)) {
+            Log::warning('Unable to remove a custom label file.', [
+                'public_file_path' => $file,
+            ]);
+        }
+    }
+
+    private function recordPackedShipmentAudit(ShipperInfo $shipper, int $customerId): void
+    {
+        try {
+            $shippingId = CreateShipment::where('shipper_id', $shipper->id)->value('id');
+
+            Tracking::firstOrCreate(
+                ['shipper_id' => $shipper->id, 'status' => 'packed'],
+                [
+                    'awb_number' => $shipper->awb_number,
+                    'shipping_id' => $shippingId,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('packed'),
+                ]
+            );
+        } catch (\Throwable $e) {
+            $this->logPackedShipmentAuditFailure('tracking_insert', $shipper, $customerId, $e);
+        }
+
+        try {
+            ShipmentLog::firstOrCreate(
+                ['shipper_id' => $shipper->id, 'status' => 'packed'],
+                [
+                    'customer_id' => $customerId,
+                    'awb_number' => $shipper->awb_number,
+                    'previous_status' => 'ready',
+                    'title' => Tracking::getTitleForStatus('packed'),
+                    'description' => 'Shipment marked as packed and custom label URL stored.',
+                    'performed_by' => 'customer',
+                    'created_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            $this->logPackedShipmentAuditFailure('shipment_log_insert', $shipper, $customerId, $e);
+        }
+    }
+
+    private function logPackedShipmentAuditFailure(
+        string $stage,
+        ShipperInfo $shipper,
+        int $customerId,
+        \Throwable $exception
+    ): void {
+        Log::error('Packed shipment audit record failed after the shipment was saved.', [
+            'failure_stage' => $stage,
+            'shipper_id' => $shipper->id,
+            'customer_id' => $customerId,
+            'exception_class' => $exception::class,
+            'exception_message' => $exception->getMessage(),
+            'exception_file' => $exception->getFile(),
+            'exception_line' => $exception->getLine(),
+        ]);
     }
 
     /**

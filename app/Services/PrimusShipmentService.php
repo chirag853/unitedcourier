@@ -13,6 +13,7 @@ use App\Models\ShipperInfo;
 use App\Models\Tracking;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
 
@@ -416,38 +417,49 @@ class PrimusShipmentService
         }
 
         $path = str_replace('\\', '/', rawurldecode((string) ($parts['path'] ?? '')));
-        $locations = [
-            '/storage/custom_labels/' => storage_path('app/public/custom_labels'),
-            '/uploads/custom_labels/' => public_path('uploads/custom_labels'),
-        ];
-        $filename = null;
-        $configuredDirectory = null;
+        $publicMarker = '/custom_label/';
+        $publicPosition = strpos($path, $publicMarker);
 
-        foreach ($locations as $marker => $directory) {
-            $markerPosition = strpos($path, $marker);
-            if ($markerPosition !== false) {
-                $filename = substr($path, $markerPosition + strlen($marker));
-                $configuredDirectory = $directory;
-                break;
-            }
+        if ($publicPosition !== false) {
+            $filename = substr($path, $publicPosition + strlen($publicMarker));
+
+            return $this->readCustomLabelFromPublicDirectory('custom_label', $filename);
         }
 
-        if ($filename === null || $configuredDirectory === null) {
+        $storageMarker = '/storage/custom_labels/';
+        $storagePosition = strpos($path, $storageMarker);
+
+        if ($storagePosition !== false) {
+            $filename = substr($path, $storagePosition + strlen($storageMarker));
+
+            return $this->readCustomLabelFromDisk('public', $filename);
+        }
+
+        $legacyMarker = '/uploads/custom_labels/';
+        $legacyPosition = strpos($path, $legacyMarker);
+        if ($legacyPosition === false) {
             throw new RuntimeException('The stored custom label URL is outside the custom label directory.');
         }
 
-        if ($filename === '' || $filename !== basename($filename) || str_contains($filename, '..')) {
-            throw new RuntimeException('The stored custom label URL contains an invalid file path.');
-        }
+        $filename = substr($path, $legacyPosition + strlen($legacyMarker));
 
+        return $this->readCustomLabelFromPublicDirectory('uploads/custom_labels', $filename);
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function readCustomLabelFromPublicDirectory(string $relativeDirectory, string $filename): array
+    {
+        $this->assertValidCustomLabelFilename($filename);
+        $configuredDirectory = public_path($relativeDirectory);
         $directory = realpath($configuredDirectory);
-        $file = $directory !== false ? realpath($directory.DIRECTORY_SEPARATOR.$filename) : false;
-        if ($directory === false || $file === false || ! is_file($file) || ! is_readable($file)) {
+        $file = $directory !== false ? realpath($directory . DIRECTORY_SEPARATOR . $filename) : false;
+
+        if ($directory === false || $file === false || !is_file($file) || !is_readable($file)) {
             throw new RuntimeException('The stored custom label file is missing or unreadable.');
         }
 
-        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-        if (! str_starts_with($file, $directoryPrefix)) {
+        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (!str_starts_with($file, $directoryPrefix)) {
             throw new RuntimeException('The stored custom label file is outside the custom label directory.');
         }
 
@@ -457,6 +469,37 @@ class PrimusShipmentService
         }
 
         return [basename($file), $bytes];
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function readCustomLabelFromDisk(string $disk, string $filename): array
+    {
+        $this->assertValidCustomLabelFilename($filename);
+        $path = 'custom_labels/' . $filename;
+
+        try {
+            if (!Storage::disk($disk)->exists($path)) {
+                throw new RuntimeException('The stored custom label file is missing or unreadable.');
+            }
+
+            $bytes = Storage::disk($disk)->get($path);
+        } catch (RuntimeException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new RuntimeException('The stored custom label file could not be read.', 0, $e);
+        }
+
+        return [$filename, $bytes];
+    }
+
+    private function assertValidCustomLabelFilename(string $filename): void
+    {
+        if ($filename === ''
+            || $filename !== basename($filename)
+            || str_contains($filename, '..')
+            || !str_ends_with(strtolower($filename), '.pdf')) {
+            throw new RuntimeException('The stored custom label URL contains an invalid file path.');
+        }
     }
 
     private function resolveCourierService(ShipperInfo $shipper): ?CourierService

@@ -41,6 +41,7 @@ class PrimusShipmentServiceTest extends TestCase
         DB::reconnect('sqlite');
 
         $this->createSchema();
+        mkdir($this->testPublicPath.'/custom_label', 0777, true);
         mkdir($this->testPublicPath.'/uploads/custom_labels', 0777, true);
     }
 
@@ -64,7 +65,7 @@ class PrimusShipmentServiceTest extends TestCase
         $this->assertSame('TEST-ACCOUNT', $payload['ValidateAccount'][0]['AccountCode']);
         $this->assertSame('test-user', $payload['ValidateAccount'][0]['Username']);
         $this->assertSame('S', $shipment['ServiceTypeCode']);
-        $this->assertSame('GBR', $shipment['DestinationCode']);
+        $this->assertSame('United Kingdom', $shipment['DestinationCode']);
         $this->assertSame('1.500', $shipment['ActWeight']);
         $this->assertSame('Sender Street', $shipment['ConsignorAddressLine1']);
         $this->assertSame('Sender Street', $shipment['ConsignorAddressLine2']);
@@ -75,6 +76,35 @@ class PrimusShipmentServiceTest extends TestCase
         $this->assertSame('label-10.pdf', $shipment['filename']);
         $this->assertSame(base64_encode($labelBytes), $shipment['Base64StringInvoice']);
         $this->assertNotSame(base64_encode((string) $shipper->custom_label), $shipment['Base64StringInvoice']);
+    }
+
+    public function test_it_reads_legacy_public_custom_label_urls(): void
+    {
+        $labelBytes = "%PDF-1.4\nLegacy public label bytes";
+        $shipper = $this->createShipmentFixture('new public label bytes');
+        file_put_contents($this->testPublicPath.'/uploads/custom_labels/label-10.pdf', $labelBytes);
+        $shipper->custom_label = 'http://localhost/uploads/custom_labels/label-10.pdf';
+
+        $payload = $this->service()->buildPayload($shipper);
+
+        $this->assertSame('label-10.pdf', $payload['Shipment'][0]['filename']);
+        $this->assertSame(base64_encode($labelBytes), $payload['Shipment'][0]['Base64StringInvoice']);
+    }
+
+    public function test_it_reads_legacy_public_disk_custom_label_urls(): void
+    {
+        $labelBytes = "%PDF-1.4\nLegacy storage label bytes";
+        $shipper = $this->createShipmentFixture('new public label bytes');
+        $publicDiskRoot = $this->testPublicPath.'/legacy-public-disk';
+        mkdir($publicDiskRoot.'/custom_labels', 0777, true);
+        file_put_contents($publicDiskRoot.'/custom_labels/label-10.pdf', $labelBytes);
+        config()->set('filesystems.disks.public.root', $publicDiskRoot);
+        $shipper->custom_label = 'http://localhost/storage/custom_labels/label-10.pdf';
+
+        $payload = $this->service()->buildPayload($shipper);
+
+        $this->assertSame('label-10.pdf', $payload['Shipment'][0]['filename']);
+        $this->assertSame(base64_encode($labelBytes), $payload['Shipment'][0]['Base64StringInvoice']);
     }
 
     public function test_it_uses_the_second_consignor_address_line_when_present(): void
@@ -139,7 +169,7 @@ class PrimusShipmentServiceTest extends TestCase
     public function test_it_rejects_a_missing_custom_label_file(): void
     {
         $shipper = $this->createShipmentFixture('private label');
-        unlink($this->testPublicPath.'/uploads/custom_labels/label-10.pdf');
+        unlink($this->testPublicPath.'/custom_label/label-10.pdf');
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('The stored custom label file is missing or unreadable.');
@@ -291,7 +321,7 @@ class PrimusShipmentServiceTest extends TestCase
 
     private function createShipmentFixture(string $labelBytes): ShipperInfo
     {
-        file_put_contents($this->testPublicPath.'/uploads/custom_labels/label-10.pdf', $labelBytes);
+        file_put_contents($this->testPublicPath.'/custom_label/label-10.pdf', $labelBytes);
 
         DB::table('courier_services')->insert([
             'id' => 5,
@@ -300,7 +330,7 @@ class PrimusShipmentServiceTest extends TestCase
             'method' => 'FedEx Priority',
             'description' => 'FedEx Priority',
             'real_name' => 'FedEx International Priority',
-            'country' => 'United Kingdom',
+            'country' => 'UK',
             'status' => 1,
             'api_provider' => 'primus',
         ]);
@@ -321,7 +351,7 @@ class PrimusShipmentServiceTest extends TestCase
             'kyc_number' => 'TESTGST123',
             'service_id' => 5,
             'status' => 'packed',
-            'custom_label' => 'http://localhost/uploads/custom_labels/label-10.pdf',
+            'custom_label' => 'http://localhost/custom_label/label-10.pdf',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -514,6 +544,24 @@ class PrimusShipmentServiceTest extends TestCase
             $table->integer('status')->default(1);
             $table->string('api_provider')->nullable();
         });
+
+        Schema::create('destinations', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('code', 10)->unique();
+            $table->string('country_code', 5)->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+
+        DB::table('destinations')->insert([
+            'name' => 'UK - United Kingdom',
+            'code' => 'UK',
+            'country_code' => 'UK',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         Schema::create('create_shipment', function (Blueprint $table): void {
             $table->id();
