@@ -415,19 +415,32 @@ class PrimusShipmentService
             }
         }
 
-        $path = rawurldecode((string) ($parts['path'] ?? ''));
-        $marker = '/uploads/custom_labels/';
-        $markerPosition = strpos(str_replace('\\', '/', $path), $marker);
-        if ($markerPosition === false) {
+        $path = str_replace('\\', '/', rawurldecode((string) ($parts['path'] ?? '')));
+        $locations = [
+            '/storage/custom_labels/' => storage_path('app/public/custom_labels'),
+            '/uploads/custom_labels/' => public_path('uploads/custom_labels'),
+        ];
+        $filename = null;
+        $configuredDirectory = null;
+
+        foreach ($locations as $marker => $directory) {
+            $markerPosition = strpos($path, $marker);
+            if ($markerPosition !== false) {
+                $filename = substr($path, $markerPosition + strlen($marker));
+                $configuredDirectory = $directory;
+                break;
+            }
+        }
+
+        if ($filename === null || $configuredDirectory === null) {
             throw new RuntimeException('The stored custom label URL is outside the custom label directory.');
         }
 
-        $filename = substr(str_replace('\\', '/', $path), $markerPosition + strlen($marker));
         if ($filename === '' || $filename !== basename($filename) || str_contains($filename, '..')) {
             throw new RuntimeException('The stored custom label URL contains an invalid file path.');
         }
 
-        $directory = realpath(public_path('uploads/custom_labels'));
+        $directory = realpath($configuredDirectory);
         $file = $directory !== false ? realpath($directory.DIRECTORY_SEPARATOR.$filename) : false;
         if ($directory === false || $file === false || ! is_file($file) || ! is_readable($file)) {
             throw new RuntimeException('The stored custom label file is missing or unreadable.');

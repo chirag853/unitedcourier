@@ -33,6 +33,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Validation\Rule;
@@ -5800,7 +5801,10 @@ class CustomerController extends Controller
             Log::error('Custom label persistence failed.', [
                 'shipper_id' => $validated['shipper_id'],
                 'customer_id' => $customerId,
+                'storage_disk' => 'public',
+                'storage_path' => $labelPath,
                 'exception_class' => $e::class,
+                'exception_message' => $e->getMessage(),
             ]);
 
             return response()->json([
@@ -5812,31 +5816,18 @@ class CustomerController extends Controller
 
     private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
     {
-        $relativeDirectory = 'uploads/custom_labels';
-        $directory = public_path($relativeDirectory);
-
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            throw new \RuntimeException('Unable to create the custom label directory.');
-        }
-
         $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
         $filename = $name . '-' . Str::uuid() . '.pdf';
-        $path = $directory . DIRECTORY_SEPARATOR . $filename;
-        $temporaryPath = $path . '.tmp';
+        $path = 'custom_labels/' . $filename;
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
         $pdfBytes = Pdf::loadHTML($document)->output();
+        $disk = Storage::disk('public');
 
-        if (file_put_contents($temporaryPath, $pdfBytes, LOCK_EX) === false) {
-            @unlink($temporaryPath);
-            throw new \RuntimeException('Unable to write the custom label file.');
+        if (!$disk->put($path, $pdfBytes)) {
+            throw new \RuntimeException('Unable to write the custom label file to public storage.');
         }
 
-        if (!rename($temporaryPath, $path)) {
-            @unlink($temporaryPath);
-            throw new \RuntimeException('Unable to publish the custom label file.');
-        }
-
-        return [$path, asset($relativeDirectory . '/' . $filename)];
+        return [$path, asset('storage/' . $path)];
     }
 
     private function buildCustomLabelDocument(ShipperInfo $shipper, string $labelHtml): string
@@ -5857,8 +5848,8 @@ class CustomerController extends Controller
 
     private function deleteCustomLabelFile(?string $path): void
     {
-        if ($path !== null && is_file($path)) {
-            @unlink($path);
+        if ($path !== null) {
+            Storage::disk('public')->delete($path);
         }
     }
 

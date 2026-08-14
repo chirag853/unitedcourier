@@ -10,17 +10,15 @@ use Tests\TestCase;
 
 class StoreCustomLabelWhenPackingTest extends TestCase
 {
-    private string $originalPublicPath;
-
-    private string $testPublicPath;
+    private string $testStoragePath;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->originalPublicPath = public_path();
-        $this->testPublicPath = storage_path('framework/testing/custom-labels-' . uniqid());
-        app()->usePublicPath($this->testPublicPath);
+        $this->testStoragePath = storage_path('framework/testing/custom-labels-' . uniqid());
+        config()->set('filesystems.disks.public.root', $this->testStoragePath);
+        config()->set('filesystems.disks.public.url', asset('storage'));
 
         config()->set('database.default', 'sqlite');
         config()->set('database.connections.sqlite.database', ':memory:');
@@ -77,8 +75,7 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->deleteDirectory($this->testPublicPath);
-        app()->usePublicPath($this->originalPublicPath);
+        $this->deleteDirectory($this->testStoragePath);
 
         parent::tearDown();
     }
@@ -98,12 +95,12 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
         $storedUrl = DB::table('shipper_info')->where('id', 10)->value('custom_label');
         $this->assertIsString($storedUrl);
-        $this->assertStringStartsWith(asset('uploads/custom_labels/'), $storedUrl);
+        $this->assertStringStartsWith(asset('storage/custom_labels/'), $storedUrl);
         $this->assertStringEndsWith('.pdf', $storedUrl);
         $response->assertJsonPath('custom_label_url', $storedUrl);
 
         $filename = basename((string) parse_url($storedUrl, PHP_URL_PATH));
-        $labelPath = $this->testPublicPath . '/uploads/custom_labels/' . $filename;
+        $labelPath = $this->testStoragePath . '/custom_labels/' . $filename;
         $this->assertFileExists($labelPath);
 
         $storedDocument = file_get_contents($labelPath);
@@ -212,7 +209,7 @@ class StoreCustomLabelWhenPackingTest extends TestCase
 
     private function customLabelFiles(): array
     {
-        return glob($this->testPublicPath . '/uploads/custom_labels/*.pdf') ?: [];
+        return glob($this->testStoragePath . '/custom_labels/*.pdf') ?: [];
     }
 
     private function deleteDirectory(string $directory): void
