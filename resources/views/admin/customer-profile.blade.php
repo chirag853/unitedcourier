@@ -496,11 +496,24 @@
                             <!-- Documents -->
                             <h6 class="mt-3 mb-2"><i class="ti ti-files me-2"></i>Documents</h6>
                             <div class="kyc-doc-grid">
-                                @php $docBase = asset('uploads/'); @endphp
+                                @php
+                                    $documentUrl = static function ($storedPath) {
+                                        $path = trim((string) $storedPath);
+
+                                        if (filter_var($path, FILTER_VALIDATE_URL)) {
+                                            return $path;
+                                        }
+
+                                        $path = ltrim(str_replace('\\', '/', $path), '/');
+                                        $path = preg_replace('#^(?:(?:public|uploads)/)+#i', '', $path) ?? $path;
+
+                                        return asset('uploads/' . ltrim($path, '/'));
+                                    };
+                                @endphp
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Aadhaar Front</span>
                                     @if($personalKyc->aadhar_front_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($personalKyc->aadhar_front_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($personalKyc->aadhar_front_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else
                                         <span class="doc-empty">Not uploaded</span>
                                     @endif
@@ -508,7 +521,7 @@
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Aadhaar Back</span>
                                     @if($personalKyc->aadhar_back_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($personalKyc->aadhar_back_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($personalKyc->aadhar_back_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else
                                         <span class="doc-empty">Not uploaded</span>
                                     @endif
@@ -516,7 +529,7 @@
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">PAN Card</span>
                                     @if($personalKyc->pan_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($personalKyc->pan_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($personalKyc->pan_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else
                                         <span class="doc-empty">Not uploaded</span>
                                     @endif
@@ -524,7 +537,7 @@
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Signature</span>
                                     @if($personalKyc->signature_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($personalKyc->signature_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($personalKyc->signature_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else
                                         <span class="doc-empty">Not uploaded</span>
                                     @endif
@@ -532,7 +545,7 @@
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Merchant Agreement</span>
                                     @if($personalKyc->merchant_agreement)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($personalKyc->merchant_agreement, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($personalKyc->merchant_agreement) }}"><i class="ti ti-eye"></i> View</a>
                                     @else
                                         <span class="doc-empty">Not uploaded</span>
                                     @endif
@@ -611,53 +624,52 @@
                             <!-- Business Documents -->
                             <h6 class="mt-3 mb-2"><i class="ti ti-files me-2"></i>Business Documents</h6>
                             <div class="kyc-doc-grid">
-                                @php $docBase = asset('uploads/'); @endphp
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">GST Certificate</span>
                                     @if($businessKyc->gst_certificate_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->gst_certificate_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->gst_certificate_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">IEC Certificate</span>
                                     @if($businessKyc->iec_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->iec_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->iec_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">AD Code Document</span>
                                     @if($businessKyc->ad_code_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->ad_code_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->ad_code_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">LUT Document</span>
                                     @if($businessKyc->lut_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->lut_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->lut_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">GST Document</span>
                                     @if($businessKyc->gst_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->gst_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->gst_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Aadhaar Document</span>
                                     @if($businessKyc->aadhar_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->aadhar_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->aadhar_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Authorized Signature</span>
                                     @if($businessKyc->signature_document)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->signature_document, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->signature_document) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                                 <div class="kyc-doc-card">
                                     <span class="doc-label">Merchant Agreement</span>
                                     @if($businessKyc->merchant_agreement)
-                                        <a class="doc-link" href="{{ $docBase . '/' . ltrim($businessKyc->merchant_agreement, '/') }}" target="_blank"><i class="ti ti-external-link"></i> View</a>
+                                        <a class="doc-link document-preview-link" href="{{ $documentUrl($businessKyc->merchant_agreement) }}"><i class="ti ti-eye"></i> View</a>
                                     @else <span class="doc-empty">Not uploaded</span> @endif
                                 </div>
                             </div>
@@ -703,6 +715,21 @@
 
     </div>
     <!-- End Wrapper -->
+
+    <!-- Document Preview Modal -->
+    <div class="modal fade" id="documentPreviewModal" tabindex="-1" aria-labelledby="documentPreviewTitle" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="documentPreviewTitle"><i class="ti ti-file-search me-2"></i>Document Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0" style="height:min(78vh, 900px);min-height:420px;">
+                    <iframe id="documentPreviewFrame" title="Document preview" loading="lazy" style="width:100%;height:100%;border:0;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Reset Password Modal -->
     <div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-hidden="true">
@@ -776,6 +803,26 @@
     <script>
         var rechargeCustomerId = null;
         var rechargeUrlTemplate = '{{ route("admin.customer.recharge-wallet", ["id" => "__ID__"]) }}';
+        var documentPreviewElement = document.getElementById('documentPreviewModal');
+        var documentPreviewFrame = document.getElementById('documentPreviewFrame');
+        var documentPreviewTitle = document.getElementById('documentPreviewTitle');
+        var documentPreviewModal = bootstrap.Modal.getOrCreateInstance(documentPreviewElement);
+
+        document.querySelectorAll('.document-preview-link').forEach(function(link) {
+            link.addEventListener('click', function(event) {
+                event.preventDefault();
+
+                var labelElement = link.closest('.kyc-doc-card').querySelector('.doc-label');
+                documentPreviewTitle.textContent = labelElement ? labelElement.textContent.trim() : 'Document Preview';
+                documentPreviewFrame.src = link.href;
+                documentPreviewModal.show();
+            });
+        });
+
+        documentPreviewElement.addEventListener('hidden.bs.modal', function() {
+            documentPreviewFrame.removeAttribute('src');
+            documentPreviewTitle.textContent = 'Document Preview';
+        });
 
         function copyText(text) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
