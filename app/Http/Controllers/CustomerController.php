@@ -1719,10 +1719,14 @@ class CustomerController extends Controller
             'email' => 'required|email|unique:customers,email',
             'phone_number' => 'required|string|max:20',
             'alternate_phone_number' => 'nullable|string|max:20',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:6|confirmed',
+            'password_confirmation' => 'required|string|min:6',
             'aadhar_number' => 'nullable|string|max:20',
             'business_category' => 'nullable|string',
             'termsCheck' => 'required|accepted'
+        ], [
+            'password.confirmed' => 'Password and confirm password must match.',
+            'password_confirmation.required' => 'Please confirm your password.'
         ]);
 
         if ($validator->fails()) {

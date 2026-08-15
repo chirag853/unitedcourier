@@ -111,19 +111,22 @@
                         <!-- Password Row -->
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
-                                <label class="form-label-custom">Create Password</label>
+                                <label class="form-label-custom" for="password">Create Password</label>
                                 <div class="input-group-custom">
-                                    <input type="password" name="password" class="form-control input-custom" placeholder="********"
-                                        required>
+                                    <input type="password" id="password" name="password" class="form-control input-custom" placeholder="********"
+                                        minlength="6" autocomplete="new-password" required>
                                     <i class="fa-solid fa-lock"></i>
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label-custom">Confirm Password</label>
+                                <label class="form-label-custom" for="passwordConfirmation">Confirm Password</label>
                                 <div class="input-group-custom">
-                                    <input type="password" name="confirm_password" class="form-control input-custom" placeholder="********"
-                                        required>
+                                    <input type="password" id="passwordConfirmation" name="password_confirmation" class="form-control input-custom" placeholder="********"
+                                        minlength="6" autocomplete="new-password" required>
                                     <i class="fa-solid fa-lock"></i>
+                                </div>
+                                <div id="passwordMismatchError" class="small text-danger mt-1" style="display: none;">
+                                    Password and confirm password must match.
                                 </div>
                             </div>
                         </div>
@@ -384,9 +387,32 @@ function verifyRegistrationOtp() {
     });
 }
 
+const passwordInput = document.getElementById('password');
+const passwordConfirmationInput = document.getElementById('passwordConfirmation');
+const passwordMismatchError = document.getElementById('passwordMismatchError');
+
+function validatePasswordMatch() {
+    const passwordsMatch = passwordInput.value === passwordConfirmationInput.value;
+    const shouldShowError = passwordConfirmationInput.value.length > 0 && !passwordsMatch;
+
+    passwordConfirmationInput.setCustomValidity(passwordsMatch ? '' : 'Password and confirm password must match.');
+    passwordMismatchError.style.display = shouldShowError ? 'block' : 'none';
+
+    return passwordsMatch;
+}
+
+passwordInput.addEventListener('input', validatePasswordMatch);
+passwordConfirmationInput.addEventListener('input', validatePasswordMatch);
+
 // Form Submission
 document.getElementById('registrationForm').addEventListener('submit', function(e) {
     e.preventDefault();
+
+    if (!validatePasswordMatch()) {
+        showNotification('Password and confirm password must match.', 'error');
+        passwordConfirmationInput.focus();
+        return;
+    }
 
     // Require OTP verification before submitting registration
     if (!registrationPhoneVerified) {
