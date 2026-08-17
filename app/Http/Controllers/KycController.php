@@ -346,10 +346,10 @@ class KycController extends Controller
                 !$request->boolean('gst_verified')
                 || session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
-                || !hash_equals(
-                    (string) session('kyc_gst_business_name', ''),
-                    $this->normalizeGstBusinessName($gstBusinessName)
-                )
+                || strcasecmp(
+                    trim((string) session('kyc_gst_business_name', '')),
+                    $gstBusinessName
+                ) !== 0
             )) {
                 return response()->json([
                     'success' => false,
@@ -369,10 +369,7 @@ class KycController extends Controller
             $organizationName = trim((string) $request->input('organization_name'));
             if ($gstNumber && session('kyc_gst_cashfree_verified')) {
                 $verifiedGstBusinessName = trim((string) session('kyc_gst_business_name', ''));
-                if ($organizationName === '' || !hash_equals(
-                    $this->normalizeGstBusinessName($verifiedGstBusinessName),
-                    $this->normalizeGstBusinessName($organizationName)
-                )) {
+                if ($organizationName === '' || strcasecmp($verifiedGstBusinessName, $organizationName) !== 0) {
                     return response()->json([
                         'success' => false,
                         'message' => 'The Organization Name must match the business name returned in the GST verification. Please enter the verified name exactly as it appears on your GST registration.',
@@ -635,7 +632,14 @@ class KycController extends Controller
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            $businessName = trim($validated['business_name']);
+            $enteredBusinessName = trim((string) $validated['business_name']);
+            $businessName = $this->sanitizeGstBusinessName($enteredBusinessName);
+            if ($businessName === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The Business Name may only contain letters, numbers, and spaces.',
+                ], 422);
+            }
 
             $clientId = config('services.cashfree.verification_client_id');
             $clientSecret = config('services.cashfree.verification_client_secret');
@@ -665,10 +669,13 @@ class KycController extends Controller
                     'customer_id' => $customer->id,
                     'http_status' => $cashfreeResponse->status(),
                 ]);
+                $errorMessage = data_get($cashfreeData, 'message') ?: 'Cashfree could not verify this GSTIN.';
+                if (str_contains(strtolower($errorMessage), 'alphanumeric')) {
+                    $errorMessage = 'The Business Name may only contain letters, numbers, and spaces. Please remove any special characters and try again.';
+                }
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not verify this GSTIN.',
+                    'message' => $errorMessage,
                 ], 422);
             }
 
@@ -683,10 +690,13 @@ class KycController extends Controller
             if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
                 || $providerValid === false
                 || $providerSuccess === false) {
+                $errorMessage = data_get($cashfreeData, 'message') ?: 'Cashfree could not verify this GSTIN.';
+                if (str_contains(strtolower($errorMessage), 'alphanumeric')) {
+                    $errorMessage = 'The Business Name may only contain letters, numbers, and spaces. Please remove any special characters and try again.';
+                }
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not verify this GSTIN.',
+                    'message' => $errorMessage,
                 ], 422);
             }
 
@@ -744,13 +754,9 @@ class KycController extends Controller
                 ?? data_get($cashfreeData, 'data.trade_name')
                 ?? ''
             ));
-            $normalizedBusinessName = $this->normalizeGstBusinessName($businessName);
             $providerNames = array_values(array_filter([$legalName, $tradeName]));
             $nameMatches = collect($providerNames)->contains(
-                fn (string $providerName) => hash_equals(
-                    $this->normalizeGstBusinessName($providerName),
-                    $normalizedBusinessName
-                )
+                fn (string $providerName) => strcasecmp(trim($providerName), $enteredBusinessName) === 0
             );
 
             if (!$providerNames) {
@@ -763,9 +769,13 @@ class KycController extends Controller
             if (!$nameMatches) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'The entered Business Name does not match the name registered for this GSTIN.',
+                    'message' => 'The entered Business Name does not match the name registered for this GSTIN. Please enter it exactly as it appears on the GST registration.',
                 ], 422);
             }
+
+            // The verified business name is taken from the verification response and
+            // used for all later exact-match comparisons (case-insensitive).
+            $verifiedBusinessName = trim($legalName ?: $tradeName);
 
             // Registered address of the business (principal place of business)
             // so the Billing Address can be prefilled from the GST response.
@@ -773,7 +783,7 @@ class KycController extends Controller
 
             session([
                 'kyc_gst_number' => $gst,
-                'kyc_gst_business_name' => $normalizedBusinessName,
+                'kyc_gst_business_name' => $verifiedBusinessName,
                 'kyc_gst_address' => $gstAddress !== '' ? $gstAddress : null,
                 'kyc_gst_verified' => true,
                 'kyc_gst_cashfree_verified' => true,
@@ -783,7 +793,7 @@ class KycController extends Controller
                 'success' => true,
                 'message' => 'GST number and Business Name verified successfully.',
                 'gst_number' => $gst,
-                'business_name' => $legalName ?: $tradeName,
+                'business_name' => $verifiedBusinessName,
             ];
             if ($gstAddress !== '') {
                 $response['address'] = $gstAddress;
@@ -813,11 +823,12 @@ class KycController extends Controller
         }
     }
 
-    private function normalizeGstBusinessName(string $name): string
+    private function sanitizeGstBusinessName(string $name): string
     {
-        $asciiName = Str::ascii($name);
+        $name = preg_replace('/[^A-Za-z0-9\s]+/', ' ', $name) ?? '';
+        $name = preg_replace('/\s+/', ' ', $name) ?? '';
 
-        return strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $asciiName) ?? '');
+        return trim($name);
     }
 
     private function normalizePanHolderName(string $name): string
@@ -1427,18 +1438,17 @@ class KycController extends Controller
                 ], 422);
             }
 
-            // A Personal (Individual) account's KYC must use an individual
-            // PAN whose fourth character is 'P'. Business accounts may
-            // legitimately use either their own entity PAN (e.g. 'C', 'F')
-            // or the proprietor's individual PAN (sole proprietorship).
-            if (!$this->isBusinessCustomer($customer) && !$this->isIndividualPan($pan)) {
-                \Log::warning('Personal KYC PAN rejected: PAN belongs to a business entity.', [
+            // Business KYC must use the registered business entity's PAN
+            // (e.g. 'C' for company, 'F' for firm). Personal KYC accepts both
+            // the account holder's individual PAN and a business PAN.
+            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($pan)) {
+                \Log::warning('Business KYC PAN rejected: PAN belongs to an individual.', [
                     'customer_id' => $customer->id,
                     'pan_number' => $pan,
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'This PAN belongs to a business entity. Individual KYC requires a personal PAN (with "P" as the 4th character). Please enter the PAN of the individual account holder.',
+                    'message' => 'This PAN belongs to an individual. Business KYC requires the PAN of the registered business entity (with a letter other than "P" as the 4th character).',
                 ], 422);
             }
 
@@ -1485,7 +1495,7 @@ class KycController extends Controller
                     ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
                         'verification_id' => $verificationId,
                         'document_type' => 'PAN',
-                        'do_verification' => 'false',
+                        'do_verification' => 'true',
                     ]);
             } finally {
                 fclose($fileStream);
@@ -1505,18 +1515,40 @@ class KycController extends Controller
                 ], 422);
             }
 
-            $providerStatus = strtoupper((string) (
+            $providerStatus = strtoupper(trim((string) (
                 data_get($cashfreeData, 'verification_status')
                 ?? data_get($cashfreeData, 'status')
                 ?? data_get($cashfreeData, 'status_code')
                 ?? ''
-            ));
+            )));
             if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
                 || data_get($cashfreeData, 'success') === false) {
                 return response()->json([
                     'success' => false,
                     'message' => data_get($cashfreeData, 'message')
                         ?: 'Cashfree could not read this PAN image.',
+                ], 422);
+            }
+
+            $panVerificationStatus = strtoupper(trim((string) data_get(
+                $cashfreeData,
+                'verification_details.status',
+                ''
+            )));
+            if ($panVerificationStatus !== 'VALID') {
+                \Log::warning('Cashfree PAN verification status is not valid.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'verification_status' => $panVerificationStatus ?: 'MISSING',
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'verification_details.message')
+                        ?: ($panVerificationStatus === ''
+                            ? 'PAN verification Failed'
+                            : 'PAN verification failed. Your Pan card is : ' . $panVerificationStatus . '.'),
+                    'verification_status' => $panVerificationStatus ?: null,
                 ], 422);
             }
 
@@ -1612,6 +1644,7 @@ class KycController extends Controller
                 'message' => 'PAN document verified successfully',
                 'pan_number' => $pan,
                 'verification_id' => $verificationId,
+                'verification_status' => $panVerificationStatus,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([

@@ -2182,7 +2182,7 @@
                     };
 
                     // Detect Business vs Personal flow and merge any server-side draft.
-                    const isBusinessFlow = @json($userType === 'Business');
+                    const isBusinessFlow = @json(strcasecmp(trim((string) $userType), 'Business') === 0);
                     const isAadhaarOptional = @json($isAadhaarOptional);
                     const totalSteps = 7;
                     const savedKycDraft = @json($kycDraft?->form_data ?? []);
@@ -2612,7 +2612,7 @@
                     }
 
                     function normalizeName(value) {
-                        return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        return String(value || '').trim().toLowerCase();
                     }
 
                     function verifyGst() {
@@ -2699,8 +2699,12 @@
                             })
                             .then(data => {
                                 if (data.success) {
+                                    // Use the exact business name returned in the verification
+                                    // response so every later check compares the same value.
+                                    const verifiedBusinessName = (data.business_name || businessName).trim();
                                     kycData.gst_number = gst;
-                                    kycData.gst_business_name = businessName;
+                                    kycData.gst_business_name = verifiedBusinessName;
+                                    businessNameField.value = verifiedBusinessName;
                                     kycData.gst_verified = true;
                                     saveKycDraft(getActiveKycStep());
 
@@ -2879,9 +2883,9 @@
 
                         if (!panField || !holderField || !dobField || !panFileInput || !verifyBtn || !panStatus) return;
 
-                        // Normalize PAN to uppercase, no spaces
+                        // Normalize PAN to uppercase, no spaces. Personal KYC accepts every
+                        // valid PAN entity type; only Business KYC rejects individual ('P') PAN.
                         const pan = panField.value.replace(/\s+/g, '').toUpperCase();
-                        const isBusinessKyc = {{ json_encode(strtolower((string) ($userType ?? 'Personal')) === 'business') }};
 
                         if (!pan) {
                             showKycAlert('PAN number required', 'Please enter your PAN number.');
@@ -2893,8 +2897,8 @@
                             markFieldInvalid(panField);
                             return;
                         }
-                        if (!isBusinessKyc && pan.charAt(3) !== 'P') {
-                            showKycAlert('This PAN belongs to a business entity', 'Individual KYC requires a personal PAN with <strong>"P"</strong> as the 4th character. The PAN you entered (4th character "<strong>' + pan.charAt(3) + '</strong>") belongs to a business entity. Please enter the PAN of the individual account holder.');
+                        if (isBusinessFlow && pan.charAt(3) === 'P') {
+                            showKycAlert('This PAN belongs to an individual', 'Business KYC requires the PAN of the registered business entity with a letter other than <strong>"P"</strong> as the 4th character. The PAN you entered (4th character "<strong>' + pan.charAt(3) + '</strong>") belongs to an individual. Please enter the PAN of the registered business entity.');
                             markFieldInvalid(panField);
                             return;
                         }
@@ -2954,14 +2958,15 @@
                                 });
                             })
                             .then(data => {
-                                if (data.success) {
+                                const verificationStatus = String(data.verification_status || '').trim().toUpperCase();
+                                if (data.success && verificationStatus === 'VALID') {
                                     kycData.pan_number = pan;
                                     kycData.pan_holder_name = holderField.value.trim();
                                     kycData.pan_dob = dobField.value;
                                     kycData.pan_verified = true;
                                     saveKycDraft(getActiveKycStep());
 
-                                    panStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'PAN verified successfully!');
+                                    panStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message || 'PAN verified successfully!') + ' (Status: ' + verificationStatus + ')';
                                     panStatus.style.display = 'block';
                                     panStatus.style.color = '#10b981';
 
@@ -2971,7 +2976,10 @@
                                     if (holderField) holderField.readOnly = true;
                                     if (dobField) dobField.readOnly = true;
                                 } else {
-                                    panStatus.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message || 'PAN verification failed.');
+                                    const statusMessage = verificationStatus
+                                        ? 'PAN verification status: ' + verificationStatus + '.'
+                                        : 'PAN verification status was not received.';
+                                    panStatus.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message || statusMessage);
                                     panStatus.style.display = 'block';
                                     panStatus.style.color = '#dc3545';
 
@@ -3173,7 +3181,7 @@
                                     return false;
                                 }
                                 if (!kycData.gst_certificate_verified
-                                    || businessName.value.trim() !== String(kycData.gst_business_name || '').trim()) {
+                                    || businessName.value.trim().toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
                                     alert('Please verify your GST Certificate number before continuing.');
                                     return false;
                                 }
@@ -3333,7 +3341,7 @@
                                     }
                                     if (!kycData.gst_verified
                                         || gstNumber !== String(kycData.gst_number || '').trim().toUpperCase()
-                                        || businessNameValue !== String(kycData.gst_business_name || '').trim()) {
+                                        || businessNameValue.toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
                                         alert('Please verify your GST details before continuing.');
                                         return false;
                                     }
@@ -3538,8 +3546,12 @@
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
+                                    // Use the exact business name returned in the verification
+                                    // response so every later check compares the same value.
+                                    const verifiedBusinessName = (data.business_name || businessName).trim();
                                     kycData.gst_certificate_number = gstValue;
-                                    kycData.gst_business_name = businessName;
+                                    kycData.gst_business_name = verifiedBusinessName;
+                                    businessNameField.value = verifiedBusinessName;
                                     kycData.gst_certificate_verified = true;
                                     kycData.gst_number = gstValue;
                                     kycData.gst_verified = true;

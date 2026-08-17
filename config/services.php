@@ -135,6 +135,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Adomantra CMS API
+    |--------------------------------------------------------------------------
+    | Customer master sync endpoint called when a customer's KYC is approved.
+    | Endpoint: https://adomantra.united.cmswebservice.in/api/shipment/customer
+    */
+    'adomantra' => [
+        'base_url' => env('ADOMANTRA_BASE_URL', 'https://adomantra.united.cmswebservice.in'),
+        'endpoint' => env('ADOMANTRA_ENDPOINT', '/api/shipment/customer'),
+        'timeout' => (int) env('ADOMANTRA_TIMEOUT', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Primus Logistics API
     |--------------------------------------------------------------------------
     | Authentication uses the OAuth password grant with form-encoded

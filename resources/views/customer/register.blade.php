@@ -135,7 +135,7 @@
                         <div class="mb-3">
                             <label class="form-label-custom">User Type</label>
                             <div class="input-group-custom">
-                                <select name="business_category" class="form-select input-custom">
+                                <select name="business_category" class="form-select input-custom" required>
                                     <option value="" selected disabled>Select your business category</option>
                                     @foreach($groupedBusinessCategories as $groupName => $categories)
                                         <optgroup label="{{ $groupName }}">
@@ -147,17 +147,23 @@
                                 </select>
                                 <i class="fas fa-briefcase"></i>
                             </div>
+                            <div id="userTypeError" class="small text-danger mt-1" style="display: none;">
+                                Please select a User Type to continue.
+                            </div>
                         </div>
 
                         <!-- Terms and Conditions -->
                         <div class="form-check mb-4">
                             <input class="form-check-input" type="checkbox" name="termsCheck" id="termsCheck" required>
                             <label class="form-check-label small text-muted" for="termsCheck">
-                                I agree to the <a href="#" class="text-primary text-decoration-none fw-bold">Terms of
-                                    Service</a> and <a href="#"
+                                I agree to the <a href="{{ url('/terms-and-conditions') }}" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-none fw-bold">Terms of
+                                    Service</a> and <a href="{{ url('/privacy-policy') }}" target="_blank" rel="noopener noreferrer"
                                     class="text-primary text-decoration-none fw-bold">Privacy Policy</a>.
                             </label>
                         </div>
+
+                        <!-- Inline form message (replaces the floating top alert) -->
+                        <div id="formError" class="alert alert-danger small py-2 mb-3" style="display: none;"></div>
 
                         <!-- Submit Button -->
                         <button type="submit" class="btn moving-gradient-bg btn-primary-custom">
@@ -202,6 +208,7 @@ document.getElementById('mobileInput').addEventListener('input', function() {
     // If phone changes after verification, reset verification state
     if (registrationPhoneVerified && phone !== currentPhoneNumber) {
         registrationPhoneVerified = false;
+        getOtpBtn.style.display = '';
         document.getElementById('otpContainer').style.display = 'none';
         document.getElementById('phoneStatus').style.display = 'none';
         document.getElementById('otpStatus').style.display = 'none';
@@ -221,20 +228,34 @@ function sendRegistrationOtp() {
     const getOtpBtn = document.getElementById('getOtpBtn');
     const phoneStatus = document.getElementById('phoneStatus');
 
+    // No resending once the phone number has been verified.
+    if (registrationPhoneVerified) {
+        return;
+    }
+
     if (!phone) {
-        showNotification('Please enter a phone number', 'error');
+        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a phone number';
+        phoneStatus.className = 'otp-sent-text';
+        phoneStatus.style.display = 'block';
+        phoneStatus.style.color = '#dc3545';
         return;
     }
 
     let cleanPhone = phone.replace(/[\s+()-]/g, '');
 
     if (cleanPhone.length < 10 || cleanPhone.length > 15) {
-        showNotification('Please enter a valid phone number (10-15 digits)', 'error');
+        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid phone number (10-15 digits)';
+        phoneStatus.className = 'otp-sent-text';
+        phoneStatus.style.display = 'block';
+        phoneStatus.style.color = '#dc3545';
         return;
     }
 
     if (!/^\d+$/.test(cleanPhone)) {
-        showNotification('Phone number should contain only digits', 'error');
+        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Phone number should contain only digits';
+        phoneStatus.className = 'otp-sent-text';
+        phoneStatus.style.display = 'block';
+        phoneStatus.style.color = '#dc3545';
         return;
     }
 
@@ -244,7 +265,10 @@ function sendRegistrationOtp() {
     const timeoutId = setTimeout(() => {
         getOtpBtn.innerHTML = 'Get OTP';
         getOtpBtn.disabled = false;
-        showNotification('Request timeout. Please try again.', 'error');
+        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Request timeout. Please try again.';
+        phoneStatus.className = 'otp-sent-text';
+        phoneStatus.style.display = 'block';
+        phoneStatus.style.color = '#dc3545';
     }, 10000);
 
     const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
@@ -282,8 +306,6 @@ function sendRegistrationOtp() {
 
             getOtpBtn.innerHTML = 'Resend OTP';
             getOtpBtn.disabled = false;
-
-            showNotification('✓ OTP sent to your mobile number!', 'success');
         } else {
             // 409 = already registered; treat as blocking error
             phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Error sending OTP');
@@ -293,8 +315,6 @@ function sendRegistrationOtp() {
 
             getOtpBtn.innerHTML = 'Get OTP';
             getOtpBtn.disabled = false;
-
-            showNotification(data.message || 'Unable to send OTP. Please try again.', 'error');
         }
     })
     .catch(error => {
@@ -308,8 +328,6 @@ function sendRegistrationOtp() {
 
         getOtpBtn.innerHTML = 'Get OTP';
         getOtpBtn.disabled = false;
-
-        showNotification('Server connection error. Please check your internet and try again.', 'error');
     });
 }
 
@@ -319,14 +337,21 @@ function verifyRegistrationOtp() {
     const otp = document.getElementById('otpInput').value.trim();
     const verifyOtpBtn = document.getElementById('verifyOtpBtn');
     const otpStatus = document.getElementById('otpStatus');
+    const getOtpBtn = document.getElementById('getOtpBtn');
 
     if (!phone || !otp) {
-        showNotification('Please enter phone number and OTP', 'error');
+        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter phone number and OTP';
+        otpStatus.className = 'otp-sent-text';
+        otpStatus.style.display = 'block';
+        otpStatus.style.color = '#dc3545';
         return;
     }
 
     if (otp.length < 6) {
-        showNotification('Please enter a valid 6-digit OTP', 'error');
+        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid 6-digit OTP';
+        otpStatus.className = 'otp-sent-text';
+        otpStatus.style.display = 'block';
+        otpStatus.style.color = '#dc3545';
         return;
     }
 
@@ -360,7 +385,11 @@ function verifyRegistrationOtp() {
             verifyOtpBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
             verifyOtpBtn.disabled = true;
 
-            showNotification('✓ Phone number verified! You can now complete your registration.', 'success');
+            // Stop resending once the phone number is verified: hide the resend button.
+            if (getOtpBtn) {
+                getOtpBtn.style.display = 'none';
+                getOtpBtn.disabled = true;
+            }
         } else {
             otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Invalid OTP');
             otpStatus.className = 'otp-sent-text';
@@ -369,8 +398,6 @@ function verifyRegistrationOtp() {
 
             verifyOtpBtn.innerHTML = 'Verify';
             verifyOtpBtn.disabled = false;
-
-            showNotification(data.message || 'OTP verification failed. Please try again.', 'error');
         }
     })
     .catch(error => {
@@ -382,8 +409,6 @@ function verifyRegistrationOtp() {
 
         verifyOtpBtn.innerHTML = 'Verify';
         verifyOtpBtn.disabled = false;
-
-        showNotification('Verification failed. Please try again.', 'error');
     });
 }
 
@@ -404,19 +429,55 @@ function validatePasswordMatch() {
 passwordInput.addEventListener('input', validatePasswordMatch);
 passwordConfirmationInput.addEventListener('input', validatePasswordMatch);
 
+// Clear the User Type error as soon as a category is selected.
+const businessCategorySelect = document.querySelector('select[name="business_category"]');
+if (businessCategorySelect) {
+    businessCategorySelect.addEventListener('change', function() {
+        const userTypeError = document.getElementById('userTypeError');
+        if (userTypeError) userTypeError.style.display = 'none';
+    });
+}
+
+// Clear the inline form error as soon as the user edits the form again.
+document.getElementById('registrationForm').addEventListener('input', function() {
+    const formError = document.getElementById('formError');
+    if (formError) formError.style.display = 'none';
+});
+
 // Form Submission
 document.getElementById('registrationForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
+    const formError = document.getElementById('formError');
+    const userTypeError = document.getElementById('userTypeError');
+    const businessCategory = this.querySelector('select[name="business_category"]');
+
+    function showFormError(message) {
+        formError.innerHTML = message;
+        formError.style.display = 'block';
+    }
+
     if (!validatePasswordMatch()) {
-        showNotification('Password and confirm password must match.', 'error');
+        showFormError('Password and confirm password must match.');
         passwordConfirmationInput.focus();
+        return;
+    }
+
+    // Require User Type selection before registration
+    if (!businessCategory || !businessCategory.value) {
+        if (userTypeError) {
+            userTypeError.style.display = 'block';
+            userTypeError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (businessCategory) businessCategory.focus();
         return;
     }
 
     // Require OTP verification before submitting registration
     if (!registrationPhoneVerified) {
-        showNotification('Please verify your phone number via OTP before registering.', 'error');
+        showFormError('Please verify your phone number via OTP before registering.');
+        document.getElementById('otpContainer').style.display = 'block';
+        document.getElementById('otpInput').focus();
         return;
     }
 
@@ -471,8 +532,8 @@ document.getElementById('registrationForm').addEventListener('submit', function(
                 errorMessage += '<br><small>' + data.error + '</small>';
             }
             
-            // Show error notification
-            showNotification(errorMessage, 'error');
+            // Show error message inline above the submit button
+            showFormError(errorMessage);
         }
     })
     .catch(error => {
@@ -480,23 +541,9 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         btn.innerHTML = 'Create My Account';
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
-        showNotification('Registration failed due to a network error. Please try again.', 'error');
+        showFormError('Registration failed due to a network error. Please try again.');
     });
 });
-
-// Helper function to show notifications
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed top-0 end-0 m-3`;
-    notification.style.zIndex = '9999';
-    notification.innerHTML = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 5000);
-}
 </script>
 
 @include('website_include.footer')

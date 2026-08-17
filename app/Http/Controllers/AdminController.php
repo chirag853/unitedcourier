@@ -2358,6 +2358,21 @@ class AdminController extends Controller
                 report($mailException);
                 \Log::error('KYC approval email error for customer ' . $kycDetail->customer_id . ': ' . $mailException->getMessage());
             }
+
+            try {
+                $customer = Customer::findOrFail($kycDetail->customer_id);
+                $csbForm = \App\Models\CsbForm::where('customer_id', $customer->id)->latest()->first();
+                $client = new \App\Services\AdomantraApiClient();
+                $response = $client->createCustomer(
+                    $client->buildPayload($customer, $kycDetail->fresh(), $csbForm)
+                );
+                \Log::info('Adomantra customer sync succeeded for customer ' . $customer->id, [
+                    'response' => $response,
+                ]);
+            } catch (\Throwable $adomantraException) {
+                report($adomantraException);
+                \Log::error('Adomantra customer sync error for customer ' . $kycDetail->customer_id . ': ' . $adomantraException->getMessage());
+            }
         }
 
         return redirect()->route('admin.kyc-pending')

@@ -613,12 +613,16 @@ class CustomerController extends Controller
             ->where('kyc_type', $kycType)
             ->first();
 
-        return view('customer.dashboard', compact(
-            'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
-            'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
-            'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-            'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft'
-        ));
+        return response()
+            ->view('customer.dashboard', compact(
+                'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
+                'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
+                'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
+                'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft'
+            ))
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 
     public function dashboardChartData(Request $request)
@@ -1292,18 +1296,18 @@ class CustomerController extends Controller
                     strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->gst_number)),
                     $gstNumber
                 )
-                && hash_equals(
-                    $this->normalizeGstBusinessName((string) $existingBusinessKyc->organization_name),
-                    $this->normalizeGstBusinessName($gstBusinessName)
-                );
+                && strcasecmp(
+                    trim((string) $existingBusinessKyc->organization_name),
+                    $gstBusinessName
+                ) === 0;
 
             if ($hasGstIdentity && !$matchesVerifiedGst && (
                 session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
-                || !hash_equals(
-                    (string) session('kyc_gst_business_name', ''),
-                    $this->normalizeGstBusinessName($gstBusinessName)
-                )
+                || strcasecmp(
+                    trim((string) session('kyc_gst_business_name', '')),
+                    $gstBusinessName
+                ) !== 0
             )) {
                 return response()->json([
                     'success' => false,
@@ -1700,11 +1704,12 @@ class CustomerController extends Controller
         @rmdir($directory);
     }
 
-    private function normalizeGstBusinessName(string $name): string
+    private function sanitizeGstBusinessName(string $name): string
     {
-        $asciiName = Str::ascii($name);
+        $name = preg_replace('/[^A-Za-z0-9\s]+/', ' ', $name) ?? '';
+        $name = preg_replace('/\s+/', ' ', $name) ?? '';
 
-        return strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $asciiName) ?? '');
+        return trim($name);
     }
 
     private function normalizePanHolderName(string $name): string
@@ -1811,11 +1816,13 @@ class CustomerController extends Controller
             'password' => 'required|string|min:6|confirmed',
             'password_confirmation' => 'required|string|min:6',
             'aadhar_number' => 'nullable|string|max:20',
-            'business_category' => 'nullable|string',
+            'business_category' => 'required|integer',
             'termsCheck' => 'required|accepted'
         ], [
             'password.confirmed' => 'Password and confirm password must match.',
-            'password_confirmation.required' => 'Please confirm your password.'
+            'password_confirmation.required' => 'Please confirm your password.',
+            'business_category.required' => 'Please select a User Type.',
+            'business_category.integer' => 'The selected User Type is invalid.'
         ]);
 
         if ($validator->fails()) {
