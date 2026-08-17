@@ -35,6 +35,12 @@ class AdminController extends Controller
                 ->with('error', 'You do not have permission to access the dashboard.');
         }
 
+        // Date helpers (used by the stat card month-over-month calculations)
+        $now = now();
+        $thisMonthStart = $now->copy()->startOfMonth();
+        $lastMonthStart = $now->copy()->subMonthNoOverflow()->startOfMonth();
+        $lastMonthEnd = $now->copy()->subMonthNoOverflow()->endOfMonth();
+
         // Customer Summary
         $totalRegistrations = Customer::count();
         $kycPending = KycDetail::whereIn('kyc_status', ['pending', 'under_review'])->count();
@@ -46,6 +52,43 @@ class AdminController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status')
             ->toArray();
+
+        $totalShipments = array_sum($shipmentStatusCounts);
+
+        // In-transit shipments (any shipment that has left the draft/pending stage
+        // and has not reached a terminal state)
+        $inTransitStatuses = ['assigned_for_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
+        $inTransit = collect($inTransitStatuses)->sum(fn ($status) => $shipmentStatusCounts[$status] ?? 0);
+
+        // Delivery success rate: delivered / (total - cancelled - disputed)
+        $terminalExcluded = $totalShipments - ($shipmentStatusCounts['cancelled'] ?? 0) - ($shipmentStatusCounts['disputed'] ?? 0);
+        $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
+        $deliverySuccessRate = $terminalExcluded > 0 ? round($deliveredCount / $terminalExcluded * 100, 1) : 0;
+
+        // Revenue from shipment invoices for this month vs last month
+        $thisMonthRevenue = ShipmentInvoice::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])
+            ->where('invoice_amount', '>', 0)
+            ->sum('invoice_amount');
+        $lastMonthRevenue = ShipmentInvoice::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])
+            ->where('invoice_amount', '>', 0)
+            ->sum('invoice_amount');
+        $revenueChangePercent = $lastMonthRevenue > 0 ? round(($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue * 100, 1) : ($thisMonthRevenue > 0 ? 100 : 0);
+
+        // Wallet top-ups (credit transactions) for this month
+        $thisMonthWalletTopups = WalletTransaction::where('type', 'credit')
+            ->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])
+            ->sum('amount');
+        $lastMonthWalletTopups = WalletTransaction::where('type', 'credit')
+            ->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])
+            ->sum('amount');
+        $walletTopupsChangePercent = $lastMonthWalletTopups > 0 ? round(($thisMonthWalletTopups - $lastMonthWalletTopups) / $lastMonthWalletTopups * 100, 1) : ($thisMonthWalletTopups > 0 ? 100 : 0);
+
+        // Total customer wallet balance held by the company
+        $walletBalanceTotal = Wallet::sum('balance');
+
+        // Today's shipments (for the quick glance strip)
+        $todayShipments = ShipperInfo::whereDate('created_at', now()->toDateString())->count();
+        $todayRegistrations = Customer::whereDate('created_at', now()->toDateString())->count();
 
         // Delivery/Network Summary - group by shipping_method
         $networkCounts = ShipperInfo::select('shipping_method', DB::raw('count(*) as count'))
@@ -72,12 +115,6 @@ class AdminController extends Controller
         // Delivered shipments count
         $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
 
-        // Month-over-month changes for stat cards
-        $now = now();
-        $thisMonthStart = $now->copy()->startOfMonth();
-        $lastMonthStart = $now->copy()->subMonthNoOverflow()->startOfMonth();
-        $lastMonthEnd = $now->copy()->subMonthNoOverflow()->endOfMonth();
-
         $thisMonthRegistrations = Customer::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
         $lastMonthRegistrations = Customer::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
         $registrationsChangePercent = $lastMonthRegistrations > 0 ? round(($thisMonthRegistrations - $lastMonthRegistrations) / $lastMonthRegistrations * 100, 1) : ($thisMonthRegistrations > 0 ? 100 : 0);
@@ -100,12 +137,53 @@ class AdminController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // Recent shipments for the activity feed
+        $recentShipments = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+            ->select(
+                'shipment_invoice.invoice_number',
+                'shipment_invoice.invoice_amount',
+                'shipment_invoice.invoice_currency',
+                'shipment_invoice.created_at',
+                'shipper_info.id as shipper_id',
+                'shipper_info.awb_number',
+                'shipper_info.company_name',
+                'shipper_info.city as pickup_city',
+                'shipper_info.status',
+                'consignee_info.consignee_name',
+                'consignee_info.city as destination_city',
+                'customers.first_name',
+                'customers.last_name'
+            )
+            ->orderByDesc('shipment_invoice.created_at')
+            ->limit(8)
+            ->get();
+
+        // Recent customer registrations for the activity feed
+        $recentRegistrations = Customer::select('id', 'first_name', 'last_name', 'email', 'phone_number', 'created_at')
+            ->orderByDesc('created_at')
+            ->limit(6)
+            ->get();
+
+        // Greeting for the dashboard header
+        $adminName = explode(' ', (string) $admin->name)[0] ?: $admin->name;
+        $currentHour = (int) $now->format('H');
+        $greeting = $currentHour < 12 ? 'Good morning' : ($currentHour < 17 ? 'Good afternoon' : 'Good evening');
+
         return view('admin.dashboard', compact(
+            'adminName', 'greeting',
             'totalRegistrations', 'kycPending', 'onboardedCustomers', 'csb5Enabled',
             'shipmentStatusCounts', 'shipRocketCount', 'selfCount', 'otherNetworkCount', 'deliveredCount',
             'networkCounts',
             'registrationsChangePercent', 'kycPendingChangePercent', 'onboardedChangePercent', 'csb5ChangePercent',
-            'kycPendingList'
+            'kycPendingList',
+            'totalShipments', 'inTransit', 'deliverySuccessRate',
+            'thisMonthRevenue', 'revenueChangePercent',
+            'thisMonthWalletTopups', 'walletTopupsChangePercent', 'walletBalanceTotal',
+            'todayShipments', 'todayRegistrations',
+            'recentShipments', 'recentRegistrations'
         ));
     }
 
@@ -188,6 +266,22 @@ class AdminController extends Controller
         }
         $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
 
+        // Extra period-based business metrics for the stat tiles
+        $periodRevenue = ShipmentInvoice::whereBetween('created_at', [$startDate, $endDate])
+            ->where('invoice_amount', '>', 0)
+            ->sum('invoice_amount');
+
+        $periodWalletTopups = WalletTransaction::where('type', 'credit')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->sum('amount');
+
+        $inTransitStatuses = ['assigned_for_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
+        $periodInTransit = collect($inTransitStatuses)->sum(fn ($status) => $shipmentStatusCounts[$status] ?? 0);
+
+        $totalPeriodShipments = array_sum($shipmentStatusCounts);
+        $periodEligible = $totalPeriodShipments - ($shipmentStatusCounts['cancelled'] ?? 0) - ($shipmentStatusCounts['disputed'] ?? 0);
+        $periodSuccessRate = $periodEligible > 0 ? round($deliveredCount / $periodEligible * 100, 1) : 0;
+
         // Date-wise shipment counts for trend chart
         if ($filter === 'last_year') {
             $dateWiseCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
@@ -223,6 +317,13 @@ class AdminController extends Controller
                 'shipRocket' => $shipRocketCount,
                 'self' => $selfCount,
                 'otherNetworks' => $otherNetworks,
+            ],
+            'businessSummary' => [
+                'totalShipments' => $totalPeriodShipments,
+                'revenue' => $periodRevenue,
+                'walletTopups' => $periodWalletTopups,
+                'inTransit' => $periodInTransit,
+                'successRate' => $periodSuccessRate,
             ],
             'dateWiseCounts' => $dateWiseCounts,
         ]);

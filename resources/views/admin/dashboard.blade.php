@@ -45,8 +45,8 @@
     <!-- Main CSS -->
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
 
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- Chart.js (local copy - no CDN dependency) -->
+    <script src="{{ asset('assets/plugins/chartjs/chart.min.js') }}"></script>
 
     <style>
         .chart-filter-btn {
@@ -70,6 +70,105 @@
         .chart-card {
             min-height: 300px;
         }
+
+        /* --- Dashboard polish --- */
+        .dash-stat-card {
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 14px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .dash-stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.09);
+        }
+        .dash-stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .icon-indigo { background: linear-gradient(135deg, #5b5eff, #7367f0); box-shadow: 0 4px 12px rgba(91, 94, 255, 0.32); }
+        .icon-orange { background: linear-gradient(135deg, #ff9f43, #ff7a2e); box-shadow: 0 4px 12px rgba(255, 159, 67, 0.32); }
+        .icon-green  { background: linear-gradient(135deg, #1abe17, #0f9d0f); box-shadow: 0 4px 12px rgba(26, 190, 23, 0.32); }
+        .icon-red    { background: linear-gradient(135deg, #ff4d4f, #e5383b); box-shadow: 0 4px 12px rgba(255, 77, 79, 0.32); }
+        .icon-teal   { background: linear-gradient(135deg, #20c997, #12b3a8); box-shadow: 0 4px 12px rgba(32, 201, 151, 0.32); }
+        .icon-purple { background: linear-gradient(135deg, #7367f0, #9b59f6); box-shadow: 0 4px 12px rgba(115, 103, 240, 0.32); }
+        .icon-blue   { background: linear-gradient(135deg, #2f80ed, #1e6fd9); box-shadow: 0 4px 12px rgba(47, 128, 237, 0.32); }
+        .icon-cyan   { background: linear-gradient(135deg, #0dcaf0, #0891b2); box-shadow: 0 4px 12px rgba(13, 202, 240, 0.32); }
+
+        .stat-trend-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .stat-trend-badge.up { background: rgba(26, 190, 23, 0.12); color: #15803d; }
+        .stat-trend-badge.down { background: rgba(239, 30, 30, 0.12); color: #dc2626; }
+        .stat-trend-badge.flat { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+        [data-bs-theme="dark"] .stat-trend-badge.up { color: #4ade80; }
+        [data-bs-theme="dark"] .stat-trend-badge.down { color: #f87171; }
+        [data-bs-theme="dark"] .stat-trend-badge.flat { color: #94a3b8; }
+
+        .dash-list-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+        }
+        .dash-list-item:last-child { border-bottom: 0; }
+        [data-bs-theme="dark"] .dash-list-item { border-bottom-color: rgba(255, 255, 255, 0.08); }
+        .dash-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 8px;
+        }
+        .skeleton::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+            animation: skeleton-shimmer 1.3s infinite;
+        }
+        @keyframes skeleton-shimmer {
+            100% { transform: translateX(100%); }
+        }
+        [data-bs-theme="dark"] .skeleton { background: rgba(255, 255, 255, 0.08); }
+        [data-bs-theme="dark"] .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent); }
+
+        .dash-status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .dashboard-title h4 { letter-spacing: -0.3px; }
+        .activity-tab-link { cursor: pointer; user-select: none; }
     </style>
 </head>
 
@@ -107,43 +206,70 @@
             <div class="content pb-0">
 
                 <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
-                    <div>
-                        <h4 class="mb-1">Dashboard</h4>
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
+                    <div class="dashboard-title">
+                        <h4 class="mb-1 fw-semibold">{{ $greeting }}, {{ $adminName }} <i class="ti ti-sun fs-20 text-warning align-middle ms-1"></i></h4>
+                        <p class="text-muted fs-13 mb-0">{{ \Carbon\Carbon::now()->format('l, d F Y') }} — Here's what's happening with your courier network today.</p>
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
-                        <a href="{{ route('admin.companies') }}" class="btn btn-primary btn-sm">Companies</a>
+                        <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-outline-warning">
+                            <i class="ti ti-file-alert me-1"></i>KYC Pending <span class="badge bg-warning text-dark ms-1">{{ $kycPending }}</span>
+                        </a>
+                        <a href="{{ route('admin.companies') }}" class="btn btn-primary btn-sm"><i class="ti ti-building me-1"></i>Companies</a>
                         <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload()"><i class="ti ti-refresh"></i></a>
                     </div>
-                </div>				
-				<!-- End Page Header -->
+                </div>
+                <!-- /Page Header -->
+
+                <!-- Quick glance strip -->
+                <div class="row row-gap-3 mb-4">
+                    <div class="col-12">
+                        <div class="card mb-0">
+                            <div class="card-body py-3">
+                                <div class="row align-items-center text-center text-md-start row-gap-3">
+                                    <div class="col-md-3 col-6">
+                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-truck-delivery me-1"></i>Shipments Today</p>
+                                        <h5 class="mb-0 fw-semibold" id="todayShipments">{{ $todayShipments }}</h5>
+                                    </div>
+                                    <div class="col-md-3 col-6">
+                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-user-plus me-1"></i>New Registrations Today</p>
+                                        <h5 class="mb-0 fw-semibold" id="todayRegistrations">{{ $todayRegistrations }}</h5>
+                                    </div>
+                                    <div class="col-md-3 col-6">
+                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-wallet me-1"></i>Total Wallet Balance</p>
+                                        <h5 class="mb-0 fw-semibold">₹ {{ number_format($walletBalanceTotal, 0) }}</h5>
+                                    </div>
+                                    <div class="col-md-3 col-6">
+                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-box me-1"></i>Total Shipments (All Time)</p>
+                                        <h5 class="mb-0 fw-semibold">{{ number_format($totalShipments) }}</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- /Quick glance strip -->
 
                 <!-- start row - Customer Summary Stat Cards -->
-                <h6 class="mb-2">Customer Summary</h6>
+                <h6 class="mb-2"><i class="ti ti-users me-1"></i>Customer Summary</h6>
                 <div class="row row-gap-3 mb-4">
 					<!-- Total Registrations -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card flex-fill mb-0 position-relative overflow-hidden">
+						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">Total Registrations</p>
-                                            <h2 class="mb-1 fs-16">{{ $totalRegistrations }}</h2>
-                                            @if($registrationsChangePercent > 0)
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $registrationsChangePercent }}%<span class="text-body ms-1">from last month</span></p>
-                                            @elseif($registrationsChangePercent < 0)
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($registrationsChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
-                                            @else
-                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                            @endif
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Total Registrations</p>
+                                        <h2 class="mb-2 fw-semibold">{{ number_format($totalRegistrations) }}</h2>
+                                        @if($registrationsChangePercent > 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $registrationsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($registrationsChangePercent < 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($registrationsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-primary border border-primary">
-                                            <i class="ti ti-building fs-16 text-primary"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-indigo"><i class="ti ti-building"></i></span>
                                 </div>
 							</div>
                             <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
@@ -153,27 +279,21 @@
 
                     <!-- KYC Pending -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card flex-fill mb-0 position-relative overflow-hidden">
+						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">KYC Pending</p>
-                                            <h2 class="mb-1 fs-16">{{ $kycPending }}</h2>
-                                            @if($kycPendingChangePercent > 0)
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $kycPendingChangePercent }}%<span class="text-body ms-1">from last month</span></p>
-                                            @elseif($kycPendingChangePercent < 0)
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($kycPendingChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
-                                            @else
-                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                            @endif
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">KYC Pending</p>
+                                        <h2 class="mb-2 fw-semibold">{{ number_format($kycPending) }}</h2>
+                                        @if($kycPendingChangePercent > 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-up"></i>{{ $kycPendingChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($kycPendingChangePercent < 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-down"></i>{{ abs($kycPendingChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                            <i class="ti ti-clock fs-16 text-warning"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-clock"></i></span>
                                 </div>
 							</div>
                             <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
@@ -183,27 +303,21 @@
 
                     <!-- Onboarded Customers -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card flex-fill mb-0 position-relative overflow-hidden">
+						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">Onboarded Customers</p>
-                                            <h2 class="mb-1 fs-16">{{ $onboardedCustomers }}</h2>
-                                            @if($onboardedChangePercent > 0)
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $onboardedChangePercent }}%<span class="text-body ms-1">from last month</span></p>
-                                            @elseif($onboardedChangePercent < 0)
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($onboardedChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
-                                            @else
-                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                            @endif
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Onboarded Customers</p>
+                                        <h2 class="mb-2 fw-semibold">{{ number_format($onboardedCustomers) }}</h2>
+                                        @if($onboardedChangePercent > 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $onboardedChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($onboardedChangePercent < 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($onboardedChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-success border border-success">
-                                            <i class="ti ti-user-check fs-16 text-success"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-green"><i class="ti ti-user-check"></i></span>
                                 </div>
 							</div>
                             <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
@@ -213,27 +327,21 @@
 
                     <!-- CSB5 Enabled -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card flex-fill mb-0 position-relative overflow-hidden">
+						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
 							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">CSB5 Enabled</p>
-                                            <h2 class="mb-1 fs-16">{{ $csb5Enabled }}</h2>
-                                            @if($csb5ChangePercent > 0)
-                                            <p class="text-success mb-0 fs-13"> <i class="ti ti-arrow-bar-up me-1"></i>{{ $csb5ChangePercent }}%<span class="text-body ms-1">from last month</span></p>
-                                            @elseif($csb5ChangePercent < 0)
-                                            <p class="text-danger mb-0 fs-13"> <i class="ti ti-arrow-bar-down me-1"></i>{{ abs($csb5ChangePercent) }}%<span class="text-body ms-1">from last month</span></p>
-                                            @else
-                                            <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                            @endif
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">CSB5 Enabled</p>
+                                        <h2 class="mb-2 fw-semibold">{{ number_format($csb5Enabled) }}</h2>
+                                        @if($csb5ChangePercent > 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $csb5ChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($csb5ChangePercent < 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($csb5ChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-info border border-info">
-                                            <i class="ti ti-file-check fs-16 text-info"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-purple"><i class="ti ti-file-check"></i></span>
                                 </div>
 							</div>
                             <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
@@ -243,6 +351,95 @@
 
 				</div>
                 <!-- end row -->
+
+                <!-- start row - Business Summary Stat Cards -->
+                <h6 class="mb-2"><i class="ti ti-trending-up me-1"></i>Business Summary</h6>
+                <div class="row row-gap-3 mb-4">
+                    <!-- Revenue -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Revenue (This Month)</p>
+                                        <h2 class="mb-2 fw-semibold" id="statRevenue">₹ {{ number_format($thisMonthRevenue) }}</h2>
+                                        @if($revenueChangePercent > 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $revenueChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($revenueChangePercent < 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($revenueChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
+                                    </div>
+                                    <span class="dash-stat-icon icon-green"><i class="ti ti-currency-rupee"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Revenue -->
+
+                    <!-- In-Transit -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">In-Transit Shipments</p>
+                                        <h2 class="mb-2 fw-semibold" id="statInTransit">{{ number_format($inTransit) }}</h2>
+                                        <span class="stat-trend-badge flat">Moving through the network</span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-blue"><i class="ti ti-truck"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /In-Transit -->
+
+                    <!-- Wallet Top-ups -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Wallet Top-ups (This Month)</p>
+                                        <h2 class="mb-2 fw-semibold" id="statWalletTopups">₹ {{ number_format($thisMonthWalletTopups) }}</h2>
+                                        @if($walletTopupsChangePercent > 0)
+                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $walletTopupsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @elseif($walletTopupsChangePercent < 0)
+                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($walletTopupsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                        @else
+                                        <span class="stat-trend-badge flat">No change vs last month</span>
+                                        @endif
+                                    </div>
+                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-wallet"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Wallet Top-ups -->
+
+                    <!-- Delivery Success Rate -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Delivery Success Rate</p>
+                                        <h2 class="mb-2 fw-semibold" id="statSuccessRate">{{ $deliverySuccessRate }}%</h2>
+                                        <span class="stat-trend-badge flat">Delivered vs non-cancelled</span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-teal"><i class="ti ti-circle-check"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Delivery Success Rate -->
+                </div>
+                <!-- end row - Business Summary Stat Cards -->
 
                 <!-- KYC Pending List -->
                 <div class="row mb-4">
@@ -357,21 +554,15 @@
                 <div class="row row-gap-3 mb-4">
                     <!-- Total Shipments -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
                             <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">Total Shipments</p>
-                                            <h2 class="mb-1 fs-16" id="statTotalShipments">{{ array_sum($shipmentStatusCounts) }}</h2>
-                                            <p class="text-muted mb-0 fs-13" id="statTotalShipmentsSub">for selected period</p>
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Total Shipments</p>
+                                        <h2 class="mb-2 fw-semibold" id="statTotalShipments">{{ number_format(array_sum($shipmentStatusCounts)) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statTotalShipmentsSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-primary border border-primary">
-                                            <i class="ti ti-package fs-16 text-primary"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-indigo"><i class="ti ti-package"></i></span>
                                 </div>
                             </div>
                             <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
@@ -381,21 +572,15 @@
 
                     <!-- Delivered -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
                             <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">Delivered</p>
-                                            <h2 class="mb-1 fs-16" id="statDelivered">{{ $deliveredCount }}</h2>
-                                            <p class="text-muted mb-0 fs-13" id="statDeliveredSub">for selected period</p>
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Delivered</p>
+                                        <h2 class="mb-2 fw-semibold" id="statDelivered">{{ number_format($deliveredCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statDeliveredSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-success border border-success">
-                                            <i class="ti ti-truck-delivery fs-16 text-success"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-green"><i class="ti ti-truck-delivery"></i></span>
                                 </div>
                             </div>
                             <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
@@ -405,21 +590,15 @@
 
                     <!-- ShipRocket -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
                             <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">ShipRocket</p>
-                                            <h2 class="mb-1 fs-16" id="statShipRocket">{{ $shipRocketCount }}</h2>
-                                            <p class="text-muted mb-0 fs-13" id="statShipRocketSub">for selected period</p>
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">ShipRocket</p>
+                                        <h2 class="mb-2 fw-semibold" id="statShipRocket">{{ number_format($shipRocketCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statShipRocketSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-info border border-info">
-                                            <i class="ti ti-rocket fs-16 text-info"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-cyan"><i class="ti ti-rocket"></i></span>
                                 </div>
                             </div>
                             <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
@@ -429,21 +608,15 @@
 
                     <!-- Self/Own Network -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
                             <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div>
-                                            <p class="fs-14 mb-1 text-dark">Self/Own Network</p>
-                                            <h2 class="mb-1 fs-16" id="statSelfNetwork">{{ $selfCount }}</h2>
-                                            <p class="text-muted mb-0 fs-13" id="statSelfNetworkSub">for selected period</p>
-                                        </div>
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Self/Own Network</p>
+                                        <h2 class="mb-2 fw-semibold" id="statSelfNetwork">{{ number_format($selfCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statSelfNetworkSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
                                     </div>
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <span class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                            <i class="ti ti-world fs-16 text-warning"></i>
-                                        </span>
-                                    </div>
+                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-world"></i></span>
                                 </div>
                             </div>
                             <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
@@ -495,6 +668,126 @@
                     </div>
                 </div>
                 <!-- end row -->
+
+                <!-- start row - Recent Activity -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- Recent Shipments -->
+                    <div class="col-xl-7 col-lg-12 d-flex">
+                        <div class="card flex-fill mb-0">
+                            <div class="card-header d-flex align-items-center justify-content-between">
+                                <h6 class="mb-0"><i class="ti ti-truck me-1"></i>Recent Shipments</h6>
+                                <a href="{{ route('admin.companies') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                            </div>
+                            <div class="card-body">
+                                @if($recentShipments->count() > 0)
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>AWB / Invoice</th>
+                                                <th>Company</th>
+                                                <th>Route</th>
+                                                <th>Amount</th>
+                                                <th>Status</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($recentShipments as $shipment)
+                                            <tr>
+                                                <td>
+                                                    <span class="fw-semibold d-block">{{ $shipment->awb_number ?? '—' }}</span>
+                                                    <small class="text-muted">{{ $shipment->invoice_number ?? '' }}</small>
+                                                </td>
+                                                <td>{{ $shipment->company_name ?? (trim(($shipment->first_name ?? '') . ' ' . ($shipment->last_name ?? '')) ?: '—') }}</td>
+                                                <td>
+                                                    <span class="d-block">{{ $shipment->pickup_city ?? '—' }}</span>
+                                                    <small class="text-muted"><i class="ti ti-arrow-right me-1"></i>{{ $shipment->destination_city ?? '—' }}</small>
+                                                </td>
+                                                <td>
+                                                    @if($shipment->invoice_amount)
+                                                    <span class="fw-semibold">₹ {{ number_format($shipment->invoice_amount, 2) }}</span>
+                                                    @else
+                                                    <span class="text-muted">—</span>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @php
+                                                        $statusKey = $shipment->status;
+                                                        $statusTitle = \App\Models\Tracking::getTitleForStatus($statusKey);
+                                                        $statusBadgeColors = [
+                                                            'delivered' => 'bg-success-subtle text-success',
+                                                            'dispatched' => 'bg-primary-subtle text-primary',
+                                                            'manifested' => 'bg-info-subtle text-info',
+                                                            'cancelled' => 'bg-danger-subtle text-danger',
+                                                            'disputed' => 'bg-danger-subtle text-danger',
+                                                            'on_hold' => 'bg-warning-subtle text-warning',
+                                                            'received' => 'bg-info-subtle text-info',
+                                                            'ready_to_dispatch' => 'bg-primary-subtle text-primary',
+                                                            'packed' => 'bg-primary-subtle text-primary',
+                                                            'draft' => 'bg-secondary-subtle text-secondary',
+                                                            'ready' => 'bg-primary-subtle text-primary',
+                                                            'assigned_for_pickup' => 'bg-primary-subtle text-primary',
+                                                        ];
+                                                    @endphp
+                                                    <span class="dash-status-badge {{ $statusBadgeColors[$statusKey] ?? 'bg-secondary-subtle text-secondary' }}">{{ $statusTitle }}</span>
+                                                </td>
+                                                <td class="text-muted">{{ \Carbon\Carbon::parse($shipment->created_at)->format('d M, h:i A') }}</td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @else
+                                <div class="text-center py-3">
+                                    <i class="ti ti-truck fs-24 text-muted"></i>
+                                    <p class="text-muted mb-0">No shipments yet</p>
+                                </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /Recent Shipments -->
+
+                    <!-- Recent Registrations -->
+                    <div class="col-xl-5 col-lg-12 d-flex">
+                        <div class="card flex-fill mb-0">
+                            <div class="card-header d-flex align-items-center justify-content-between">
+                                <h6 class="mb-0"><i class="ti ti-user-plus me-1"></i>Recent Registrations</h6>
+                                <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                            </div>
+                            <div class="card-body py-2">
+                                @if($recentRegistrations->count() > 0)
+                                @foreach($recentRegistrations as $customer)
+                                @php
+                                    $initial = strtoupper(substr($customer->first_name ?? ($customer->email ?? 'U'), 0, 1));
+                                    $avatarPalette = ['icon-indigo', 'icon-orange', 'icon-green', 'icon-purple', 'icon-teal', 'icon-blue'];
+                                    $avatarClass = $avatarPalette[($customer->id ?? 0) % count($avatarPalette)];
+                                @endphp
+                                <div class="dash-list-item">
+                                    <span class="dash-avatar {{ $avatarClass }}">{{ $initial }}</span>
+                                    <div class="flex-fill min-w-0">
+                                        <p class="mb-0 fw-semibold text-truncate">{{ $customer->first_name }} {{ $customer->last_name }}</p>
+                                        <small class="text-muted text-truncate d-block">{{ $customer->email }}</small>
+                                    </div>
+                                    <div class="text-end flex-shrink-0">
+                                        <span class="stat-trend-badge flat">{{ \Carbon\Carbon::parse($customer->created_at)->format('d M') }}</span>
+                                        <small class="text-muted d-block">{{ \Carbon\Carbon::parse($customer->created_at)->diffForHumans() }}</small>
+                                    </div>
+                                </div>
+                                @endforeach
+                                @else
+                                <div class="text-center py-3">
+                                    <i class="ti ti-user-off fs-24 text-muted"></i>
+                                    <p class="text-muted mb-0">No registrations yet</p>
+                                </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /Recent Registrations -->
+                </div>
+                <!-- end row - Recent Activity -->
 
             </div>
             <!-- End Content -->            
@@ -550,6 +843,62 @@
         let customerSummaryBarChart = null;
         let shipmentDeliveryBarChart = null;
 
+        // ---- Helpers -------------------------------------------------------
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('en-IN');
+        }
+
+        function formatCurrency(value) {
+            return '₹ ' + formatNumber(Math.round(Number(value || 0)));
+        }
+
+        function isDarkTheme() {
+            return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        }
+
+        function cssVar(name, fallback) {
+            const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return value || fallback;
+        }
+
+        // Resolve template theme colors (CSS variables) for canvas rendering,
+        // so charts stay consistent in both light and dark mode.
+        function themeColors() {
+            const dark = isDarkTheme();
+            return {
+                text: dark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(30, 41, 59, 0.9)',
+                subText: dark ? 'rgba(255, 255, 255, 0.55)' : 'rgba(100, 116, 139, 0.9)',
+                grid: dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                cardBg: dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.9)',
+                primary: cssVar('--crms-primary', '#2563eb')
+            };
+        }
+
+        function applyChartDefaults() {
+            const colors = themeColors();
+            Chart.defaults.color = colors.text;
+            Chart.defaults.borderColor = colors.grid;
+        }
+
+        // Skeleton shimmer overlay for chart canvases while data refreshes
+        function showChartLoading() {
+            document.querySelectorAll('.chart-card').forEach(card => {
+                if (!card.querySelector('.skeleton-overlay')) {
+                    const overlay = document.createElement('div');
+                    overlay.className = 'skeleton-overlay';
+                    overlay.style.cssText = 'position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.65);backdrop-filter:blur(2px);border-radius:12px;';
+                    if (isDarkTheme()) overlay.style.background = 'rgba(20,25,35,0.7)';
+                    overlay.innerHTML = '<div class="spinner-border text-primary" role="status" style="width:26px;height:26px;"></div>';
+                    card.style.position = 'relative';
+                    card.appendChild(overlay);
+                }
+            });
+        }
+
+        function hideChartLoading() {
+            document.querySelectorAll('.skeleton-overlay').forEach(el => el.remove());
+        }
+
         // Color palette for charts
         const customerColors = {
             totalRegistrations: '#5b5eff',
@@ -600,6 +949,8 @@
             document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
             if (btnElement) btnElement.classList.add('active');
 
+            showChartLoading();
+
             fetch('{{ route("admin.dashboard-chart-data") }}?filter=' + filter, {
                 headers: {
                     'Accept': 'application/json',
@@ -615,11 +966,22 @@
                     renderShipmentDeliveryBarChart(data.shipmentStatusCounts, data.statusMap, data.deliverySummary);
                     renderShipmentTrendChart(data.dateWiseCounts, data.filter);
                     updateShipmentDeliveryStatTiles(data.shipmentStatusCounts, data.deliverySummary, data.filter);
+                    updateBusinessStatTiles(data.businessSummary || {});
                 }
             })
             .catch(error => {
                 console.error('Error fetching chart data:', error);
+            })
+            .finally(() => {
+                hideChartLoading();
             });
+        }
+
+        function updateBusinessStatTiles(businessSummary) {
+            document.getElementById('statRevenue').textContent = formatCurrency(businessSummary.revenue);
+            document.getElementById('statInTransit').textContent = formatNumber(businessSummary.inTransit);
+            document.getElementById('statWalletTopups').textContent = formatCurrency(businessSummary.walletTopups);
+            document.getElementById('statSuccessRate').textContent = (businessSummary.successRate || 0) + '%';
         }
 
         function updateShipmentDeliveryStatTiles(statusCounts, deliverySummary, filter) {
@@ -639,17 +1001,17 @@
             };
             const periodLabel = filterLabels[filter] || 'selected period';
 
-            document.getElementById('statTotalShipments').textContent = totalShipments;
-            document.getElementById('statTotalShipmentsSub').textContent = 'for ' + periodLabel;
+            document.getElementById('statTotalShipments').textContent = formatNumber(totalShipments);
+            document.getElementById('statTotalShipmentsSub').querySelector('span').textContent = 'for ' + periodLabel;
 
-            document.getElementById('statDelivered').textContent = delivered;
-            document.getElementById('statDeliveredSub').textContent = 'for ' + periodLabel;
+            document.getElementById('statDelivered').textContent = formatNumber(delivered);
+            document.getElementById('statDeliveredSub').querySelector('span').textContent = 'for ' + periodLabel;
 
-            document.getElementById('statShipRocket').textContent = shipRocket;
-            document.getElementById('statShipRocketSub').textContent = 'for ' + periodLabel;
+            document.getElementById('statShipRocket').textContent = formatNumber(shipRocket);
+            document.getElementById('statShipRocketSub').querySelector('span').textContent = 'for ' + periodLabel;
 
-            document.getElementById('statSelfNetwork').textContent = selfNetwork;
-            document.getElementById('statSelfNetworkSub').textContent = 'for ' + periodLabel;
+            document.getElementById('statSelfNetwork').textContent = formatNumber(selfNetwork);
+            document.getElementById('statSelfNetworkSub').querySelector('span').textContent = 'for ' + periodLabel;
         }
 
         function renderCustomerSummaryChart(customerSummary) {
@@ -680,7 +1042,7 @@
                         data: values,
                         backgroundColor: colors,
                         borderWidth: 4,
-                        borderColor: '#fff',
+                        borderColor: themeColors().cardBg,
                         borderRadius: 8,
                         spacing: 4,
                         hoverOffset: 8
@@ -773,7 +1135,7 @@
                         data: values,
                         backgroundColor: colors,
                         borderWidth: 2,
-                        borderColor: '#fff',
+                        borderColor: themeColors().cardBg,
                         hoverOffset: 8
                     }]
                 },
@@ -828,6 +1190,7 @@
             }
 
             const ctx = document.getElementById('shipmentTrendChart').getContext('2d');
+            const colors = themeColors();
             const gradient = ctx.createLinearGradient(0, 0, 0, 320);
             gradient.addColorStop(0, 'rgba(255, 159, 67, 0.35)');
             gradient.addColorStop(1, 'rgba(255, 159, 67, 0.02)');
@@ -843,7 +1206,7 @@
                         borderColor: '#ff9f43',
                         borderWidth: 3,
                         pointBackgroundColor: '#ff9f43',
-                        pointBorderColor: '#fff',
+                        pointBorderColor: colors.cardBg,
                         pointBorderWidth: 2,
                         pointHoverRadius: 6,
                         pointRadius: 4,
@@ -883,7 +1246,7 @@
                                 font: { size: 11 }
                             },
                             grid: {
-                                color: 'rgba(0,0,0,0.05)'
+                                color: colors.grid
                             }
                         },
                         x: {
@@ -958,7 +1321,7 @@
                                 font: { size: 11 }
                             },
                             grid: {
-                                color: 'rgba(0,0,0,0.05)'
+                                color: themeColors().grid
                             }
                         },
                         x: {
@@ -1019,7 +1382,7 @@
                                 font: { size: 11 }
                             },
                             grid: {
-                                color: 'rgba(0,0,0,0.05)'
+                                color: themeColors().grid
                             }
                         },
                         x: {
@@ -1039,7 +1402,22 @@
 
         // Load default chart data on page load
         document.addEventListener('DOMContentLoaded', function() {
+            applyChartDefaults();
             loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
+
+            // Re-apply theme-aware chart styling when the theme changes
+            const themeObserver = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'data-bs-theme') {
+                        applyChartDefaults();
+                        loadChartData(
+                            document.querySelector('.chart-filter-btn.active')?.getAttribute('data-filter') || 'this_month',
+                            document.querySelector('.chart-filter-btn.active')
+                        );
+                    }
+                });
+            });
+            themeObserver.observe(document.documentElement, { attributes: true });
         });
     </script>
 

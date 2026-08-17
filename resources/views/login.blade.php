@@ -119,7 +119,7 @@
                         </form>
 
                         <div class="auth-footer-links">
-                            New to United Couriers? <a href="register.php">Create an Account</a>
+                            New to United Couriers? <a href="./get-started">Create an Account1</a>
                         </div>
                     </div>
                 </div>

@@ -486,7 +486,7 @@
                     {{ data_get($heroContent, 'content.paragraphs', 'Our US warehousing facility helps businesses reduce delivery timelines, manage inventory efficiently, and fulfil international orders with greater speed, control, and reliability.') }}
                 </p>
 
-                <a href="#" class="book-btn-service"><i class="fas fa-paper-plane"></i> Book a Shipping</a> &nbsp;  <a href="#" class="quote-btn-service"><i class="fas fa-calculator"></i> Get a Quote</a>
+                <a href="./login" class="book-btn-service"><i class="fas fa-paper-plane"></i> Book a shipment</a> &nbsp;  <a href="./get-started" class="quote-btn-service"><i class="fas fa-calculator"></i> Get a Quote</a>
 
                 <div class="hero-badges">
                     <!-- @foreach(data_get($heroContent, 'content.list_items', [

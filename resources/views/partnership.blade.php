@@ -18,7 +18,7 @@
                         {{ $hero->content['description'] ?? 'Maximise your profits by accessing affordable international shipping, and a network that helps you reach customers in every major market.' }}
                     </p>
 
-                    <a href="{{ $hero->content['cta_link'] ?? '#' }}" class="book-btn-service"><i class="fa-solid fa-handshake"></i> &nbsp; {{ $hero->content['cta_text'] ?? 'Join Network' }}</a>
+                    <a href="#formsection" class="book-btn-service"><i class="fa-solid fa-handshake"></i> &nbsp; {{ $hero->content['cta_text'] ?? 'Join Network' }}</a>
 
                 </div>
 
@@ -50,7 +50,7 @@
         </div>
 @endif
 
-   <header style="background: #fafafa; min-height: 20vh; padding-top: 40px; padding-bottom: 40px;">
+   <header id="formsection" style="background: #fafafa; min-height: 20vh; padding-top: 40px; padding-bottom: 40px;">
         <div class="floating-blob bg-warning opacity-25" style="width: 250px; height: 250px; top: 10%; left: -125px;">
         </div>
         <div class="floating-blob bg-primary opacity-10" style="width: 200px; height: 200px; bottom: 10%; right: -100px;"></div>

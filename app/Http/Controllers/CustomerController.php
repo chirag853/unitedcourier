@@ -1146,6 +1146,18 @@ class CustomerController extends Controller
                 ]);
             }
 
+            // Stored draft documents (persisted on upload so they survive a page
+            // refresh) act as fallbacks when no fresh file is sent with this request.
+            $businessDraft = KycDraft::where('customer_id', $customer->id)
+                ->where('kyc_type', 'business')
+                ->latest()
+                ->first();
+            $storedDraftDocs = is_array($businessDraft?->form_data) ? $businessDraft->form_data : [];
+            $storedDraftPath = fn (string $field): ?string => (function () use ($field, $storedDraftDocs) {
+                $path = $storedDraftDocs[$field] ?? null;
+                return (is_string($path) && $path !== '' && is_file(public_path($path))) ? $path : null;
+            })();
+
             // Existing documents remain valid while editing KYC. A replacement file is
             // required only when the customer has not uploaded that document previously.
             $validated = $request->validate([
@@ -1166,13 +1178,20 @@ class CustomerController extends Controller
                         && !$existingCsbForm?->gst_certificate_document
                         && !$existingCsbForm?->gst_document
                         && !$existingBusinessKyc?->gst_certificate_document
+                        && !$request->filled('gst_certificate_document_path')
+                        && !$storedDraftPath('gst_certificate_document')
                     ),
                     'nullable', 'file', 'mimes:pdf', 'max:5120'
                 ],
+                'gst_certificate_document_path' => ['nullable', 'string'],
                 'gst_document' => ['nullable', 'file', 'mimes:pdf', 'max:5120'],
+                'gst_document_path' => ['nullable', 'string'],
                 'aadhar_front_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_front_document_path' => ['nullable', 'string'],
                 'aadhar_back_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_back_document_path' => ['nullable', 'string'],
                 'aadhar_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_document_path' => ['nullable', 'string'],
                 'pan_number' => [
                     \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
                     'nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'
@@ -1186,25 +1205,47 @@ class CustomerController extends Controller
                     'nullable', 'date', 'before:today'
                 ],
                 'pan_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 && !$canReuseVerifiedPan),
+                    \Illuminate\Validation\Rule::requiredIf(
+                        !$isStandaloneCsb5
+                        && !$canReuseVerifiedPan
+                        && !$request->filled('pan_document_path')
+                        && !$storedDraftPath('pan_document')
+                    ),
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
                 ],
+                'pan_document_path' => ['nullable', 'string'],
                 'ad_code' => ['required', 'digits:14'],
                 'ad_code_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->ad_code_document),
+                    \Illuminate\Validation\Rule::requiredIf(
+                        !$existingCsbForm?->ad_code_document
+                        && !$request->filled('ad_code_document_path')
+                        && !$storedDraftPath('ad_code_document')
+                    ),
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
                 ],
+                'ad_code_document_path' => ['nullable', 'string'],
                 'iec_number' => ['required', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
                 'iec_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$existingCsbForm?->iec_document),
+                    \Illuminate\Validation\Rule::requiredIf(
+                        !$existingCsbForm?->iec_document
+                        && !$request->filled('iec_document_path')
+                        && !$storedDraftPath('iec_document')
+                    ),
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
                 ],
+                'iec_document_path' => ['nullable', 'string'],
                 'bank_account_number' => ['required', 'regex:/^[0-9]{9,18}$/'],
                 'bank_type' => 'required|in:private,government',
                 'lut_document' => [
-                    \Illuminate\Validation\Rule::requiredIf($request->boolean('is_lut') && !$existingCsbForm?->lut_document),
+                    \Illuminate\Validation\Rule::requiredIf(
+                        $request->boolean('is_lut')
+                        && !$existingCsbForm?->lut_document
+                        && !$request->filled('lut_document_path')
+                        && !$storedDraftPath('lut_document')
+                    ),
                     'nullable', 'file', 'mimes:pdf', 'max:5120'
                 ],
+                'lut_document_path' => ['nullable', 'string'],
                 'lut_expiry_date' => 'required_if:is_lut,1|nullable|date|after_or_equal:today',
                 'lut_bond_year' => ['required_if:is_lut,1', 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
                 'billing_address' => 'required|string|min:10|max:1000',
@@ -1215,9 +1256,12 @@ class CustomerController extends Controller
                         !$isStandaloneCsb5
                         && !$existingCsbForm?->signature_document
                         && !$existingBusinessKyc?->signature_document
+                        && !$request->filled('signature_document_path')
+                        && !$storedDraftPath('signature_document')
                     ),
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
                 ],
+                'signature_document_path' => ['nullable', 'string'],
                 'merchant_agreement' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
                 'terms_accepted' => 'accepted',
             ], [
@@ -1322,9 +1366,11 @@ class CustomerController extends Controller
                 $hasAadhaarFront = $request->hasFile('aadhar_front_document')
                     || $request->hasFile('aadhar_document')
                     || !empty($existingBusinessKyc?->aadhar_front_document)
-                    || !empty($existingCsbForm?->aadhar_document);
+                    || !empty($existingCsbForm?->aadhar_document)
+                    || (bool) $storedDraftPath('aadhar_front_document');
                 $hasAadhaarBack = $request->hasFile('aadhar_back_document')
-                    || !empty($existingBusinessKyc?->aadhar_back_document);
+                    || !empty($existingBusinessKyc?->aadhar_back_document)
+                    || (bool) $storedDraftPath('aadhar_back_document');
 
                 if (!$hasAadhaarFront || !$hasAadhaarBack) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
@@ -1338,6 +1384,7 @@ class CustomerController extends Controller
             $panHolderName = $this->normalizePanHolderName((string) ($validated['pan_holder_name'] ?? ''));
             $panDob = $this->normalizePanDob((string) ($validated['pan_dob'] ?? ''));
             $panFile = $request->file('pan_document');
+            $panStoredPath = $storedDraftPath('pan_document');
             $hasPanIdentity = $panNumber !== null && $panHolderName !== '' && $panDob !== null;
             $matchesVerifiedPan = $hasPanIdentity
                 && $canReuseVerifiedPan
@@ -1350,7 +1397,9 @@ class CustomerController extends Controller
                     $panHolderName
                 )
                 && hash_equals($this->normalizePanDob((string) $existingBusinessKyc->pan_dob), $panDob);
-            $panDocumentHash = $panFile ? hash_file('sha256', $panFile->getRealPath()) : null;
+            $panRealPath = $panFile ? $panFile->getRealPath()
+                : ($panStoredPath ? public_path($panStoredPath) : null);
+            $panDocumentHash = $panRealPath ? hash_file('sha256', $panRealPath) : null;
 
             if ($hasPanIdentity && !$matchesVerifiedPan && (!session('kyc_pan_cashfree_verified')
                 || session('kyc_pan_number') !== $panNumber
@@ -1390,64 +1439,57 @@ class CustomerController extends Controller
             }
 
             // Store identity and registration documents selected in steps 1-3.
-            $gstDocumentPath = null;
-            $gstFile = $request->file('gst_certificate_document') ?? $request->file('gst_document');
-            if ($gstFile) {
-                $filename = time() . '_gst_' . \Illuminate\Support\Str::uuid() . '.' . $gstFile->getClientOriginalExtension();
-                $gstFile->move(public_path('uploads/gst_documents'), $filename);
-                $gstDocumentPath = 'uploads/gst_documents/' . $filename;
-            }
+            // A stored draft file (kept after a page refresh) is moved into its
+            // final directory when the customer submits without re-selecting it.
+            $gstDocumentPath = $this->finalizeKycDocument(
+                $request->file('gst_certificate_document') ?? $request->file('gst_document'),
+                $storedDraftPath('gst_certificate_document'),
+                'uploads/gst_documents',
+                'gst'
+            );
 
-            $aadharFrontPath = null;
-            $aadharFrontFile = $request->file('aadhar_front_document') ?? $request->file('aadhar_document');
-            if ($aadharFrontFile) {
-                $filename = time() . '_aadhar_front_' . \Illuminate\Support\Str::uuid() . '.' . $aadharFrontFile->getClientOriginalExtension();
-                $aadharFrontFile->move(public_path('uploads/aadhar_front_documents'), $filename);
-                $aadharFrontPath = 'uploads/aadhar_front_documents/' . $filename;
-            }
+            $aadharFrontPath = $this->finalizeKycDocument(
+                $request->file('aadhar_front_document') ?? $request->file('aadhar_document'),
+                $storedDraftPath('aadhar_front_document'),
+                'uploads/aadhar_front_documents',
+                'aadhar_front'
+            );
 
-            $aadharBackPath = null;
-            if ($request->hasFile('aadhar_back_document')) {
-                $file = $request->file('aadhar_back_document');
-                $filename = time() . '_aadhar_back_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('uploads/aadhar_back_documents'), $filename);
-                $aadharBackPath = 'uploads/aadhar_back_documents/' . $filename;
-            }
+            $aadharBackPath = $this->finalizeKycDocument(
+                $request->file('aadhar_back_document'),
+                $storedDraftPath('aadhar_back_document'),
+                'uploads/aadhar_back_documents',
+                'aadhar_back'
+            );
 
-            $panDocumentPath = null;
-            if ($request->hasFile('pan_document')) {
-                $file = $request->file('pan_document');
-                $filename = time() . '_pan_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('uploads/pan_documents'), $filename);
-                $panDocumentPath = 'uploads/pan_documents/' . $filename;
-            }
+            $panDocumentPath = $this->finalizeKycDocument(
+                $request->file('pan_document'),
+                $panStoredPath,
+                'uploads/pan_documents',
+                'pan'
+            );
 
-            // Handle LUT document upload
-            $lutDocumentPath = null;
-            if ($request->hasFile('lut_document')) {
-                $file = $request->file('lut_document');
-                $filename = time() . '_lut_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/lut_documents'), $filename);
-                $lutDocumentPath = 'uploads/lut_documents/' . $filename;
-            }
+            $lutDocumentPath = $this->finalizeKycDocument(
+                $request->file('lut_document'),
+                $storedDraftPath('lut_document'),
+                'uploads/lut_documents',
+                'lut'
+            );
 
-            // Handle IEC document upload
-            $iecDocumentPath = null;
-            if ($request->hasFile('iec_document')) {
-                $file = $request->file('iec_document');
-                $filename = time() . '_iec_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/iec_documents'), $filename);
-                $iecDocumentPath = 'uploads/iec_documents/' . $filename;
-            }
+            $iecDocumentPath = $this->finalizeKycDocument(
+                $request->file('iec_document'),
+                $storedDraftPath('iec_document'),
+                'uploads/iec_documents',
+                'iec'
+            );
 
             // Handle AD Code document upload
-            $adCodeDocumentPath = null;
-            if ($request->hasFile('ad_code_document')) {
-                $file = $request->file('ad_code_document');
-                $filename = time() . '_adcode_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/ad_code_documents'), $filename);
-                $adCodeDocumentPath = 'uploads/ad_code_documents/' . $filename;
-            }
+            $adCodeDocumentPath = $this->finalizeKycDocument(
+                $request->file('ad_code_document'),
+                $storedDraftPath('ad_code_document'),
+                'uploads/ad_code_documents',
+                'ad_code'
+            );
 
             // Handle merchant agreement document upload
             $merchantAgreementPath = null;
@@ -1459,14 +1501,12 @@ class CustomerController extends Controller
             }
 
             // Store the multipart image and persist only its relative path.
-            $signaturePath = null;
-            if ($request->hasFile('signature_document')) {
-                $file = $request->file('signature_document');
-                $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
-                    . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('uploads/signature_documents'), $filename);
-                $signaturePath = 'uploads/signature_documents/' . $filename;
-            }
+            $signaturePath = $this->finalizeKycDocument(
+                $request->file('signature_document'),
+                $storedDraftPath('signature_document'),
+                'uploads/signature_documents',
+                'signature'
+            );
 
             // Create or update CSB Form record
             $csbData = [
@@ -1576,6 +1616,7 @@ class CustomerController extends Controller
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'business')
                 ->delete();
+            $this->deleteKycDraftDirectory($customer->id);
 
             return response()->json([
                 'success' => true,
@@ -1609,6 +1650,54 @@ class CustomerController extends Controller
                 'message' => 'CSB form submission failed. Please try again.'
             ], 500);
         }
+    }
+
+    private function finalizeKycDocument(
+        ?\Illuminate\Http\UploadedFile $file,
+        ?string $storedDraftPathValue,
+        string $targetDir,
+        string $namePrefix
+    ): ?string {
+        if ($file) {
+            $filename = time() . '_' . $namePrefix . '_' . \Illuminate\Support\Str::uuid()
+                . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path($targetDir), $filename);
+            return $targetDir . '/' . $filename;
+        }
+
+        if ($storedDraftPathValue !== null) {
+            $source = public_path($storedDraftPathValue);
+            if (is_file($source)) {
+                $extension = pathinfo($source, PATHINFO_EXTENSION) ?: 'bin';
+                $filename = time() . '_' . $namePrefix . '_' . \Illuminate\Support\Str::uuid()
+                    . '.' . $extension;
+                $target = public_path($targetDir . '/' . $filename);
+                if (rename($source, $target)) {
+                    return $targetDir . '/' . $filename;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function deleteKycDraftDirectory(int $customerId): void
+    {
+        $directory = public_path('uploads/kyc_drafts/' . $customerId);
+        if (!is_dir($directory)) {
+            return;
+        }
+
+        $files = glob($directory . '/*');
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+        }
+
+        @rmdir($directory);
     }
 
     private function normalizeGstBusinessName(string $name): string

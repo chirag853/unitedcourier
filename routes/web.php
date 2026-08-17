@@ -630,6 +630,7 @@ Route::prefix('customer')->name('customer.')->group(function () {
     Route::post('/csb5-form', [CustomerController::class, 'storeCsb5Form'])->name('csb5-form.store');
     Route::post('/csb5-form/standalone', [CustomerController::class, 'storeCsb5Form'])->name('csb5-form.standalone.store');
     Route::post('/kyc-draft', [KycController::class, 'saveKycDraft'])->name('kyc.draft.save');
+    Route::post('/kyc-draft-file', [KycController::class, 'uploadKycDraftFile'])->name('kyc.draft-file');
     Route::post('/kyc-submit', [KycController::class, 'kycSubmit'])->name('kyc.submit');
     Route::post('/verify-gst', [KycController::class, 'verifyGst'])->name('verify.gst');
     Route::post('/verify-aadhar', [KycController::class, 'verifyAadhar'])->name('verify.aadhar');

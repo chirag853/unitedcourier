@@ -49,6 +49,9 @@ class KycController extends Controller
             'gst_certificate_number', 'gst_certificate_verified', 'iec_number',
             'ad_code', 'lut_expiry_date', 'lut_bond_year', 'bank_account_number',
             'bank_type',
+            'gst_certificate_document', 'aadhar_front_document', 'aadhar_back_document',
+            'pan_document', 'signature_document', 'lut_document', 'iec_document',
+            'ad_code_document',
         ];
         $formData = array_intersect_key(
             $validated['form_data'] ?? [],
@@ -73,6 +76,186 @@ class KycController extends Controller
     }
 
     /**
+     * Rules for the KYC draft document uploads.
+     */
+    private function kycDraftDocumentRules(): array
+    {
+        return [
+            'gst_certificate_document' => ['file', 'mimes:pdf', 'max:5120'],
+            'aadhar_front_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'aadhar_back_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'pan_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'signature_document' => ['image', 'mimes:jpg,jpeg,png', 'max:2048'],
+            'lut_document' => ['file', 'mimes:pdf', 'max:5120'],
+            'iec_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'ad_code_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ];
+    }
+
+    /**
+     * Persist a KYC document immediately so it survives a page refresh.
+     * The file is stored under uploads/kyc_drafts/{customer_id} and its
+     * relative path is kept in the KYC draft's form_data.
+     */
+    public function uploadKycDraftFile(Request $request)
+    {
+        try {
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to save KYC documents.',
+                ], 401);
+            }
+
+            $field = $request->input('field');
+            $rules = $this->kycDraftDocumentRules();
+            if (!is_string($field) || !array_key_exists($field, $rules)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The document field is invalid.',
+                ], 422);
+            }
+
+            $validated = $request->validate([
+                'field' => ['required', 'string'],
+                'document' => array_merge(['required'], $rules[$field]),
+            ]);
+
+            $file = $validated['document'];
+            $directory = public_path('uploads/kyc_drafts/' . $customer->id);
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            $filename = time() . '_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
+            $relativePath = 'uploads/kyc_drafts/' . $customer->id . '/' . $filename;
+
+            $draft = KycDraft::firstOrCreate(
+                [
+                    'customer_id' => $customer->id,
+                    'kyc_type' => $this->isBusinessCustomer($customer) ? 'business' : 'personal',
+                ],
+                ['current_step' => 1]
+            );
+
+            $formData = $draft->form_data ?? [];
+            $existingPath = is_string($formData[$field] ?? null) ? $formData[$field] : null;
+            if ($existingPath && $existingPath !== $relativePath) {
+                $this->deleteKycDraftDocument($existingPath);
+            }
+
+            $formData[$field] = $relativePath;
+            $draft->form_data = $formData;
+            $draft->save();
+
+            return response()->json([
+                'success' => true,
+                'path' => $relativePath,
+                'url' => asset($relativePath),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('KYC draft document upload error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'The document could not be saved. Please try again.',
+            ], 500);
+        }
+    }
+
+    private function deleteKycDraftDocument(string $relativePath): void
+    {
+        $fullPath = public_path($relativePath);
+        if (is_file($fullPath)) {
+            @unlink($fullPath);
+        }
+    }
+
+    /**
+     * Resolve a KYC document for verification: prefer a fresh upload, then
+     * fall back to the document already stored in the customer's KYC draft.
+     *
+     * @return array{0: string, 1: string}|null [absolute path, original file name]
+     */
+    private function resolveKycDocumentForVerification(Customer $customer, Request $request, string $field): ?array
+    {
+        if ($request->hasFile($field)) {
+            $file = $request->file($field);
+            return [$file->getRealPath(), $file->getClientOriginalName()];
+        }
+
+        $pathInput = $request->input($field . '_path');
+        $path = is_string($pathInput) && $pathInput !== '' ? $pathInput : null;
+        if ($path === null) {
+            $draft = KycDraft::where('customer_id', $customer->id)->latest()->first();
+            $draftPath = $draft?->form_data[$field] ?? null;
+            $path = is_string($draftPath) && $draftPath !== '' ? $draftPath : null;
+        }
+
+        if ($path !== null) {
+            $fullPath = public_path($path);
+            if (is_file($fullPath)) {
+                return [$fullPath, basename($fullPath)];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a KYC document for the final submission: prefer a fresh upload;
+     * otherwise move the stored draft document into the final upload directory.
+     *
+     * @return string|null relative path of the final document
+     */
+    private function resolveFinalKycDocument(Request $request, string $field, ?string $storedPath, string $targetDir, string $prefix): ?string
+    {
+        if ($request->hasFile($field)) {
+            $file = $request->file($field);
+            $filename = time() . $prefix . Str::uuid() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path($targetDir), $filename);
+            return $targetDir . '/' . $filename;
+        }
+
+        if ($storedPath !== null && is_file(public_path($storedPath))) {
+            $filename = time() . $prefix . Str::uuid()
+                . '.' . pathinfo($storedPath, PATHINFO_EXTENSION);
+            if (@rename(public_path($storedPath), public_path($targetDir . '/' . $filename))) {
+                return $targetDir . '/' . $filename;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Remove the draft document folder (and any leftover files) for a customer.
+     */
+    private function deleteKycDraftDirectory(int $customerId): void
+    {
+        $draftDir = public_path('uploads/kyc_drafts/' . $customerId);
+        if (!is_dir($draftDir)) {
+            return;
+        }
+        $files = glob($draftDir . '/*');
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+        }
+        @rmdir($draftDir);
+    }
+
+    /**
      * Return chart data for the customer dashboard via AJAX.
      * Supports date filters: today, yesterday, this_month, last_month, last_year
      */
@@ -94,7 +277,8 @@ class KycController extends Controller
             $validated = $request->validate([
                 'gst_number' => 'nullable|string|size:15|regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
                 'gst_business_name' => 'required_with:gst_number|string|max:255',
-                'gst_certificate_document' => 'required_with:gst_number|file|mimes:pdf|max:5120',
+                'gst_certificate_document' => 'nullable|file|mimes:pdf|max:5120',
+                'gst_certificate_document_path' => 'nullable|string',
                 'gst_verified' => 'nullable|boolean',
                 'otp_verified' => 'nullable|boolean',
                 'aadhar_number' => 'nullable|string|max:20',
@@ -112,17 +296,24 @@ class KycController extends Controller
                 'billing_email' => 'nullable|string|email|max:255',
                 'terms_accepted' => 'nullable|boolean',
                 'terms_accepted_at' => 'nullable|date',
-                // File uploads
+                // File uploads (stored draft paths arrive under *_path keys)
                 'aadhar_front_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+                'aadhar_front_document_path' => 'nullable|string',
                 'aadhar_back_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+                'aadhar_back_document_path' => 'nullable|string',
                 'pan_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
-                'signature_document' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+                'pan_document_path' => 'nullable|string',
+                'signature_document' => 'required_without:signature_document_path|nullable|image|mimes:jpg,jpeg,png|max:2048',
+                'signature_document_path' => 'required_without:signature_document|nullable|string',
             ], [
                 'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
                 'gst_number.size' => 'The GST number must be exactly 15 characters.',
-                'gst_certificate_document.required_with' => 'Upload the GST Certificate PDF when submitting GST details.',
                 'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
                 'gst_certificate_document.max' => 'The GST Certificate PDF must not exceed 5 MB.',
+                'signature_document.required' => 'Upload your signature before submitting KYC.',
+                'signature_document.image' => 'The signature must be a JPG, JPEG, or PNG image.',
+                'signature_document.mimes' => 'The signature must be a JPG, JPEG, or PNG image.',
+                'signature_document.max' => 'The signature image must not exceed 2 MB.',
             ]);
 
             // Get current customer
@@ -133,6 +324,18 @@ class KycController extends Controller
                     'message' => 'You must be logged in to submit your KYC application.'
                 ], 401);
             }
+
+            // Stored draft documents (uploaded earlier and persisted across
+            // refreshes) act as fallbacks when no fresh file is sent.
+            $personalDraft = KycDraft::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->latest()
+                ->first();
+            $storedDraftDocs = is_array($personalDraft?->form_data) ? $personalDraft->form_data : [];
+            $storedDraftPath = fn (string $field): ?string => (function () use ($field, $storedDraftDocs) {
+                $path = $storedDraftDocs[$field] ?? null;
+                return (is_string($path) && $path !== '' && is_file(public_path($path))) ? $path : null;
+            })();
 
             $gstNumber = $request->gst_number
                 ? strtoupper(preg_replace('/\s+/', '', $request->gst_number))
@@ -154,6 +357,29 @@ class KycController extends Controller
                 ], 422);
             }
 
+            if ($gstNumber && !$request->hasFile('gst_certificate_document') && !$storedDraftPath('gst_certificate_document')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the GST Certificate PDF when submitting GST details.',
+                ], 422);
+            }
+
+            // The Organization Name entered in the Business Details step must
+            // match the business name returned in the GST verification payload.
+            $organizationName = trim((string) $request->input('organization_name'));
+            if ($gstNumber && session('kyc_gst_cashfree_verified')) {
+                $verifiedGstBusinessName = trim((string) session('kyc_gst_business_name', ''));
+                if ($organizationName === '' || !hash_equals(
+                    $this->normalizeGstBusinessName($verifiedGstBusinessName),
+                    $this->normalizeGstBusinessName($organizationName)
+                )) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The Organization Name must match the business name returned in the GST verification. Please enter the verified name exactly as it appears on your GST registration.',
+                    ], 422);
+                }
+            }
+
             $aadharNumber = $request->aadhar_number
                 ? preg_replace('/\s+/', '', $request->aadhar_number)
                 : null;
@@ -166,18 +392,20 @@ class KycController extends Controller
                 || $panHolderName
                 || $panDob
                 || $request->boolean('pan_verified')
-                || $request->hasFile('pan_document');
+                || $request->hasFile('pan_document')
+                || $storedDraftPath('pan_document') !== null;
 
             if ($hasAnyPanData) {
                 $panFile = $request->file('pan_document');
-                $panDocumentHash = $panFile
-                    ? hash_file('sha256', $panFile->getRealPath())
-                    : null;
+                $panRealPath = $panFile
+                    ? $panFile->getRealPath()
+                    : ($storedDraftPath('pan_document') !== null ? public_path($storedDraftPath('pan_document')) : null);
+                $panDocumentHash = $panRealPath ? hash_file('sha256', $panRealPath) : null;
                 if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', (string) $panNumber)
                     || $panHolderName === ''
                     || $panDob === null
                     || !$request->boolean('pan_verified')
-                    || !$panFile
+                    || !$panRealPath
                     || !session('kyc_pan_cashfree_verified')
                     || session('kyc_pan_number') !== $panNumber
                     || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
@@ -197,17 +425,25 @@ class KycController extends Controller
             $hasAnyAadhaarData = $aadharNumber
                 || $request->boolean('aadhar_verified')
                 || $request->hasFile('aadhar_front_document')
-                || $request->hasFile('aadhar_back_document');
+                || $request->hasFile('aadhar_back_document')
+                || $storedDraftPath('aadhar_front_document') !== null
+                || $storedDraftPath('aadhar_back_document') !== null;
 
             if (!$isAadhaarOptional || $hasAnyAadhaarData) {
                 $aadharFrontFile = $request->file('aadhar_front_document');
-                $aadharFrontHash = $aadharFrontFile
-                    ? hash_file('sha256', $aadharFrontFile->getRealPath())
+                $aadharFrontRealPath = $aadharFrontFile
+                    ? $aadharFrontFile->getRealPath()
+                    : ($storedDraftPath('aadhar_front_document') !== null ? public_path($storedDraftPath('aadhar_front_document')) : null);
+                $aadharBackRealPath = $request->hasFile('aadhar_back_document')
+                    ? $request->file('aadhar_back_document')->getRealPath()
+                    : ($storedDraftPath('aadhar_back_document') !== null ? public_path($storedDraftPath('aadhar_back_document')) : null);
+                $aadharFrontHash = $aadharFrontRealPath
+                    ? hash_file('sha256', $aadharFrontRealPath)
                     : null;
                 if (!preg_match('/^[2-9][0-9]{11}$/', (string) $aadharNumber)
                     || !$request->boolean('aadhar_verified')
-                    || !$aadharFrontFile
-                    || !$request->hasFile('aadhar_back_document')
+                    || !$aadharFrontRealPath
+                    || !$aadharBackRealPath
                     || !session('kyc_aadhar_cashfree_verified')
                     || session('kyc_aadhar_number') !== $aadharNumber
                     || !hash_equals(
@@ -247,49 +483,40 @@ class KycController extends Controller
                 }
             }
 
-            // Handle GST Certificate upload
-            $gstCertificatePath = null;
-            if ($request->hasFile('gst_certificate_document')) {
-                $file = $request->file('gst_certificate_document');
-                $filename = time() . '_gst_certificate_' . Str::uuid()
-                    . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('uploads/gst_certificate_documents'), $filename);
-                $gstCertificatePath = 'uploads/gst_certificate_documents/' . $filename;
-            }
+            // Handle GST Certificate upload (fresh file or stored draft path)
+            $gstCertificatePath = $this->resolveFinalKycDocument(
+                $request, 'gst_certificate_document',
+                $storedDraftPath('gst_certificate_document'),
+                'uploads/gst_certificate_documents', '_gst_certificate_'
+            );
 
             // Handle Aadhaar front document upload
-            $aadharFrontPath = null;
-            if ($request->hasFile('aadhar_front_document')) {
-                $file = $request->file('aadhar_front_document');
-                $filename = time() . '_aadhar_front_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/aadhar_front_documents'), $filename);
-                $aadharFrontPath = 'uploads/aadhar_front_documents/' . $filename;
-            }
+            $aadharFrontPath = $this->resolveFinalKycDocument(
+                $request, 'aadhar_front_document',
+                $storedDraftPath('aadhar_front_document'),
+                'uploads/aadhar_front_documents', '_aadhar_front_'
+            );
 
             // Handle Aadhaar back document upload
-            $aadharBackPath = null;
-            if ($request->hasFile('aadhar_back_document')) {
-                $file = $request->file('aadhar_back_document');
-                $filename = time() . '_aadhar_back_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/aadhar_back_documents'), $filename);
-                $aadharBackPath = 'uploads/aadhar_back_documents/' . $filename;
-            }
+            $aadharBackPath = $this->resolveFinalKycDocument(
+                $request, 'aadhar_back_document',
+                $storedDraftPath('aadhar_back_document'),
+                'uploads/aadhar_back_documents', '_aadhar_back_'
+            );
 
             // Handle PAN document upload
-            $panDocumentPath = null;
-            if ($request->hasFile('pan_document')) {
-                $file = $request->file('pan_document');
-                $filename = time() . '_pan_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/pan_documents'), $filename);
-                $panDocumentPath = 'uploads/pan_documents/' . $filename;
-            }
+            $panDocumentPath = $this->resolveFinalKycDocument(
+                $request, 'pan_document',
+                $storedDraftPath('pan_document'),
+                'uploads/pan_documents', '_pan_'
+            );
 
             // Store the uploaded image and persist only its relative path.
-            $file = $request->file('signature_document');
-            $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
-                . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('uploads/signature_documents'), $filename);
-            $signaturePath = 'uploads/signature_documents/' . $filename;
+            $signaturePath = $this->resolveFinalKycDocument(
+                $request, 'signature_document',
+                $storedDraftPath('signature_document'),
+                'uploads/signature_documents', '_signature_'
+            );
 
             // Prepare KYC data
             $kycData = [
@@ -327,6 +554,7 @@ class KycController extends Controller
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'personal')
                 ->delete();
+            $this->deleteKycDraftDirectory($customer->id);
 
             $this->sendKycSubmissionConfirmation($customer, $kyc);
 
@@ -372,7 +600,8 @@ class KycController extends Controller
             $validated = $request->validate([
                 'gst_number' => ['required', 'string', 'size:15'],
                 'business_name' => ['required', 'string', 'max:255'],
-                'gst_certificate_document' => ['required', 'file', 'mimes:pdf', 'max:5120'],
+                'gst_certificate_document' => ['required_without:gst_certificate_document_path', 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+                'gst_certificate_document_path' => ['required_without:gst_certificate_document', 'nullable', 'string'],
             ], [
                 'gst_certificate_document.required' => 'Upload the GST Certificate PDF before verification.',
                 'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
@@ -461,6 +690,46 @@ class KycController extends Controller
                 ], 422);
             }
 
+            // GSTIN registration status (gst_in_status) — only an ACTIVE
+            // registration should be accepted. Suspended / Cancelled GSTINs
+            // still return valid=true with matching business names, so the
+            // generic status check above is not enough on its own.
+            $registrationStatus = strtoupper(trim((string) (
+                data_get($cashfreeData, 'gst_in_status')
+                ?? data_get($cashfreeData, 'data.gst_in_status')
+                ?? data_get($cashfreeData, 'gstin_status')
+                ?? data_get($cashfreeData, 'data.gstin_status')
+                ?? data_get($cashfreeData, 'registration_status')
+                ?? data_get($cashfreeData, 'data.registration_status')
+                ?? ''
+            )));
+            $hasCancellationDate = !empty(data_get($cashfreeData, 'cancellation_date')
+                ?? data_get($cashfreeData, 'data.cancellation_date'));
+
+            if ($registrationStatus !== '' && $registrationStatus !== 'ACTIVE') {
+                \Log::warning('Cashfree GST verification rejected: registration not active.', [
+                    'customer_id' => $customer->id,
+                    'gst_number' => $gst,
+                    'registration_status' => $registrationStatus,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This GSTIN is ' . ucfirst(strtolower($registrationStatus))
+                        . ' and cannot be used for verification. Only active GST registrations are accepted.',
+                ], 422);
+            }
+
+            if ($hasCancellationDate) {
+                \Log::warning('Cashfree GST verification rejected: cancellation date present.', [
+                    'customer_id' => $customer->id,
+                    'gst_number' => $gst,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This GSTIN has been cancelled and cannot be used for verification.',
+                ], 422);
+            }
+
             $legalName = trim((string) (
                 data_get($cashfreeData, 'legal_name_of_business')
                 ?? data_get($cashfreeData, 'data.legal_name_of_business')
@@ -498,19 +767,29 @@ class KycController extends Controller
                 ], 422);
             }
 
+            // Registered address of the business (principal place of business)
+            // so the Billing Address can be prefilled from the GST response.
+            $gstAddress = $this->extractGstAddress($cashfreeData);
+
             session([
                 'kyc_gst_number' => $gst,
                 'kyc_gst_business_name' => $normalizedBusinessName,
+                'kyc_gst_address' => $gstAddress !== '' ? $gstAddress : null,
                 'kyc_gst_verified' => true,
                 'kyc_gst_cashfree_verified' => true,
             ]);
 
-            return response()->json([
+            $response = [
                 'success' => true,
-                'message' => 'GST number and Business Name verified successfully through Cashfree.',
+                'message' => 'GST number and Business Name verified successfully.',
                 'gst_number' => $gst,
                 'business_name' => $legalName ?: $tradeName,
-            ]);
+            ];
+            if ($gstAddress !== '') {
+                $response['address'] = $gstAddress;
+            }
+
+            return response()->json($response);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -573,6 +852,57 @@ class KycController extends Controller
      * @param string $gst14  The first 14 characters of the GSTIN
      * @return string         The computed checksum character (0-9 or A-Z)
      */
+    /**
+     * Extract the registered business address from a Cashfree GSTIN
+     * verification response. The real API returns the principal place of
+     * business either as a formatted string (principal_place_address) or as
+     * its split components (principal_place_split_address). Older / alternate
+     * response shapes (address, registered_address) are kept as fallbacks.
+     */
+    private function extractGstAddress(array $cashfreeData): string
+    {
+        foreach (['principal_place_address', 'address', 'registered_address'] as $key) {
+            $value = data_get($cashfreeData, $key);
+            if (is_scalar($value) && trim((string) $value) !== '') {
+                return trim((string) $value);
+            }
+        }
+
+        foreach (['principal_place_split_address', 'address', 'registered_address'] as $key) {
+            $value = data_get($cashfreeData, $key);
+            if (!is_array($value)) {
+                continue;
+            }
+
+            // A plain list like ["address line 1", "address line 2"] means the
+            // first entry is the complete address; an associative object is the
+            // split form whose fields are joined below.
+            if (array_is_list($value)) {
+                $first = reset($value);
+                if (is_scalar($first) && trim((string) $first) !== '') {
+                    return trim((string) $first);
+                }
+                if (is_array($first)) {
+                    $value = $first;
+                }
+            }
+
+            $addressParts = [];
+            foreach (['flat_number', 'building_number', 'building_name', 'street', 'location', 'village_or_town', 'city', 'tehsil', 'district', 'state', 'pincode'] as $addressKey) {
+                $part = trim((string) ($value[$addressKey] ?? ''));
+                if ($part !== '' && $part !== '-') {
+                    $addressParts[] = $part;
+                }
+            }
+
+            if ($addressParts) {
+                return implode(', ', $addressParts);
+            }
+        }
+
+        return '';
+    }
+
     private function computeGstChecksum(string $gst14): string
     {
         // Official GSTIN checksum (Luhn mod 36):
@@ -716,7 +1046,8 @@ class KycController extends Controller
 
             $validated = $request->validate([
                 'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
-                'aadhar_front_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_front_document' => ['required_without:aadhar_front_document_path', 'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_front_document_path' => ['required_without:aadhar_front_document', 'nullable', 'string'],
             ], [
                 'aadhar_front_document.required' => 'Upload the Aadhaar front image before verification.',
                 'aadhar_front_document.mimes' => 'The Aadhaar front document must be a JPG, JPEG, or PNG image.',
@@ -738,11 +1069,21 @@ class KycController extends Controller
                 ], 503);
             }
 
-            $frontFile = $request->file('aadhar_front_document');
+            // User-friendly replacement for the raw Cashfree OCR error message.
+            $customImageReadError = 'We could not read the uploaded Aadhaar image. Please upload a clear, sharp photo of the Aadhaar card with all four corners and the 12-digit number clearly visible, then try again.';
+
+            $frontFile = $this->resolveKycDocumentForVerification($customer, $request, 'aadhar_front_document');
+            if (!$frontFile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the Aadhaar front image before verification.',
+                ], 422);
+            }
+            [$frontRealPath, $frontOriginalName] = $frontFile;
             $verificationId = (string) random_int(1000, 9999);
-            $fileStream = fopen($frontFile->getRealPath(), 'r');
+            $fileStream = fopen($frontRealPath, 'r');
             if ($fileStream === false) {
-                throw new \RuntimeException('Unable to read the uploaded Aadhaar front image.');
+                throw new \RuntimeException('Unable to read the Aadhaar front image.');
             }
 
             try {
@@ -752,7 +1093,7 @@ class KycController extends Controller
                         'x-client-secret' => $clientSecret,
                         'x-api-version' => '2024-12-01',
                     ])
-                    ->attach('file', $fileStream, $frontFile->getClientOriginalName())
+                    ->attach('file', $fileStream, $frontOriginalName)
                     ->timeout((int) config('services.cashfree.verification_timeout', 30))
                     ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
                         'verification_id' => $verificationId,
@@ -769,11 +1110,11 @@ class KycController extends Controller
                     'customer_id' => $customer->id,
                     'verification_id' => $verificationId,
                     'http_status' => $cashfreeResponse->status(),
+                    'provider_message' => data_get($cashfreeData, 'message'),
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this Aadhaar image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -787,8 +1128,7 @@ class KycController extends Controller
                 || data_get($cashfreeData, 'success') === false) {
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this Aadhaar image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -806,7 +1146,7 @@ class KycController extends Controller
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cashfree could not read a valid Aadhaar number from the uploaded image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -817,7 +1157,7 @@ class KycController extends Controller
                 ], 422);
             }
 
-            $frontHash = hash_file('sha256', $frontFile->getRealPath());
+            $frontHash = hash_file('sha256', $frontRealPath);
             session([
                 'kyc_aadhar_number' => $aadhar,
                 'kyc_aadhar_verified' => true,
@@ -923,11 +1263,21 @@ class KycController extends Controller
                 ], 503);
             }
 
-            $frontFile = $request->file('aadhar_front_document');
+            // User-friendly replacement for the raw Cashfree OCR error message.
+            $customImageReadError = 'We could not read the uploaded Aadhaar image. Please upload a clear, sharp photo of the Aadhaar card with all four corners and the 12-digit number clearly visible, then try again.';
+
+            $frontFile = $this->resolveKycDocumentForVerification($customer, $request, 'aadhar_front_document');
+            if (!$frontFile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the Aadhaar front image before verification.',
+                ], 422);
+            }
+            [$frontRealPath, $frontOriginalName] = $frontFile;
             $verificationId = (string) random_int(1000, 9999);
-            $fileStream = fopen($frontFile->getRealPath(), 'r');
+            $fileStream = fopen($frontRealPath, 'r');
             if ($fileStream === false) {
-                throw new \RuntimeException('Unable to read the uploaded Aadhaar front image.');
+                throw new \RuntimeException('Unable to read the Aadhaar front image.');
             }
 
             try {
@@ -937,7 +1287,7 @@ class KycController extends Controller
                         'x-client-secret' => $clientSecret,
                         'x-api-version' => '2024-12-01',
                     ])
-                    ->attach('file', $fileStream, $frontFile->getClientOriginalName())
+                    ->attach('file', $fileStream, $frontOriginalName)
                     ->timeout((int) config('services.cashfree.verification_timeout', 30))
                     ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
                         'verification_id' => $verificationId,
@@ -954,11 +1304,11 @@ class KycController extends Controller
                     'customer_id' => $customer->id,
                     'verification_id' => $verificationId,
                     'http_status' => $cashfreeResponse->status(),
+                    'provider_message' => data_get($cashfreeData, 'message'),
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this Aadhaar image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -972,8 +1322,7 @@ class KycController extends Controller
                 || data_get($cashfreeData, 'success') === false) {
                 return response()->json([
                     'success' => false,
-                    'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this Aadhaar image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -991,7 +1340,7 @@ class KycController extends Controller
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cashfree could not read a valid Aadhaar number from the uploaded image.',
+                    'message' => $customImageReadError,
                 ], 422);
             }
 
@@ -1002,7 +1351,7 @@ class KycController extends Controller
                 ], 422);
             }
 
-            $frontHash = hash_file('sha256', $frontFile->getRealPath());
+            $frontHash = hash_file('sha256', $frontRealPath);
             session([
                 'kyc_aadhar_number' => $aadhar,
                 'kyc_aadhar_verified' => true,
@@ -1060,7 +1409,8 @@ class KycController extends Controller
                 'pan_number' => ['required', 'string', 'regex:/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/'],
                 'pan_holder_name' => ['required', 'string', 'max:255'],
                 'pan_dob' => ['required', 'date', 'before:today'],
-                'pan_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'pan_document' => ['required_without:pan_document_path', 'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'pan_document_path' => ['required_without:pan_document', 'nullable', 'string'],
             ], [
                 'pan_document.required' => 'Upload the PAN image before verification.',
                 'pan_document.mimes' => 'The PAN document must be a JPG, JPEG, or PNG image.',
@@ -1077,10 +1427,20 @@ class KycController extends Controller
                 ], 422);
             }
 
-            // Business accounts may legitimately use the proprietor's individual
-            // PAN (for example, a sole proprietorship). Keep PAN format, OCR,
-            // holder-name, DOB, and uniqueness validation below instead of
-            // rejecting the PAN based only on its fourth character.
+            // A Personal (Individual) account's KYC must use an individual
+            // PAN whose fourth character is 'P'. Business accounts may
+            // legitimately use either their own entity PAN (e.g. 'C', 'F')
+            // or the proprietor's individual PAN (sole proprietorship).
+            if (!$this->isBusinessCustomer($customer) && !$this->isIndividualPan($pan)) {
+                \Log::warning('Personal KYC PAN rejected: PAN belongs to a business entity.', [
+                    'customer_id' => $customer->id,
+                    'pan_number' => $pan,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This PAN belongs to a business entity. Individual KYC requires a personal PAN (with "P" as the 4th character). Please enter the PAN of the individual account holder.',
+                ], 422);
+            }
 
             if ($identifierConflict = $this->findKycIdentifierConflict($customer, null, null, $pan)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
@@ -1096,8 +1456,15 @@ class KycController extends Controller
                 ], 503);
             }
 
-            $panFile = $validated['pan_document'];
-            $fileStream = fopen($panFile->getRealPath(), 'r');
+            $panFile = $this->resolveKycDocumentForVerification($customer, $request, 'pan_document');
+            if (!$panFile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the PAN image before verification.',
+                ], 422);
+            }
+            [$panRealPath, $panOriginalName] = $panFile;
+            $fileStream = fopen($panRealPath, 'r');
             if ($fileStream === false) {
                 return response()->json([
                     'success' => false,
@@ -1113,7 +1480,7 @@ class KycController extends Controller
                         'x-client-secret' => $clientSecret,
                         'x-api-version' => '2024-12-01',
                     ])
-                    ->attach('file', $fileStream, $panFile->getClientOriginalName())
+                    ->attach('file', $fileStream, $panOriginalName)
                     ->timeout((int) config('services.cashfree.verification_timeout', 30))
                     ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
                         'verification_id' => $verificationId,
@@ -1223,7 +1590,7 @@ class KycController extends Controller
                 ], 422);
             }
 
-            $documentHash = hash_file('sha256', $panFile->getRealPath());
+            $documentHash = hash_file('sha256', $panRealPath);
             session([
                 'kyc_pan_number' => $pan,
                 'kyc_pan_holder_name' => $panHolderName,
