@@ -318,6 +318,9 @@
                                             <th>Balance After</th>
                                             <th>Type</th>
                                             <th>Reason</th>
+                                            <th>Recharge Type</th>
+                                            <th>Recharged By User ID</th>
+                                            <th>User Type</th>
                                             <th>Amount</th>
                                             <th>Reference</th>
                                             <th>Description</th>
@@ -360,6 +363,9 @@
                                             <td>
                                                 <i class="ti {{ $reasonIcon[$txn->reason] ?? 'ti-point' }} me-1"></i>{{ $reasonLabel[$txn->reason] ?? ucfirst(str_replace('_', ' ', $txn->reason)) }}
                                             </td>
+                                            <td>{{ $txn->recharge_type ?: '-' }}</td>
+                                            <td>{{ $txn->user_id ?: '-' }}</td>
+                                            <td>{{ $txn->user_type ? ucfirst($txn->user_type) : '-' }}</td>
                                             <td class="fw-bold {{ $txn->type === 'credit' ? 'text-success' : 'text-danger' }}">
                                                 {{ $txn->type === 'credit' ? '+' : '-' }}₹{{ number_format($txn->amount, 2) }}
                                             </td>
@@ -459,7 +465,7 @@
             // =============================================
             var dataTable = $('#walletTable').DataTable({
                 pageLength: 25,
-                order: [[8, 'desc']],
+                order: [[11, 'desc']],
                 language: {
                     search: "",
                     searchPlaceholder: "Search wallet transactions...",

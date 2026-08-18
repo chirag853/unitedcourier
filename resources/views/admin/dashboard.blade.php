@@ -476,18 +476,9 @@
                                                 <td>{{ $kyc->gst_number ?? '—' }}</td>
                                                 <td><span class="badge bg-warning text-dark">{{ $kyc->created_at->format('d M Y, h:i A') }}</span></td>
                                                 <td>
-                                                    <form action="{{ route('admin.kyc-pending.approve', $kyc->id) }}" method="POST" class="d-inline kyc-approve-form">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-sm btn-success" title="Approve KYC">
-                                                            <i class="ti ti-circle-check me-1"></i>Approve
-                                                        </button>
-                                                    </form>
-                                                    <form action="{{ route('admin.kyc-pending.reject', $kyc->id) }}" method="POST" class="d-inline kyc-reject-form">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-sm btn-danger" title="Reject KYC">
-                                                            <i class="ti ti-circle-x me-1"></i>Reject
-                                                        </button>
-                                                    </form>
+                                                    <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-outline-primary" title="View KYC Details">
+                                                        <i class="ti ti-eye me-1"></i>View
+                                                    </a>
                                                 </td>
                                             </tr>
                                             @endforeach

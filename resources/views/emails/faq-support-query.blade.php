@@ -18,7 +18,7 @@
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                     <tr>
                         <td style="padding:10px 0;width:130px;color:#6b7280;font-weight:bold;vertical-align:top;">Name</td>
-                        <td style="padding:10px 0;">{{ $query->full_name }}</td>
+                        <td style="padding:10px 0;">{{ mb_convert_case($query->full_name, MB_CASE_TITLE, 'UTF-8') }}</td>
                     </tr>
                     <tr>
                         <td style="padding:10px 0;color:#6b7280;font-weight:bold;vertical-align:top;">Email</td>

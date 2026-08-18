@@ -94,8 +94,9 @@ class KycController extends Controller
 
     /**
      * Persist a KYC document immediately so it survives a page refresh.
-     * The file is stored under uploads/kyc_drafts/{customer_id} and its
-     * relative path is kept in the KYC draft's form_data.
+     * The file is stored under uploads/kyc_documents/{customer_code} as
+     * {customer_code}_{date}_{time}_{field}_draft.{ext} and its relative
+     * path is kept in the KYC draft's form_data.
      */
     public function uploadKycDraftFile(Request $request)
     {
@@ -123,14 +124,15 @@ class KycController extends Controller
             ]);
 
             $file = $validated['document'];
-            $directory = public_path('uploads/kyc_drafts/' . $customer->id);
+            $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+            $directory = public_path('uploads/kyc_documents/' . $customerCode);
             if (!file_exists($directory)) {
                 mkdir($directory, 0755, true);
             }
 
-            $filename = time() . '_' . \Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension();
+            $filename = $customerCode . '_' . date('Ymd_His') . '_' . $field . '_draft.' . $file->getClientOriginalExtension();
             $file->move($directory, $filename);
-            $relativePath = 'uploads/kyc_drafts/' . $customer->id . '/' . $filename;
+            $relativePath = 'uploads/kyc_documents/' . $customerCode . '/' . $filename;
 
             $draft = KycDraft::firstOrCreate(
                 [
@@ -211,22 +213,33 @@ class KycController extends Controller
 
     /**
      * Resolve a KYC document for the final submission: prefer a fresh upload;
-     * otherwise move the stored draft document into the final upload directory.
+     * otherwise move the stored draft document into the customer's KYC folder.
+     *
+     * Files are stored under uploads/kyc_documents/{customer_code} and named
+     * {customer_code}_{date}_{time}_{document-name}.{ext}.
      *
      * @return string|null relative path of the final document
      */
-    private function resolveFinalKycDocument(Request $request, string $field, ?string $storedPath, string $targetDir, string $prefix): ?string
+    private function resolveFinalKycDocument(Customer $customer, Request $request, string $field, ?string $storedPath, string $prefix): ?string
     {
+        $code = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $targetDir = 'uploads/kyc_documents/' . $code;
+        $directory = public_path($targetDir);
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $base = $code . '_' . date('Ymd_His') . '_' . ltrim($prefix, '_');
+
         if ($request->hasFile($field)) {
             $file = $request->file($field);
-            $filename = time() . $prefix . Str::uuid() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path($targetDir), $filename);
+            $filename = $base . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
             return $targetDir . '/' . $filename;
         }
 
         if ($storedPath !== null && is_file(public_path($storedPath))) {
-            $filename = time() . $prefix . Str::uuid()
-                . '.' . pathinfo($storedPath, PATHINFO_EXTENSION);
+            $filename = $base . '.' . pathinfo($storedPath, PATHINFO_EXTENSION);
             if (@rename(public_path($storedPath), public_path($targetDir . '/' . $filename))) {
                 return $targetDir . '/' . $filename;
             }
@@ -236,15 +249,17 @@ class KycController extends Controller
     }
 
     /**
-     * Remove the draft document folder (and any leftover files) for a customer.
+     * Remove leftover draft-tagged KYC documents for a customer. Finalized
+     * documents (renamed without the "_draft" marker) are kept in place.
      */
-    private function deleteKycDraftDirectory(int $customerId): void
+    private function deleteKycDraftDirectory(Customer $customer): void
     {
-        $draftDir = public_path('uploads/kyc_drafts/' . $customerId);
+        $code = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $draftDir = public_path('uploads/kyc_documents/' . $code);
         if (!is_dir($draftDir)) {
             return;
         }
-        $files = glob($draftDir . '/*');
+        $files = glob($draftDir . '/*_draft.*');
         if (is_array($files)) {
             foreach ($files as $file) {
                 if (is_file($file)) {
@@ -465,54 +480,40 @@ class KycController extends Controller
             // here; Cashfree verification and the duplicate-identifier check still
             // validate ownership and prevent reuse by another customer.
 
-            // Ensure upload directories exist
-            $uploadDirs = [
-                'uploads/gst_certificate_documents',
-                'uploads/aadhar_front_documents',
-                'uploads/aadhar_back_documents',
-                'uploads/pan_documents',
-                'uploads/signature_documents',
-            ];
-            foreach ($uploadDirs as $dir) {
-                $path = public_path($dir);
-                if (!file_exists($path)) {
-                    mkdir($path, 0755, true);
-                }
+            // Ensure the customer's KYC document folder exists
+            $kycDocDir = 'uploads/kyc_documents/' . (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+            if (!file_exists(public_path($kycDocDir))) {
+                mkdir(public_path($kycDocDir), 0755, true);
             }
 
             // Handle GST Certificate upload (fresh file or stored draft path)
             $gstCertificatePath = $this->resolveFinalKycDocument(
-                $request, 'gst_certificate_document',
-                $storedDraftPath('gst_certificate_document'),
-                'uploads/gst_certificate_documents', '_gst_certificate_'
+                $customer, $request, 'gst_certificate_document',
+                $storedDraftPath('gst_certificate_document'), '_gst_certificate_'
             );
 
             // Handle Aadhaar front document upload
             $aadharFrontPath = $this->resolveFinalKycDocument(
-                $request, 'aadhar_front_document',
-                $storedDraftPath('aadhar_front_document'),
-                'uploads/aadhar_front_documents', '_aadhar_front_'
+                $customer, $request, 'aadhar_front_document',
+                $storedDraftPath('aadhar_front_document'), '_aadhar_front_'
             );
 
             // Handle Aadhaar back document upload
             $aadharBackPath = $this->resolveFinalKycDocument(
-                $request, 'aadhar_back_document',
-                $storedDraftPath('aadhar_back_document'),
-                'uploads/aadhar_back_documents', '_aadhar_back_'
+                $customer, $request, 'aadhar_back_document',
+                $storedDraftPath('aadhar_back_document'), '_aadhar_back_'
             );
 
             // Handle PAN document upload
             $panDocumentPath = $this->resolveFinalKycDocument(
-                $request, 'pan_document',
-                $storedDraftPath('pan_document'),
-                'uploads/pan_documents', '_pan_'
+                $customer, $request, 'pan_document',
+                $storedDraftPath('pan_document'), '_pan_'
             );
 
             // Store the uploaded image and persist only its relative path.
             $signaturePath = $this->resolveFinalKycDocument(
-                $request, 'signature_document',
-                $storedDraftPath('signature_document'),
-                'uploads/signature_documents', '_signature_'
+                $customer, $request, 'signature_document',
+                $storedDraftPath('signature_document'), '_signature_'
             );
 
             // Prepare KYC data
@@ -551,7 +552,7 @@ class KycController extends Controller
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'personal')
                 ->delete();
-            $this->deleteKycDraftDirectory($customer->id);
+            $this->deleteKycDraftDirectory($customer);
 
             $this->sendKycSubmissionConfirmation($customer, $kyc);
 
@@ -843,6 +844,12 @@ class KycController extends Controller
         $dob = trim($dob);
         if ($dob === '') {
             return null;
+        }
+
+        // DB-backed values may carry a time component (e.g. "2010-06-11 00:00:00"
+        // or "2010-06-11T00:00:00.000000Z"); keep only the date part.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $dob, $matches)) {
+            $dob = $matches[0];
         }
 
         foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
@@ -1448,7 +1455,7 @@ class KycController extends Controller
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'This PAN belongs to an individual. Business KYC requires the PAN of the registered business entity (with a letter other than "P" as the 4th character).',
+                    'message' => 'please upload business pan card',
                 ], 422);
             }
 
@@ -1775,62 +1782,55 @@ class KycController extends Controller
             // PAN is the proprietor's individual PAN. The PAN has already passed
             // Cashfree verification and the uniqueness check above.
 
-            // Ensure upload directories exist
-            $uploadDirs = [
-                'uploads/aadhar_front_documents',
-                'uploads/aadhar_back_documents',
-                'uploads/pan_documents',
-                'uploads/signature_documents',
-                'uploads/merchant_agreements',
-            ];
-            foreach ($uploadDirs as $dir) {
-                $path = public_path($dir);
-                if (!file_exists($path)) {
-                    mkdir($path, 0755, true);
-                }
+            // Ensure the customer's KYC document folder exists
+            $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+            $kycDocDir = 'uploads/kyc_documents/' . $customerCode;
+            $kycDocPath = public_path($kycDocDir);
+            if (!file_exists($kycDocPath)) {
+                mkdir($kycDocPath, 0755, true);
             }
+            $kycDocBase = $customerCode . '_' . date('Ymd_His');
 
             // Handle Aadhaar front document upload
             $aadharFrontPath = null;
             if ($request->hasFile('aadhar_front_document')) {
                 $file = $request->file('aadhar_front_document');
-                $filename = time() . '_aadhar_front_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/aadhar_front_documents'), $filename);
-                $aadharFrontPath = 'uploads/aadhar_front_documents/' . $filename;
+                $filename = $kycDocBase . '_aadhar_front.' . $file->getClientOriginalExtension();
+                $file->move($kycDocPath, $filename);
+                $aadharFrontPath = $kycDocDir . '/' . $filename;
             }
 
             // Handle Aadhaar back document upload
             $aadharBackPath = null;
             if ($request->hasFile('aadhar_back_document')) {
                 $file = $request->file('aadhar_back_document');
-                $filename = time() . '_aadhar_back_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/aadhar_back_documents'), $filename);
-                $aadharBackPath = 'uploads/aadhar_back_documents/' . $filename;
+                $filename = $kycDocBase . '_aadhar_back.' . $file->getClientOriginalExtension();
+                $file->move($kycDocPath, $filename);
+                $aadharBackPath = $kycDocDir . '/' . $filename;
             }
 
             // Handle PAN document upload
             $panDocumentPath = null;
             if ($request->hasFile('pan_document')) {
                 $file = $request->file('pan_document');
-                $filename = time() . '_pan_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/pan_documents'), $filename);
-                $panDocumentPath = 'uploads/pan_documents/' . $filename;
+                $filename = $kycDocBase . '_pan.' . $file->getClientOriginalExtension();
+                $file->move($kycDocPath, $filename);
+                $panDocumentPath = $kycDocDir . '/' . $filename;
             }
 
             // Store the uploaded image and persist only its relative path.
             $file = $request->file('signature_document');
-            $filename = time() . '_signature_' . \Illuminate\Support\Str::uuid()
-                . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('uploads/signature_documents'), $filename);
-            $signaturePath = 'uploads/signature_documents/' . $filename;
+            $filename = $kycDocBase . '_signature.' . $file->getClientOriginalExtension();
+            $file->move($kycDocPath, $filename);
+            $signaturePath = $kycDocDir . '/' . $filename;
 
             // Handle merchant agreement document upload
             $merchantAgreementPath = null;
             if ($request->hasFile('merchant_agreement')) {
                 $file = $request->file('merchant_agreement');
-                $filename = time() . '_merchant_agreement_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/merchant_agreements'), $filename);
-                $merchantAgreementPath = 'uploads/merchant_agreements/' . $filename;
+                $filename = $kycDocBase . '_merchant_agreement.' . $file->getClientOriginalExtension();
+                $file->move($kycDocPath, $filename);
+                $merchantAgreementPath = $kycDocDir . '/' . $filename;
             }
 
             // Create or update KYC Detail record (Personal KYC = CSB-IV)

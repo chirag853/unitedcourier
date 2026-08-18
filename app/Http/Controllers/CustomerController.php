@@ -90,6 +90,12 @@ class CustomerController extends Controller
             'customer_name' => $customer->first_name . ' ' . $customer->last_name,
         ]);
 
+        \App\Support\SystemLogger::log(
+            'customer.login',
+            'Customer logged in: ' . $customer->email,
+            'customer'
+        );
+
         return response()->json([
             'success'  => true,
             'message'  => 'Login successful! Redirecting...',
@@ -704,6 +710,14 @@ class CustomerController extends Controller
     public function logout(Request $request)
     {
         // Logout customer using auth guard
+        $customer = auth()->guard('customer')->user();
+
+        \App\Support\SystemLogger::log(
+            'customer.logout',
+            'Customer logged out: ' . ($customer->email ?? 'unknown'),
+            'customer'
+        );
+
         auth()->guard('customer')->logout();
         
         // Clear customer session
@@ -1390,6 +1404,7 @@ class CustomerController extends Controller
             $panFile = $request->file('pan_document');
             $panStoredPath = $storedDraftPath('pan_document');
             $hasPanIdentity = $panNumber !== null && $panHolderName !== '' && $panDob !== null;
+            $existingPanDob = $this->normalizePanDob((string) ($existingBusinessKyc->pan_dob ?? ''));
             $matchesVerifiedPan = $hasPanIdentity
                 && $canReuseVerifiedPan
                 && hash_equals(
@@ -1400,7 +1415,7 @@ class CustomerController extends Controller
                     $this->normalizePanHolderName((string) $existingBusinessKyc->pan_holder_name),
                     $panHolderName
                 )
-                && hash_equals($this->normalizePanDob((string) $existingBusinessKyc->pan_dob), $panDob);
+                && $existingPanDob === $panDob;
             $panRealPath = $panFile ? $panFile->getRealPath()
                 : ($panStoredPath ? public_path($panStoredPath) : null);
             $panDocumentHash = $panRealPath ? hash_file('sha256', $panRealPath) : null;
@@ -1423,24 +1438,14 @@ class CustomerController extends Controller
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 
-            // Ensure upload directories exist
-            $uploadDirs = [
-                'uploads/gst_documents',
-                'uploads/aadhar_front_documents',
-                'uploads/aadhar_back_documents',
-                'uploads/pan_documents',
-                'uploads/lut_documents',
-                'uploads/iec_documents',
-                'uploads/ad_code_documents',
-                'uploads/signature_documents',
-                'uploads/merchant_agreements',
-            ];
-            foreach ($uploadDirs as $dir) {
-                $path = public_path($dir);
-                if (!file_exists($path)) {
-                    mkdir($path, 0755, true);
-                }
+            // Ensure the customer's KYC document folder exists
+            $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+            $kycDocDir = 'uploads/kyc_documents/' . $customerCode;
+            $kycDocPath = public_path($kycDocDir);
+            if (!file_exists($kycDocPath)) {
+                mkdir($kycDocPath, 0755, true);
             }
+            $kycDocBase = $customerCode . '_' . date('Ymd_His');
 
             // Store identity and registration documents selected in steps 1-3.
             // A stored draft file (kept after a page refresh) is moved into its
@@ -1448,42 +1453,42 @@ class CustomerController extends Controller
             $gstDocumentPath = $this->finalizeKycDocument(
                 $request->file('gst_certificate_document') ?? $request->file('gst_document'),
                 $storedDraftPath('gst_certificate_document'),
-                'uploads/gst_documents',
+                $customer,
                 'gst'
             );
 
             $aadharFrontPath = $this->finalizeKycDocument(
                 $request->file('aadhar_front_document') ?? $request->file('aadhar_document'),
                 $storedDraftPath('aadhar_front_document'),
-                'uploads/aadhar_front_documents',
+                $customer,
                 'aadhar_front'
             );
 
             $aadharBackPath = $this->finalizeKycDocument(
                 $request->file('aadhar_back_document'),
                 $storedDraftPath('aadhar_back_document'),
-                'uploads/aadhar_back_documents',
+                $customer,
                 'aadhar_back'
             );
 
             $panDocumentPath = $this->finalizeKycDocument(
                 $request->file('pan_document'),
                 $panStoredPath,
-                'uploads/pan_documents',
+                $customer,
                 'pan'
             );
 
             $lutDocumentPath = $this->finalizeKycDocument(
                 $request->file('lut_document'),
                 $storedDraftPath('lut_document'),
-                'uploads/lut_documents',
+                $customer,
                 'lut'
             );
 
             $iecDocumentPath = $this->finalizeKycDocument(
                 $request->file('iec_document'),
                 $storedDraftPath('iec_document'),
-                'uploads/iec_documents',
+                $customer,
                 'iec'
             );
 
@@ -1491,7 +1496,7 @@ class CustomerController extends Controller
             $adCodeDocumentPath = $this->finalizeKycDocument(
                 $request->file('ad_code_document'),
                 $storedDraftPath('ad_code_document'),
-                'uploads/ad_code_documents',
+                $customer,
                 'ad_code'
             );
 
@@ -1499,16 +1504,16 @@ class CustomerController extends Controller
             $merchantAgreementPath = null;
             if ($request->hasFile('merchant_agreement')) {
                 $file = $request->file('merchant_agreement');
-                $filename = time() . '_merchant_agreement_' . $file->getClientOriginalName();
-                $file->move(public_path('uploads/merchant_agreements'), $filename);
-                $merchantAgreementPath = 'uploads/merchant_agreements/' . $filename;
+                $filename = $kycDocBase . '_merchant_agreement.' . $file->getClientOriginalExtension();
+                $file->move($kycDocPath, $filename);
+                $merchantAgreementPath = $kycDocDir . '/' . $filename;
             }
 
             // Store the multipart image and persist only its relative path.
             $signaturePath = $this->finalizeKycDocument(
                 $request->file('signature_document'),
                 $storedDraftPath('signature_document'),
-                'uploads/signature_documents',
+                $customer,
                 'signature'
             );
 
@@ -1620,7 +1625,7 @@ class CustomerController extends Controller
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'business')
                 ->delete();
-            $this->deleteKycDraftDirectory($customer->id);
+            $this->deleteKycDraftDirectory($customer);
 
             return response()->json([
                 'success' => true,
@@ -1659,13 +1664,20 @@ class CustomerController extends Controller
     private function finalizeKycDocument(
         ?\Illuminate\Http\UploadedFile $file,
         ?string $storedDraftPathValue,
-        string $targetDir,
+        Customer $customer,
         string $namePrefix
     ): ?string {
+        $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $targetDir = 'uploads/kyc_documents/' . $customerCode;
+        $directory = public_path($targetDir);
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
+        }
+        $base = $customerCode . '_' . date('Ymd_His');
+
         if ($file) {
-            $filename = time() . '_' . $namePrefix . '_' . \Illuminate\Support\Str::uuid()
-                . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path($targetDir), $filename);
+            $filename = $base . '_' . $namePrefix . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
             return $targetDir . '/' . $filename;
         }
 
@@ -1673,8 +1685,7 @@ class CustomerController extends Controller
             $source = public_path($storedDraftPathValue);
             if (is_file($source)) {
                 $extension = pathinfo($source, PATHINFO_EXTENSION) ?: 'bin';
-                $filename = time() . '_' . $namePrefix . '_' . \Illuminate\Support\Str::uuid()
-                    . '.' . $extension;
+                $filename = $base . '_' . $namePrefix . '.' . $extension;
                 $target = public_path($targetDir . '/' . $filename);
                 if (rename($source, $target)) {
                     return $targetDir . '/' . $filename;
@@ -1685,14 +1696,15 @@ class CustomerController extends Controller
         return null;
     }
 
-    private function deleteKycDraftDirectory(int $customerId): void
+    private function deleteKycDraftDirectory(Customer $customer): void
     {
-        $directory = public_path('uploads/kyc_drafts/' . $customerId);
+        $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $directory = public_path('uploads/kyc_documents/' . $customerCode);
         if (!is_dir($directory)) {
             return;
         }
 
-        $files = glob($directory . '/*');
+        $files = glob($directory . '/*_draft.*');
         if (is_array($files)) {
             foreach ($files as $file) {
                 if (is_file($file)) {
@@ -1701,7 +1713,9 @@ class CustomerController extends Controller
             }
         }
 
-        @rmdir($directory);
+        if (is_dir($directory) && empty(glob($directory . '/*'))) {
+            @rmdir($directory);
+        }
     }
 
     private function sanitizeGstBusinessName(string $name): string
@@ -1724,6 +1738,12 @@ class CustomerController extends Controller
         $dob = trim($dob);
         if ($dob === '') {
             return null;
+        }
+
+        // DB-backed values may carry a time component (e.g. "2010-06-11 00:00:00"
+        // or "2010-06-11T00:00:00.000000Z"); keep only the date part.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $dob, $matches)) {
+            $dob = $matches[0];
         }
 
         foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
@@ -1878,6 +1898,14 @@ class CustomerController extends Controller
 
             // Clear registration OTP session data after successful registration
             session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
+
+            \App\Support\SystemLogger::log(
+                'customer.register',
+                'New customer registered: ' . ($customer->email ?? ''),
+                'customer',
+                null,
+                ['customer_id' => $customer->id]
+            );
 
             return response()->json([
                 'success' => true,
@@ -11042,6 +11070,7 @@ class CustomerController extends Controller
 
             $customerId = auth()->guard('customer')->id();
             $amount = $validated['amount'];
+            $rechargeType = $request->input('mode', 'credit');
 
             $wallet = Wallet::where('customer_id', $customerId)->first();
 
@@ -11065,18 +11094,21 @@ class CustomerController extends Controller
                 ]);
             }
 
-            DB::transaction(function () use ($wallet, $amount, $customerId) {
+            DB::transaction(function () use ($wallet, $amount, $customerId, $rechargeType) {
                 $wallet->increment('balance', $amount);
                 $wallet->refresh();
 
                 // Log the wallet transaction
                 WalletTransaction::create([
-                    'customer_id'   => $customerId,
-                    'type'          => 'credit',
-                    'reason'        => 'recharge',
-                    'amount'        => $amount,
-                    'balance_after' => $wallet->balance,
-                    'description'   => 'Wallet recharge of ₹' . number_format($amount, 2),
+                    'customer_id'       => $customerId,
+                    'type'              => 'credit',
+                    'reason'            => 'recharge',
+                    'recharge_type'     => $rechargeType,
+                    'user_id'           => $customerId,
+                    'user_type'         => 'customer',
+                    'amount'            => $amount,
+                    'balance_after'     => $wallet->balance,
+                    'description'       => 'Wallet recharge of ₹' . number_format($amount, 2),
                 ]);
             });
 

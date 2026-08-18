@@ -678,6 +678,12 @@ class AdminController extends Controller
                 ? 'admin.dashboard'
                 : ($authenticatedAdmin->canAccessDeliveryDashboard() ? 'admin.delivery-dashboard' : 'admin.my-profile');
 
+            \App\Support\SystemLogger::log(
+                'admin.login',
+                'Admin logged in: ' . $authenticatedAdmin->email,
+                'admin'
+            );
+
             return redirect()->route($landingRoute)->with('success', 'Login successful!');
         }
 
@@ -687,6 +693,14 @@ class AdminController extends Controller
 
     public function logout(Request $request)
     {
+        $admin = Auth::guard('admin')->user();
+
+        \App\Support\SystemLogger::log(
+            'admin.logout',
+            'Admin logged out: ' . ($admin->email ?? 'unknown'),
+            'admin'
+        );
+
         Auth::guard('admin')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -2276,6 +2290,14 @@ class AdminController extends Controller
         $customer->setRememberToken(\Illuminate\Support\Str::random(60));
         $customer->save();
 
+        \App\Support\SystemLogger::log(
+            'customer.password_reset',
+            'Password reset for customer #' . $customer->id . ' (' . $customer->first_name . ' ' . $customer->last_name . ') by admin',
+            'customer',
+            null,
+            ['performed_by_admin' => true]
+        );
+
         return redirect()->back()
             ->with('success', 'Password for ' . $customer->first_name . ' ' . $customer->last_name . ' has been reset successfully.');
     }
@@ -2375,18 +2397,118 @@ class AdminController extends Controller
             }
         }
 
+        \App\Support\SystemLogger::log(
+            'kyc.approve',
+            'KYC approved: ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id),
+            'kyc_detail',
+            $previousStatus,
+            'approved'
+        );
+
         return redirect()->route('admin.kyc-pending')
             ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been approved successfully. Shipment creation enabled, wallet created with ₹0 balance, and ' . $ratesCount . ' courier rates assigned.');
     }
 
-    public function rejectKyc($id)
+    public function rejectKyc(Request $request, $id)
     {
+        $validated = $request->validate([
+            'reject_remark' => 'required|string|max:1000',
+        ]);
+
+        $remark = trim($validated['reject_remark']);
+        if ($remark === '') {
+            return back()
+                ->withErrors(['reject_remark' => 'The remark field is required.'])
+                ->withInput();
+        }
+
         $kycDetail = \App\Models\KycDetail::findOrFail($id);
+
+        $previousStatus = $kycDetail->kyc_status;
+
+        // Preserve all submitted KYC details as a draft so the customer can
+        // re-submit without re-entering everything.
+        $formData = collect($kycDetail->getAttributes())
+            ->except(['id', 'created_at', 'updated_at'])
+            ->map(function ($value) {
+                return $value instanceof \DateTimeInterface ? $value->format('Y-m-d H:i:s') : $value;
+            })
+            ->toArray();
+
+        $customer = $kycDetail->customer;
+        $csb = $customer ? $customer->csbForm : null;
+        if ($csb) {
+            $csbData = collect($csb->getAttributes())
+                ->except(['id', 'customer_id', 'created_at', 'updated_at'])
+                ->map(function ($value) {
+                    return $value instanceof \DateTimeInterface ? $value->format('Y-m-d H:i:s') : $value;
+                })
+                ->toArray();
+            $formData = array_merge($formData, $csbData);
+        }
+
+        $formData['reject_remark'] = $remark;
+
+        // The frontend KYC form reads the business name from gst_business_name,
+        // which lives on the customer's submitted record as organization_name.
+        if (empty($formData['gst_business_name'])) {
+            $formData['gst_business_name'] = $kycDetail->organization_name ?? null;
+        }
+
+        \App\Models\KycDraft::updateOrCreate(
+            [
+                'customer_id' => $kycDetail->customer_id,
+                'kyc_type' => $kycDetail->kyc_type ?? 'personal',
+            ],
+            [
+                'current_step' => 1,
+                'form_data' => $formData,
+            ]
+        );
+
         $kycDetail->kyc_status = 'rejected';
         $kycDetail->save();
 
-        return redirect()->route('admin.kyc-pending')
+        \App\Support\SystemLogger::log(
+            'kyc.reject',
+            'KYC rejected: ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id),
+            'kyc_detail',
+            $previousStatus,
+            ['status' => 'rejected', 'remark' => $remark]
+        );
+
+        if ($customer) {
+            $this->sendKycRejectionEmail($customer, $kycDetail, $remark);
+        }
+
+        return redirect()->back()
             ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been rejected.');
+    }
+
+    /**
+     * Notify the customer that their KYC application was rejected, including
+     * the admin's remark. A copy is BCC'd to the internal KYC mailbox.
+     */
+    private function sendKycRejectionEmail(Customer $customer, KycDetail $kyc, string $remark): void
+    {
+        try {
+            Mail::send('emails.kyc-rejected', [
+                'customer' => $customer,
+                'kyc' => $kyc,
+                'remark' => $remark,
+            ], function ($mail) use ($customer) {
+                $mail->to(
+                    $customer->email,
+                    trim($customer->first_name . ' ' . $customer->last_name)
+                )
+                    ->bcc('sidhantk@unitedcouriers.biz')
+                    ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                    ->subject('KYC Application Rejected - United Worldwide Couriers');
+            });
+        } catch (\Throwable $mailException) {
+            report($mailException);
+            \Log::error('KYC rejection email error for customer ' . $customer->id . ': ' . $mailException->getMessage());
+        }
     }
 
     /**
@@ -2409,22 +2531,37 @@ class AdminController extends Controller
                 ['balance' => 0]
             );
 
-            DB::transaction(function () use ($wallet, $amount, $customer) {
+            $balanceBefore = (float) $wallet->balance;
+            $mode = $request->input('mode', 'credit');
+            $adminId = Auth::guard('admin')->id();
+
+            DB::transaction(function () use ($wallet, $amount, $customer, $mode, $adminId) {
                 $wallet->increment('balance', $amount);
                 $wallet->refresh();
 
                 WalletTransaction::create([
-                    'customer_id'   => $customer->id,
-                    'type'          => 'credit',
-                    'reason'        => 'recharge',
-                    'amount'        => $amount,
-                    'balance_after' => $wallet->balance,
-                    'reference'     => 'ADMIN-' . now()->format('ymd'),
-                    'description'   => 'Wallet recharge of ₹' . number_format($amount, 2) . ' by Admin',
+                    'customer_id'       => $customer->id,
+                    'type'              => 'credit',
+                    'reason'            => 'recharge',
+                    'recharge_type'     => $mode,
+                    'user_id'           => $adminId,
+                    'user_type'         => 'admin',
+                    'amount'            => $amount,
+                    'balance_after'     => $wallet->balance,
+                    'reference'         => 'ADMIN-' . now()->format('ymd'),
+                    'description'       => 'Wallet recharge of ₹' . number_format($amount, 2) . ' by Admin',
                 ]);
             });
 
             $wallet->refresh();
+
+            \App\Support\SystemLogger::log(
+                'wallet.recharge',
+                'Wallet recharged ₹' . number_format($amount, 2) . ' for ' . $customer->first_name . ' ' . $customer->last_name,
+                'wallet',
+                ['balance_before' => $balanceBefore],
+                ['amount' => $amount, 'mode' => $mode, 'balance_after' => (float) $wallet->balance]
+            );
 
             return response()->json([
                 'success'     => true,
@@ -4604,11 +4741,21 @@ class AdminController extends Controller
     {
         $customer = Customer::findOrFail($id);
 
+        $oldStatus = $customer->status;
+
         $customer->status = !$customer->status;
         $customer->save();
 
         $action = $customer->status ? 'activated' : 'deactivated';
         $customerName = $customer->first_name . ' ' . $customer->last_name;
+
+        \App\Support\SystemLogger::log(
+            'customer.status_toggle',
+            "Account for {$customerName} has been {$action}",
+            'customer',
+            (int) $oldStatus,
+            (int) $customer->status
+        );
 
         return redirect()->back()
             ->with('success', "Account for {$customerName} has been {$action} successfully.");
@@ -4628,11 +4775,21 @@ class AdminController extends Controller
     {
         $customer = Customer::findOrFail($id);
 
+        $oldAccess = $customer->can_create_shipment;
+
         $customer->can_create_shipment = !$customer->can_create_shipment;
         $customer->save();
 
         $action = $customer->can_create_shipment ? 'enabled' : 'disabled';
         $customerName = $customer->first_name . ' ' . $customer->last_name;
+
+        \App\Support\SystemLogger::log(
+            'customer.shipment_access_toggle',
+            "Shipment creation for {$customerName} has been {$action}",
+            'customer',
+            (bool) $oldAccess,
+            (bool) $customer->can_create_shipment
+        );
 
         return redirect()->back()
             ->with('success', "Shipment creation for {$customerName} has been {$action} successfully.");

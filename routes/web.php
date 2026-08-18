@@ -55,7 +55,7 @@ Route::get('/get-started', [CustomerController::class, 'register'])->name('regis
 
 
 // Admin routes
-Route::prefix('admin')->group(function () {
+Route::prefix('admin')->middleware('log.activity')->group(function () {
     
     // Public Authentication Routes (No Middleware)
     Route::get('/', [AdminController::class, 'login'])->name('admin.login');
@@ -593,7 +593,7 @@ Route::prefix('admin')->group(function () {
 
 
 // Customer routes
-Route::prefix('customer')->name('customer.')->group(function () {
+Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(function () {
     // Route::get('/index', [CustomerController::class, 'index'])->name('customer.index');
     Route::post('/register', [CustomerController::class, 'register'])->name('customer.register');
     Route::post('/login', [CustomerController::class, 'login'])->name('customer.login');

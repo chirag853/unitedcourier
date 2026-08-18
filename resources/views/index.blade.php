@@ -1,5 +1,152 @@
 @include('website_include.header')
 
+<style>
+    /* ===== Get Quote custom dropdown component ===== */
+    .uwd-dropdown {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .uwd-dropdown-trigger {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 14px 42px 14px 42px;
+        font-family: inherit;
+        font-weight: 500;
+        font-size: 14px;
+        color: #6c757d;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s, color 0.3s;
+    }
+
+    .uwd-dropdown-trigger.is-selected {
+        color: #212529;
+    }
+
+    .uwd-dropdown-trigger.is-open {
+        background-color: #fff;
+        border-color: var(--brand-blue);
+        box-shadow: 0 0 0 4px rgba(26, 35, 126, 0.05);
+        color: #212529;
+    }
+
+    .uwd-dropdown .uwd-dropdown-chevron {
+        position: absolute;
+        right: 16px;
+        left: auto;
+        color: #adb5bd;
+        font-size: 12px;
+        pointer-events: none;
+        transition: transform 0.25s ease, color 0.3s;
+    }
+
+    .uwd-dropdown-trigger.is-open .uwd-dropdown-chevron {
+        transform: rotate(180deg);
+        color: var(--brand-blue);
+    }
+
+    .uwd-dropdown-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        z-index: 2000;
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+        max-height: 260px;
+        overflow-y: auto;
+        padding: 6px;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-6px);
+        transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    }
+
+    .uwd-dropdown-panel.is-open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    .uwd-dropdown-panel.is-flipped {
+        top: auto;
+        bottom: calc(100% + 6px);
+        transform: translateY(6px);
+    }
+
+    .uwd-dropdown-panel.is-flipped.is-open {
+        transform: translateY(0);
+    }
+
+    .uwd-dropdown-group {
+        padding: 10px 12px 4px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #94a3b8;
+    }
+
+    .uwd-dropdown-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #334155;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .uwd-dropdown-option:hover,
+    .uwd-dropdown-option.is-highlighted {
+        background-color: #eef2ff;
+        color: var(--brand-blue);
+    }
+
+    .uwd-dropdown-option.is-selected {
+        background-color: #f5f7ff;
+        color: var(--brand-blue);
+        font-weight: 700;
+    }
+
+    .uwd-dropdown-option.is-placeholder {
+        color: #9ca3af;
+        font-style: italic;
+    }
+
+    .uwd-dropdown-option .uwd-dropdown-check {
+        position: static;
+        left: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--brand-blue);
+        color: #fff;
+        font-size: 9px;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    .uwd-dropdown-option.is-selected .uwd-dropdown-check {
+        opacity: 1;
+    }
+</style>
+
 <!-- Hero section -->
 <header class="hero-gradient">
     <div class="floating-blob bg-warning opacity-25" style="width: 250px; height: 250px; top: 10%; left: -125px;">
@@ -741,5 +888,178 @@
         </div>
     </div>
 </section>
+
+<script>
+    // ===== Get Quote: convert the native selects into designed dropdowns =====
+    (function () {
+        const quoteSelects = document.querySelectorAll('header.hero-gradient select.form-select.input-custom');
+        if (!quoteSelects.length) return;
+
+        quoteSelects.forEach(function (select) {
+            if (select.dataset.uwdEnhanced) return;
+            select.dataset.uwdEnhanced = '1';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'uwd-dropdown';
+
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'uwd-dropdown-trigger';
+            trigger.setAttribute('aria-haspopup', 'listbox');
+            trigger.setAttribute('aria-expanded', 'false');
+
+            const value = document.createElement('span');
+            value.className = 'uwd-dropdown-value';
+            const chevron = document.createElement('i');
+            chevron.className = 'fas fa-chevron-down uwd-dropdown-chevron';
+            trigger.appendChild(value);
+            trigger.appendChild(chevron);
+
+            const panel = document.createElement('div');
+            panel.className = 'uwd-dropdown-panel';
+            panel.setAttribute('role', 'listbox');
+            panel.tabIndex = -1;
+
+            const items = [];
+            let highlightedIndex = -1;
+
+            function renderPanel() {
+                panel.innerHTML = '';
+                items.length = 0;
+                let currentGroup = null;
+
+                Array.from(select.options).forEach(function (opt) {
+                    const group = opt.closest('optgroup');
+                    if (group && group !== currentGroup) {
+                        const label = document.createElement('div');
+                        label.className = 'uwd-dropdown-group';
+                        label.textContent = group.label;
+                        panel.appendChild(label);
+                        currentGroup = group;
+                    } else if (!group) {
+                        currentGroup = null;
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = 'uwd-dropdown-option';
+                    item.setAttribute('role', 'option');
+                    if (opt.disabled) item.classList.add('is-placeholder');
+
+                    const text = document.createElement('span');
+                    text.textContent = opt.textContent;
+                    const check = document.createElement('i');
+                    check.className = 'fas fa-check uwd-dropdown-check';
+                    item.appendChild(text);
+                    item.appendChild(check);
+                    panel.appendChild(item);
+
+                    const index = items.length;
+                    item.addEventListener('click', function () {
+                        selectAt(index);
+                    });
+
+                    items.push({ item: item, opt: opt });
+                });
+            }
+
+            function refresh() {
+                const idx = select.selectedIndex;
+                const opt = select.options[idx] || null;
+                value.textContent = opt ? opt.textContent : '';
+                trigger.classList.toggle('is-selected', !!opt && !opt.disabled);
+                items.forEach(function (entry, i) {
+                    entry.item.classList.toggle('is-selected', i === idx);
+                    entry.item.classList.toggle('is-placeholder', entry.opt.disabled);
+                });
+            }
+
+            function open() {
+                renderPanel();
+                refresh();
+                panel.classList.remove('is-flipped');
+                panel.classList.add('is-open');
+                trigger.classList.add('is-open');
+                trigger.setAttribute('aria-expanded', 'true');
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const panelHeight = Math.min(panel.scrollHeight, 260);
+                if (window.innerHeight - wrapperRect.bottom < panelHeight + 12) {
+                    panel.classList.add('is-flipped');
+                }
+                highlightedIndex = select.selectedIndex;
+                updateHighlight();
+                panel.focus();
+            }
+
+            function close(returnFocus) {
+                panel.classList.remove('is-open');
+                trigger.classList.remove('is-open');
+                trigger.setAttribute('aria-expanded', 'false');
+                if (returnFocus) trigger.focus();
+            }
+
+            function updateHighlight() {
+                items.forEach(function (entry, i) {
+                    entry.item.classList.toggle('is-highlighted', i === highlightedIndex);
+                });
+                const current = items[highlightedIndex];
+                if (current) current.item.scrollIntoView({ block: 'nearest' });
+            }
+
+            function moveHighlight(step) {
+                if (!items.length) return;
+                let next = highlightedIndex;
+                for (let i = 0; i < items.length; i++) {
+                    next = (next + step + items.length) % items.length;
+                    if (!items[next].opt.disabled) break;
+                }
+                highlightedIndex = next;
+                updateHighlight();
+            }
+
+            function selectAt(index) {
+                const entry = items[index];
+                if (!entry || entry.opt.disabled) return;
+                select.selectedIndex = index;
+                refresh();
+                close(true);
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            trigger.addEventListener('click', function () {
+                if (panel.classList.contains('is-open')) {
+                    close(true);
+                } else {
+                    open();
+                }
+            });
+
+            trigger.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    open();
+                    moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
+                }
+            });
+
+            panel.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown') { e.preventDefault(); moveHighlight(1); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); moveHighlight(-1); }
+                else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAt(highlightedIndex); }
+                else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!wrapper.contains(e.target)) close(false);
+            });
+
+            select.hidden = true;
+            select.insertAdjacentElement('afterend', wrapper);
+            wrapper.appendChild(trigger);
+            wrapper.appendChild(panel);
+            renderPanel();
+            refresh();
+        });
+    })();
+</script>
 
 @include('website_include.footer')

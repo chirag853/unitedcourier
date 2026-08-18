@@ -453,13 +453,13 @@
                             review. We'll notify you once it's approved.</p>
                         @elseif($kycRecord->kyc_status == 'rejected')
                         <p class="mb-0 text-danger"><i class="fas fa-exclamation-triangle"></i> Your KYC application was
-                            rejected. Please contact support for assistance.</p>
+                            rejected. Please review and correct the details below, then re-submit your KYC.</p>
                         @endif
                     </div>
                 </div>
                 @endif
 
-                @if(!$kycExists)
+                @if(!$kycExists || ($kycRecord && $kycRecord->kyc_status == 'rejected'))
                 <!-- KYC Form Start -->
                 <style>
                 :root {
@@ -2898,7 +2898,7 @@
                             return;
                         }
                         if (isBusinessFlow && pan.charAt(3) === 'P') {
-                            showKycAlert('This PAN belongs to an individual', 'Business KYC requires the PAN of the registered business entity with a letter other than <strong>"P"</strong> as the 4th character. The PAN you entered (4th character "<strong>' + pan.charAt(3) + '</strong>") belongs to an individual. Please enter the PAN of the registered business entity.');
+                            showKycAlert('please upload business pan card', 'please upload business pan card');
                             markFieldInvalid(panField);
                             return;
                         }
@@ -3180,7 +3180,7 @@
                                     if (businessName) businessName.focus();
                                     return false;
                                 }
-                                if (!kycData.gst_certificate_verified
+                                if ((!kycData.gst_certificate_verified && !kycData.gst_verified)
                                     || businessName.value.trim().toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
                                     alert('Please verify your GST Certificate number before continuing.');
                                     return false;
@@ -3645,13 +3645,13 @@
                         }
                         const values = {
                             gstInput: kycData.gst_number,
-                            gstBusinessName: kycData.gst_business_name,
+                            gstBusinessName: kycData.gst_business_name || kycData.organization_name,
                             aadharInput: kycData.aadhar_number ? String(kycData.aadhar_number).replace(/(.{4})(?=.)/g, '$1 ') : '',
                             panInput: kycData.pan_number,
                             panHolderName: kycData.pan_holder_name,
                             panDob: kycData.pan_dob,
                             bizGstCertNumber: kycData.gst_certificate_number,
-                            bizGstBusinessName: kycData.gst_business_name,
+                            bizGstBusinessName: kycData.gst_business_name || kycData.organization_name,
                             bizIecNumber: kycData.iec_number,
                             bizAdCode: kycData.ad_code,
                             bizLutExpiry: kycData.lut_expiry_date,
@@ -3716,12 +3716,18 @@
 
                         restoreVerifiedState('gstInput', 'verifyGstBtn', 'gstStatus', kycData.gst_verified,
                             'GST verification restored from your saved KYC.', 'gstBusinessName');
-                        restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus', kycData.aadhar_verified,
-                            'Aadhaar verification restored from your saved KYC.', 'aadharInput');
+                        restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus',
+                            kycData.aadhar_verified || (isAadhaarOptional && !kycData.aadhar_number
+                                && !kycData.aadhar_front_document && !kycData.aadhar_back_document),
+                            kycData.aadhar_verified
+                                ? 'Aadhaar verification restored from your saved KYC.'
+                                : 'Aadhaar verification is optional for your account type.',
+                            'aadharInput');
                         restoreVerifiedState('panInput', 'verifyPanBtn', 'panStatus', kycData.pan_verified,
                             'PAN verification restored from your saved KYC.', 'panInput');
                         restoreVerifiedState('bizGstCertNumber', 'bizVerifyGstCertBtn', 'bizGstStatus',
-                            kycData.gst_certificate_verified, 'GST Certificate verification restored from your saved KYC.',
+                            kycData.gst_certificate_verified || kycData.gst_verified,
+                            'GST Certificate verification restored from your saved KYC.',
                             'bizGstBusinessName');
                         renderKycStep(savedKycStep, false);
                     }

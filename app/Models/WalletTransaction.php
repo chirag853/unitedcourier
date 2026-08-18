@@ -23,6 +23,9 @@ class WalletTransaction extends Model
         'customer_id',
         'type',
         'reason',
+        'recharge_type',
+        'user_id',
+        'user_type',
         'amount',
         'balance_after',
         'reference',
@@ -71,6 +74,14 @@ class WalletTransaction extends Model
         } while (self::where('transaction_id', $id)->exists());
 
         return $id;
+    }
+
+    /**
+     * Get the user who performed this wallet recharge.
+     */
+    public function recharger()
+    {
+        return $this->belongsTo(Customer::class, 'user_id');
     }
 
     /**

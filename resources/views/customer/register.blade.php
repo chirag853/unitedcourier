@@ -1,5 +1,14 @@
 @include('website_include.header')
 
+<style>
+    .form-control.input-custom.is-locked {
+        background-color: #f1f3f5;
+        color: #495057;
+        cursor: not-allowed;
+        opacity: 1;
+    }
+</style>
+
 <div class="hero-gradient-container" style="margin-top: 70px;">
     <!-- Floating Elements -->
     <div class="floating-blob bg-warning opacity-25" style="width: 250px; height: 250px; top: 10%; left: -125px;"></div>
@@ -390,6 +399,17 @@ function verifyRegistrationOtp() {
                 getOtpBtn.style.display = 'none';
                 getOtpBtn.disabled = true;
             }
+
+            // Lock the phone number so it can't be changed after verification
+            // (readonly, not disabled, so the value still submits with the form)
+            const mobileInput = document.getElementById('mobileInput');
+            mobileInput.readOnly = true;
+            mobileInput.classList.add('is-locked');
+
+            // Lock the OTP input too once verification is done
+            const otpInput = document.getElementById('otpInput');
+            otpInput.disabled = true;
+            otpInput.classList.add('is-locked');
         } else {
             otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Invalid OTP');
             otpStatus.className = 'otp-sent-text';

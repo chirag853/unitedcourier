@@ -119,7 +119,7 @@
                         </form>
 
                         <div class="auth-footer-links">
-                            New to United Couriers? <a href="./get-started">Create an Account1</a>
+                            New to United Couriers? <a href="{{ route('register') }}">Create an Account</a>
                         </div>
                     </div>
                 </div>

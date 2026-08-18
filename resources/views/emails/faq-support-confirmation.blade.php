@@ -14,7 +14,7 @@
         </tr>
         <tr>
             <td style="padding:28px;">
-                <p style="margin:0 0 16px;font-size:16px;">Dear {{ $query->full_name }},</p>
+                <p style="margin:0 0 16px;font-size:16px;">Dear {{ mb_convert_case($query->full_name, MB_CASE_TITLE, 'UTF-8') }},</p>
                 <p style="margin:0 0 16px;line-height:1.7;color:#374151;">
                     We have received your support query. Our team will review your request and contact you shortly.
                 </p>
