@@ -890,29 +890,23 @@
                             </div>
                             <div class="step-label">3. Verify PAN</div>
                         </div>
-                        <div class="step-item" id="step4-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">4. Basic Info & Signing</div>
-                        </div>
                         <div class="step-item" id="step5-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Upload Signature</div>
+                            <div class="step-label">4. Upload Signature</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. Bill</div>
+                            <div class="step-label">5. Marchant Agreement</div>
                         </div>
                         <div class="step-item" id="step7-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">7. CSB V Ramp UP</div>
+                            <div class="step-label">6. CSB V Ramp UP</div>
                         </div>
                         @endif
                     </div>
@@ -1519,39 +1513,7 @@
                         @else
                         <!-- ===== PERSONAL KYC (CSB-IV) STEPS 4-5 ===== -->
 
-                        <!-- Step 4 Content -->
-                        <div id="step4-content" class="step-content">
-                            <h3 class="kyc-card-title">Business <span class="gradient-text">Details</span></h3>
-                            <p class="text-muted small mb-4">Provide details for the digital agreement.</p>
-
-                            <div class="row g-4">
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">Organization Name</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="input-custom" placeholder="Company Ltd">
-                                        <i class="fas fa-building"></i>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label-custom">Authorized Signatory</label>
-                                    <div class="input-group-custom">
-                                        <input type="text" class="input-custom" placeholder="Full Name">
-                                        <i class="fas fa-user-tie"></i>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
-                                <button class="btn btn-outline-custom flex-md-shrink-1"
-                                    style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(3)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(5)">Continue</button>
-                            </div>
-                        </div>
-
-                        <!-- Step 5 Content - Upload Signature -->
+                        <!-- Step 4 Content - Upload Signature -->
                         <div id="step5-content" class="step-content">
                             <h3 class="kyc-card-title">Upload <span class="gradient-text">Signature</span></h3>
                             <p class="text-muted small mb-4">Upload your signature to be appended to the agreement.</p>
@@ -1584,10 +1546,10 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(4)">Back</button>
+                                    onclick="nextStep(3)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(6)">Continue</button>
+                                    onclick="nextStep(5)">Continue</button>
                             </div>
                         </div>
                         @endif
@@ -2107,10 +2069,10 @@
                                 <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mt-3">
                                     <button class="btn btn-outline-custom"
                                         style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                        onclick="nextStep(5)">Back</button>
+                                        onclick="nextStep(isBusinessFlow ? 5 : 4)">Back</button>
                                     <button class="btn btn-primary-custom"
                                         style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                        onclick="nextStep(7)">Submit & Finish</button>
+                                        onclick="nextStep(isBusinessFlow ? 7 : 6)">Submit & Finish</button>
                                 </div>
                             </div>
                         </div>
@@ -2186,10 +2148,14 @@
                     // Detect Business vs Personal flow and merge any server-side draft.
                     const isBusinessFlow = @json(strcasecmp(trim((string) $userType), 'Business') === 0);
                     const isAadhaarOptional = @json($isAadhaarOptional);
-                    const totalSteps = 7;
+                    const totalSteps = isBusinessFlow ? 7 : 6;
                     const savedKycDraft = @json($kycDraft?->form_data ?? []);
-                    const savedKycStep = Math.min(totalSteps - 1, Math.max(1,
-                        Number(@json($kycDraft?->current_step ?? 1)) || 1));
+                    const rawSavedKycStep = Number(@json($kycDraft?->current_step ?? 1)) || 1;
+                    // Personal step 4 was removed. Shift only later saved steps down by one.
+                    const normalizedSavedKycStep = !isBusinessFlow && rawSavedKycStep >= 5
+                        ? rawSavedKycStep - 1
+                        : rawSavedKycStep;
+                    const savedKycStep = Math.min(totalSteps - 1, Math.max(1, normalizedSavedKycStep));
                     const kycDraftSaveUrl = @json(route('customer.kyc.draft.save'));
                     const kycType = isBusinessFlow ? 'business' : 'personal';
                     let kycDraftTimer = null;
@@ -2217,7 +2183,9 @@
                     function getActiveKycStep() {
                         const active = document.querySelector('.step-content.active');
                         const match = active && active.id.match(/step(\d+)-content/);
-                        return match ? Number(match[1]) : 1;
+                        if (!match) return 1;
+                        const domStep = Number(match[1]);
+                        return isBusinessFlow ? domStep : (domStep >= 5 ? domStep - 1 : domStep);
                     }
 
                     function readKycField(id, key, transform) {
@@ -2261,11 +2229,6 @@
                         readKycField('bizBillingContact', 'billing_contact');
                         readKycField('bizBillingEmail', 'billing_email');
                         readKycField('bizBillingAddress', 'billing_address');
-
-                        const organization = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
-                        const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
-                        if (!isBusinessFlow && organization) kycData.organization_name = organization.value.trim();
-                        if (!isBusinessFlow && signatory) kycData.authorized_signatory = signatory.value.trim();
 
                         return Object.keys(kycData).reduce(function(draft, key) {
                             const value = kycData[key];
@@ -3353,7 +3316,7 @@
                                 if (selectedSignature && !validateBusinessSignatureFile(selectedSignature, sigFile)) return false;
                             }
                         } else {
-                            // ===== PERSONAL FLOW (7 steps) =====
+                            // ===== PERSONAL FLOW (6 steps) =====
                             if (step === 1) {
                                 // GST remains optional, but partially entered GST details must be completed and verified.
                                 const gstField = document.getElementById('gstInput');
@@ -3402,18 +3365,7 @@
                                 const panFile = document.getElementById('panFileInput');
                                 if (!panFile || (!panFile.files || !panFile.files[0]) && !kycData.pan_document) { alert('Please upload your PAN card.'); return false; }
                             } else if (step === 4) {
-                                // Step 4: Business Details
-                                const orgName = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
-                                const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
-                                if (!orgName || !orgName.value.trim()) { showKycAlert('Organization Name required', 'Please enter your Organization Name.'); markFieldInvalid(orgName); return false; }
-                                if (!signatory || !signatory.value.trim()) { showKycAlert('Authorized Signatory required', 'Please enter the Authorized Signatory name.'); markFieldInvalid(signatory); return false; }
-                                if (kycData.gst_business_name && normalizeName(orgName.value) !== normalizeName(kycData.gst_business_name)) {
-                                    showKycAlert('Organization Name mismatch', 'The Organization Name must match the business name returned in the GST verification.<br><br><strong>Verified GST business name:</strong> ' + kycData.gst_business_name + '<br><strong>You entered:</strong> ' + orgName.value.trim() + '<br><br>Please enter the verified name exactly as it appears on your GST registration.');
-                                    markFieldInvalid(orgName);
-                                    return false;
-                                }
-                            } else if (step === 5) {
-                                // Step 5: Upload Signature
+                                // Step 4: Upload Signature
                                 const selectedSignature = signatureFileInput
                                     && signatureFileInput.files
                                     && signatureFileInput.files[0];
@@ -3425,7 +3377,8 @@
 
                     function renderKycStep(stepNumber, shouldScroll) {
                         document.querySelectorAll('.step-content').forEach(content => content.classList.remove('active'));
-                        const target = document.getElementById('step' + stepNumber + '-content');
+                        const domStep = isBusinessFlow || stepNumber <= 3 ? stepNumber : stepNumber + 1;
+                        const target = document.getElementById('step' + domStep + '-content');
                         if (target) target.classList.add('active');
 
                         document.querySelectorAll('.step-item').forEach((item, index) => {
@@ -3435,7 +3388,7 @@
                             else if (currentIdx === stepNumber) item.classList.add('active');
                         });
 
-                        if (stepNumber === 6) {
+                        if (stepNumber === (isBusinessFlow ? 6 : 5)) {
                             const billSignatureImg = document.getElementById('billSignatureImg');
                             const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
                             const termsSignaturePreviewUrl = isBusinessFlow
@@ -3500,15 +3453,9 @@
                                 submitBusinessKYC();
                             }
                         } else {
-                            // ===== PERSONAL FLOW (7 steps) =====
-                            if (stepNumber === 5) {
-                                // Leaving step 4 (Business Details) -> save business details
-                                const orgName = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
-                                const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
-                                if (orgName) kycData.organization_name = orgName.value;
-                                if (signatory) kycData.authorized_signatory = signatory.value;
-                            } else if (stepNumber === 7) {
-                                // Leaving step 6 (Bill) -> submit KYC data
+                            // ===== PERSONAL FLOW (6 steps) =====
+                            if (stepNumber === 6) {
+                                // Leaving step 5 (Bill) -> submit KYC data
                                 submitKYC();
                             }
                         }
@@ -3723,11 +3670,6 @@
                         } else {
                             populateBusinessLutEndYears('');
                         }
-
-                        const organization = document.querySelector('#step4-content input[placeholder="Company Ltd"]');
-                        const signatory = document.querySelector('#step4-content input[placeholder="Full Name"]');
-                        if (!isBusinessFlow && organization) organization.value = kycData.organization_name || kycData.gst_business_name || '';
-                        if (!isBusinessFlow && signatory) signatory.value = kycData.authorized_signatory || '';
 
                         // File inputs cannot be restored from a JSON draft; a newly
                         // selected file replaces the stored document on submit.

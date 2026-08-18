@@ -387,18 +387,12 @@ class KycController extends Controller
                 ], 422);
             }
 
-            // The Organization Name entered in the Business Details step must
-            // match the business name returned in the GST verification payload.
-            $organizationName = trim((string) $request->input('organization_name'));
-            if ($gstNumber && session('kyc_gst_cashfree_verified')) {
-                $verifiedGstBusinessName = trim((string) session('kyc_gst_business_name', ''));
-                if ($organizationName === '' || strcasecmp($verifiedGstBusinessName, $organizationName) !== 0) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'The Organization Name must match the business name returned in the GST verification. Please enter the verified name exactly as it appears on your GST registration.',
-                    ], 422);
-                }
-            }
+            // Personal KYC no longer has a separate Organization Name field.
+            // Use the GST-verified business name as the canonical organization
+            // name so stale values from older drafts cannot cause a mismatch.
+            $organizationName = $gstBusinessName !== ''
+                ? $gstBusinessName
+                : trim((string) $request->input('organization_name'));
 
             $aadharNumber = $request->aadhar_number
                 ? preg_replace('/\s+/', '', $request->aadhar_number)
@@ -544,7 +538,7 @@ class KycController extends Controller
                 'pan_verified' => $request->pan_verified ?? false,
                 'signature_document' => $signaturePath,
                 'signature' => null,
-                'organization_name' => $request->organization_name,
+                'organization_name' => $organizationName !== '' ? $organizationName : null,
                 'authorized_signatory' => $request->authorized_signatory,
                 'billing_address' => $request->billing_address,
                 'billing_gst' => $request->billing_gst,
@@ -1540,7 +1534,7 @@ class KycController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this PAN image.',
+                        ?: 'We could not read this PAN image.',
                 ], 422);
             }
 
@@ -1555,7 +1549,7 @@ class KycController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => data_get($cashfreeData, 'message')
-                        ?: 'Cashfree could not read this PAN image.',
+                        ?: 'we could not read this PAN image.',
                 ], 422);
             }
 
