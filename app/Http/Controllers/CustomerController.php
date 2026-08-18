@@ -85,6 +85,10 @@ class CustomerController extends Controller
         auth()->guard('customer')->login($customer, $remember);
         $request->session()->regenerate();
 
+        // Restore any saved KYC verification state so resuming an in-progress
+        // KYC does not require re-verifying documents after a logout.
+        \App\Support\KycVerificationState::restore($customer);
+
         session([
             'customer_id'   => $customer->id,
             'customer_name' => $customer->first_name . ' ' . $customer->last_name,
@@ -380,6 +384,10 @@ class CustomerController extends Controller
             // Authenticate customer using Laravel's auth system
             auth()->guard('customer')->login($customer);
             
+            // Restore any saved KYC verification state so resuming an in-progress
+            // KYC does not require re-verifying documents after a logout.
+            \App\Support\KycVerificationState::restore($customer);
+            
             // Also keep session data for compatibility
             session(['customer_id' => $customer->id, 'customer_name' => $customer->first_name . ' ' . $customer->last_name]);
 
@@ -541,6 +549,10 @@ class CustomerController extends Controller
 
         $customer = auth()->guard('customer')->user();
         $customerId = $customer->id;
+
+        // Restore any saved KYC verification state (session may have been
+        // cleared by a logout / login or session expiry).
+        \App\Support\KycVerificationState::restore($customer);
 
         // Get shipment counts by status for this customer
         $statusCounts = ShipperInfo::where('customer_id', $customerId)
@@ -1119,6 +1131,10 @@ class CustomerController extends Controller
                     'message' => 'You must be logged in to submit the CSB form.'
                 ], 401);
             }
+
+            // Restore any saved KYC verification state so resuming after a
+            // logout / login does not require re-verifying documents.
+            \App\Support\KycVerificationState::restore($customer);
 
             $isStandaloneCsb5 = $request->routeIs('customer.csb5-form.standalone.store');
             $existingCsbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();

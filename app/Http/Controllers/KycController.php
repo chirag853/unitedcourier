@@ -58,16 +58,17 @@ class KycController extends Controller
             array_flip($allowedFields)
         );
 
-        $draft = KycDraft::updateOrCreate(
-            [
-                'customer_id' => $customer->id,
-                'kyc_type' => $validated['kyc_type'],
-            ],
-            [
-                'current_step' => (int) $validated['current_step'],
-                'form_data' => $formData,
-            ]
-        );
+        // Merge autosaved form fields with the existing draft. Cashfree
+        // verification markers are stored in the same form_data payload and
+        // must survive later step saves, refreshes, and logout/login cycles.
+        $draft = KycDraft::firstOrNew([
+            'customer_id' => $customer->id,
+            'kyc_type' => $validated['kyc_type'],
+        ]);
+        $existingFormData = is_array($draft->form_data) ? $draft->form_data : [];
+        $draft->current_step = (int) $validated['current_step'];
+        $draft->form_data = array_merge($existingFormData, $formData);
+        $draft->save();
 
         return response()->json([
             'success' => true,
@@ -278,6 +279,13 @@ class KycController extends Controller
     public function kycSubmit(Request $request)
     {
         try {
+            // A logout / login clears the session; restore any verification
+            // state saved in the customer's KYC draft before validating.
+            $customer = auth()->guard('customer')->user();
+            if ($customer) {
+                \App\Support\KycVerificationState::restore($customer);
+            }
+
             // Normalize boolean-ish fields that arrive as strings via FormData
             foreach (['gst_verified', 'otp_verified', 'aadhar_verified', 'pan_verified', 'terms_accepted'] as $boolField) {
                 if ($request->has($boolField)) {
@@ -547,8 +555,20 @@ class KycController extends Controller
                 'kyc_status' => 'pending', // Set status to under_review after submission
             ];
 
-            // Create KYC record
-            $kyc = KycDetail::create($kycData);
+            // Update the customer's existing personal KYC record when present
+            // (e.g. a previously rejected application being re-submitted) so a
+            // customer never gets more than one KYC record per kyc_type.
+            $kyc = KycDetail::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->latest()
+                ->first();
+
+            if ($kyc) {
+                $kyc->update($kycData);
+            } else {
+                $kyc = KycDetail::create($kycData);
+            }
+
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'personal')
                 ->delete();
@@ -789,6 +809,7 @@ class KycController extends Controller
                 'kyc_gst_verified' => true,
                 'kyc_gst_cashfree_verified' => true,
             ]);
+            \App\Support\KycVerificationState::persist($customer);
 
             $response = [
                 'success' => true,
@@ -1183,6 +1204,7 @@ class KycController extends Controller
                 'kyc_aadhar_front_hash' => $frontHash,
                 'kyc_aadhar_verification_id' => $verificationId,
             ]);
+            \App\Support\KycVerificationState::persist($customer);
 
             $customer->aadhar_number = $aadhar;
             $customer->aadhar_verified = true;
@@ -1639,6 +1661,7 @@ class KycController extends Controller
                 'kyc_pan_document_hash' => $documentHash,
                 'kyc_pan_verification_id' => $verificationId,
             ]);
+            \App\Support\KycVerificationState::persist($customer);
 
             if (\Schema::hasColumn('customers', 'pan_number')) {
                 $customer->pan_number = $pan;
@@ -1713,6 +1736,13 @@ class KycController extends Controller
     public function storePersonalKyc(Request $request)
     {
         try {
+            // Restore verification state saved in the KYC draft after a
+            // logout / login cleared the session.
+            $customer = auth()->guard('customer')->user();
+            if ($customer) {
+                \App\Support\KycVerificationState::restore($customer);
+            }
+
             // Validate the request
             $validated = $request->validate([
                 'aadhar_number' => 'required|string|size:12',

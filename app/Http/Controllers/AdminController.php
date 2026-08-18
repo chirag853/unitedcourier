@@ -2481,7 +2481,7 @@ class AdminController extends Controller
             $this->sendKycRejectionEmail($customer, $kycDetail, $remark);
         }
 
-        return redirect()->back()
+        return redirect()->route('admin.kyc-pending')
             ->with('success', 'KYC for ' . ($kycDetail->organization_name ?? 'Customer #' . $kycDetail->customer_id) . ' has been rejected.');
     }
 

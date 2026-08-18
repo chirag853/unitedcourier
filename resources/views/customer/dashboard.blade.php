@@ -1188,7 +1188,9 @@
                                 <div class="col-md-6">
                                     <label class="form-label-custom">Date of Birth</label>
                                     <div class="input-group-custom">
-                                        <input type="date" class="form-control input-custom" id="panDob">
+                                        <input type="text" class="form-control input-custom" id="panDob"
+                                            placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"
+                                            autocomplete="bday">
                                         <i class="fas fa-calendar"></i>
                                     </div>
                                 </div>
@@ -2195,6 +2197,23 @@
                     let kycDraftQueuedStep = null;
                     kycData = Object.assign(kycData, savedKycDraft || {});
 
+                    // Verification state is stored with internal session-key names
+                    // in the draft. Normalize it before the form is restored so a
+                    // verified GST business name is available on the first render.
+                    if (!kycData.gst_number) {
+                        kycData.gst_number = kycData.kyc_gst_number || @json(session('kyc_gst_number', ''));
+                    }
+                    if (!kycData.gst_business_name) {
+                        kycData.gst_business_name = kycData.kyc_gst_business_name || @json(session('kyc_gst_business_name', ''));
+                    }
+                    if (!kycData.gst_verified) {
+                        kycData.gst_verified = Boolean(
+                            kycData.kyc_gst_cashfree_verified ||
+                            kycData.kyc_gst_verified ||
+                            @json((bool) session('kyc_gst_cashfree_verified', false))
+                        );
+                    }
+
                     function getActiveKycStep() {
                         const active = document.querySelector('.step-content.active');
                         const match = active && active.id.match(/step(\d+)-content/);
@@ -2208,14 +2227,27 @@
                         kycData[key] = value;
                     }
 
+                    function formatDisplayDob(value) {
+                        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || '');
+                    }
+
+                    function formatRequestDob(value) {
+                        const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                        return match ? `${match[3]}-${match[2]}-${match[1]}` : String(value || '').trim();
+                    }
+
                     function captureKycDraftData() {
                         readKycField('gstInput', 'gst_number', value => value.trim().toUpperCase());
-                        readKycField('gstBusinessName', 'gst_business_name');
-                        readKycField('bizGstBusinessName', 'gst_business_name');
+                        const businessNameFieldId = isBusinessFlow ? 'bizGstBusinessName' : 'gstBusinessName';
+                        const businessNameField = document.getElementById(businessNameFieldId);
+                        if (businessNameField && businessNameField.value.trim()) {
+                            kycData.gst_business_name = businessNameField.value.trim();
+                        }
                         readKycField('aadharInput', 'aadhar_number', value => value.replace(/\s+/g, ''));
                         readKycField('panInput', 'pan_number', value => value.trim().toUpperCase());
                         readKycField('panHolderName', 'pan_holder_name');
-                        readKycField('panDob', 'pan_dob', value => value);
+                        readKycField('panDob', 'pan_dob', formatRequestDob);
                         readKycField('bizGstCertNumber', 'gst_certificate_number', value => value.trim().toUpperCase());
                         readKycField('bizIecNumber', 'iec_number');
                         readKycField('bizAdCode', 'ad_code', value => value.replace(/\D/g, '').slice(0, 14));
@@ -2571,7 +2603,10 @@
                         panHolderName.addEventListener('input', invalidatePanVerification);
                     }
                     if (panDob) {
-                        panDob.addEventListener('change', invalidatePanVerification);
+                        panDob.addEventListener('input', function() {
+                            invalidatePanVerification();
+                            this.value = this.value.replace(/[^0-9]/g, '').replace(/^(\d{2})(\d)/, '$1/$2').replace(/^(\d{2}\/\d{2})(\d)/, '$1/$2').slice(0, 10);
+                        });
                     }
 
                     // ===== KYC Alert Modal helper (replaces browser alert()) =====
@@ -2907,8 +2942,14 @@
                             markFieldInvalid(holderField);
                             return;
                         }
-                        if (!dobField.value) {
-                            showKycAlert('Date of birth required', 'Please select your date of birth.');
+                        if (!dobField.value.trim()) {
+                            showKycAlert('Date of birth required', 'Please enter your date of birth in DD/MM/YYYY format.');
+                            markFieldInvalid(dobField);
+                            return;
+                        }
+                        const panDob = formatRequestDob(dobField.value);
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(panDob)) {
+                            showKycAlert('Invalid date of birth', 'Please enter the date in DD/MM/YYYY format.');
                             markFieldInvalid(dobField);
                             return;
                         }
@@ -2925,7 +2966,7 @@
                         const verifyData = new FormData();
                         verifyData.append('pan_number', pan);
                         verifyData.append('pan_holder_name', holderField.value.trim());
-                        verifyData.append('pan_dob', dobField.value);
+                        verifyData.append('pan_dob', panDob);
                         if (hasPanFile) {
                             verifyData.append('pan_document', panFileInput.files[0]);
                         } else {
@@ -2962,7 +3003,7 @@
                                 if (data.success && verificationStatus === 'VALID') {
                                     kycData.pan_number = pan;
                                     kycData.pan_holder_name = holderField.value.trim();
-                                    kycData.pan_dob = dobField.value;
+                                    kycData.pan_dob = panDob;
                                     kycData.pan_verified = true;
                                     saveKycDraft(getActiveKycStep());
 
@@ -3649,7 +3690,7 @@
                             aadharInput: kycData.aadhar_number ? String(kycData.aadhar_number).replace(/(.{4})(?=.)/g, '$1 ') : '',
                             panInput: kycData.pan_number,
                             panHolderName: kycData.pan_holder_name,
-                            panDob: kycData.pan_dob,
+                            panDob: formatDisplayDob(kycData.pan_dob),
                             bizGstCertNumber: kycData.gst_certificate_number,
                             bizGstBusinessName: kycData.gst_business_name || kycData.organization_name,
                             bizIecNumber: kycData.iec_number,
