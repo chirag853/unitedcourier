@@ -147,6 +147,7 @@
                         </div>
                     </div>
 
+                    @if($authCustomer && $authCustomer->kycDetail && $authCustomer->kycDetail->kyc_status === 'approved')
                     <!-- Wallet Button -->
 
                     <div class="ms-3 mb-2 header-wallet-section">
@@ -169,6 +170,7 @@
                         <i class="bi bi-currency-rupee"></i>&nbsp;{{ number_format($walletBalance, 2) }}
                         </button>
                     </div>
+                    @endif
 
                     
 
@@ -185,176 +187,7 @@
                     </div>
 
                     <!-- Notification Dropdown -->
-                    <div class="header-item header-notification-section">
-                        <div class="dropdown me-2">
-
-                            <button class="topbar-link btn topbar-link dropdown-toggle drop-arrow-none"
-                                data-bs-toggle="dropdown" data-bs-offset="0,24" type="button" aria-haspopup="false"
-                                aria-expanded="false">
-                                <i class="ti ti-bell-check fs-16 animate-ring"></i>
-                                <span class="badge rounded-pill">10</span>
-                            </button>
-
-                            <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg"
-                                style="min-height: 300px;">
-
-                                <div class="p-2 border-bottom">
-                                    <div class="row align-items-center">
-                                        <div class="col">
-                                            <h6 class="m-0 fs-16 fw-semibold"> Notifications</h6>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Notification Body -->
-                                <div class="notification-body position-relative z-2 rounded-0" data-simplebar>
-
-                                    <!-- Item-->
-                                    <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                        id="notification-1">
-                                        <div class="d-flex">
-                                            <div class="me-2 position-relative flex-shrink-0">
-                                                <img src="assets/img/users/user-01.jpg" class="avatar-md rounded-circle"
-                                                    alt="Img">
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 fw-medium text-dark">John Doe</p>
-                                                <p class="mb-1 text-wrap">
-                                                    left 6 comments on <span class="fw-medium text-dark">Isla Nublar
-                                                        SOC2 compliance report</span>
-                                                </p>
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <span class="fs-12"><i class="ti ti-clock me-1"></i>4 min ago</span>
-                                                    <div
-                                                        class="notification-action d-flex align-items-center float-end gap-2">
-                                                        <a href="javascript:void(0);"
-                                                            class="notification-read rounded-circle bg-danger"
-                                                            data-bs-toggle="tooltip" title=""
-                                                            data-bs-original-title="Make as Read"
-                                                            aria-label="Make as Read"></a>
-                                                        <button class="btn rounded-circle p-0"
-                                                            data-dismissible="#notification-1">
-                                                            <i class="ti ti-x"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Item-->
-                                    <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                        id="notification-2">
-                                        <div class="d-flex">
-                                            <div class="me-2 position-relative flex-shrink-0">
-                                                <img src="assets/img/users/user-12.jpg" class="avatar-md rounded-circle"
-                                                    alt="Img">
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 fw-medium text-dark">Thomas William</p>
-                                                <p class="mb-1 text-wrap">
-                                                    “Oh, I finished de-bugging the phones, but the system's compiling
-                                                    for eighteen minutes, or twenty...”
-                                                </p>
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <span class="fs-12"><i class="ti ti-clock me-1"></i>8 min ago</span>
-                                                    <div
-                                                        class="notification-action d-flex align-items-center float-end gap-2">
-                                                        <a href="javascript:void(0);"
-                                                            class="notification-read rounded-circle bg-danger"
-                                                            data-bs-toggle="tooltip" title=""
-                                                            data-bs-original-title="Make as Read"
-                                                            aria-label="Make as Read"></a>
-                                                        <button class="btn rounded-circle p-0"
-                                                            data-dismissible="#notification-2">
-                                                            <i class="ti ti-x"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Item-->
-                                    <div class="dropdown-item notification-item py-3 text-wrap border-bottom"
-                                        id="notification-3">
-                                        <div class="d-flex">
-                                            <div class="me-2 position-relative flex-shrink-0">
-                                                <img src="assets/img/profiles/avatar-12.jpg"
-                                                    class="avatar-md rounded-circle" alt="Img">
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 fw-medium text-dark">Sarah Anderson</p>
-                                                <p class="mb-1 text-wrap">
-                                                    attached a file to <span class="fw-medium text-dark">Isla Nublar
-                                                        SOC2 compliance report</span>
-                                                </p>
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <span class="fs-12"><i class="ti ti-clock me-1"></i>15 min
-                                                        ago</span>
-                                                    <div
-                                                        class="notification-action d-flex align-items-center float-end gap-2">
-                                                        <a href="javascript:void(0);"
-                                                            class="notification-read rounded-circle bg-danger"
-                                                            data-bs-toggle="tooltip" title=""
-                                                            data-bs-original-title="Make as Read"
-                                                            aria-label="Make as Read"></a>
-                                                        <button class="btn rounded-circle p-0"
-                                                            data-dismissible="#notification-3">
-                                                            <i class="ti ti-x"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Item-->
-                                    <div class="dropdown-item notification-item py-3 text-wrap" id="notification-4">
-                                        <div class="d-flex">
-                                            <div class="me-2 position-relative flex-shrink-0">
-                                                <img src="assets/img/profiles/avatar-08.jpg"
-                                                    class="avatar-md rounded-circle" alt="Img">
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 fw-medium text-dark">Ann McClure</p>
-                                                <p class="mb-1 text-wrap">
-                                                    mentioned you in <span class="fw-medium text-dark">Bug Fix Review -
-                                                        Task #432</span>
-                                                </p>
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <span class="fs-12"><i class="ti ti-clock me-1"></i>20 min
-                                                        ago</span>
-                                                    <div
-                                                        class="notification-action d-flex align-items-center float-end gap-2">
-                                                        <a href="javascript:void(0);"
-                                                            class="notification-read rounded-circle bg-danger"
-                                                            data-bs-toggle="tooltip" title=""
-                                                            data-bs-original-title="Make as Read"
-                                                            aria-label="Make as Read"></a>
-                                                        <button class="btn rounded-circle p-0"
-                                                            data-dismissible="#notification-4">
-                                                            <i class="ti ti-x"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-
-                                <!-- View All-->
-                                <div class="p-2 rounded-bottom border-top text-center">
-                                    <a href="notifications.html"
-                                        class="text-center text-decoration-underline fs-14 mb-0">
-                                        View All Notifications
-                                    </a>
-                                </div>
-
-                            </div>
-                        </div>
-                    </div>
+                    
 
                     <!-- User Dropdown -->
                     <div class="dropdown profile-dropdown d-flex align-items-center justify-content-center">
@@ -375,31 +208,23 @@
                                 </div>
                             </div>
 
+                            @if($authCustomer && $authCustomer->kycDetail && $authCustomer->kycDetail->kyc_status === 'approved')
                             <!-- Item-->
                             <a href="profile-settings.html" class="dropdown-item">
                                 <i class="ti ti-user-circle me-1 align-middle"></i>
                                 <span class="align-middle">Profile Settings</span>
                             </a>
-
+                            @endif
                             <!-- item -->
-                            <div
-                                class="form-check form-switch form-check-reverse d-flex align-items-center justify-content-between dropdown-item mb-0">
-                                <label class="form-check-label" for="notify"><i
-                                        class="ti ti-bell"></i>Notifications</label>
-                                <input class="form-check-input me-0" type="checkbox" role="switch" id="notify">
-                            </div>
 
                             <!-- Item-->
-                            <a href="javascript:void(0);" class="dropdown-item">
+                            <!-- isme achor tag mai help and support ka url dena hai -->
+                            <a href="{{ route('contact-us') }}" class="dropdown-item">
                                 <i class="ti ti-help-circle me-1 align-middle"></i>
                                 <span class="align-middle">Help & Support</span>
                             </a>
 
                             <!-- Item-->
-                            <a href="profile-settings.html" class="dropdown-item">
-                                <i class="ti ti-settings me-1 align-middle"></i>
-                                <span class="align-middle">Settings</span>
-                            </a>
 
                             <!-- Item-->
                             <div class="pt-2 mt-2 border-top">

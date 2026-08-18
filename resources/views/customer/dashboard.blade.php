@@ -1058,7 +1058,7 @@
 
                                 <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
 
-                                <div class="text-center mt-4">
+                                <div class="text-end mt-4">
                                     <button class="btn btn-primary-custom" onclick="nextStep(2)">Continue</button>
                                 </div>
                             </div>
@@ -1069,7 +1069,7 @@
                             <h3 class="kyc-card-title">
                                 Verify <span class="gradient-text">Aadhar</span>
                                 @if($isAadhaarOptional)
-                                    <small class="text-muted fs-6">(Optional)</small>
+                                    <span class="text-muted">(Optional)</span>
                                 @endif
                             </h3>
                             <p class="text-muted mb-4">
