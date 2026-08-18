@@ -181,7 +181,7 @@
                     </form>
 
                     <div class="auth-footer-links">
-                        Already have an account? <a href="login.php">Sign In</a>
+                        Already have an account? <a href="{{ route('login') }}" target="_blank" rel="noopener noreferrer">Sign In</a>
                     </div>
                 </div>
             </div>
