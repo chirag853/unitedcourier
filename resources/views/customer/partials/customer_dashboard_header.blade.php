@@ -210,7 +210,7 @@
 
                             @if($authCustomer && $authCustomer->kycDetail && $authCustomer->kycDetail->kyc_status === 'approved')
                             <!-- Item-->
-                            <a href="profile-settings.html" class="dropdown-item">
+                            <a href="{{ route('customer.my-profile') }}" class="dropdown-item">
                                 <i class="ti ti-user-circle me-1 align-middle"></i>
                                 <span class="align-middle">Profile Settings</span>
                             </a>

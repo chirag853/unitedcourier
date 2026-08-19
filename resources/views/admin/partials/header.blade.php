@@ -91,49 +91,10 @@
             <div class="header-line"></div>
 
             <!-- message -->
-            <div class="header-item">
-                <div class="dropdown me-2">
-                    <a href="chat.html" class="btn topbar-link">
-                        <i class="ti ti-message-circle-exclamation"></i>
-                        <span class="badge rounded-pill">14</span>
-                    </a>
-                </div>
-            </div>
+            
 
             <!-- Notification Dropdown -->
-            <div class="header-item">
-                <div class="dropdown me-2">
-                    <button class="topbar-link btn dropdown-toggle drop-arrow-none"
-                        data-bs-toggle="dropdown" data-bs-offset="0,24" type="button" aria-haspopup="false"
-                        aria-expanded="false" id="notificationDropdownButton">
-                        <i class="ti ti-bell-check fs-16 animate-ring"></i>
-                        <span class="badge rounded-pill d-none" id="notificationUnreadBadge">0</span>
-                    </button>
-
-                    <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg" style="min-height: 260px;">
-                        <div class="p-2 border-bottom d-flex align-items-center justify-content-between">
-                            <h6 class="m-0 fs-16 fw-semibold">Notifications</h6>
-                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none d-none"
-                                id="markAllNotificationsRead">Mark all as read</button>
-                        </div>
-
-                        <div class="notification-body position-relative z-2 rounded-0 overflow-auto"
-                            id="notificationList" style="max-height: 360px;">
-                            <div class="py-5 text-center text-muted" id="notificationLoading">
-                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                                Loading notifications...
-                            </div>
-                        </div>
-
-                        <div class="p-2 rounded-bottom border-top text-center">
-                            <a href="{{ $adminHomeUrl }}"
-                                class="text-center text-decoration-underline fs-14 mb-0">
-                                View Dashboard
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
+           
 
             <!-- User Dropdown -->
             <div class="dropdown profile-dropdown d-flex align-items-center justify-content-center">
@@ -162,23 +123,13 @@
                     </a>
 
                     <!-- item -->
-                    <div
-                        class="form-check form-switch form-check-reverse d-flex align-items-center justify-content-between dropdown-item mb-0">
-                        <label class="form-check-label" for="notify"><i class="ti ti-bell"></i>Notifications</label>
-                        <input class="form-check-input me-0" type="checkbox" role="switch" id="notify">
-                    </div>
+                   
 
                     <!-- Item-->
-                    <a href="javascript:void(0);" class="dropdown-item">
-                        <i class="ti ti-help-circle me-1 align-middle"></i>
-                        <span class="align-middle">Help & Support</span>
-                    </a>
+                   
 
                     <!-- Item-->
-                    <a href="{{ route('admin.my-profile') }}" class="dropdown-item">
-                        <i class="ti ti-settings me-1 align-middle"></i>
-                        <span class="align-middle">Settings</span>
-                    </a>
+                    
 
                     <!-- Item-->
                     <div class="pt-2 mt-2 border-top">
