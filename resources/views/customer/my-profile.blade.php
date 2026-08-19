@@ -300,7 +300,7 @@
                             </div>
                             <div class="text-end">
                                 <p class="text-muted mb-0" style="font-size:12px;">Customer ID</p>
-                                <p class="fw-bold mb-0">#{{ str_pad($customer->id, 6, '0', STR_PAD_LEFT) }}</p>
+                                <p class="fw-bold mb-0">{{ $customer->customer_code ?? '—' }}</p>
                             </div>
                         </div>
                     </div>
@@ -642,7 +642,7 @@
                             <div class="card-body p-4">
                                 <div class="detail-row">
                                     <span class="detail-label"><i class="ti ti-hash"></i>Customer ID</span>
-                                    <span class="detail-value">#{{ str_pad($customer->id, 6, '0', STR_PAD_LEFT) }}</span>
+                                    <span class="detail-value">{{ $customer->customer_code ?? '—' }}</span>
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label"><i class="ti ti-calendar-plus"></i>Registration Date</span>

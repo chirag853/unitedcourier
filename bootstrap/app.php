@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             '/customer/create-shipment',
             '/tracking/search',
+            // Cashfree webhooks cannot carry a session CSRF token; the request
+            // is authenticated via the x-webhook-signature HMAC instead.
+            '/payment/webhook/cashfree',
             // Logout must work even after the session expires while a page is open;
             // otherwise a stale CSRF token returns a 419 "Page Expired" on sign out.
             '/customer/logout',

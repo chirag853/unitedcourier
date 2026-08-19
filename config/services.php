@@ -49,6 +49,17 @@ return [
         'verification_client_id' => env('CASHFREE_VERIFICATION_CLIENT_ID'),
         'verification_client_secret' => env('CASHFREE_VERIFICATION_CLIENT_SECRET'),
         'verification_timeout' => (int) env('CASHFREE_VERIFICATION_TIMEOUT', 30),
+        'pg' => [
+            'base_url' => env('CASHFREE_PG_BASE_URL', 'https://sandbox.cashfree.com/pg'),
+            'mode' => env('CASHFREE_PG_MODE', 'sandbox'),
+            'orders_endpoint' => env('CASHFREE_PG_ORDERS_ENDPOINT', '/orders'),
+            'client_id' => env('CASHFREE_PG_CLIENT_ID'),
+            'client_secret' => env('CASHFREE_PG_CLIENT_SECRET'),
+            'api_version' => env('CASHFREE_PG_API_VERSION', '2025-01-01'),
+            'return_url' => env('CASHFREE_PG_RETURN_URL'),
+            'webhook_secret' => env('CASHFREE_PG_WEBHOOK_SECRET'),
+            'timeout' => (int) env('CASHFREE_PG_TIMEOUT', 30),
+        ],
     ],
 
     /*
@@ -143,7 +154,11 @@ return [
     'adomantra' => [
         'base_url' => env('ADOMANTRA_BASE_URL', 'https://adomantra.united.cmswebservice.in'),
         'endpoint' => env('ADOMANTRA_ENDPOINT', '/api/shipment/customer'),
+        'order_endpoint' => env('ADOMANTRA_ORDER_ENDPOINT', '/api/shipment/order_create'),
         'timeout' => (int) env('ADOMANTRA_TIMEOUT', 30),
+        'connect_timeout' => (int) env('ADOMANTRA_CONNECT_TIMEOUT', 10),
+        'retries' => (int) env('ADOMANTRA_RETRIES', 2),
+        'retry_delay' => (int) env('ADOMANTRA_RETRY_DELAY', 500),
     ],
 
     /*

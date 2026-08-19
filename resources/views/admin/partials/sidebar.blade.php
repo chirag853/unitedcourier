@@ -183,7 +183,7 @@
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
-                                class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
+                                class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
                                 <i class="ti ti-dashboard"></i><span>Customer</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
@@ -198,13 +198,15 @@
                                 </li>
                                 <li class="submenu submenu-two">
                                     <a href="javascript:void(0);"
-                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/customer-profile*') ? 'active' : '' }}">KYC<span
+                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') ? 'active' : '' }}">KYC<span
                                             class="menu-arrow inside-submenu"></span></a>
                                     <ul>
                                         <li><a href="{{ url('/admin/kyc-pending') }}"
                                                 class="{{ request()->is('admin/kyc-pending') ? 'active' : '' }}">Pending Customer</a></li>
                                         <li><a href="{{ url('/admin/kyc-approved') }}"
                                                 class="{{ request()->is('admin/kyc-approved') ? 'active' : '' }}">Approved Customer</a></li>
+                                        <li><a href="{{ route('admin.kyc-rejected') }}"
+                                                class="{{ request()->is('admin/kyc-rejected') ? 'active' : '' }}">Rejected Customer</a></li>
                                         <li><a href="{{ route('admin.kyc-export', ['status' => 'all']) }}"
                                                 class="{{ request()->is('admin/kyc-export*') ? 'active' : '' }}"><i class="ti ti-file-spreadsheet me-1"></i>Export KYC (Excel)</a></li>
                                     </ul>

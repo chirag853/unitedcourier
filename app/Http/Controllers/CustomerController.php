@@ -27,6 +27,10 @@ use App\Models\Tracking;
 use App\Models\ShipmentLog;
 use App\Models\WalletTransaction;
 use App\Models\CourierService;
+use App\Models\CourierRate;
+use App\Models\PaymentOrder;
+use App\Services\AdomantraApiClient;
+use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -1942,8 +1946,10 @@ class CustomerController extends Controller
     /**
      * Store shipment data from create-shipment form
      */
-    public function storeShipment(Request $request)
+    public function storeShipment(Request $request, AdomantraApiClient $adomantra)
     {
+        $transactionStarted = false;
+
         try {
             // Shipment creation always requires an authenticated customer.
             $customer = auth()->guard('customer')->user();
@@ -2339,6 +2345,34 @@ class CustomerController extends Controller
                 }
             }
 
+            // Resolve the selected rate from server-owned records. A customer rate
+            // takes precedence over the shared default rate (customer_id = 0).
+            $courierRate = null;
+            if (!empty($validatedData['service_rate_id'])) {
+                $courierRate = CourierRate::whereKey((int) $validatedData['service_rate_id'])
+                    ->whereIn('customer_id', [$customer->id, 0])
+                    ->with('service')
+                    ->first();
+
+                if (!$courierRate) {
+                    throw ValidationException::withMessages([
+                        'service_rate_id' => 'The selected courier rate is invalid or unavailable for your account.',
+                    ]);
+                }
+
+                if ($serviceId && (int) $courierRate->service_id !== (int) $serviceId) {
+                    throw ValidationException::withMessages([
+                        'service_rate_id' => 'The selected courier rate does not belong to the selected courier service.',
+                    ]);
+                }
+
+                $serviceId = $courierRate->service_id;
+                $courierService = $courierRate->service;
+                if ($courierService && empty($validatedData['shipping_method'])) {
+                    $validatedData['shipping_method'] = $courierService->method;
+                }
+            }
+
             // ------------------------------------------------------------
             // SHIPPER STATE — MAX 2 WORDS VALIDATION
             // The shipper state field must not contain more than 2 words
@@ -2418,6 +2452,12 @@ class CustomerController extends Controller
                     $handlingCharge = $handlingChargeAmount;
                 }
             }
+
+            // Keep local records uncommitted until the vendor accepts the order.
+            // This permits rollback on vendor failure, but it is not a distributed
+            // transaction: a later database commit failure cannot undo vendor state.
+            DB::beginTransaction();
+            $transactionStarted = true;
 
             // Store Shipper Info
             $awbNumber = $this->generateAwbNumber();
@@ -2620,6 +2660,35 @@ class CustomerController extends Controller
                 'customer'
             );
 
+            $adomantraPayload = $this->buildAdomantraOrderPayload(
+                $validatedData,
+                $customer,
+                $courierService ?? null,
+                $courierRate,
+                $awbNumber,
+                $oversizeCharge,
+                $handlingCharge
+            );
+
+            // Debug the exact payload generated when Create Now is submitted.
+            // This is intentionally server-side so the vendor contract is not
+            // exposed through browser-side code or a public debug response.
+            Log::info('Adomantra order payload generated.', [
+                'customer_id' => $customer->id,
+                'awb_number' => $awbNumber,
+                'payload' => $adomantraPayload,
+            ]);
+
+            $adomantraResponse = $adomantra->createOrder($adomantraPayload);
+
+            Log::info('Adomantra order created for shipment.', [
+                'customer_id' => $customer->id,
+                'awb_number' => $awbNumber,
+            ]);
+
+            DB::commit();
+            $transactionStarted = false;
+
             if (!$request->expectsJson()) {
                 return back()->with('success', 'Shipment created successfully!');
             }
@@ -2637,10 +2706,16 @@ class CustomerController extends Controller
                     'invoice_id' => $invoice->id,
                     'oversize_charge' => (float) $oversizeCharge,
                     'handling_charge' => (float) $handlingCharge,
+                    'adomantra' => $adomantraResponse,
                 ]
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($transactionStarted) {
+                DB::rollBack();
+                $transactionStarted = false;
+            }
+
             if (!$request->expectsJson()) {
                 return back()
                     ->withErrors($e->validator)
@@ -2654,828 +2729,212 @@ class CustomerController extends Controller
                 'errors' => $e->errors()
             ], 422);
 
-        } catch (\Exception $e) {
+        } catch (\RuntimeException $e) {
+            if ($transactionStarted) {
+                DB::rollBack();
+                $transactionStarted = false;
+            }
+
+            Log::error('Adomantra shipment order submission failed.', [
+                'customer_id' => $customer->id ?? null,
+                'awb_number' => $awbNumber ?? null,
+                'exception' => $e->getMessage(),
+            ]);
+
+            $message = 'The shipment could not be submitted to the carrier. No shipment was saved. Please try again.';
+
             if (!$request->expectsJson()) {
                 return back()
                     ->withInput()
-                    ->with('error', 'Failed to create shipment: ' . $e->getMessage());
+                    ->with('error', $message);
             }
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create shipment: ' . $e->getMessage()
+                'message' => $message,
+            ], 502);
+
+        } catch (\Exception $e) {
+            if ($transactionStarted) {
+                DB::rollBack();
+                $transactionStarted = false;
+            }
+
+            Log::error('Shipment creation failed.', [
+                'customer_id' => $customer->id ?? null,
+                'awb_number' => $awbNumber ?? null,
+                'exception' => $e->getMessage(),
+            ]);
+
+            $message = 'Failed to create shipment. Please try again.';
+
+            if (!$request->expectsJson()) {
+                return back()
+                    ->withInput()
+                    ->with('error', $message);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
             ], 500);
         }
     }
 
     /**
-     * Show the Bulk Upload page (Excel upload form).
+     * Build the exact nested request contract expected by Adomantra order_create.
      */
-    public function bulkUpload()
-    {
-        if (!auth()->guard('customer')->check()) {
-            return redirect()->route('login');
+    private function buildAdomantraOrderPayload(
+        array $data,
+        Customer $customer,
+        ?CourierService $service,
+        ?CourierRate $rate,
+        string $awbNumber,
+        float $oversizeCharge,
+        float $handlingCharge
+    ): array {
+        $items = is_array($data['items'] ?? null) ? $data['items'] : [];
+        $packages = is_array($data['packages'] ?? null) ? $data['packages'] : [];
+        $baseAmount = (float) ($rate?->price ?? 0);
+        $fuelPercentage = (float) ($rate?->fuel_percentage ?? 0);
+        $fuel = (float) ($rate?->fuel_charge ?? 0);
+        if ($fuel <= 0) {
+            $fuel = $baseAmount * $fuelPercentage / 100;
         }
-
-        $customer = auth()->guard('customer')->user();
-        // Only enabled services (status = 1) are offered in the bulk upload flow.
-        $courierServices = \App\Models\CourierService::where('status', 1)->orderBy('network')->orderBy('method')->get();
-
-        return view('customer.bulk-upload', compact('customer', 'courierServices'));
-    }
-
-    /**
-     * Process the uploaded Excel file for bulk shipment creation.
-     *
-     * Each unique AwbNo = one consignee shipment. Multiple rows sharing the
-     * same AwbNo are treated as invoice line items for that shipment.
-     * Rate is calculated using the ChgWeight column against the courier_rates table.
-     */
-    public function processBulkUpload(Request $request)
-    {
-        if (!auth()->guard('customer')->check()) {
-            return redirect()->route('login');
+        $gstPercentage = (float) ($rate?->gst_percentage ?? 0);
+        $gst = (float) ($rate?->gst_amount ?? 0);
+        if ($gst <= 0) {
+            $gst = ($baseAmount + $fuel) * $gstPercentage / 100;
         }
-
-        $customer = auth()->guard('customer')->user();
-        $customerId = $customer->id;
-
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
-            'selected_rates' => 'nullable|string', // JSON map: { awb_no: rate_id }
-        ]);
-
-        try {
-            $file = $request->file('excel_file');
-            $filePath = $file->getRealPath();
-
-            // Load the spreadsheet using PhpSpreadsheet
-            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($filePath);
-            $reader->setReadDataOnly(true);
-            $spreadsheet = $reader->load($filePath);
-            $sheet = $spreadsheet->getActiveSheet();
-            $rows = $sheet->toArray(null, true, true, false);
-
-            if (count($rows) < 2) {
-                return back()->with('error', 'The uploaded file does not contain any data rows.');
-            }
-
-            // First row = headers. Normalize header names (remove spaces, underscores).
-            $rawHeaders = array_map(function ($h) {
-                return trim(preg_replace('/\s+/', '', strtolower((string) $h)));
-            }, $rows[0]);
-
-            // Build a map: normalized header => column index
-            $headerMap = [];
-            foreach ($rawHeaders as $col => $header) {
-                if ($header !== '') {
-                    $headerMap[$header] = $col;
-                }
-            }
-
-            // Helper to fetch a cell value by header name
-            $getCol = function ($row, $name) use ($headerMap) {
-                if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
-                    return trim((string) $row[$headerMap[$name]]);
-                }
-                return null;
-            };
-
-            // Group data rows by AwbNo (each unique AwbNo = one shipment/consignee)
-            $grouped = [];
-            for ($i = 1; $i < count($rows); $i++) {
-                $row = $rows[$i];
-                $awbNo = $getCol($row, 'awbno');
-                if ($awbNo === '' || $awbNo === null) {
-                    continue;
-                }
-                $grouped[$awbNo][] = $row;
-            }
-
-            if (empty($grouped)) {
-                return back()->with('error', 'No valid rows with AwbNo found in the uploaded file.');
-            }
-
-            // Parse the selected rate map: { awb_no => rate_id }
-            // This comes from the preview modal where the user picks a rate card per shipment.
-            $selectedRatesRaw = $request->input('selected_rates', '');
-            $selectedRateMap = [];
-            if (!empty($selectedRatesRaw)) {
-                $decoded = json_decode($selectedRatesRaw, true);
-                if (is_array($decoded)) {
-                    foreach ($decoded as $awbKey => $rateId) {
-                        $selectedRateMap[trim((string) $awbKey)] = (int) $rateId;
-                    }
-                }
-            }
-
-            $createdShipments = [];
-            $errors = [];
-            $successCount = 0;
-
-            DB::beginTransaction();
-
-            foreach ($grouped as $awbNo => $rowGroup) {
-                try {
-                    $firstRow = $rowGroup[0];
-
-                    // ---- Shipper (Consignor) data ----
-                    $shipperCompanyName = $getCol($firstRow, 'consignorname') ?: ($customer->first_name . ' ' . $customer->last_name);
-                    $shipperContactPerson = $getCol($firstRow, 'consignorcontactperson') ?: ($customer->first_name . ' ' . $customer->last_name);
-                    $shipperAddress1 = $getCol($firstRow, 'consignoraddressline1');
-                    $shipperAddress2 = $getCol($firstRow, 'consignoraddressline2');
-                    $shipperAddress3 = $getCol($firstRow, 'consignoraddressline3');
-                    $shipperCity = $getCol($firstRow, 'consignorcity');
-                    $shipperState = $getCol($firstRow, 'consignorstate');
-                    $shipperPincode = $getCol($firstRow, 'consignorpincode');
-                    $shipperPhone = $getCol($firstRow, 'consignortelephone') ?: ($customer->phone_number ?? null);
-                    $shipperEmail = $customer->email ?? ($shipperPhone . '@bulkupload.local');
-                    $gstType = $getCol($firstRow, 'gsttype');
-                    $gstIdNo = $getCol($firstRow, 'gstidno');
-
-                    // ---- Consignee data ----
-                    $consigneeName = $getCol($firstRow, 'consigneename');
-                    $consigneeContactPerson = $getCol($firstRow, 'consigneecontactperson');
-                    $consigneeAddress1 = $getCol($firstRow, 'consigneeaddressline1');
-                    $consigneeAddress2 = $getCol($firstRow, 'consigneeaddressline2');
-                    $consigneeAddress3 = $getCol($firstRow, 'consigneeaddressline3');
-                    $consigneeCity = $getCol($firstRow, 'consigneecity');
-                    $consigneeState = $getCol($firstRow, 'consigneestate');
-                    $consigneeZip = $getCol($firstRow, 'consigneezipcode');
-                    $consigneePhone = $getCol($firstRow, 'consigneetelephone');
-
-                    $destination = $getCol($firstRow, 'destination');
-                    $referenceNo = $getCol($firstRow, 'referenceno');
-
-                    // ---- Service / shipping method ----
-                    $serviceType = $getCol($firstRow, 'servicetype');
-
-                    // ---- Calculate total chargeable weight from ChgWeight column ----
-                    $totalChgWeight = 0;
-                    foreach ($rowGroup as $r) {
-                        $totalChgWeight += floatval($getCol($r, 'chgweight') ?: 0);
-                    }
-                    if ($totalChgWeight <= 0) {
-                        // Fallback: sum of ActWeight
-                        foreach ($rowGroup as $r) {
-                            $totalChgWeight += floatval($getCol($r, 'actweight') ?: 0);
-                        }
-                    }
-
-                    // ---- Resolve the rate selected by the user in the preview modal ----
-                    // The preview modal returns a map of awb_no => rate_id. We look up the
-                    // CourierRate by ID and derive the courierService + rate details from it.
-                    $selectedRateId = $selectedRateMap[$awbNo] ?? null;
-                    $rateDetails = [
-                        'rate_id' => null,
-                        'price' => 0,
-                        'fuel_charge' => 0,
-                        'fuel_percentage' => 0,
-                        'gst_percentage' => 0,
-                        'gst_amount' => 0,
-                        'total' => 0,
-                    ];
-                    $courierService = null;
-
-                    if ($selectedRateId) {
-                        $matchedRate = \App\Models\CourierRate::find($selectedRateId);
-                        if ($matchedRate) {
-                            $courierService = \App\Models\CourierService::find($matchedRate->service_id);
-
-                            $price = floatval($matchedRate->price);
-                            $fuelPercentage = floatval($matchedRate->fuel_percentage);
-                            $fuelChargeStored = floatval($matchedRate->fuel_charge);
-                            $gstPercentage = floatval($matchedRate->gst_percentage);
-                            $gstAmountStored = floatval($matchedRate->gst_amount);
-
-                            // Mirror create-shipments computation exactly
-                            $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-                            $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-                            $total = $price + $computedFuel + $computedGst;
-
-                            $rateDetails = [
-                                'rate_id' => $matchedRate->id,
-                                'price' => round($price, 2),
-                                'fuel_charge' => round($computedFuel, 2),
-                                'fuel_percentage' => $fuelPercentage,
-                                'gst_percentage' => $gstPercentage,
-                                'gst_amount' => round($computedGst, 2),
-                                'total' => round($total, 2),
-                            ];
-                        }
-                    }
-
-                    // Fallback: if no rate was selected (or rate_id not found), try ServiceType column
-                    if (!$courierService && $serviceType) {
-                        $courierService = $this->findCourierService($serviceType, null);
-                        if ($courierService) {
-                            $rateDetails = $this->calculateBulkRate($customerId, $courierService, $totalChgWeight, $consigneeState);
-                        }
-                    }
-
-                    $shippingMethod = $courierService ? $courierService->method : ($serviceType ?: null);
-
-                    // ---- Generate AWB number ----
-                    $newAwbNumber = $this->generateAwbNumber();
-
-                    // ---- Create ShipperInfo ----
-                    $shipper = ShipperInfo::create([
-                        'customer_id' => $customerId,
-                        'awb_number' => $newAwbNumber,
-                        'shipping_method' => $shippingMethod,
-                        'shipper_same_as_customer' => false,
-                        'company_name' => $shipperCompanyName,
-                        'contact_person' => $shipperContactPerson,
-                        'address_line1' => $shipperAddress1,
-                        'address_line2' => $shipperAddress2,
-                        'address_line3' => $shipperAddress3,
-                        'pincode' => $shipperPincode,
-                        'city' => $shipperCity,
-                        'state' => $shipperState,
-                        'phone_number' => $shipperPhone,
-                        'email' => $shipperEmail,
-                        'email_opt_out' => false,
-                        'kyc_type' => $gstType,
-                        'kyc_number' => $gstIdNo,
-                        'service_rate_id' => $rateDetails['rate_id'] ?? null,
-                        'service_id' => $courierService ? $courierService->id : null,
-                    ]);
-
-                    $shipperId = $shipper->id;
-
-                    // ---- Create ConsigneeInfo ----
-                    $consignee = ConsigneeInfo::create([
-                        'shipper_id' => $shipperId,
-                        'delivery_destination' => $destination,
-                        'origin_type' => 'CSB IV',
-                        'consignee_name' => $consigneeName,
-                        'contact_person' => $consigneeContactPerson,
-                        'address_line1' => $consigneeAddress1,
-                        'address_line2' => $consigneeAddress2,
-                        'address_line3' => $consigneeAddress3,
-                        'zip_code' => $consigneeZip,
-                        'city' => $consigneeCity,
-                        'state' => $consigneeState,
-                        'phone_number' => $consigneePhone,
-                        'email' => $consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local',
-                        'email_opt_out' => false,
-                    ]);
-
-                    // ---- Create PackageDimension records (one per row) ----
-                    $packageIds = [];
-                    $boxNo = 1;
-                    foreach ($rowGroup as $r) {
-                        $package = PackageDimension::create([
-                            'shipper_id' => $shipperId,
-                            'shipping_method' => $shippingMethod,
-                            'actual_weight_kg' => floatval($getCol($r, 'actweight') ?: 0),
-                            'length_cm' => floatval($getCol($r, 'l') ?: 0),
-                            'width_cm' => floatval($getCol($r, 'b') ?: 0),
-                            'height_cm' => floatval($getCol($r, 'h') ?: 0),
-                            'volumetric_weight' => floatval($getCol($r, 'volweight') ?: 0),
-                            'chargeable_weight' => floatval($getCol($r, 'chgweight') ?: 0),
-                        ]);
-                        $packageIds[$boxNo] = $package->id;
-                        $boxNo++;
-                    }
-
-                    // ---- Create CSB Information (minimal) ----
-                    $csb = CsbInformation::create([
-                        'shipper_id' => $shipperId,
-                        'ecommerce' => 'No',
-                        'scheme' => 'No',
-                        'bond_ut_igst' => null,
-                        'lut_number' => null,
-                        'iec_code' => null,
-                        'gst_number' => $gstIdNo,
-                        'ad_code' => null,
-                        'bank_account_number' => null,
-                        'bank_ifsc_code' => null,
-                    ]);
-
-                    // ---- Create Shipment Invoice (one per consignee/AwbNo) ----
-                    $invoiceNo = $getCol($firstRow, 'invoiceno') ?: ('INV-' . $newAwbNumber);
-                    $invoiceValue = round(floatval($getCol($firstRow, 'invoicevalue') ?: 0), 2);
-                    $currency = $getCol($firstRow, 'currency') ?: 'INR';
-
-                    $invoice = ShipmentInvoice::create([
-                        'shipper_id' => $shipperId,
-                        'invoice_number' => $invoiceNo,
-                        'invoice_date' => now()->toDateString(),
-                        'invoice_amount' => $invoiceValue,
-                        'incoterms' => 'DAP',
-                        'invoice_currency' => $currency,
-                        'reference_number' => $referenceNo,
-                    ]);
-
-                    // ---- Create Invoice Items (one per row) ----
-                    // Use the invoiceValue from the current Excel row as the item's unit_rate.
-                    $itemBoxNo = 1;
-                    foreach ($rowGroup as $r) {
-                        $description = $getCol($r, 'description');
-                        $qty = floatval($getCol($r, 'pcs') ?: 1);
-                        $unitRate = round(floatval($getCol($r, 'invoicevalue') ?: 0), 2);
-                        $amount = round($qty * $unitRate, 2);
-
-                        ShipmentInvoiceItem::create([
-                            'invoice_id' => $invoice->id,
-                            'package_dimension_id' => $packageIds[$itemBoxNo] ?? null,
-                            'box_no' => $itemBoxNo,
-                            'description' => $description,
-                            'hs_code' => null,
-                            'hts_code' => null,
-                            'unit_type' => 'PCS',
-                            'qty' => $qty,
-                            'unit_rate' => $unitRate,
-                            'igst_percentage' => 0,
-                            'igst_amount' => 0,
-                            'amount' => $amount,
-                        ]);
-                        $itemBoxNo++;
-                    }
-
-                    // ---- Create CreateShipment record ----
-                    $createShipment = CreateShipment::create([
-                        'shipper_id' => $shipper->id,
-                        'customer_id' => $customerId,
-                        'awb_number' => $newAwbNumber,
-                        'shipping_method' => $shippingMethod,
-                        'delivery_destination' => $destination,
-                        'origin_type' => 'CSB IV',
-                        'shipper_company_name' => $shipperCompanyName,
-                        'shipper_contact_person' => $shipperContactPerson,
-                        'shipper_address_line1' => $shipperAddress1,
-                        'shipper_address_line2' => $shipperAddress2,
-                        'shipper_address_line3' => $shipperAddress3,
-                        'shipper_pincode' => $shipperPincode,
-                        'shipper_city' => $shipperCity,
-                        'shipper_state' => $shipperState,
-                        'shipper_phone_number' => $shipperPhone,
-                        'shipper_email' => $shipperEmail,
-                        'consignee_name' => $consigneeName,
-                        'consignee_contact_person' => $consigneeContactPerson,
-                        'consignee_address_line1' => $consigneeAddress1,
-                        'consignee_address_line2' => $consigneeAddress2,
-                        'consignee_address_line3' => $consigneeAddress3,
-                        'consignee_zip_code' => $consigneeZip,
-                        'consignee_city' => $consigneeCity,
-                        'consignee_state' => $consigneeState,
-                        'consignee_phone_number' => $consigneePhone,
-                        'consignee_email' => $consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local',
-                        'invoice_number' => $invoiceNo,
-                        'invoice_date' => now()->toDateString(),
-                        'invoice_amount' => $invoiceValue,
-                        'incoterms' => 'DAP',
-                        'invoice_currency' => $currency,
-                        'reference_number' => $referenceNo,
-                        'ecommerce' => 'No',
-                        'scheme' => 'No',
-                        'bond_ut_igst' => null,
-                        'lut_number' => null,
-                        'iec_code' => null,
-                        'gst_number' => $gstIdNo,
-                        'ad_code' => null,
-                        'bank_account_number' => null,
-                        'bank_ifsc_code' => null,
-                        'status' => 'draft',
-                    ]);
-
-                    // ---- Create Tracking record ----
-                    Tracking::create([
-                        'awb_number' => $newAwbNumber,
-                        'shipper_id' => $shipper->id,
-                        'shipping_id' => $createShipment->id,
-                        'uwc_id' => $newAwbNumber,
-                        'title' => Tracking::getTitleForStatus('draft'),
-                        'status' => 'draft',
-                    ]);
-
-                    // ---- Log the draft status change ----
-                    ShipmentLog::logStatus(
-                        $shipper->id,
-                        $newAwbNumber,
-                        'draft',
-                        null,
-                        'Shipment created via bulk upload (draft)',
-                        $customerId,
-                        'customer'
-                    );
-
-                    // ---- Generate PDF invoice for this consignee ----
-                    $pdfPath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalChgWeight);
-
-                    $createdShipments[] = [
-                        'awb_number' => $newAwbNumber,
-                        'consignee_name' => $consigneeName,
-                        'consignee_city' => $consigneeCity,
-                        'total_weight' => $totalChgWeight,
-                        'rate' => $rateDetails['total'] ?? 0,
-                        'invoice_pdf' => $pdfPath,
-                        'invoice_number' => $invoiceNo,
-                    ];
-                    $successCount++;
-                } catch (\Exception $e) {
-                    $errors[] = [
-                        'awb_no' => $awbNo,
-                        'message' => $e->getMessage(),
-                    ];
-                    \Log::error('Bulk upload error for AwbNo ' . $awbNo . ': ' . $e->getMessage());
-                }
-            }
-
-            DB::commit();
-
-            return back()->with([
-                'success' => $successCount . ' shipment(s) created successfully from the bulk upload.',
-                'created_shipments' => $createdShipments,
-                'upload_errors' => $errors,
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return back()->withErrors($e->validator)->withInput()->with('error', 'Validation failed. Please upload a valid Excel file.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Bulk upload failed: ' . $e->getMessage());
-            return back()->with('error', 'Bulk upload failed: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Preview bulk upload: parse the Excel file, group by AwbNo, calculate rates,
-     * and return JSON data for the preview modal (without creating any records).
-     */
-    public function previewBulkUpload(Request $request)
-    {
-        if (!auth()->guard('customer')->check()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
-        }
-
-        $customer = auth()->guard('customer')->user();
-        $customerId = $customer->id;
-
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
-        ]);
-
-        try {
-            $file = $request->file('excel_file');
-            $filePath = $file->getRealPath();
-
-            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($filePath);
-            $reader->setReadDataOnly(true);
-            $spreadsheet = $reader->load($filePath);
-            $sheet = $spreadsheet->getActiveSheet();
-            $rows = $sheet->toArray(null, true, true, false);
-
-            if (count($rows) < 2) {
-                return response()->json(['success' => false, 'message' => 'The uploaded file does not contain any data rows.']);
-            }
-
-            // Normalize headers
-            $rawHeaders = array_map(function ($h) {
-                return trim(preg_replace('/\s+/', '', strtolower((string) $h)));
-            }, $rows[0]);
-
-            $headerMap = [];
-            foreach ($rawHeaders as $col => $header) {
-                if ($header !== '') {
-                    $headerMap[$header] = $col;
-                }
-            }
-
-            $getCol = function ($row, $name) use ($headerMap) {
-                if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
-                    return trim((string) $row[$headerMap[$name]]);
-                }
-                return null;
-            };
-
-            // Group rows by AwbNo
-            $grouped = [];
-            for ($i = 1; $i < count($rows); $i++) {
-                $row = $rows[$i];
-                $awbNo = $getCol($row, 'awbno');
-                if ($awbNo === '' || $awbNo === null) {
-                    continue;
-                }
-                $grouped[$awbNo][] = $row;
-            }
-
-            if (empty($grouped)) {
-                return response()->json(['success' => false, 'message' => 'No valid rows with AwbNo found in the uploaded file.']);
-            }
-
-            $previewShipments = [];
-            $grandTotal = 0;
-            $errors = [];
-
-            // Fetch all ENABLED courier services once (mirrors getUpsRate all-services mode).
-            // Disabled services (status = 0) are excluded so their rates are not shown.
-            $allServices = \App\Models\CourierService::where('status', 1)->orderBy('network')->orderBy('method')->get();
-
-            foreach ($grouped as $awbNo => $rowGroup) {
-                $firstRow = $rowGroup[0];
-
-                $consigneeName = $getCol($firstRow, 'consigneename');
-                $consigneeCity = $getCol($firstRow, 'consigneecity');
-                $consigneeState = $getCol($firstRow, 'consigneestate');
-                $consigneeZip = $getCol($firstRow, 'consigneezipcode');
-                $destination = $getCol($firstRow, 'destination');
-                $serviceType = $getCol($firstRow, 'servicetype');
-
-                // Calculate total chargeable weight
-                $totalChgWeight = 0;
-                $totalActWeight = 0;
-                $totalPcs = 0;
-                foreach ($rowGroup as $r) {
-                    $totalChgWeight += floatval($getCol($r, 'chgweight') ?: 0);
-                    $totalActWeight += floatval($getCol($r, 'actweight') ?: 0);
-                    $totalPcs += intval($getCol($r, 'pcs') ?: 0);
-                }
-                if ($totalChgWeight <= 0) {
-                    $totalChgWeight = $totalActWeight;
-                }
-
-                // Look up zone by consignee state (mirrors getUpsRate)
-                $zone = null;
-                if (!empty($consigneeState)) {
-                    $zone = \App\Models\Zone::where('zone_code', $consigneeState)->first();
-                }
-
-                // Destination-based service filtering now uses the `country` column on
-                // the courier_services table. The destination string (from the Excel
-                // "Destination" column) is normalized to a country code ("UK",
-                // "Canada", or "US") and compared against each service's `country`
-                // value — a service is shown only when its country matches.
-                $destinationCountry = $this->resolveDestinationCountry($destination);
-
-                // Collect ALL available service rates for this shipment (like getUpsRate all-services mode)
-                $allRates = [];
-                $defaultRate = null; // first available rate as default selection
-
-                foreach ($allServices as $service) {
-                    // Country-based filtering: destination-specific services and
-                    // services explicitly configured for ALL countries are eligible.
-                    $serviceCountry = strtoupper(trim((string) ($service->country ?? 'US')));
-                    if ($serviceCountry !== 'ALL' && strcasecmp($serviceCountry, $destinationCountry) !== 0) {
-                        continue; // country mismatch → skip this service
-                    }
-
-                    // Fetch rates: customer-specific first, then default fallback
-                    $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-                        ->where('service_id', $service->id)
-                        ->orderBy('wt_range_start')
-                        ->get();
-
-                    if ($rates->isEmpty() && $customerId !== 0) {
-                        $rates = \App\Models\CourierRate::where('customer_id', 0)
-                            ->where('service_id', $service->id)
-                            ->orderBy('wt_range_start')
-                            ->get();
-                    }
-
-                    // Find rates matching weight AND zone.
-                    // Matching uses the zone's `zone_number_testing` field (compared against
-                    // the rate's `zone_no`). Zone-independent rates (zone_no=null/0) are
-                    // always shown weight-wise; zone-matched rates are shown when the rate's
-                    // zone_no equals the selected zone's zone_number_testing.
-                    $matchedRates = $rates->filter(function ($r) use ($totalChgWeight, $zone) {
-                        if (!($totalChgWeight >= $r->wt_range_start && $totalChgWeight <= $r->wt_range_end)) {
-                            return false;
-                        }
-                        $zoneNo = $r->zone_no;
-                        if ($zoneNo === null || $zoneNo == 0) {
-                            return true;
-                        }
-                        if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
-                            return true;
-                        }
-                        return false;
-                    });
-
-                    foreach ($matchedRates as $matchedRate) {
-                        $price = floatval($matchedRate->price);
-                        $fuelPercentage = floatval($matchedRate->fuel_percentage);
-                        $fuelChargeStored = floatval($matchedRate->fuel_charge);
-                        $gstPercentage = floatval($matchedRate->gst_percentage);
-                        $gstAmountStored = floatval($matchedRate->gst_amount);
-
-                        // Mirror create-shipments computation exactly
-                        $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-                        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-                        $total = $price + $computedFuel + $computedGst;
-
-                        $rateEntry = [
-                            'rate_id' => $matchedRate->id,
-                            'service_id' => $service->id,
-                            'method' => $service->method,
-                            'method_display' => $service->method . ' ' . $service->tat,
-                            'network' => $service->network,
-                            'method_code' => $service->method_code,
-                            'tat' => $service->tat,
-                            'scode' => $service->scode,
-                            'price' => round($price, 2),
-                            'zone_no' => $matchedRate->zone_no,
-                            'zone_name' => ($matchedRate->zone_no && $zone && $matchedRate->zone_no == $zone->id) ? $zone->zone_name : null,
-                            'zone_code' => ($matchedRate->zone_no && $zone && $matchedRate->zone_no == $zone->id) ? $zone->zone_code : null,
-                            'fuel_charge' => round($computedFuel, 2),
-                            'fuel_percentage' => $fuelPercentage,
-                            'gst_percentage' => $gstPercentage,
-                            'gst_amount' => round($computedGst, 2),
-                            'total' => round($total, 2),
-                        ];
-
-                        $allRates[] = $rateEntry;
-                        if ($defaultRate === null) {
-                            $defaultRate = $rateEntry;
-                        }
-                    }
-                }
-
-                // Filter out rate cards whose total price (base + fuel + gst) is 0
-                // so 0-price services are not shown in the bulk-upload preview.
-                // Re-pick the first remaining rate as the default selection.
-                $allRates = array_values(array_filter($allRates, function ($r) {
-                    $base = floatval($r['price'] ?? 0);
-                    $fuel = floatval($r['fuel_charge'] ?? 0);
-                    $gst  = floatval($r['gst_amount'] ?? 0);
-                    return ($base + $fuel + $gst) > 0;
-                }));
-                $defaultRate = !empty($allRates) ? $allRates[0] : null;
-
-                $invoiceNo = $getCol($firstRow, 'invoiceno') ?: ('INV-' . $awbNo);
-                $invoiceValue = floatval($getCol($firstRow, 'invoicevalue') ?: 0);
-
-                $previewShipments[] = [
-                    'awb_no' => $awbNo,
-                    'consignee_name' => $consigneeName ?: '-',
-                    'consignee_city' => $consigneeCity ?: '-',
-                    'consignee_state' => $consigneeState ?: '-',
-                    'consignee_zip' => $consigneeZip ?: '-',
-                    'destination' => $destination ?: '-',
-                    'pieces' => $totalPcs,
-                    'total_weight' => round($totalChgWeight, 3),
-                    'invoice_no' => $invoiceNo,
-                    'invoice_value' => $invoiceValue,
-                    'all_rates' => $allRates,
-                    'default_rate' => $defaultRate,
-                    'row_count' => count($rowGroup),
-                ];
-
-                $grandTotal += $defaultRate['total'] ?? 0;
-            }
-
-            return response()->json([
-                'success' => true,
-                'shipments' => $previewShipments,
-                'grand_total' => round($grandTotal, 2),
-                'total_shipments' => count($previewShipments),
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            \Log::error('Bulk upload preview failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Preview failed: ' . $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Calculate the courier rate for a bulk upload shipment using ChgWeight.
-     * Mirrors the logic in getUpsRate() but returns a single best-matching rate.
-     *
-     * @param int $customerId
-     * @param \App\Models\CourierService|null $service
-     * @param float $totalWeight
-     * @param string|null $consigneeState
-     * @return array
-     */
-    private function calculateBulkRate($customerId, $service, $totalWeight, $consigneeState)
-    {
-        $result = [
-            'rate_id' => null,
-            'price' => 0,
-            'fuel_charge' => 0,
-            'fuel_percentage' => 0,
-            'gst_percentage' => 0,
-            'gst_amount' => 0,
-            'total' => 0,
-        ];
-
-        if (!$service || $totalWeight <= 0) {
-            return $result;
-        }
-
-        // Look up zone by consignee state
-        $zone = null;
-        if (!empty($consigneeState)) {
-            $zone = \App\Models\Zone::where('zone_code', $consigneeState)
-                ->orWhere('zone_name', $consigneeState)
-                ->first();
-        }
-
-        // Step 1: Try customer-specific rates
-        $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-            ->where('service_id', $service->id)
-            ->orderBy('wt_range_start')
-            ->get();
-
-        // Step 2: Fallback to default rates (customer_id = 0)
-        if ($rates->isEmpty()) {
-            $rates = \App\Models\CourierRate::where('customer_id', 0)
-                ->where('service_id', $service->id)
-                ->orderBy('wt_range_start')
-                ->get();
-        }
-
-        if ($rates->isEmpty()) {
-            return $result;
-        }
-
-        // Find the rate matching the weight AND zone.
-        // Matching uses the zone's `zone_number_testing` field (compared against the
-        // rate's `zone_no`). Zone-independent rates (zone_no=null/0) are always shown
-        // weight-wise; zone-matched rates are shown when the rate's zone_no equals the
-        // selected zone's zone_number_testing.
-        $matchedRate = $rates->first(function ($r) use ($totalWeight, $zone) {
-            if (!($totalWeight >= $r->wt_range_start && $totalWeight <= $r->wt_range_end)) {
-                return false;
-            }
-            $zoneNo = $r->zone_no;
-            if ($zoneNo === null || $zoneNo == 0) {
-                return true; // Zone-independent rate
-            }
-            if ($zone && $zone->zone_number_testing !== null && $zoneNo == $zone->zone_number_testing) {
-                return true; // Zone-matched rate (via zone_number_testing)
-            }
-            return false;
-        });
-
-        if (!$matchedRate) {
-            return $result;
-        }
-
-        $price = floatval($matchedRate->price);
-        $fuelPercentage = floatval($matchedRate->fuel_percentage);
-        $fuelChargeStored = floatval($matchedRate->fuel_charge);
-        $gstPercentage = floatval($matchedRate->gst_percentage);
-        $gstAmountStored = floatval($matchedRate->gst_amount);
-
-        // Mirror the create-shipments page computation exactly:
-        // - If fuel_charge > 0 use it directly, otherwise compute from percentage
-        // - If gst_amount > 0 use it directly, otherwise compute from percentage
-        $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-        $total = $price + $computedFuel + $computedGst;
+        $miscellaneous = $oversizeCharge + $handlingCharge;
+        $invoiceAmount = (float) ($data['invoice_amount'] ?? 0);
+        $destination = (string) ($data['delivery_destination'] ?? '');
+        $destinationRecord = \App\Models\Destination::where('name', $destination)->first();
+        $countryCode = strtoupper((string) ($destinationRecord?->country_code ?? ''));
+        $csbType = strtoupper((string) ($data['origin_type'] ?? 'CSB IV')) === 'CSB V' ? 'CSB 5' : 'CSB 4';
+        $customerName = trim((string) ($customer->first_name . ' ' . $customer->last_name));
+        $accountCode = (string) ($customer->customer_code ?: 'UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT));
+
+        $productDetails = array_map(function (array $item): array {
+            return [
+                'BoxNo' => (string) ($item['box_no'] ?? ''),
+                'Description' => (string) ($item['description'] ?? ''),
+                'HSNCode' => (string) ($item['hs_code'] ?? ''),
+                'HTSCode' => (string) ($item['hts_code'] ?? ''),
+                'UnitType' => (string) ($item['unit_type'] ?? 'PCS'),
+                'Qty' => (float) ($item['qty'] ?? 0),
+                'UnitRate' => (float) ($item['unit_rate'] ?? 0),
+                'ShipPieceIGST' => (float) ($item['igst_amount'] ?? 0),
+                'PieceWt' => 0,
+            ];
+        }, array_values(array_filter($items, 'is_array')));
+
+        $packageDetails = array_map(function (array $package): array {
+            return [
+                'Length' => (float) ($package['length_cm'] ?? 0),
+                'Width' => (float) ($package['width_cm'] ?? 0),
+                'Height' => (float) ($package['height_cm'] ?? 0),
+                'ActualWeight' => (float) ($package['actual_weight_kg'] ?? 0),
+            ];
+        }, array_values(array_filter($packages, 'is_array')));
 
         return [
-            'rate_id' => $matchedRate->id,
-            'price' => round($price, 2),
-            'fuel_charge' => round($computedFuel, 2),
-            'fuel_percentage' => $fuelPercentage,
-            'gst_percentage' => $gstPercentage,
-            'gst_amount' => round($computedGst, 2),
-            'total' => round($total, 2),
+            'Awbno' => $awbNumber,
+            'AccountCode' => $accountCode,
+            'AccountName' => $customerName,
+            'Origin' => 'DEL',
+            'PaymentType' => 'Credit',
+            'ShipDate' => now()->format('Y-m-d\\TH:i:s'),
+            'Sender' => [
+                'SenderName' => (string) ($data['shipper_company_names'] ?? $customerName),
+                'SenderContactPerson' => (string) ($data['shipper_contact_person'] ?? $customerName),
+                'SenderAddressLine1' => (string) ($data['shipper_address_line1'] ?? ''),
+                'SenderAddressLine2' => (string) ($data['shipper_address_line2'] ?? ''),
+                'SenderAddressLine3' => (string) ($data['shipper_address_line3'] ?? ''),
+                'SenderPincode' => (string) ($data['shipper_pincode'] ?? ''),
+                'SenderCity' => (string) ($data['shipper_city'] ?? ''),
+                'SenderState' => (string) ($data['shipper_state'] ?? ''),
+                'SenderTelephone' => (string) ($data['shipper_phone_number'] ?? ''),
+                'SenderEmailId' => (string) ($data['shipper_emails'] ?? ''),
+                'KYCType' => (string) ($data['shipper_kyc_type'] ?? ''),
+                'KYCNo' => (string) ($data['shipper_kyc_number'] ?? ''),
+            ],
+            'Receiver' => [
+                'ReceiverName' => (string) ($data['consignee_name'] ?? ''),
+                'ReceiverContactPerson' => (string) ($data['consignee_contact_person'] ?? ''),
+                'ReceiverAddressLine1' => (string) ($data['consignee_address_line1'] ?? ''),
+                'ReceiverAddressLine2' => (string) ($data['consignee_address_line2'] ?? ''),
+                'ReceiverAddressLine3' => (string) ($data['consignee_address_line3'] ?? ''),
+                'ReceiverZipcode' => (string) ($data['consignee_zip_code'] ?? ''),
+                'ReceiverCity' => (string) ($data['consignee_city'] ?? ''),
+                'ReceiverState' => (string) ($data['consignee_state'] ?? ''),
+                'ReceiverCountry' => $countryCode !== '' ? $countryCode : $destination,
+                'ReceiverTelephone' => (string) ($data['consignee_phone_number'] ?? ''),
+                'ReceiverEmailid' => (string) ($data['consignee_email'] ?? ''),
+                'VatId' => '',
+            ],
+            'ServiceDetails' => [
+                'ServiceCode' => (string) ($service?->service_code ?? $service?->scode ?? ''),
+                'ServiceName' => (string) ($service?->method ?? $data['shipping_method'] ?? ''),
+                'Forwarder' => (string) ($service?->shipper_code ?? $service?->network ?? ''),
+                'NetworkCode' => (string) ($service?->network ?? ''),
+                'NetworkName' => (string) ($service?->description ?? $service?->network ?? ''),
+                'NetworkNo' => (string) ($service?->method_code ?? ''),
+                'GoodsType' => 'NDOX',
+                'PackageType' => 'PACKAGE',
+            ],
+            'PackageDetails' => ['PackageDetail' => $packageDetails],
+            'AdditionalDetails' => [
+                'IsThirdParty' => false,
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => (string) ($data['invoice_currency'] ?? ''),
+                'InvoiceNo' => (string) ($data['invoice_number'] ?? ''),
+                'InvoiceDate' => date('Y-m-d\\T00:00:00', strtotime((string) ($data['invoice_date'] ?? 'now'))),
+                'TermsOfSale' => (string) ($data['incoterms'] ?? ''),
+                'ReasonForExport' => 'Sale',
+                'FreightCharge' => round($baseAmount, 2),
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => (string) ($data['reference_number'] ?? ''),
+                'DeliveryConfirmation' => '',
+                'DutyTax' => '',
+                'DutiesAccountNo' => '',
+                'TransactionId' => $awbNumber,
+                'IECNo' => (string) ($data['iec_code'] ?? ''),
+                'ADCode' => (string) ($data['ad_code'] ?? ''),
+                'BankType' => '',
+                'NFEI' => false,
+                'Ecom' => strtoupper((string) ($data['ecommerce'] ?? 'No')) === 'YES',
+                'MEIS' => false,
+                'BankAccount' => (string) ($data['bank_account_number'] ?? ''),
+                'ProductType' => 'Commercial',
+                'BoundUT' => (string) ($data['bond_ut_igst'] ?? ''),
+                'IGSTAmount' => round(array_sum(array_map(fn (array $item): float => (float) ($item['igst_amount'] ?? 0), array_filter($items, 'is_array'))), 2),
+                'IGSTPaid' => strtoupper((string) ($data['bond_ut_igst'] ?? '')) === 'IGST' ? 'Yes' : 'No',
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
+            ],
+            'FreightDetails' => [
+                'BasicAmount' => round($baseAmount, 2),
+                'FuelPercentage' => round($fuelPercentage, 2),
+                'Fuel' => round($fuel, 2),
+                'MisFuel' => 0,
+                'Misc' => round($miscellaneous, 2),
+                'Demand' => 0,
+                'GreenSuch' => 0,
+                'Taxable' => round($baseAmount + $fuel + $miscellaneous, 2),
+                'SGST' => 0,
+                'CGST' => 0,
+                'IGST' => round($gst, 2),
+                'NTaxable' => 0,
+                'NetTotal' => round($baseAmount + $fuel + $gst + $miscellaneous, 2),
+            ],
+            'MiscDetailsTable' => array_values(array_filter([
+                $oversizeCharge > 0 ? ['MiscCode' => 'OVERSIZE', 'MiscName' => 'Oversize Charge', 'MisAmt' => round($oversizeCharge, 2), 'MisNTax' => 0, 'MisFuel' => 0] : null,
+                $handlingCharge > 0 ? ['MiscCode' => 'HANDLING', 'MiscName' => 'Handling Charge', 'MisAmt' => round($handlingCharge, 2), 'MisNTax' => 0, 'MisFuel' => 0] : null,
+            ])),
         ];
-    }
-
-    /**
-     * Generate a PDF invoice for a bulk-uploaded shipment using dompdf.
-     *
-     * @param \App\Models\ShipperInfo $shipper
-     * @param \App\Models\ConsigneeInfo $consignee
-     * @param \App\Models\ShipmentInvoice $invoice
-     * @param array $rateDetails
-     * @param float $totalWeight
-     * @return string Relative path to the generated PDF
-     */
-    private function generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalWeight)
-    {
-        $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
-
-        $data = [
-            'shipper' => $shipper,
-            'consignee' => $consignee,
-            'invoice' => $invoice,
-            'invoiceItems' => $invoiceItems,
-            'rateDetails' => $rateDetails,
-            'totalWeight' => $totalWeight,
-        ];
-
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('customer.partials.bulk-invoice-pdf', $data);
-        $pdf->setPaper('A4', 'portrait');
-
-        $filename = 'bulk_invoice_' . $shipper->awb_number . '.pdf';
-        $relativePath = 'uploads/bulk_invoices/' . $filename;
-        $fullPath = public_path($relativePath);
-
-        if (!file_exists(dirname($fullPath))) {
-            mkdir(dirname($fullPath), 0777, true);
-        }
-
-        $pdf->save($fullPath);
-
-        return $relativePath;
     }
 
     /**
@@ -5468,6 +4927,11 @@ class CustomerController extends Controller
 
         $customerId = auth()->guard('customer')->id();
 
+        // Notice shown after a wallet recharge payment completes. Set by
+        // walletRechargeCallback() so the popup can close and the main window
+        // redirect here to show the result.
+        $paymentNotice = session()->pull('wallet_payment_notice');
+
         // Get all wallet transactions for this customer, newest first
         $transactions = WalletTransaction::where('customer_id', $customerId)
             ->orderBy('created_at', 'desc')
@@ -5493,7 +4957,8 @@ class CustomerController extends Controller
             'totalRecharges',
             'totalRefunds',
             'totalCharges',
-            'walletBalance'
+            'walletBalance',
+            'paymentNotice'
         ));
     }
 
@@ -7289,7 +6754,7 @@ class CustomerController extends Controller
      * Tiers: exact → case-insensitive → str_contains → word-by-word → collapsed-string
      * Logs all available methods on total failure for diagnostics.
      */
-    private function findCourierService($shippingMethod, $shipperId)
+    public function findCourierService($shippingMethod, $shipperId)
     {
         // Tier 1: Exact match
         $service = CourierService::where('method', $shippingMethod)->first();
@@ -7789,7 +7254,7 @@ class CustomerController extends Controller
      * @param string|null $destination
      * @return string  "UK" | "CA" | "AUS" | "UAE" | "NZ" | "SG" | "MY" | "US"
      */
-    private function resolveDestinationCountry($destination)
+    public function resolveDestinationCountry($destination)
     {
         $destinationValue = trim((string) ($destination ?? ''));
         if ($destinationValue === '') {
@@ -10630,7 +10095,7 @@ class CustomerController extends Controller
         $consigneeState = $consignee ? ($consignee->state ?? '') : '';
 
         // 4. Calculate the UNITED CLASSIC rate
-        $classicRate = $this->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicRate = app(\App\Http\Controllers\BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
         $classicTotal = floatval($classicRate['total'] ?? 0);
 
         \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
@@ -10709,7 +10174,7 @@ class CustomerController extends Controller
         $consigneeState = $consignee ? ($consignee->state ?? '') : '';
 
         // 4. Calculate the UNITED CLASSIC rate
-        $classicRate = $this->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicRate = app(\App\Http\Controllers\BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
         $classicTotal = floatval($classicRate['total'] ?? 0);
 
         \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
@@ -11084,9 +10549,10 @@ class CustomerController extends Controller
                 'amount' => 'required|numeric|min:1',
             ]);
 
-            $customerId = auth()->guard('customer')->id();
-            $amount = $validated['amount'];
-            $rechargeType = $request->input('mode', 'credit');
+            $customer = auth()->guard('customer')->user();
+            $customerId = $customer->id;
+            $amount = round((float) $validated['amount'], 2);
+            $rechargeType = 'self';
 
             $wallet = Wallet::where('customer_id', $customerId)->first();
 
@@ -11094,46 +10560,98 @@ class CustomerController extends Controller
                 return response()->json(['success' => false, 'message' => 'Wallet not found. Please contact support.']);
             }
 
-            // Server-side idempotency guard: reject duplicate recharge if an
-            // identical recharge was logged for this customer within 10 seconds.
-            // This prevents double entries from rapid double-clicks or AJAX retries.
-            $recentDuplicate = WalletTransaction::where('customer_id', $customerId)
-                ->where('reason', 'recharge')
-                ->where('amount', $amount)
-                ->where('created_at', '>=', now()->subSeconds(10))
-                ->exists();
+            // A Cashfree payment session is single-use: once it has been handed
+            // to the browser it can never be presented again, and reusing it
+            // makes the checkout hang on a loading screen. Expire any earlier
+            // pending order for this customer (e.g. an attempt where the user
+            // closed the payment page) and always create a fresh order. The
+            // client-side button guard already prevents true double submissions.
+            PaymentOrder::where('customer_id', $customerId)
+                ->where('status', 'pending')
+                ->update(['status' => 'expired']);
 
-            if ($recentDuplicate) {
+            $orderId = $this->generateCashfreeOrderId();
+
+            $payload = [
+                'order_id' => $orderId,
+                'order_amount' => $amount,
+                'order_currency' => 'INR',
+                'customer_details' => [
+                    'customer_id' => 'CUST-' . $customerId,
+                    'customer_name' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')) ?: ('Customer ' . $customerId),
+                    'customer_email' => $customer->email ?? ('customer' . $customerId . '@unitedcourier.local'),
+                    'customer_phone' => $this->normalizeCashfreePhone($customer->phone_number ?? '') ?: '+910000000000',
+                ],
+                'order_meta' => [
+                    'return_url' => $this->cashfreeReturnUrl(),
+                ],
+            ];
+
+            $response = $this->cashfreeApi()->post(
+                config('services.cashfree.pg.base_url') . config('services.cashfree.pg.orders_endpoint'),
+                $payload
+            );
+
+            if (!$response->successful()) {
+                \Log::error('Cashfree order creation failed for customer #' . $customerId . ': ' . $response->body());
                 return response()->json([
                     'success' => false,
-                    'message' => 'A recharge of this amount was just processed. Please wait a moment before trying again.',
-                ]);
+                    'message' => 'Could not initiate payment. Please try again later.',
+                    'debug_response' => $response->json(),
+                ], 500);
             }
 
-            DB::transaction(function () use ($wallet, $amount, $customerId, $rechargeType) {
-                $wallet->increment('balance', $amount);
-                $wallet->refresh();
+            $data = $response->json();
+            $paymentSessionId = $data['payment_session_id'] ?? null;
 
-                // Log the wallet transaction
-                WalletTransaction::create([
-                    'customer_id'       => $customerId,
-                    'type'              => 'credit',
-                    'reason'            => 'recharge',
-                    'recharge_type'     => $rechargeType,
-                    'user_id'           => $customerId,
-                    'user_type'         => 'customer',
-                    'amount'            => $amount,
-                    'balance_after'     => $wallet->balance,
-                    'description'       => 'Wallet recharge of ₹' . number_format($amount, 2),
-                ]);
-            });
+            \Log::info('Cashfree order creation response', [
+                'customer_id' => $customerId,
+                'order_id' => $orderId,
+                'status_code' => $response->status(),
+                'response' => $data,
+            ]);
 
-            $wallet->refresh();
+            if (!$paymentSessionId) {
+                \Log::error('Cashfree order response missing payment_session_id: ' . $response->body());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not initiate payment. Please try again later.',
+                    'debug_response' => $data,
+                ], 500);
+            }
+
+            PaymentOrder::create([
+                'customer_id' => $customerId,
+                'cashfree_order_id' => $orderId,
+                'order_amount' => $amount,
+                'currency' => 'INR',
+                'status' => 'pending',
+                'payment_session_id' => $paymentSessionId,
+                'recharge_type' => $rechargeType,
+            ]);
+
+            WalletTransaction::create([
+                'customer_id' => $customerId,
+                'type' => 'credit',
+                'reason' => 'recharge',
+                'recharge_type' => $rechargeType,
+                'user_id' => $customerId,
+                'user_type' => 'customer',
+                'payment_session_id' => $paymentSessionId,
+                'payment_method' => 'initiate',
+                'payment_status' => 'pending',
+                'amount' => $amount,
+                'balance_after' => $wallet->balance,
+                'reference' => $orderId,
+                'description' => 'Wallet recharge of ₹' . number_format($amount, 2) . ' initiated (Payment ref: ' . $orderId . ')',
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Wallet recharged successfully! ₹' . number_format($amount, 2) . ' has been added.',
-                'new_balance' => (float) $wallet->balance,
+                'payment_session_id' => $paymentSessionId,
+                'order_id' => $orderId,
+                'amount' => $amount,
+                'debug_response' => $data,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -11141,11 +10659,208 @@ class CustomerController extends Controller
                 'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
             ], 422);
         } catch (\Exception $e) {
+            \Log::error('Wallet recharge init error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error processing recharge: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Cashfree payment return URL callback for wallet recharge.
+     *
+     * The wallet is credited ONLY after the payment is verified server-side via
+     * the Cashfree Order Pay API (GET /pg/orders/{order_id}/payments). Crediting
+     * is idempotent — a payment order is credited exactly once.
+     *
+     * @param Request $request
+     * @return \Illuminate\Contracts\View\View
+     */
+    public function walletRechargeCallback(Request $request)
+    {
+        $orderId = trim((string) $request->query('order_id', ''));
+
+        $order = $orderId !== '' ? PaymentOrder::where('cashfree_order_id', $orderId)->first() : null;
+
+        if (!$order) {
+            session(['wallet_payment_notice' => ['type' => 'error', 'message' => 'Payment order not found.']]);
+
+            return $this->walletRechargeResult('error', 'Payment order not found.');
+        }
+
+        if ($order->status === 'paid') {
+            session(['wallet_payment_notice' => ['type' => 'success', 'message' => 'Payment already verified and credited to your wallet.']]);
+
+            return $this->walletRechargeResult('success', 'Payment already verified and credited to your wallet.', $order->order_amount);
+        }
+
+        $verified = $this->verifyCashfreeOrder($orderId);
+        $paymentStatus = strtoupper((string) ($verified['status'] ?? 'PENDING'));
+
+        if ($verified['success'] && $paymentStatus === 'SUCCESS') {
+            app(CashfreePaymentService::class)->creditPaymentOrder($order, [
+                'cf_payment_id' => $verified['cf_payment_id'] ?? null,
+                'payment_method' => $verified['payment_method'] ?? null,
+                'payment_time' => $verified['payment_time'] ?? null,
+            ]);
+
+            session(['wallet_payment_notice' => ['type' => 'success', 'message' => 'Wallet recharged successfully! ₹' . number_format((float) $order->order_amount, 2) . ' has been added to your wallet.']]);
+
+            return $this->walletRechargeResult('success', 'Wallet recharged successfully!', $order->order_amount);
+        }
+
+        if ($paymentStatus === 'FAILED' || $paymentStatus === 'CANCELLED') {
+            $order->update(['status' => 'failed']);
+
+            WalletTransaction::where('reference', $order->cashfree_order_id)
+                ->where('payment_status', 'pending')
+                ->orWhere('payment_status', 'in_process')
+                ->update(['payment_status' => 'failed']);
+
+            session(['wallet_payment_notice' => ['type' => 'error', 'message' => 'Payment was not successful. No amount has been charged to your wallet.']]);
+
+            return $this->walletRechargeResult('failed', 'Payment was not successful. No amount has been charged to your wallet.');
+        }
+
+        session(['wallet_payment_notice' => ['type' => 'warning', 'message' => 'Payment is still in process. Please check your wallet history after some time.']]);
+
+        return $this->walletRechargeResult('pending', 'Payment is still in process. Please check your wallet history after some time.');
+    }
+
+    /**
+     * Render the wallet recharge result page. The page auto-closes the
+     * payment popup and redirects the main customer window to the wallet
+     * history page.
+     */
+    private function walletRechargeResult(string $status, string $message, $amount = null)
+    {
+        return view('customer.wallet-recharge-result', [
+            'status' => $status,
+            'message' => $message,
+            'amount' => $amount,
+            'redirect_url' => route('customer.wallet-history'),
+        ]);
+    }
+
+    /**
+     * Standalone Cashfree drop-in page rendered inside the recharge popup.
+     * Loads the Cashfree SDK and starts the checkout with the payment session
+     * created by walletRecharge().
+     *
+     * @return \Illuminate\Contracts\View\View
+     */
+    public function cashfreeCheckout(Request $request)
+    {
+        $paymentSessionId = trim((string) $request->query('payment_session_id', ''));
+        $paymentMode = (string) config('services.cashfree.pg.mode', 'sandbox');
+
+        // Payment processing has started: reflect it in the wallet history.
+        if ($paymentSessionId !== '') {
+            WalletTransaction::where('payment_session_id', $paymentSessionId)
+                ->where('payment_status', 'pending')
+                ->update(['payment_status' => 'in_process']);
+        }
+
+        return view('customer.cashfree-checkout', compact('paymentSessionId', 'paymentMode'));
+    }
+
+    /**
+     * HTTP client pre-configured with the Cashfree PG headers.
+     */
+    private function cashfreeApi()
+    {
+        $pg = config('services.cashfree.pg');
+
+        return Http::withHeaders([
+            'X-Client-Id' => $pg['client_id'],
+            'X-Client-Secret' => $pg['client_secret'],
+            'x-api-version' => $pg['api_version'],
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ])
+            ->connectTimeout(10)
+            ->timeout($pg['timeout']);
+    }
+
+    /**
+     * Return URL for the Cashfree order. The {order_id} placeholder is replaced
+     * by Cashfree when redirecting the customer after payment.
+     */
+    private function cashfreeReturnUrl()
+    {
+        $configured = config('services.cashfree.pg.return_url');
+
+        if (!empty($configured)) {
+            return $configured;
+        }
+
+        return url('/customer/wallet-recharge/callback') . '?order_id={order_id}';
+    }
+
+    /**
+     * Generate a unique Cashfree order id.
+     */
+    private function generateCashfreeOrderId()
+    {
+        return 'UWC' . strtoupper(Str::random(14));
+    }
+
+    /**
+     * Normalize a stored phone number to the +91XXXXXXXXXX format expected by Cashfree.
+     */
+    private function normalizeCashfreePhone($phone)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+
+        if ($digits === '') {
+            return '';
+        }
+
+        if (strlen($digits) === 10) {
+            $digits = '91' . $digits;
+        }
+
+        return '+' . $digits;
+    }
+
+    /**
+     * Verify a Cashfree order's payment status server-side.
+     *
+     * @param string $orderId
+     * @return array
+     */
+    private function verifyCashfreeOrder($orderId)
+    {
+        $url = config('services.cashfree.pg.base_url') . '/orders/' . urlencode($orderId) . '/payments';
+        $response = $this->cashfreeApi()->get($url);
+
+        if (!$response->successful()) {
+            \Log::error('Cashfree payment verification failed for ' . $orderId . ': ' . $response->body());
+            return ['success' => false, 'status' => 'PENDING'];
+        }
+
+        $payments = $response->json();
+
+        \Log::info('Cashfree payment verification response', [
+            'order_id' => $orderId,
+            'status_code' => $response->status(),
+            'response' => $payments,
+        ]);
+
+        if (!is_array($payments) || empty($payments)) {
+            return ['success' => true, 'status' => 'PENDING'];
+        }
+
+        $payment = $payments[0];
+
+        return [
+            'success' => true,
+            'status' => (string) ($payment['payment_status'] ?? 'PENDING'),
+            'cf_payment_id' => (string) ($payment['cf_payment_id'] ?? ''),
+            'payment_method' => CashfreePaymentService::formatPaymentMethod($payment),
+            'payment_time' => $payment['payment_time'] ?? null,
+        ];
     }
 
     /**
@@ -11200,7 +10915,7 @@ class CustomerController extends Controller
         return $this->isCourierOrAggregator($customer);
     }
 
-    private function generateAwbNumber()
+    public function generateAwbNumber()
     {
         $prefix = 'UWC';
         $datePart = now()->format('ymd'); // e.g., 260602 for 2026-06-02

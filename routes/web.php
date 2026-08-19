@@ -1,9 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\BulkUploadController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\KycController;
+use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Controllers\WebsiteAdminController;
 
@@ -534,9 +536,10 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     // FAQ Queries Management Routes
     Route::get('/change-faq-queries', [WebsiteAdminController::class, 'changeFaqQueries'])->name('admin.change-faq-queries');
 
-    // KYC Pending Management Routes
+    // KYC Management Routes
     Route::get('/kyc-pending', [AdminController::class, 'kycPending'])->name('admin.kyc-pending');
     Route::get('/kyc-approved', [AdminController::class, 'kycApproved'])->name('admin.kyc-approved');
+    Route::get('/kyc-rejected', [AdminController::class, 'kycRejected'])->name('admin.kyc-rejected');
     Route::post('/kyc-pending/approve/{id}', [AdminController::class, 'approveKyc'])->name('admin.kyc-pending.approve');
     Route::post('/kyc-pending/reject/{id}', [AdminController::class, 'rejectKyc'])->name('admin.kyc-pending.reject');
     Route::post('/customer/{id}/reset-password', [AdminController::class, 'resetCustomerPassword'])->name('admin.customer.reset-password');
@@ -639,9 +642,9 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::post('/kyc-personal', [KycController::class, 'storePersonalKyc'])->name('kyc.personal.store');
     Route::get('/kyc-summary', [KycController::class, 'kycSummary'])->name('kyc.summary');
     Route::post('/create-shipment', [CustomerController::class, 'storeShipment'])->name('create-shipment.store');
-    Route::get('/bulk-upload', [CustomerController::class, 'bulkUpload'])->name('bulk-upload');
-    Route::post('/bulk-upload', [CustomerController::class, 'processBulkUpload'])->name('bulk-upload.process');
-    Route::post('/bulk-upload/preview', [CustomerController::class, 'previewBulkUpload'])->name('bulk-upload.preview');
+    Route::get('/bulk-upload', [BulkUploadController::class, 'bulkUpload'])->name('bulk-upload');
+    Route::post('/bulk-upload', [BulkUploadController::class, 'processBulkUpload'])->name('bulk-upload.process');
+    Route::post('/bulk-upload/preview', [BulkUploadController::class, 'previewBulkUpload'])->name('bulk-upload.preview');
     Route::post('/ups-rate', [CustomerController::class, 'getUpsRate'])->name('ups.rate');
     Route::post('/ups-ship', [CustomerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [CustomerController::class, 'viewAllShipments'])->name('view-all-shipments');
@@ -651,6 +654,8 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::get('/my-profile', [CustomerController::class, 'myProfile'])->name('my-profile');
     Route::post('/pay-now', [CustomerController::class, 'payNow'])->name('pay-now');
     Route::post('/wallet-recharge', [CustomerController::class, 'walletRecharge'])->name('wallet-recharge');
+    Route::get('/wallet-recharge/callback', [CustomerController::class, 'walletRechargeCallback'])->name('wallet-recharge.callback');
+    Route::get('/cashfree-checkout', [CustomerController::class, 'cashfreeCheckout'])->name('cashfree-checkout');
     Route::post('/cancel-shipment/{id}', [CustomerController::class, 'cancelShipment'])->name('cancel-shipment');
     Route::post('/mark-packed', [CustomerController::class, 'markPacked'])->name('mark-packed');
     Route::post('/manifest', [CustomerController::class, 'manifestShipment'])->name('manifest');
@@ -659,3 +664,6 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::post('/cancel-shipment-by-shipper', [CustomerController::class, 'cancelShipmentByShipperId'])->name('cancel-shipment-by-shipper');
     Route::get('/search-hs-codes', [CustomerController::class, 'searchHsCodes'])->name('search-hs-codes');
 });
+
+// Cashfree payment webhook (outside customer auth; signature-verified server-side)
+Route::post('/payment/webhook/cashfree', [PaymentWebhookController::class, 'handleCashfree'])->name('payment.webhook.cashfree');

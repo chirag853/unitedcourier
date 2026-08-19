@@ -528,13 +528,14 @@
                             @php
                                 $isDraftView = request('status') === 'draft';
                                 $selectedStatus = request('status');
+                                $isAllOrdersView = $selectedStatus === null || $selectedStatus === 'all';
                                 $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
                                 $postPackedStatuses = ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
-                                $hideCurrencyColumn = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
-                                $hideIncotermsAndPayColumns = $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
-                                $hidePrintLabelColumn = $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
-                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
-                                $hideCancelColumn = in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideCurrencyColumn = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideIncotermsAndPayColumns = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hidePrintLabelColumn = $isAllOrdersView || $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideManifestColumn = $isAllOrdersView || in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $hideCancelColumn = $isAllOrdersView || in_array($selectedStatus, $postPackedStatuses, true);
                             @endphp
                             <div class="table-responsive">
                                 <table id="shipmentsTable" class="table table-bordered table-hover">

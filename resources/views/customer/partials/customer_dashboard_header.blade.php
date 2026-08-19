@@ -295,8 +295,54 @@
             var confirmBtn = document.getElementById('confirmRechargeBtn');
             var modalCurrentBalance = document.getElementById('modalCurrentBalance');
             var rechargeAmountError = document.getElementById('rechargeAmountError');
+            var checkoutStarted = false;
+            var payWindow = null;
+            var checkoutUrl = @json(url('customer/cashfree-checkout'));
 
             if (!amountInput || !confirmBtn) return;
+
+            function resetRechargeButton() {
+                checkoutStarted = false;
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="ti ti-credit-card me-1"></i>Recharge Now';
+            }
+
+            function closeCheckoutPopup() {
+                if (payWindow && !payWindow.closed) {
+                    payWindow.close();
+                }
+                payWindow = null;
+            }
+
+            // Open the Cashfree drop-in (which loads its own SDK) in a popup.
+            function openCheckoutPopup(sessionId) {
+                var url = checkoutUrl + '?payment_session_id=' + encodeURIComponent(sessionId);
+                if (payWindow && !payWindow.closed) {
+                    payWindow.location.href = url;
+                    payWindow.focus();
+                } else {
+                    payWindow = window.open(url, '_blank', 'width=480,height=720');
+                    if (!payWindow) {
+                        // Popup blocked — fall back to the same tab.
+                        window.location.href = url;
+                    }
+                }
+                watchCheckoutPopup();
+            }
+
+            // When the popup is closed (payment finished/cancelled), restore
+            // the Recharge button so the user can retry.
+            function watchCheckoutPopup() {
+                var watcher = setInterval(function () {
+                    if (!payWindow || payWindow.closed) {
+                        clearInterval(watcher);
+                        payWindow = null;
+                        if (checkoutStarted) {
+                            resetRechargeButton();
+                        }
+                    }
+                }, 1000);
+            }
 
             prepaidBtns.forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -322,6 +368,10 @@
                 confirmBtn.disabled = true;
                 confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
 
+                // Reserve the popup inside the click gesture so popup blockers
+                // do not block it after the API response arrives.
+                payWindow = window.open('', '_blank', 'width=480,height=720');
+
                 // Use a server-rendered token instead of relying on every page
                 // that includes this header to provide a CSRF meta element.
                 var token = @json(csrf_token());
@@ -339,8 +389,14 @@
                 })
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
+                    console.log('Cashfree recharge response:', data);
                     if (data.success) {
-                        var formatted = '₹' + parseFloat(data.new_balance).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                        if (data.payment_session_id) {
+                            checkoutStarted = true;
+                            openCheckoutPopup(data.payment_session_id);
+                            return;
+                        }
+                        var formatted = '₹' + parseFloat(data.new_balance || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                         var spans = document.querySelectorAll('#walletBalanceBtn span');
                         spans.forEach(function(el) { el.textContent = formatted; });
                         if (modalCurrentBalance) modalCurrentBalance.textContent = formatted;
@@ -363,13 +419,16 @@
                         amountInput.value = '';
                         prepaidBtns.forEach(function(b) { b.classList.remove('active', 'bg-primary', 'text-white'); });
                     } else {
+                        closeCheckoutPopup();
                         if (rechargeAmountError) { rechargeAmountError.textContent = data.message || 'Recharge failed.'; amountInput.classList.add('is-invalid'); }
                     }
                 })
                 .catch(function() {
+                    closeCheckoutPopup();
                     if (rechargeAmountError) { rechargeAmountError.textContent = 'Network error. Please try again.'; amountInput.classList.add('is-invalid'); }
                 })
                 .finally(function() {
+                    if (checkoutStarted) return;
                     confirmBtn.disabled = false;
                     confirmBtn.innerHTML = '<i class="ti ti-credit-card me-1"></i>Recharge Now';
                 });

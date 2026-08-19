@@ -185,7 +185,44 @@
                 </div>
 
                 <!-- Success/Error Messages -->
-                <div id="alertContainer"></div>
+                <div id="alertContainer">
+                    @if(!empty($paymentNotice) && isset($paymentNotice['type']))
+                        @php
+                            $noticeClass = match($paymentNotice['type']) {
+                                'success' => 'alert-success',
+                                'error' => 'alert-danger',
+                                default => 'alert-warning',
+                            };
+                            $noticeIcon = $paymentNotice['type'] === 'success' ? 'ti-circle-check' : 'ti-alert-circle';
+                        @endphp
+                        <div class="alert {{ $noticeClass }} alert-dismissible fade show d-flex align-items-center" role="alert">
+                            <i class="ti {{ $noticeIcon }} me-2"></i>
+                            <div>{{ $paymentNotice['message'] }}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show d-flex align-items-center" role="alert">
+                            <i class="ti ti-circle-check me-2"></i>
+                            <div>{{ session('success') }}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+                    @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+                            <i class="ti ti-alert-circle me-2"></i>
+                            <div>{{ session('error') }}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+                    @if(session('warning'))
+                        <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center" role="alert">
+                            <i class="ti ti-alert-triangle me-2"></i>
+                            <div>{{ session('warning') }}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+                </div>
 
                 <!-- Summary Cards -->
                 <div class="row g-3 mb-4">
@@ -319,6 +356,8 @@
                                             <th>Type</th>
                                             <th>Reason</th>
                                             <th>Recharge Type</th>
+                                            <th>Payment Method</th>
+                                            <th>Payment Status</th>
                                             <th>Recharged By User ID</th>
                                             <th>User Type</th>
                                             <th>Amount</th>
@@ -350,6 +389,36 @@
                                                 'shipment_charge' => 'ti-package',
                                                 'adjustment'      => 'ti-adjustments',
                                             ];
+                                            $paymentStatusMap = [
+                                                'success' => 'badge bg-success',
+                                                'pending' => 'badge bg-warning text-dark',
+                                                'in_process' => 'badge bg-info text-white',
+                                                'failed' => 'badge bg-danger',
+                                            ];
+                                            $paymentStatusLabel = [
+                                                'success' => 'Success',
+                                                'pending' => 'Pending',
+                                                'in_process' => 'In Process',
+                                                'failed' => 'Failed',
+                                            ];
+                                            $methodLabels = [
+                                                'upi' => 'UPI',
+                                                'netbanking' => 'Net Banking',
+                                                'credit_card' => 'Credit Card',
+                                                'debit_card' => 'Debit Card',
+                                                'wallet' => 'Wallet',
+                                                'paylater' => 'Pay Later',
+                                                'visa' => 'Visa',
+                                                'mastercard' => 'Mastercard',
+                                                'rupay' => 'RuPay',
+                                                'amex' => 'Amex',
+                                            ];
+                                            $rawMethod = strtolower((string) $txn->payment_method);
+                                            $methodDisplay = $methodLabels[$rawMethod] ?? null;
+                                            if (! $methodDisplay && $rawMethod !== '') {
+                                                $methodDisplay = ucwords(str_replace('_', ' ', $rawMethod));
+                                            }
+                                            $methodDisplay = $methodDisplay ?: '-';
                                         @endphp
                                         <tr data-txn-type="{{ $txn->type }}" data-txn-reason="{{ $txn->reason }}" data-created-date="{{ $txn->created_at ? $txn->created_at->format('Y-m-d') : '' }}">
                                             <td>{{ $index + 1 }}</td>
@@ -364,6 +433,16 @@
                                                 <i class="ti {{ $reasonIcon[$txn->reason] ?? 'ti-point' }} me-1"></i>{{ $reasonLabel[$txn->reason] ?? ucfirst(str_replace('_', ' ', $txn->reason)) }}
                                             </td>
                                             <td>{{ $txn->recharge_type ?: '-' }}</td>
+                                            <td>{{ $methodDisplay }}</td>
+                                            <td>
+                                                @if($txn->payment_status)
+                                                    <span class="{{ $paymentStatusMap[$txn->payment_status] ?? 'badge bg-secondary' }}">
+                                                        {{ $paymentStatusLabel[$txn->payment_status] ?? ucfirst(str_replace('_', ' ', $txn->payment_status)) }}
+                                                    </span>
+                                                @else
+                                                    <span class="text-muted">-</span>
+                                                @endif
+                                            </td>
                                             <td>{{ $txn->user_id ?: '-' }}</td>
                                             <td>{{ $txn->user_type ? ucfirst($txn->user_type) : '-' }}</td>
                                             <td class="fw-bold {{ $txn->type === 'credit' ? 'text-success' : 'text-danger' }}">
@@ -465,7 +544,7 @@
             // =============================================
             var dataTable = $('#walletTable').DataTable({
                 pageLength: 25,
-                order: [[11, 'desc']],
+                order: [[13, 'desc']],
                 language: {
                     search: "",
                     searchPlaceholder: "Search wallet transactions...",
@@ -564,8 +643,8 @@
                 visibleRows.each(function (row) {
                     var $row = $(row);
                     var reason = $row.data('txn-reason');
-                    // Amount is now in column index 5 (0-based)
-                    var amountText = $row.find('td').eq(5).text().replace(/[₹+\-,\s]/g, '').trim();
+                    // Amount is in column index 10 (0-based)
+                    var amountText = $row.find('td').eq(10).text().replace(/[₹+\-,\s]/g, '').trim();
                     var amount = parseFloat(amountText) || 0;
                     count++;
                     if (reason === 'recharge') { recharges += amount; rechargeCnt++; }
@@ -642,7 +721,7 @@
             // =============================================
             $('#exportCsvBtn').on('click', function () {
                 var rows = [];
-                rows.push(['#', 'Transaction ID', 'Balance After', 'Type', 'Reason', 'Amount', 'Reference', 'Description', 'Date & Time']);
+                rows.push(['#', 'Transaction ID', 'Balance After', 'Type', 'Reason', 'Recharge Type', 'Payment Method', 'Payment Status', 'User ID', 'User Type', 'Amount', 'Reference', 'Description', 'Date & Time']);
 
                 $('#walletTable tbody tr:visible').each(function (idx) {
                     var $tds = $(this).find('td');
@@ -657,7 +736,12 @@
                         $tds.eq(5).text().trim(),
                         $tds.eq(6).text().trim(),
                         $tds.eq(7).text().trim(),
-                        $tds.eq(8).text().trim()
+                        $tds.eq(8).text().trim(),
+                        $tds.eq(9).text().trim(),
+                        $tds.eq(10).text().trim(),
+                        $tds.eq(11).text().trim(),
+                        $tds.eq(12).text().trim(),
+                        $tds.eq(13).text().trim()
                     ]);
                 });
 
@@ -699,6 +783,52 @@
             });
 
             var isRecharging = false;
+            var payWindow = null;
+            var checkoutUrl = '{{ url("customer/cashfree-checkout") }}';
+
+            function resetRechargeBtn(btn) {
+                isRecharging = false;
+                $(btn).prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
+            }
+
+            function closeCheckoutPopup() {
+                if (payWindow && !payWindow.closed) {
+                    payWindow.close();
+                }
+                payWindow = null;
+            }
+
+            // Open the Cashfree drop-in (which loads its own SDK) in a popup.
+            function openCheckoutPopup(sessionId) {
+                var url = checkoutUrl + '?payment_session_id=' + encodeURIComponent(sessionId);
+                if (payWindow && !payWindow.closed) {
+                    payWindow.location.href = url;
+                    payWindow.focus();
+                } else {
+                    payWindow = window.open(url, '_blank', 'width=480,height=720');
+                    if (!payWindow) {
+                        // Popup blocked — fall back to the same tab.
+                        window.location.href = url;
+                    }
+                }
+                watchCheckoutPopup();
+            }
+
+            // When the popup is closed (payment finished/cancelled), restore
+            // the Recharge button so the user can retry.
+            function watchCheckoutPopup() {
+                var watcher = setInterval(function () {
+                    if (!payWindow || payWindow.closed) {
+                        clearInterval(watcher);
+                        payWindow = null;
+                        if (isRecharging) {
+                            isRecharging = false;
+                            $('#confirmRechargeBtn').prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
+                        }
+                    }
+                }, 1000);
+            }
+
             $('#confirmRechargeBtn').on('click', function () {
                 // Guard against double submission
                 if (isRecharging) return;
@@ -713,6 +843,10 @@
                 var $btn = $(this);
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
 
+                // Reserve the popup inside the click gesture so popup blockers
+                // do not block it after the API response arrives.
+                payWindow = window.open('', '_blank', 'width=480,height=720');
+
                 $.ajax({
                     url: '{{ route("customer.wallet-recharge") }}',
                     type: 'POST',
@@ -721,9 +855,14 @@
                         amount: amount
                     },
                     success: function (response) {
+                        console.log('Cashfree recharge response:', response);
                         if (response.success) {
+                            if (response.payment_session_id) {
+                                openCheckoutPopup(response.payment_session_id);
+                                return;
+                            }
                             showAlert('success', response.message || 'Wallet recharged successfully!');
-                            $('.wallet-value').text('₹' + parseFloat(response.new_balance).toFixed(2));
+                            $('.wallet-value').text('₹' + parseFloat(response.new_balance || 0).toFixed(2));
                             var modalEl = document.getElementById('walletRechargeModal');
                             var modal = bootstrap.Modal.getInstance(modalEl);
                             if (modal) modal.hide();
@@ -732,12 +871,14 @@
                                 location.reload();
                             }, 1500);
                         } else {
+                            closeCheckoutPopup();
                             showAlert('danger', response.message || 'Recharge failed.');
                             isRecharging = false;
                             $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
                         }
                     },
                     error: function (xhr) {
+                        closeCheckoutPopup();
                         var msg = 'Error processing recharge.';
                         if (xhr.responseJSON && xhr.responseJSON.message) {
                             msg = xhr.responseJSON.message;

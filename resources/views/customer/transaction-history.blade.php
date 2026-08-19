@@ -699,6 +699,52 @@
             });
 
             var isRecharging = false;
+            var payWindow = null;
+            var checkoutUrl = '{{ url("customer/cashfree-checkout") }}';
+
+            function resetRechargeBtn(btn) {
+                isRecharging = false;
+                $(btn).prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
+            }
+
+            function closeCheckoutPopup() {
+                if (payWindow && !payWindow.closed) {
+                    payWindow.close();
+                }
+                payWindow = null;
+            }
+
+            // Open the Cashfree drop-in (which loads its own SDK) in a popup.
+            function openCheckoutPopup(sessionId) {
+                var url = checkoutUrl + '?payment_session_id=' + encodeURIComponent(sessionId);
+                if (payWindow && !payWindow.closed) {
+                    payWindow.location.href = url;
+                    payWindow.focus();
+                } else {
+                    payWindow = window.open(url, '_blank', 'width=480,height=720');
+                    if (!payWindow) {
+                        // Popup blocked — fall back to the same tab.
+                        window.location.href = url;
+                    }
+                }
+                watchCheckoutPopup();
+            }
+
+            // When the popup is closed (payment finished/cancelled), restore
+            // the Recharge button so the user can retry.
+            function watchCheckoutPopup() {
+                var watcher = setInterval(function () {
+                    if (!payWindow || payWindow.closed) {
+                        clearInterval(watcher);
+                        payWindow = null;
+                        if (isRecharging) {
+                            isRecharging = false;
+                            $('#confirmRechargeBtn').prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
+                        }
+                    }
+                }, 1000);
+            }
+
             $('#confirmRechargeBtn').on('click', function () {
                 if (isRecharging) return;
                 var amount = $('#rechargeAmount').val();
@@ -711,6 +757,10 @@
                 var $btn = $(this);
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
 
+                // Reserve the popup inside the click gesture so popup blockers
+                // do not block it after the API response arrives.
+                payWindow = window.open('', '_blank', 'width=480,height=720');
+
                 $.ajax({
                     url: '{{ route("customer.wallet-recharge") }}',
                     type: 'POST',
@@ -719,10 +769,15 @@
                         amount: amount
                     },
                     success: function (response) {
+                        console.log('Cashfree recharge response:', response);
                         if (response.success) {
+                            if (response.payment_session_id) {
+                                openCheckoutPopup(response.payment_session_id);
+                                return;
+                            }
                             showAlert('success', response.message || 'Wallet recharged successfully!');
                             // Update wallet balance display
-                            $('.wallet-value').text('₹' + parseFloat(response.new_balance).toFixed(2));
+                            $('.wallet-value').text('₹' + parseFloat(response.new_balance || 0).toFixed(2));
                             // Close modal
                             var modalEl = document.getElementById('walletRechargeModal');
                             var modal = bootstrap.Modal.getInstance(modalEl);
@@ -730,12 +785,14 @@
                             // Keep button disabled — recharge already processed
                             setTimeout(function () { location.reload(); }, 1500);
                         } else {
+                            closeCheckoutPopup();
                             showAlert('danger', response.message || 'Recharge failed.');
                             isRecharging = false;
                             $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Recharge');
                         }
                     },
                     error: function (xhr) {
+                        closeCheckoutPopup();
                         var msg = 'Error processing recharge.';
                         if (xhr.responseJSON && xhr.responseJSON.message) {
                             msg = xhr.responseJSON.message;

@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\KycDetail;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class AdomantraApiClient
@@ -41,11 +42,66 @@ class AdomantraApiClient
         $responseData = $response->json();
 
         if (! $response->successful()) {
-            throw new RuntimeException($this->errorMessage($responseData, $response->status()));
+            throw new RuntimeException($this->errorMessage($responseData, $response->status(), 'customer'));
         }
 
         if (! is_array($responseData)) {
             throw new RuntimeException('Adomantra customer response was not valid JSON.');
+        }
+
+        return $responseData;
+    }
+
+    /**
+     * Create a shipment order in the Adomantra CMS system.
+     *
+     * @return array response payload as decoded by the vendor API
+     */
+    public function createOrder(array $payload): array
+    {
+        $baseUrl = rtrim((string) config('services.adomantra.base_url'), '/');
+        $endpoint = (string) config('services.adomantra.order_endpoint', '/api/shipment/order_create');
+        $timeout = (int) config('services.adomantra.timeout', 30);
+        $connectTimeout = (int) config('services.adomantra.connect_timeout', 10);
+        $retries = max(0, (int) config('services.adomantra.retries', 2));
+        $retryDelay = max(0, (int) config('services.adomantra.retry_delay', 500));
+
+        if ($baseUrl === '') {
+            throw new RuntimeException('Adomantra base URL is not configured.');
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->asJson()
+                ->connectTimeout($connectTimeout)
+                ->timeout($timeout)
+                ->retry(
+                    $retries,
+                    $retryDelay,
+                    fn (\Throwable $exception): bool => $exception instanceof ConnectionException
+                )
+                ->post($baseUrl . $endpoint, $payload);
+        } catch (ConnectionException $exception) {
+            Log::error('Adomantra order transport failure.', [
+                'url' => $baseUrl . $endpoint,
+                'message' => $exception->getMessage(),
+                'exception' => get_class($exception),
+            ]);
+
+            throw new RuntimeException(
+                'Adomantra order request could not connect to the vendor API.',
+                previous: $exception
+            );
+        }
+
+        $responseData = $response->json();
+
+        if (! $response->successful()) {
+            throw new RuntimeException($this->errorMessage($responseData, $response->status(), 'order'));
+        }
+
+        if (! is_array($responseData)) {
+            throw new RuntimeException('Adomantra order response was not valid JSON.');
         }
 
         return $responseData;
@@ -274,8 +330,10 @@ class AdomantraApiClient
         ];
     }
 
-    private function errorMessage(mixed $responseData, int $status): string
+    private function errorMessage(mixed $responseData, int $status, string $requestType = 'customer'): string
     {
+        $label = $requestType === 'order' ? 'order' : 'customer';
+
         if (is_array($responseData)) {
             $description = $responseData['message']
                 ?? $responseData['Message']
@@ -284,10 +342,10 @@ class AdomantraApiClient
                 ?? null;
 
             if (is_scalar($description) && trim((string) $description) !== '') {
-                return 'Adomantra customer request failed: ' . trim((string) $description);
+                return 'Adomantra ' . $label . ' request failed: ' . trim((string) $description);
             }
         }
 
-        return 'Adomantra customer request failed with HTTP status ' . $status . '.';
+        return 'Adomantra ' . $label . ' request failed with HTTP status ' . $status . '.';
     }
 }

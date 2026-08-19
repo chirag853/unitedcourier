@@ -2275,6 +2275,28 @@ class AdminController extends Controller
         return view('admin.kyc-approved', compact('approvedKycDetails'));
     }
 
+    public function kycRejected()
+    {
+        $rejectedKycDetails = \App\Models\KycDetail::with(['customer.csbForm'])
+            ->where('kyc_status', 'rejected')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $rejectedRemarks = \App\Models\KycDraft::whereIn(
+            'customer_id',
+            $rejectedKycDetails->pluck('customer_id')->unique()
+        )
+            ->get(['customer_id', 'kyc_type', 'form_data'])
+            ->mapWithKeys(function ($draft) {
+                $formData = is_array($draft->form_data) ? $draft->form_data : [];
+                $remark = trim((string) ($formData['reject_remark'] ?? ''));
+
+                return [$draft->customer_id . ':' . ($draft->kyc_type ?? 'personal') => $remark];
+            });
+
+        return view('admin.kyc-rejected', compact('rejectedKycDetails', 'rejectedRemarks'));
+    }
+
     /**
      * Reset a customer's password (admin action).
      */
