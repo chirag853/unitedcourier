@@ -4903,12 +4903,20 @@ class CustomerController extends Controller
         $wallet = Wallet::where('customer_id', $customerId)->first();
         $walletBalance = $wallet ? (float) $wallet->balance : 0;
 
+        // Get actual amounts deducted from wallet for shipments (keyed by AWB number)
+        $walletDebits = WalletTransaction::where('customer_id', $customerId)
+            ->where('type', 'debit')
+            ->where('reason', 'shipment_charge')
+            ->get()
+            ->keyBy('reference');
+
         return view('customer.transaction-history', compact(
             'invoices',
             'totalAmount',
             'paidAmount',
             'cancelledAmount',
-            'walletBalance'
+            'walletBalance',
+            'walletDebits'
         ));
     }
 

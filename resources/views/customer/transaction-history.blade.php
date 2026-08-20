@@ -317,6 +317,7 @@
                                             <th>Consignee</th>
                                             <th>Invoice Date</th>
                                             <th>Amount</th>
+                                            <th>Deducted Amount</th>
                                             <th>Currency</th>
                                             <th>Incoterms</th>
                                             <th>Payment Status</th>
@@ -361,6 +362,15 @@
                                             <td style="font-size:13px;">{{ $consigneeName }}</td>
                                             <td>{{ $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : '-' }}</td>
                                             <td>{{ number_format($invoice->total_amount, 2) }}</td>
+                                            <td>
+                                                @php
+                                                    $awb = $invoice->shipperInfo ? $invoice->shipperInfo->awb_number : null;
+                                                    $deductedAmount = $awb && $walletDebits->has($awb)
+                                                        ? (float) $walletDebits[$awb]->amount
+                                                        : (float) ($invoice->total_amount ?? 0);
+                                                @endphp
+                                                ₹{{ number_format($deductedAmount, 2) }}
+                                            </td>
                                             <td>{{ $invoice->invoice_currency }}</td>
                                             <td>{{ $invoice->incoterms ?: '-' }}</td>
                                             <td>
@@ -374,7 +384,7 @@
                                         <tr>
                                             <th colspan="5" class="text-end">Total</th>
                                             <th id="tfootTotal">₹{{ number_format($totalAmount, 2) }}</th>
-                                            <th colspan="4"></th>
+                                            <th colspan="5"></th>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -645,7 +655,7 @@
             // =============================================
             $('#exportCsvBtn').on('click', function () {
                 var rows = [];
-                rows.push(['#', 'Invoice No.', 'AWB Number', 'Consignee', 'Invoice Date', 'Amount', 'Currency', 'Incoterms', 'Payment Status', 'Created']);
+                rows.push(['#', 'Invoice No.', 'AWB Number', 'Consignee', 'Invoice Date', 'Amount', 'Deducted Amount', 'Currency', 'Incoterms', 'Payment Status', 'Created']);
 
                 $('#paymentTable tbody tr:visible').each(function (idx) {
                     var $tds = $(this).find('td');
@@ -659,8 +669,9 @@
                         $tds.eq(5).text().trim(),
                         $tds.eq(6).text().trim(),
                         $tds.eq(7).text().trim(),
+                        $tds.eq(8).text().trim(),
                         status,
-                        $tds.eq(9).text().trim()
+                        $tds.eq(10).text().trim()
                     ]);
                 });
 
