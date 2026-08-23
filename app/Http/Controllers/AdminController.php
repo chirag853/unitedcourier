@@ -2617,6 +2617,8 @@ class AdminController extends Controller
 
         $services = \App\Models\CourierService::orderBy('network')->orderBy('method')->get();
 
+        $surcharges = \App\Models\SurCharge::orderBy('name')->get();
+
         // ------------------------------------------------------------------
         // Zone lookup map for the "Zone Name" / "Zone Category" columns.
         //
@@ -2746,7 +2748,72 @@ class AdminController extends Controller
             }
         }
 
-        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry'));
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry', 'surcharges'));
+    }
+
+    /**
+     * Surcharge management page.
+     *
+     * Lists every surcharge (name, code, price) so the admin can edit
+     * prices and add/delete surcharges.
+     */
+    public function manageSurcharges()
+    {
+        $surcharges = \App\Models\SurCharge::orderBy('name')->get();
+
+        return view('admin.manage-surcharges', compact('surcharges'));
+    }
+
+    /**
+     * Store a new surcharge.
+     */
+    public function storeSurcharge(Request $request)
+    {
+        $validated = $request->validate([
+            'name'  => 'required|string|max:255',
+            'code'  => 'nullable|string|max:50',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        \App\Models\SurCharge::create([
+            'name'  => $validated['name'],
+            'code'  => $validated['code'],
+            'price' => $validated['price'],
+        ]);
+
+        return redirect()->route('admin.manage-surcharges')->with('success', 'Surcharge added successfully.');
+    }
+
+    /**
+     * Update an existing surcharge (name / code / price).
+     */
+    public function updateSurcharge(Request $request, $id)
+    {
+        $surcharge = \App\Models\SurCharge::findOrFail($id);
+
+        $validated = $request->validate([
+            'name'  => 'required|string|max:255',
+            'code'  => 'nullable|string|max:50',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        $surcharge->update([
+            'name'  => $validated['name'],
+            'code'  => $validated['code'],
+            'price' => $validated['price'],
+        ]);
+
+        return redirect()->route('admin.manage-surcharges')->with('success', 'Surcharge updated successfully.');
+    }
+
+    /**
+     * Delete a surcharge.
+     */
+    public function deleteSurcharge(Request $request, $id)
+    {
+        \App\Models\SurCharge::findOrFail($id)->delete();
+
+        return redirect()->route('admin.manage-surcharges')->with('success', 'Surcharge deleted successfully.');
     }
 
     /**
@@ -3334,7 +3401,15 @@ class AdminController extends Controller
             'fuel_charge'     => 'nullable|numeric|min:0',
             'fuel_percentage' => 'nullable|numeric|min:0',
             'gst_percentage'  => 'nullable|numeric|min:0',
+            'surcharge_id'    => 'nullable|array',
+            'surcharge_id.*'  => 'integer|exists:sur_charges,id',
         ]);
+
+        // Normalize surcharge selections into a JSON-friendly list of ids.
+        $surchargeIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            (array) ($validated['surcharge_id'] ?? [])
+        ))));
 
         // Guard against duplicate default rates for the same service+weight+zone.
         $exists = \App\Models\CourierRate::where('customer_id', 0)
@@ -3365,6 +3440,7 @@ class AdminController extends Controller
                 'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
                 'gst_percentage'  => $validated['gst_percentage'] ?? 0,
                 'gst_amount'      => 0,
+                'surcharge_id'    => $surchargeIds,
                 'is_default'      => true,
                 'start_date'      => '2026-01-01',
                 'end_date'        => '2026-12-31',
@@ -3391,7 +3467,7 @@ class AdminController extends Controller
 
                 if (!empty($customersNeedingRate)) {
                     $now = now();
-                    $rows = array_map(function ($customerId) use ($validated, $now) {
+                    $rows = array_map(function ($customerId) use ($validated, $now, $surchargeIds) {
                         return [
                             'customer_id'     => $customerId,
                             'service_id'      => $validated['service_id'],
@@ -3403,6 +3479,7 @@ class AdminController extends Controller
                             'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
                             'gst_percentage'  => $validated['gst_percentage'] ?? 0,
                             'gst_amount'      => 0,
+                            'surcharge_id'    => json_encode($surchargeIds),
                             'is_default'      => true,
                             'start_date'      => '2026-01-01',
                             'end_date'        => '2026-12-31',

@@ -38,6 +38,7 @@ class DatabaseSeeder extends Seeder
             WorldTimePageSeeder::class,
             PartnershipPageSeeder::class,
             DocumentDownloadPageSeeder::class,
+            SurChargeSeeder::class,
         ]);
     }
 }

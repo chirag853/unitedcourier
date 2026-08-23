@@ -563,6 +563,12 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/manage-rate/sample', [AdminController::class, 'downloadRateSample'])->name('admin.manage-rate.sample');
     Route::post('/manage-rate/upload', [AdminController::class, 'uploadRateExcel'])->name('admin.manage-rate.upload');
 
+    // Surcharge Management Routes
+    Route::get('/manage-surcharges', [AdminController::class, 'manageSurcharges'])->name('admin.manage-surcharges');
+    Route::post('/manage-surcharges/store', [AdminController::class, 'storeSurcharge'])->name('admin.manage-surcharges.store');
+    Route::post('/manage-surcharges/update/{id}', [AdminController::class, 'updateSurcharge'])->name('admin.manage-surcharges.update');
+    Route::post('/manage-surcharges/delete/{id}', [AdminController::class, 'deleteSurcharge'])->name('admin.manage-surcharges.delete');
+
     // Add Zone & Add Country Routes
     Route::get('/add-zone', [AdminController::class, 'addZone'])->name('admin.add-zone');
     Route::post('/add-zone', [AdminController::class, 'storeZone'])->name('admin.add-zone.store');

@@ -577,8 +577,9 @@
                             var selectedClass = isSelected ? ' selected' : '';
                             var checkedAttr = isSelected ? 'checked' : '';
 
-                            var breakdownText = 'Base: ' + formatINR(r.price) +
-                                ' | Fuel (' + Number(r.fuel_percentage || 0).toFixed(1) + '%): ' + formatINR(r.fuel_charge) +
+                            var breakdownText = 'Total Base: ' + formatINR(r.total_base_price != null ? r.total_base_price : r.price) +
+                                ' | Total Fuel (' + Number(r.fuel_percentage || 0).toFixed(1) + '%): ' + formatINR(r.total_fuel_price != null ? r.total_fuel_price : r.fuel_charge) +
+                                ' | Surcharge: ' + formatINR(r.total_surcharge != null ? r.total_surcharge : r.surcharge_total) +
                                 ' | GST (' + Number(r.gst_percentage || 0).toFixed(1) + '%): ' + formatINR(r.gst_amount);
 
                             rateCardsHtml += '<div class="rate-card' + selectedClass + '" data-awb="' + escapeHtml(s.awb_no) + '" data-rate-id="' + r.rate_id + '">' +
@@ -745,6 +746,7 @@
                     'ConsigneeCity','ConsigneeState','ConsigneeZipCode','ConsigneeTelephone',
                     'GoodsType','ServiceType','Pcs','ActWeight','L','B','H','VolWeight','ChgWeight','Dimention',
                     'InvoiceNo','InvoiceValue','Currency','Description','Remark',
+                    'HSCode','HTSCode',
                     'CoLoader','CoLoaderNo','Network','NetworkNo','Sector','Runno'
                 ];
                 var sampleRow = [
@@ -753,6 +755,7 @@
                     'Retail Customer','Jane Smith','456 Market Rd','Apt 5','','Delhi','Delhi','110001','9123456780',
                     'Documents','Express','1','2.5','30','20','15','1.5','2.5','30x20x15',
                     'INV001','5000','INR','Shipping documents','Sample remark',
+                    '123456','987654',
                     '','','','','',''
                 ];
                 var csv = headers.join(',') + '\n' + sampleRow.join(',') + '\n';

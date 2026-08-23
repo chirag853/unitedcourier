@@ -8716,6 +8716,10 @@
                                             <td class="fw-semibold text-purple">GST</td>
                                             <td class="text-end text-purple" id="preview_gst_amount">-</td>
                                         </tr>
+                                        <tr>
+                                            <td class="fw-semibold">Surcharges</td>
+                                            <td class="text-end" id="preview_surcharge_amount">-</td>
+                                        </tr>
                                         <tr class="table-primary fw-bold">
                                             <td>Total</td>
                                             <td class="text-end" id="preview_rate_total">-</td>
@@ -9134,14 +9138,20 @@
                         const gstPct = parseFloat(r.gst_percentage) || 0;
                         const gstAmount = parseFloat(r.gst_amount) || 0;
                         const computedFuel = fuelCharge > 0 ? fuelCharge : (basePrice * fuelPct / 100);
-                        const computedGst = gstAmount > 0 ? gstAmount : ((basePrice + computedFuel) * gstPct / 100);
-                        const totalPrice = basePrice + computedFuel + computedGst;
+                        const surchargeTotal = parseFloat(r.surcharge_total) || 0;
+                        const totalBasePrice = parseFloat(r.total_base_price) || basePrice;
+                        const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
+                        const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
+                        const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
+                        const totalPrice = totalBasePrice + totalFuelPrice + computedGst + totalSurcharge;
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
-                            base: basePrice.toFixed(2),
-                            fuel: computedFuel.toFixed(2),
+                            base: totalBasePrice.toFixed(2),
+                            fuel: totalFuelPrice.toFixed(2),
                             gst: computedGst.toFixed(2),
+                            surcharge: totalSurcharge.toFixed(2),
+                            surcharges: r.surcharges || [],
                             demand: '0.00',
                             remote: '0.00',
                             oversize: '0.00',
@@ -9228,7 +9238,7 @@
                                                             <th>Chg. Wt (Kg)</th>
                                                             <th>Base (₹)</th>
                                                             <th>Fuel (₹)</th>
-                                                            <th>GST (₹)</th>
+                                                            <th>Surcharge (₹)</th>
                                                             <th>Total (₹)</th>
                                                         </tr>
                                                     </thead>
@@ -9239,18 +9249,23 @@
                                                                 '<td>' + b.weight.toFixed(2) + '</td>' +
                                                                 '<td>' + b.base.toFixed(2) + '</td>' +
                                                                 '<td>' + b.fuel.toFixed(2) + '</td>' +
-                                                                '<td>' + b.gst.toFixed(2) + '</td>' +
+                                                                '<td>' + (parseFloat(b.surcharge) || 0).toFixed(2) + '</td>' +
                                                                 '<td><strong>' + b.total.toFixed(2) + '</strong></td>' +
                                                             '</tr>';
                                                         }).join('')}
                                                     </tbody>
                                                     <tfoot class="table-light">
                                                         <tr>
-                                                            <th colspan="2">Combined Total</th>
+                                                            <th>Combined Total</th>
+                                                            <th></th>
                                                             <th>${basePrice.toFixed(2)}</th>
                                                             <th>${computedFuel.toFixed(2)}</th>
-                                                            <th>${computedGst.toFixed(2)}</th>
+                                                            <th>${surchargeTotal.toFixed(2)}</th>
                                                             <th>${totalPrice.toFixed(2)}</th>
+                                                        </tr>
+                                                        <tr>
+                                                            <th colspan="3" class="text-end">GST (${gstPct.toFixed(2)}%)</th>
+                                                            <th colspan="3" class="text-start">₹ ${computedGst.toFixed(2)}</th>
                                                         </tr>
                                                     </tfoot>
                                                 </table>
@@ -9259,10 +9274,14 @@
                                         ` : ''}
                                         <div class="breakdown-grid">
                                             <div class="breakdown-column">
-                                                <div class="breakdown-title">Base Charges</div>
+                                                <div class="breakdown-title">Charges</div>
                                                 <div class="breakdown-row">
-                                                    <span class="breakdown-label">Base Rate</span>
-                                                    <span class="breakdown-value">₹ ${basePrice.toFixed(2)}</span>
+                                                    <span class="breakdown-label">Total Base Price</span>
+                                                    <span class="breakdown-value">₹ ${totalBasePrice.toFixed(2)}</span>
+                                                </div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Total Fuel Price</span>
+                                                    <span class="breakdown-value">₹ ${totalFuelPrice.toFixed(2)}</span>
                                                 </div>
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Fuel Percentage</span>
@@ -9272,16 +9291,19 @@
                                             <div class="breakdown-column">
                                                 <div class="breakdown-title">Tax & Surcharges</div>
                                                 <div class="breakdown-row">
-                                                    <span class="breakdown-label">Fuel Surcharge</span>
-                                                    <span class="breakdown-value">₹ ${computedFuel.toFixed(2)}</span>
+                                                    <span class="breakdown-label">Total Surcharge</span>
+                                                    <span class="breakdown-value">₹ ${totalSurcharge.toFixed(2)}</span>
                                                 </div>
+                                                
+                                                ${(r.surcharges && r.surcharges.length > 0) ? r.surcharges.map(function(s) {
+                                                    return '<div class="breakdown-row">' +
+                                                        '<span class="breakdown-label">' + s.name + '</span>' +
+                                                        '<span class="breakdown-value">₹ ' + (parseFloat(s.price) || 0).toFixed(2) + '</span>' +
+                                                    '</div>';
+                                                }).join('') : ''}
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">GST Amount</span>
                                                     <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
-                                                </div>
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">Per KG Rate*</span>
-                                                    <span class="breakdown-value">₹ ${totalPrice.toFixed(2)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -9519,6 +9541,7 @@
     // When checked, auto-fill the shipper fields with the logged-in customer's data.
     @php
         $kycForPrefill = $customer->kycDetail ?? null;
+        $csbForPrefill = $customer->csbForm ?? null;
         $customerPrefill = [
             'company_names'  => $kycForPrefill->organization_name ?? trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
             'contact_person' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
@@ -9530,6 +9553,20 @@
             'state'          => '',
             'phone_number'   => $customer->phone_number ?? '',
             'emails'         => $customer->email ?? '',
+            'bond_ut_igst'   => $csbForPrefill?->is_csb_v
+                ? ($csbForPrefill->is_lut ? 'Bond UT' : 'IGST')
+                : '',
+            'lut_number'     => $csbForPrefill?->is_csb_v && $csbForPrefill->is_lut
+                ? ($csbForPrefill->lut_bond_year ?? '')
+                : '',
+            'iec_code'       => $csbForPrefill?->is_csb_v ? ($csbForPrefill->iec_number ?? '') : '',
+            'gst_number'     => $csbForPrefill?->is_csb_v
+                ? ($csbForPrefill->gst_certificate_number ?? $csbForPrefill->billing_gst ?? '')
+                : '',
+            'ad_code'        => $csbForPrefill?->is_csb_v ? ($csbForPrefill->ad_code ?? '') : '',
+            'bank_account_number' => $csbForPrefill?->is_csb_v
+                ? ($csbForPrefill->bank_account_number ?? '')
+                : '',
         ];
         $exporterCustomerPrefill = $exporterCustomers->mapWithKeys(function ($savedCustomer) {
             $isCsbV = $savedCustomer->csb_type === 'csb_v';
@@ -9629,7 +9666,7 @@
             'shipper_phone_number', 'shipper_emails'
         ];
         const savedCustomerCsbFieldNames = [
-            'bond_ut_igst', 'iec_code', 'gst_number',
+            'bond_ut_igst', 'lut_number', 'iec_code', 'gst_number',
             'ad_code', 'bank_account_number'
         ];
         function setShipperFieldsLocked(names, locked) {
@@ -9853,6 +9890,20 @@
             }
         }
 
+        function syncSameCustomerCsbFields() {
+            if (!sameAsCustomer || !originTypeSelect) return;
+
+            const isCsbV = sameAsCustomer.checked && originTypeSelect.value === 'CSB V';
+            savedCustomerCsbFieldNames.forEach(function (name) {
+                setField(name, isCsbV ? (customerData[name] || '') : '');
+            });
+            setShipperFieldsLocked(savedCustomerCsbFieldNames, isCsbV);
+        }
+
+        if (originTypeSelect) {
+            originTypeSelect.addEventListener('change', syncSameCustomerCsbFields);
+        }
+
         if (!sameAsCustomer) return;
         sameAsCustomer.addEventListener('change', function () {
             setShipperFieldsLocked(fieldNames, false);
@@ -9867,7 +9918,9 @@
                     syncOriginTypeOptions('');
                 }
                 // Save current values then pre-fill from customer data
-                fieldNames.forEach(function (n) { savedValues[n] = getField(n); });
+                fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (n) {
+                    savedValues[n] = getField(n);
+                });
                 syncOriginTypeOptions('');
                 setField('shipper_company_names', customerData.company_names || '');
                 setField('shipper_contact_person', customerData.contact_person || '');
@@ -9880,16 +9933,20 @@
                 setField('shipper_phone_number', customerData.phone_number || '');
                 setField('shipper_emails', customerData.emails || '');
                 setShipperFieldsLocked(sameCustomerAutofillFieldNames, true);
+                syncSameCustomerCsbFields();
             } else {
                 // Restore previously entered values
-                fieldNames.forEach(function (n) {
+                fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (n) {
                     if (savedValues[n] !== undefined) setField(n, savedValues[n]);
                 });
+                setShipperFieldsLocked(savedCustomerCsbFieldNames, false);
             }
         });
 
         if (sameAsCustomer.checked) {
             sameAsCustomer.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+            syncSameCustomerCsbFields();
         }
     });
 
@@ -10402,7 +10459,7 @@
             document.getElementById('preview_selected_method').textContent = selectedMethod;
             document.getElementById('preview_selected_network').textContent = selectedNetwork;
 
-            let rateData = { base: '0.00', fuel: '0.00', gst: '0.00', total: '0.00' };
+            let rateData = { base: '0.00', fuel: '0.00', gst: '0.00', surcharge: '0.00', total: '0.00' };
             if (selectedRateRadio && selectedRateRadio.dataset.rate) {
                 try {
                     rateData = JSON.parse(selectedRateRadio.dataset.rate);
@@ -10411,6 +10468,7 @@
             document.getElementById('preview_base_price').textContent = 'INR ' + parseFloat(rateData.base).toFixed(2);
             document.getElementById('preview_fuel_charge').textContent = 'INR ' + parseFloat(rateData.fuel).toFixed(2);
             document.getElementById('preview_gst_amount').textContent = 'INR ' + parseFloat(rateData.gst).toFixed(2);
+            document.getElementById('preview_surcharge_amount').textContent = 'INR ' + parseFloat(rateData.surcharge || 0).toFixed(2);
             document.getElementById('preview_rate_total').textContent = 'INR ' + parseFloat(rateData.total).toFixed(2);
 
             // Show the modal
@@ -10661,6 +10719,7 @@ if (rateRadio && rateRadio.dataset.rate) {
         formData.append('fuel_percentage', rateRadio.dataset.fuel_percentage || '0');
         formData.append('gst_amount', rateData.gst || '0');
         formData.append('gst_percentage', rateRadio.dataset.gst_percentage || '0');
+        formData.append('surcharge', rateData.surcharge || '0');
         formData.append('total_price', rateData.total || rateRadio.dataset.price || '0');
     } catch(e) {}
 }
@@ -10696,7 +10755,8 @@ if (rateRadio && rateRadio.dataset.rate) {
                             html: successHtml,
                             confirmButtonColor: '#2563eb'
                         }).then(() => {
-                            window.location.href = @json(route('customer.view-all-shipments'));
+                            // window.location.href = @json(route('customer.view-all-shipments'));
+                            alert("hello");
                         });
                     } else {
                         // Error could be UPS failure or validation error (controller handles both)
@@ -11868,10 +11928,11 @@ if (rateRadio && rateRadio.dataset.rate) {
 
         // ---------------------------------------------------------------
         // Zip input behaviour:
-        //  - zipcode category → show suggestions from the zone table.
-        //  - state   category → keep the old external-API auto-fill
-        //    (postcodes.io for UK, zippopotam.us for others) so that
-        //    city/state are still auto-completed for US states.
+        //  - state category   → never call an external postcode API; the
+        //    state must be selected directly from the database-zone dropdown.
+        //  - zipcode category → show zone-table suggestions and resolve a
+        //    complete postcode through the destination-specific API.
+        //  - no zone category → retain the external postcode lookup fallback.
         // ---------------------------------------------------------------
         let debounceTimer = null;
         function debounce(fn, delay) {
@@ -11879,7 +11940,7 @@ if (rateRadio && rateRadio.dataset.rate) {
             debounceTimer = setTimeout(fn, delay);
         }
 
-        // ---- External API lookups (kept for state-category destinations) ----
+        // ---- External API lookups (never used for state-category destinations) ----
         function lookupUkPostcode(postcode) {
             const url = 'https://api.postcodes.io/postcodes/' + encodeURIComponent(postcode);
             fetch(url)
@@ -11912,6 +11973,10 @@ if (rateRadio && rateRadio.dataset.rate) {
         }
 
         function lookupZippopotam(zip) {
+            // State-category destinations already have authoritative states in
+            // the zone table. Never overwrite that dropdown using Zippopotam.
+            if (currentCategory === 'state') return;
+
             // The selected destination supplies the ISO-2 API country segment
             // (for example Germany => DE), producing /DE/99998 for ZIP 99998.
             const countryCode = isCanadaDestination() ? 'CA' : getCountryCode().toUpperCase();
@@ -11946,6 +12011,15 @@ if (rateRadio && rateRadio.dataset.rate) {
         if (zipInput) {
             zipInput.addEventListener('input', function() {
                 const zip = zipInput.value.trim();
+
+                // State-category destinations use the zone table as the source
+                // of truth. Keep the state dropdown available for direct choice
+                // and do not call Zippopotam/postcodes.io when ZIP changes.
+                if (currentCategory === 'state') {
+                    hideZipDropdown();
+                    return;
+                }
+
                 const uk = isUkDestination();
                 const canada = isCanadaDestination();
                 // Canadian database suggestions are FSA prefixes such as V1M
@@ -11983,6 +12057,8 @@ if (rateRadio && rateRadio.dataset.rate) {
             // ZIP suggestions set the value programmatically and dispatch
             // `change`, not `input`; perform the lookup in that case as well.
             zipInput.addEventListener('change', function() {
+                if (currentCategory === 'state') return;
+
                 const zip = zipInput.value.trim();
                 const uk = isUkDestination();
                 const canada = isCanadaDestination();
@@ -11997,6 +12073,8 @@ if (rateRadio && rateRadio.dataset.rate) {
             // firing native input/change events. Capture the selection itself
             // at mousedown/click level and trigger the lookup from the value.
             zipInput.addEventListener('click', function() {
+                if (currentCategory === 'state') return;
+
                 const zip = zipInput.value.trim();
                 const uk = isUkDestination();
                 const canada = isCanadaDestination();

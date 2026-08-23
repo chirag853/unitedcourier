@@ -22,6 +22,7 @@ class CourierRate extends Model
         'fuel_percentage',
         'gst_percentage',
         'gst_amount',
+        'surcharge_id',
         'is_default',
         'start_date',
         'end_date',
@@ -35,6 +36,7 @@ class CourierRate extends Model
         'fuel_percentage' => 'decimal:2',
         'gst_percentage' => 'decimal:2',
         'gst_amount' => 'decimal:2',
+        'surcharge_id' => 'array',
         'is_default' => 'boolean',
         'start_date' => 'date',
         'end_date' => 'date',
@@ -51,11 +53,64 @@ class CourierRate extends Model
         $fuel = (float) $this->fuel_charge > 0
             ? (float) $this->fuel_charge
             : ($base * (float) $this->fuel_percentage / 100);
+        $surcharges = $this->surcharge_amount;
         $gst = (float) $this->gst_amount > 0
             ? (float) $this->gst_amount
-            : (($base + $fuel) * (float) $this->gst_percentage / 100);
+            : (($base + $fuel + $surcharges) * (float) $this->gst_percentage / 100);
 
-        return round($base + $fuel + $gst, 2);
+        return round($base + $fuel + $gst + $surcharges, 2);
+    }
+
+    /**
+     * Normalize surcharge_id into a clean list of integer ids.
+     * Handles JSON-array strings ("[1,2]"), plain CSV ("1,2") and real arrays.
+     */
+    protected function parseSurchargeIds(): array
+    {
+        $ids = $this->surcharge_id;
+
+        if (is_string($ids)) {
+            $ids = trim($ids);
+            if ($ids === '' || $ids === 'null' || $ids === '[]') {
+                return [];
+            }
+            $decoded = json_decode($ids, true);
+            if (is_array($decoded)) {
+                $ids = $decoded;
+            } else {
+                $ids = explode(',', $ids);
+            }
+        }
+
+        if (!is_array($ids) || empty($ids)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('intval', $ids)));
+    }
+
+    /**
+     * Get the total price of all surcharges attached to this rate.
+     */
+    public function getSurchargeAmountAttribute(): float
+    {
+        $ids = $this->parseSurchargeIds();
+
+        return empty($ids)
+            ? 0.0
+            : round((float) SurCharge::whereIn('id', $ids)->sum('price'), 2);
+    }
+
+    /**
+     * Get the surcharge records attached to this rate.
+     */
+    public function surchargeModels()
+    {
+        $ids = $this->parseSurchargeIds();
+
+        return empty($ids)
+            ? collect()
+            : SurCharge::whereIn('id', $ids)->get();
     }
 
     /**

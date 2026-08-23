@@ -184,6 +184,8 @@ class BulkUploadController extends Controller
                         'fuel_percentage' => 0,
                         'gst_percentage' => 0,
                         'gst_amount' => 0,
+                        'surcharge' => [],
+                        'surcharge_total' => 0,
                         'total' => 0,
                     ];
                     $courierService = null;
@@ -199,10 +201,20 @@ class BulkUploadController extends Controller
                             $gstPercentage = floatval($matchedRate->gst_percentage);
                             $gstAmountStored = floatval($matchedRate->gst_amount);
 
-                            // Mirror create-shipments computation exactly
+                            // Mirror create-shipments computation exactly.
+                            // GST is charged on the full amount (base + fuel + surcharges).
+                            $surchargeAmount = $matchedRate->surcharge_amount;
+                            $surchargeData = $matchedRate->surchargeModels()->map(function ($s) {
+                                return [
+                                    'id' => $s->id,
+                                    'name' => $s->name,
+                                    'code' => $s->code,
+                                    'price' => (float) $s->price,
+                                ];
+                            })->values()->all();
                             $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-                            $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-                            $total = $price + $computedFuel + $computedGst;
+                            $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel + $surchargeAmount) * $gstPercentage / 100);
+                            $total = $price + $computedFuel + $computedGst + $surchargeAmount;
 
                             $rateDetails = [
                                 'rate_id' => $matchedRate->id,
@@ -211,6 +223,11 @@ class BulkUploadController extends Controller
                                 'fuel_percentage' => $fuelPercentage,
                                 'gst_percentage' => $gstPercentage,
                                 'gst_amount' => round($computedGst, 2),
+                                'surcharge' => $surchargeData,
+                                'surcharge_total' => round($surchargeAmount, 2),
+                                'total_base_price' => round($price, 2),
+                                'total_fuel_price' => round($computedFuel, 2),
+                                'total_surcharge' => round($surchargeAmount, 2),
                                 'total' => round($total, 2),
                             ];
                         }
@@ -250,6 +267,16 @@ class BulkUploadController extends Controller
                         'kyc_number' => $gstIdNo,
                         'service_rate_id' => $rateDetails['rate_id'] ?? null,
                         'service_id' => $courierService ? $courierService->id : null,
+                        'base_price' => ($rateDetails['price'] ?? 0) > 0 ? $rateDetails['price'] : null,
+                        'fuel_price' => ($rateDetails['fuel_charge'] ?? 0) > 0 ? $rateDetails['fuel_charge'] : null,
+                        'gst_percentage' => ($rateDetails['gst_percentage'] ?? 0) > 0 ? $rateDetails['gst_percentage'] : null,
+                        'gst_amount' => ($rateDetails['gst_amount'] ?? 0) > 0 ? $rateDetails['gst_amount'] : null,
+                        'surcharge' => !empty($rateDetails['surcharge']) ? $rateDetails['surcharge'] : null,
+                        'surcharge_total' => ($rateDetails['surcharge_total'] ?? 0) > 0 ? $rateDetails['surcharge_total'] : null,
+                        'total_base_price' => ($rateDetails['price'] ?? 0) > 0 ? $rateDetails['price'] : null,
+                        'total_fuel_price' => ($rateDetails['fuel_charge'] ?? 0) > 0 ? $rateDetails['fuel_charge'] : null,
+                        'total_surcharge' => ($rateDetails['surcharge_total'] ?? 0) > 0 ? $rateDetails['surcharge_total'] : null,
+                        'total_price' => ($rateDetails['total'] ?? 0) > 0 ? $rateDetails['total'] : null,
                     ]);
 
                     $shipperId = $shipper->id;
@@ -327,14 +354,16 @@ class BulkUploadController extends Controller
                         $qty = floatval($getCol($r, 'pcs') ?: 1);
                         $unitRate = round(floatval($getCol($r, 'invoicevalue') ?: 0), 2);
                         $amount = round($qty * $unitRate, 2);
+                        $hsCode = $getCol($r, 'hscode');
+                        $htsCode = $getCol($r, 'htscode');
 
                         ShipmentInvoiceItem::create([
                             'invoice_id' => $invoice->id,
                             'package_dimension_id' => $packageIds[$itemBoxNo] ?? null,
                             'box_no' => $itemBoxNo,
                             'description' => $description,
-                            'hs_code' => null,
-                            'hts_code' => null,
+                            'hs_code' => $hsCode ?: null,
+                            'hts_code' => $htsCode ?: null,
                             'unit_type' => 'PCS',
                             'qty' => $qty,
                             'unit_rate' => $unitRate,
@@ -611,10 +640,21 @@ class BulkUploadController extends Controller
                         $gstPercentage = floatval($matchedRate->gst_percentage);
                         $gstAmountStored = floatval($matchedRate->gst_amount);
 
-                        // Mirror create-shipments computation exactly
+                        // Mirror create-shipments computation exactly:
+                        // each rate's own surcharges are included and GST is
+                        // charged on the full amount (base + fuel + surcharges).
+                        $surchargeAmount = $matchedRate->surcharge_amount;
+                        $surchargeData = $matchedRate->surchargeModels()->map(function ($s) {
+                            return [
+                                'id' => $s->id,
+                                'name' => $s->name,
+                                'code' => $s->code,
+                                'price' => (float) $s->price,
+                            ];
+                        })->values()->all();
                         $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-                        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-                        $total = $price + $computedFuel + $computedGst;
+                        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel + $surchargeAmount) * $gstPercentage / 100);
+                        $total = $price + $computedFuel + $computedGst + $surchargeAmount;
 
                         $rateEntry = [
                             'rate_id' => $matchedRate->id,
@@ -633,6 +673,11 @@ class BulkUploadController extends Controller
                             'fuel_percentage' => $fuelPercentage,
                             'gst_percentage' => $gstPercentage,
                             'gst_amount' => round($computedGst, 2),
+                            'surcharges' => $surchargeData,
+                            'surcharge_total' => round($surchargeAmount, 2),
+                            'total_base_price' => round($price, 2),
+                            'total_fuel_price' => round($computedFuel, 2),
+                            'total_surcharge' => round($surchargeAmount, 2),
                             'total' => round($total, 2),
                         ];
 
@@ -775,9 +820,19 @@ class BulkUploadController extends Controller
         // Mirror the create-shipments page computation exactly:
         // - If fuel_charge > 0 use it directly, otherwise compute from percentage
         // - If gst_amount > 0 use it directly, otherwise compute from percentage
+        // - GST is charged on the full amount (base + fuel + surcharges)
+        $surchargeAmount = $matchedRate->surcharge_amount;
+        $surchargeData = $matchedRate->surchargeModels()->map(function ($s) {
+            return [
+                'id' => $s->id,
+                'name' => $s->name,
+                'code' => $s->code,
+                'price' => (float) $s->price,
+            ];
+        })->values()->all();
         $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
-        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel) * $gstPercentage / 100);
-        $total = $price + $computedFuel + $computedGst;
+        $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel + $surchargeAmount) * $gstPercentage / 100);
+        $total = $price + $computedFuel + $computedGst + $surchargeAmount;
 
         return [
             'rate_id' => $matchedRate->id,
@@ -786,6 +841,11 @@ class BulkUploadController extends Controller
             'fuel_percentage' => $fuelPercentage,
             'gst_percentage' => $gstPercentage,
             'gst_amount' => round($computedGst, 2),
+            'surcharge' => $surchargeData,
+            'surcharge_total' => round($surchargeAmount, 2),
+            'total_base_price' => round($price, 2),
+            'total_fuel_price' => round($computedFuel, 2),
+            'total_surcharge' => round($surchargeAmount, 2),
             'total' => round($total, 2),
         ];
     }

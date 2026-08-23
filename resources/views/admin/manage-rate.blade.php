@@ -583,6 +583,16 @@
                                 <label class="form-label fw-bold">GST %</label>
                                 <input type="number" step="0.01" min="0" class="form-control" id="addRateGstPct" name="gst_percentage" placeholder="0.00">
                             </div>
+                            <!-- Surcharges (multiple) -->
+                            <div class="col-md-12">
+                                <label class="form-label fw-bold">Surcharges</label>
+                                <select class="form-select" id="addRateSurcharges" name="surcharge_id[]" multiple>
+                                    @foreach($surcharges as $sur)
+                                        <option value="{{ $sur->id }}">{{ $sur->name }} ({{ $sur->code }}) — ₹{{ number_format($sur->price, 2) }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">Select one or more surcharges. Their prices are added to the total when the rate is calculated.</small>
+                            </div>
                         </div>
                         <div class="alert alert-info mt-3 mb-0 py-2">
                             <i class="ti ti-info-circle me-1"></i>
@@ -1288,6 +1298,15 @@
             // focus-stealing conflicts that break the search input.
             initZoneSelect2(document.getElementById('addRateZoneNo'), '— Select Country First —');
 
+            // Initialize Select2 on the Surcharge multi-select dropdown so the
+            // admin can type to filter and pick multiple surcharges.
+            $('#addRateSurcharges').select2({
+                placeholder: '— Select Surcharges —',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $('#addRateModal')
+            });
+
             // When the country changes, repopulate BOTH the service dropdown
             // (only services for that country) and the zone dropdown (zone
             // numbers with their names for the selected country). The service
@@ -1465,6 +1484,7 @@
                         fuel_charge: document.getElementById('addRateFuelCharge').value || 0,
                         fuel_percentage: document.getElementById('addRateFuelPct').value || 0,
                         gst_percentage: document.getElementById('addRateGstPct').value || 0,
+                        surcharge_id: $('#addRateSurcharges').val() || [],
                     },
                     success: function(response) {
                         alert(response.message || 'Rate added successfully.');

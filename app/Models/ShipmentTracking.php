@@ -31,6 +31,11 @@ class ShipmentTracking extends Model
         'package_results',
         'raw_response',
         'status',
+        'tracking_provider',
+        'tracking_status',
+        'tracking_response',
+        'tracking_error',
+        'tracking_synced_at',
     ];
 
     protected $casts = [
@@ -40,6 +45,8 @@ class ShipmentTracking extends Model
         'billing_weight' => 'decimal:2',
         'package_results' => 'array',
         'raw_response' => 'array',
+        'tracking_response' => 'array',
+        'tracking_synced_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

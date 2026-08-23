@@ -746,11 +746,24 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
             ->get()
             ->unique('service_id')
             ->map(function ($rate) use ($zone) {
+                $surcharges = $rate->surchargeModels();
+                $computedFuel = (float) $rate->fuel_charge > 0
+                    ? (float) $rate->fuel_charge
+                    : ((float) $rate->price * (float) $rate->fuel_percentage / 100);
                 return [
                     'method' => $rate->service?->method ?: 'Courier Service',
                     'tat' => $rate->service?->tat,
                     'price' => (float) $rate->price,
                     'inclusive_total' => $rate->inclusive_total,
+                    'surcharges' => $surcharges->map(fn ($s) => [
+                        'name' => $s->name,
+                        'code' => $s->code,
+                        'price' => (float) $s->price,
+                    ])->values(),
+                    'surcharge_total' => $rate->surcharge_amount,
+                    'total_base_price' => (float) $rate->price,
+                    'total_fuel_price' => round($computedFuel, 2),
+                    'total_surcharge' => $rate->surcharge_amount,
                     'weight_range' => number_format((float) $rate->wt_range_start, 3)
                         . ' - ' . number_format((float) $rate->wt_range_end, 3) . ' kg',
                     'zone' => $rate->zone_no ? [

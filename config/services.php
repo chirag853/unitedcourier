@@ -83,6 +83,10 @@ return [
     'postshipping' => [
         'base_url' => env('POSTSHIPPING_BASE_URL', 'https://api.postshipping.com'),
         'endpoint' => env('POSTSHIPPING_ENDPOINT', '/api2/shipments'),
+        'tracking_url' => env('POSTSHIPPING_TRACKING_URL'),
+        'tracking_token' => env('POSTSHIPPING_TRACKING_TOKEN', env('POSTSHIPPING_API_TOKEN')),
+        'tracking_auth_header' => env('POSTSHIPPING_TRACKING_AUTH_HEADER', 'token'),
+        'tracking_auth_prefix' => env('POSTSHIPPING_TRACKING_AUTH_PREFIX', ''),
         // Fixed ThirdPartyToken sent in the request BODY for all UNITED AIR PREMIUM DDP shipments.
         'third_party_token' => env('POSTSHIPPING_THIRD_PARTY_TOKEN', '32A4D3D985DA8D47020688462C48BB2C'),
         // Separate API token sent in the request HEADER (header name: "token").
@@ -108,6 +112,10 @@ return [
     'flyingtigers' => [
         'base_url' => env('FLYINGTIGERS_BASE_URL', 'https://app.flyingtigers.in'),
         'endpoint' => env('FLYINGTIGERS_ENDPOINT', '/api/Shipment/CustomerBookingAPI'),
+        'tracking_url' => env('FLYINGTIGERS_TRACKING_URL'),
+        'tracking_token' => env('FLYINGTIGERS_TRACKING_TOKEN', env('FLYINGTIGERS_AUTH_TOKEN')),
+        'tracking_auth_header' => env('FLYINGTIGERS_TRACKING_AUTH_HEADER', 'AuthToken'),
+        'tracking_auth_prefix' => env('FLYINGTIGERS_TRACKING_AUTH_PREFIX', ''),
         'client_code' => env('FLYINGTIGERS_CLIENT_CODE', 'C10009'),
         'user_code' => env('FLYINGTIGERS_USER_CODE', 'C10009'),
         'auth_token' => env('FLYINGTIGERS_AUTH_TOKEN', 'VsDgjDfKqxRZHhrCt392iZ1RjCvYCMcZMH5AHWIZRDBAOZqJht'),
@@ -135,13 +143,14 @@ return [
     */
 
     'overseas' => [
-        'base_url'      => env('OVERSEAS_BASE_URL', 'https://api.overseaslogistic.com'),
-        'token_url'     => env('OVERSEAS_TOKEN_URL', 'https://api.overseaslogistic.com/token'),
-        'shipment_url'  => env('OVERSEAS_SHIPMENT_URL', 'https://api.overseaslogistic.com/api/shipment/create'),
-        'username'      => env('OVERSEAS_USERNAME', 'F25064758DAE48CBABC95DE709DCC253'),
-        'password'      => env('OVERSEAS_PASSWORD', 'J2YTXPW1MGMGWOGW6DS7H9RA0A7EVONWYAJGMR5FFST1HCEEVZTVQ7L19SISZIDT'),
-        'account_code'  => env('OVERSEAS_ACCOUNT_CODE', 'PR-U02'),
-        'timeout'       => (int) env('OVERSEAS_TIMEOUT', 60),
+        'base_url' => env('OVERSEAS_BASE_URL', 'https://api.overseaslogistic.com'),
+        'token_url' => env('OVERSEAS_TOKEN_URL', 'https://api.overseaslogistic.com/token'),
+        'shipment_url' => env('OVERSEAS_SHIPMENT_URL', 'https://api.overseaslogistic.com/api/shipment/create'),
+        'tracking_url' => env('OVERSEAS_TRACKING_URL', 'https://api.overseaslogistic.com/api/tracking/{tracking_number}'),
+        'username' => env('OVERSEAS_USERNAME', 'F25064758DAE48CBABC95DE709DCC253'),
+        'password' => env('OVERSEAS_PASSWORD', 'J2YTXPW1MGMGWOGW6DS7H9RA0A7EVONWYAJGMR5FFST1HCEEVZTVQ7L19SISZIDT'),
+        'account_code' => env('OVERSEAS_ACCOUNT_CODE', 'PR-U02'),
+        'timeout' => (int) env('OVERSEAS_TIMEOUT', 60),
     ],
 
     /*
@@ -171,6 +180,14 @@ return [
     'primus' => [
         'base_url' => env('PRIMUS_BASE_URL', 'http://api.primuslogistics.in'),
         'token_url' => env('PRIMUS_TOKEN_URL', 'http://api.primuslogistics.in/token'),
+        'tracking_url' => env(
+            'PRIMUS_TRACKING_URL',
+            'http://api.primuslogistics.in/api/Track/GetTrackings'
+        ),
+        'tracking_token' => env('PRIMUS_TRACKING_TOKEN'),
+        'tracking_authorization' => env('PRIMUS_TRACKING_AUTHORIZATION', ''),
+        'tracking_auth_header' => env('PRIMUS_TRACKING_AUTH_HEADER', 'Authorization'),
+        'tracking_auth_prefix' => env('PRIMUS_TRACKING_AUTH_PREFIX', 'Bearer'),
         'shipment_url' => env(
             'PRIMUS_SHIPMENT_URL',
             'http://api.primuslogistics.in/api/ShippingFedEx/AddShipment'
@@ -188,18 +205,46 @@ return [
     |--------------------------------------------------------------------------
     | ShipUniversal API
     |--------------------------------------------------------------------------
-    | Token authentication uses HTTP Basic Auth. The returned token is sent as
-    | a Bearer token when creating a shipment.
+    | Shipment creation uses HTTP Basic Auth to obtain a Bearer token. Tracking
+    | uses a separately configured direct Bearer token.
     */
     'shipuniversal' => [
-        'base_url'     => env('SHIPUNIVERSAL_BASE_URL', 'https://apiv2.shipuniversal.com'),
-        'token_url'    => env('SHIPUNIVERSAL_TOKEN_URL', 'https://apiv2.shipuniversal.com/token'),
+        'base_url' => env('SHIPUNIVERSAL_BASE_URL', 'https://apiv2.shipuniversal.com'),
+        'token_url' => env('SHIPUNIVERSAL_TOKEN_URL', 'https://apiv2.shipuniversal.com/token'),
         'shipment_url' => env('SHIPUNIVERSAL_SHIPMENT_URL', 'https://apiv2.shipuniversal.com/api/shipment/create'),
-        'username'     => env('SHIPUNIVERSAL_USERNAME'),
-        'password'     => env('SHIPUNIVERSAL_PASSWORD'),
-        'grant_type'   => env('SHIPUNIVERSAL_GRANT_TYPE', 'client_credentials'),
+        'tracking_url' => env('SHIPUNIVERSAL_TRACKING_URL', 'https://apiv2.shipuniversal.com/api/tracking/{tracking_number}'),
+        'tracking_token' => env('SHIPUNIVERSAL_TRACKING_TOKEN'),
+        'username' => env('SHIPUNIVERSAL_USERNAME'),
+        'password' => env('SHIPUNIVERSAL_PASSWORD'),
+        'grant_type' => env('SHIPUNIVERSAL_GRANT_TYPE', 'client_credentials'),
         'account_code' => env('SHIPUNIVERSAL_ACCOUNT_CODE', 'SU0119'),
-        'timeout'      => (int) env('SHIPUNIVERSAL_TIMEOUT', 60),
+        'timeout' => (int) env('SHIPUNIVERSAL_TIMEOUT', 60),
+    ],
+
+    'shipglobal' => [
+        'tracking_url' => env('SHIPGLOBAL_TRACKING_URL'),
+        'tracking_token' => env('SHIPGLOBAL_TRACKING_TOKEN'),
+        'tracking_auth_header' => env('SHIPGLOBAL_TRACKING_AUTH_HEADER', 'Authorization'),
+        'tracking_auth_prefix' => env('SHIPGLOBAL_TRACKING_AUTH_PREFIX', 'Bearer'),
+        'timeout' => (int) env('SHIPGLOBAL_TIMEOUT', 60),
+    ],
+
+    'ups' => [
+        'client_id' => env('UPS_CLIENT_ID'),
+        'client_secret' => env('UPS_CLIENT_SECRET'),
+        'token_url' => env('UPS_TOKEN_URL', 'https://onlinetools.ups.com/security/v1/oauth/token'),
+        'tracking_url' => env('UPS_TRACKING_URL', 'https://onlinetools.ups.com/api/track/v1/details/{tracking_number}'),
+        'tracking_token' => env('UPS_TRACKING_TOKEN'),
+        'transaction_id' => env('UPS_TRACKING_TRANSACTION_ID'),
+        'transaction_src' => env('UPS_TRANSACTION_SOURCE', 'Production'),
+        'timeout' => (int) env('UPS_TRACKING_TIMEOUT', 30),
+    ],
+
+    'tracking' => [
+        'timeout' => (int) env('SHIPMENT_TRACKING_TIMEOUT', 30),
+        'retries' => (int) env('SHIPMENT_TRACKING_RETRIES', 2),
+        'retry_delay' => (int) env('SHIPMENT_TRACKING_RETRY_DELAY', 500),
+        'chunk_size' => (int) env('SHIPMENT_TRACKING_CHUNK_SIZE', 100),
     ],
 
 ];

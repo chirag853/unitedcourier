@@ -33,11 +33,31 @@ class ShipperInfo extends Model
         'service_id',
         'status',
         'custom_label',
+        'base_price',
+        'fuel_price',
+        'gst_percentage',
+        'gst_amount',
+        'surcharge',
+        'surcharge_total',
+        'total_base_price',
+        'total_fuel_price',
+        'total_surcharge',
+        'total_price',
     ];
 
     protected $casts = [
         'shipper_same_as_customer' => 'boolean',
         'email_opt_out' => 'boolean',
+        'base_price' => 'decimal:2',
+        'fuel_price' => 'decimal:2',
+        'gst_percentage' => 'decimal:2',
+        'gst_amount' => 'decimal:2',
+        'surcharge' => 'array',
+        'surcharge_total' => 'decimal:2',
+        'total_base_price' => 'decimal:2',
+        'total_fuel_price' => 'decimal:2',
+        'total_surcharge' => 'decimal:2',
+        'total_price' => 'decimal:2',
         'created_at' => 'datetime',
     ];
 

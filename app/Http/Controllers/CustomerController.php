@@ -2461,6 +2461,100 @@ class CustomerController extends Controller
 
             // Store Shipper Info
             $awbNumber = $this->generateAwbNumber();
+
+            // Re-price every box from server-owned courier rates. The selected
+            // rate supplies the service and zone; each box is matched by its
+            // own chargeable weight. Surcharges remain shipment-level.
+            $packageRowsForPricing = array_values(array_filter(
+                $validatedData['packages'] ?? [],
+                fn ($package) => is_array($package)
+            ));
+            $packageRowsForPricing = !empty($packageRowsForPricing)
+                ? $packageRowsForPricing
+                : [[]];
+            $basePrice = 0.0;
+            $fuelPrice = 0.0;
+            $surchargeTotal = 0.0;
+            $gstAmt = 0.0;
+            $surchargeList = [];
+
+            $parseSurchargeIds = function ($value): array {
+                return $this->normalizeSurchargeIds($value);
+            };
+
+            $findBoxRate = function (int $customerId, float $weight) use ($courierRate) {
+                if (!$courierRate) {
+                    return null;
+                }
+
+                return CourierRate::where('customer_id', $customerId)
+                    ->where('service_id', $courierRate->service_id)
+                    ->where(function ($query) use ($courierRate) {
+                        $query->where('zone_no', $courierRate->zone_no)
+                            ->orWhereNull('zone_no')
+                            ->orWhere('zone_no', 0);
+                    })
+                    ->where('wt_range_start', '<=', $weight)
+                    ->where('wt_range_end', '>=', $weight)
+                    ->orderByRaw(
+                        'CASE WHEN zone_no = ? THEN 0 ELSE 1 END',
+                        [(int) ($courierRate->zone_no ?? 0)]
+                    )
+                    ->orderBy('wt_range_start')
+                    ->first();
+            };
+
+            foreach ($packageRowsForPricing as $packageData) {
+                $chargeableWeight = max(
+                    (float) ($packageData['actual_weight_kg'] ?? 0),
+                    (float) ($packageData['volumetric_weight'] ?? 0),
+                    (float) ($packageData['chargeable_weight'] ?? 0)
+                );
+                $boxRate = $findBoxRate((int) $customer->id, $chargeableWeight)
+                    ?: $findBoxRate(0, $chargeableWeight)
+                    ?: $courierRate;
+
+                if (!$boxRate) {
+                    continue;
+                }
+
+                $boxBase = (float) $boxRate->price;
+                $boxFuel = (float) $boxRate->fuel_charge > 0
+                    ? (float) $boxRate->fuel_charge
+                    : ($boxBase * (float) $boxRate->fuel_percentage / 100);
+
+                // Each box carries its own surcharges from its own matched rate.
+                $boxSurchargeIds = $parseSurchargeIds($boxRate->surcharge_id);
+                $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+
+                $basePrice += $boxBase;
+                $fuelPrice += $boxFuel;
+                $surchargeTotal += $boxSurcharge;
+
+                if (!empty($boxSurchargeIds)) {
+                    foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                        $surchargeList[$s->id] = [
+                            'id' => $s->id,
+                            'name' => $s->name,
+                            'code' => $s->code,
+                            'price' => (float) $s->price,
+                        ];
+                    }
+                }
+            }
+
+            $surchargeData = array_values($surchargeList);
+            $surchargeTotal = round($surchargeTotal, 2);
+            $gstPct = $courierRate ? (float) $courierRate->gst_percentage : 0;
+            // GST is applied once on the combined total
+            // (total base + total fuel + total surcharge).
+            $gstAmt = $courierRate && (float) $courierRate->gst_amount > 0
+                ? (float) $courierRate->gst_amount
+                : round(($basePrice + $fuelPrice + $surchargeTotal) * $gstPct / 100, 2);
+            $basePrice = round($basePrice, 2);
+            $fuelPrice = round($fuelPrice, 2);
+            $totalPrice = round($basePrice + $fuelPrice + $gstAmt + $surchargeTotal, 2);
+
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
                 'awb_number' => $awbNumber,
@@ -2481,6 +2575,16 @@ class CustomerController extends Controller
                 'kyc_number' => $validatedData['shipper_kyc_number'] ?? null,
                 'service_rate_id' => $validatedData['service_rate_id'] ?? null,
                 'service_id' => $serviceId ?? null,
+                'base_price' => $basePrice,
+                'fuel_price' => $fuelPrice,
+                'gst_percentage' => $gstPct,
+                'gst_amount' => $gstAmt,
+                'surcharge' => !empty($surchargeData) ? $surchargeData : null,
+                'surcharge_total' => $surchargeTotal,
+                'total_base_price' => $basePrice,
+                'total_fuel_price' => $fuelPrice,
+                'total_surcharge' => $surchargeTotal,
+                'total_price' => $totalPrice,
             ]);
 
             $shipperId = $shipper->id;
@@ -2803,8 +2907,9 @@ class CustomerController extends Controller
         }
         $gstPercentage = (float) ($rate?->gst_percentage ?? 0);
         $gst = (float) ($rate?->gst_amount ?? 0);
+        $surcharge = (float) ($rate?->surcharge_amount ?? 0);
         if ($gst <= 0) {
-            $gst = ($baseAmount + $fuel) * $gstPercentage / 100;
+            $gst = ($baseAmount + $fuel + $surcharge) * $gstPercentage / 100;
         }
         $miscellaneous = $oversizeCharge + $handlingCharge;
         $invoiceAmount = (float) ($data['invoice_amount'] ?? 0);
@@ -2923,12 +3028,12 @@ class CustomerController extends Controller
                 'Misc' => round($miscellaneous, 2),
                 'Demand' => 0,
                 'GreenSuch' => 0,
-                'Taxable' => round($baseAmount + $fuel + $miscellaneous, 2),
+                'Taxable' => round($baseAmount + $fuel + $surcharge + $miscellaneous, 2),
                 'SGST' => 0,
                 'CGST' => 0,
                 'IGST' => round($gst, 2),
                 'NTaxable' => 0,
-                'NetTotal' => round($baseAmount + $fuel + $gst + $miscellaneous, 2),
+                'NetTotal' => round($baseAmount + $fuel + $gst + $surcharge + $miscellaneous, 2),
             ],
             'MiscDetailsTable' => array_values(array_filter([
                 $oversizeCharge > 0 ? ['MiscCode' => 'OVERSIZE', 'MiscName' => 'Oversize Charge', 'MisAmt' => round($oversizeCharge, 2), 'MisNTax' => 0, 'MisFuel' => 0] : null,
@@ -2984,9 +3089,30 @@ class CustomerController extends Controller
 
 
     // new ups rate made by "Anil Sir"
+    private function normalizeSurchargeIds($value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('intval', $value)));
+        }
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '' || $value === 'null' || $value === '[]') {
+                return [];
+            }
+            // JSON array string like "[1,2]" (DB stores it as a JSON string).
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                return array_values(array_filter(array_map('intval', $decoded)));
+            }
+            // Plain comma-separated string like "1,2".
+            return array_values(array_filter(array_map('intval', explode(',', $value))));
+        }
+        return [];
+    }
+
     public function getUpsRate(Request $request)
     {
-        //try {
+            //try {
             // 1. Get logged-in customer
             $customer = auth()->guard('customer')->user();
             if (!$customer) {
@@ -3128,6 +3254,8 @@ class CustomerController extends Controller
                     $combinedBase = 0;
                     $combinedFuel = 0;
                     $combinedGst = 0;
+                    $combinedSurcharge = 0;
+                    $surchargeList = [];
                     $firstMatchedRate = null;
                     $allBoxesMatched = true;
 					
@@ -3176,27 +3304,38 @@ class CustomerController extends Controller
                         	$boxRate = $boxRate[0];
                         	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
-	                        // Calculate per-box amounts
+	                        // Calculate per-box amounts. Base, fuel and surcharge are
+	                        // box-specific; GST is applied once on the combined total.
 	                        $base = floatval($boxRate->price);
 	                        $fuel = floatval($boxRate->fuel_charge) > 0 
 	                            ? floatval($boxRate->fuel_charge) 
 	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-	                        $gst = floatval($boxRate->gst_amount) > 0 
-	                            ? floatval($boxRate->gst_amount) 
-	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+	                        // Each box carries its own surcharges from its own matched rate.
+	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+	                        if (!empty($boxSurchargeIds)) {
+	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+	                                $surchargeList[$s->id] = [
+	                                    'name' => $s->name,
+	                                    'code' => $s->code,
+	                                    'price' => (float) $s->price,
+	                                ];
+	                            }
+	                        }
 
 	                        $boxBreakdown[] = [
 	                            'box' => $index + 1,
 	                            'weight' => $pkgWt,
 	                            'base' => $base,
 	                            'fuel' => $fuel,
-	                            'gst' => $gst,
-	                            'total' => $base + $fuel + $gst,
+	                            'surcharge' => $boxSurcharge,
+	                            'total' => $base + $fuel + $boxSurcharge,
 	                        ];
 
 	                        $combinedBase += $base;
 	                        $combinedFuel += $fuel;
-	                        $combinedGst += $gst;
+	                        $combinedSurcharge += $boxSurcharge;
 	                        
                         }
                         /*else{
@@ -3208,6 +3347,14 @@ class CustomerController extends Controller
                         }*/ 
                         
                     }//end foreach loop
+
+                    // GST is applied once on the combined total
+                    // (total base + total fuel + total surcharge).
+                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                    $combinedGst = $fixedGst > 0
+                        ? $fixedGst
+                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
 
                    
                     $allRates[] = [
@@ -3230,8 +3377,13 @@ class CustomerController extends Controller
                         'price' => $combinedBase,
                         'fuel_charge' => $combinedFuel,
                         'fuel_percentage' => 0,
-                        'gst_percentage' => 0,
+                        'gst_percentage' => $gstPctForTotal,
                         'gst_amount' => $combinedGst,
+                        'surcharge_total' => $combinedSurcharge,
+                        'surcharges' => array_values($surchargeList),
+                        'total_base_price' => $combinedBase,
+                        'total_fuel_price' => $combinedFuel,
+                        'total_surcharge' => $combinedSurcharge,
                         'is_multi_package' => true,
                         'box_breakdown' => $boxBreakdown,
                     ];
@@ -3244,6 +3396,8 @@ class CustomerController extends Controller
 				    $combinedBase = 0;
 				    $combinedFuel = 0;
 				    $combinedGst = 0;
+				    $combinedSurcharge = 0;
+				    $surchargeList = [];
 				    $firstMatchedRate = null;
 				    $allBoxesMatched = true;
 
@@ -3288,27 +3442,38 @@ class CustomerController extends Controller
 							$boxRate = $boxRate[0];
 							if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 				        
-				            // Calculate per-box amounts
+				            // Calculate per-box amounts. Base, fuel and surcharge are
+				            // box-specific; GST is applied once on the combined total.
 				            $base = floatval($boxRate->price);
 				            $fuel = floatval($boxRate->fuel_charge) > 0 
 				                ? floatval($boxRate->fuel_charge) 
 				                : ($base * floatval($boxRate->fuel_percentage) / 100);
-				            $gst = floatval($boxRate->gst_amount) > 0 
-				                ? floatval($boxRate->gst_amount) 
-				                : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+				            // Each box carries its own surcharges from its own matched rate.
+				            $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+				            $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+				            if (!empty($boxSurchargeIds)) {
+				                foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+				                    $surchargeList[$s->id] = [
+				                        'name' => $s->name,
+				                        'code' => $s->code,
+				                        'price' => (float) $s->price,
+				                    ];
+				                }
+				            }
 
 				            $boxBreakdown[] = [
 				                'box' => $index + 1,
 				                'weight' => $pkgWt,
 				                'base' => $base,
 				                'fuel' => $fuel,
-				                'gst' => $gst,
-				                'total' => $base + $fuel + $gst,
+				                'surcharge' => $boxSurcharge,
+				                'total' => $base + $fuel + $boxSurcharge,
 				            ];
 
 				            $combinedBase += $base;
 				            $combinedFuel += $fuel;
-				            $combinedGst += $gst;
+				            $combinedSurcharge += $boxSurcharge;
 				            
 						}
 						/*else{
@@ -3320,6 +3485,14 @@ class CustomerController extends Controller
 						}*/
 				        
 				    }
+
+				    // GST is applied once on the combined total
+				    // (total base + total fuel + total surcharge).
+				    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+				    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+				    $combinedGst = $fixedGst > 0
+				        ? $fixedGst
+				        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
 
 				    $allRates[] = [
 				        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
@@ -3339,8 +3512,13 @@ class CustomerController extends Controller
 				        'price' => $combinedBase,
 				        'fuel_charge' => $combinedFuel,
 				        'fuel_percentage' => 0,
-				        'gst_percentage' => 0,
+				        'gst_percentage' => $gstPctForTotal,
 				        'gst_amount' => $combinedGst,
+				        'surcharge_total' => $combinedSurcharge,
+				        'surcharges' => array_values($surchargeList),
+				        'total_base_price' => $combinedBase,
+				        'total_fuel_price' => $combinedFuel,
+				        'total_surcharge' => $combinedSurcharge,
 				        'is_multi_package' => true,
 				        'box_breakdown' => $boxBreakdown,
 				    ];
@@ -3352,6 +3530,8 @@ class CustomerController extends Controller
                     $combinedBase = 0;
                     $combinedFuel = 0;
                     $combinedGst = 0;
+                    $combinedSurcharge = 0;
+                    $surchargeList = [];
                     $firstMatchedRate = null;
                     $allBoxesMatched = true;
 					
@@ -3399,27 +3579,38 @@ class CustomerController extends Controller
                         	$boxRate = $boxRate[0];
                         	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
-	                        // Calculate per-box amounts
+	                        // Calculate per-box amounts. Base, fuel and surcharge are
+	                        // box-specific; GST is applied once on the combined total.
 	                        $base = floatval($boxRate->price);
 	                        $fuel = floatval($boxRate->fuel_charge) > 0 
 	                            ? floatval($boxRate->fuel_charge) 
 	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-	                        $gst = floatval($boxRate->gst_amount) > 0 
-	                            ? floatval($boxRate->gst_amount) 
-	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+	                        // Each box carries its own surcharges from its own matched rate.
+	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+	                        if (!empty($boxSurchargeIds)) {
+	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+	                                $surchargeList[$s->id] = [
+	                                    'name' => $s->name,
+	                                    'code' => $s->code,
+	                                    'price' => (float) $s->price,
+	                                ];
+	                            }
+	                        }
 
 	                        $boxBreakdown[] = [
 	                            'box' => $index + 1,
 	                            'weight' => $pkgWt,
 	                            'base' => $base,
 	                            'fuel' => $fuel,
-	                            'gst' => $gst,
-	                            'total' => $base + $fuel + $gst,
+	                            'surcharge' => $boxSurcharge,
+	                            'total' => $base + $fuel + $boxSurcharge,
 	                        ];
 
 	                        $combinedBase += $base;
 	                        $combinedFuel += $fuel;
-	                        $combinedGst += $gst;
+	                        $combinedSurcharge += $boxSurcharge;
 	                        
                         }
                         /*else{
@@ -3431,6 +3622,14 @@ class CustomerController extends Controller
                         }*/ 
                         
                     }//end foreach loop
+
+                    // GST is applied once on the combined total
+                    // (total base + total fuel + total surcharge).
+                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                    $combinedGst = $fixedGst > 0
+                        ? $fixedGst
+                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
 
                    
                     $allRates[] = [
@@ -3451,8 +3650,13 @@ class CustomerController extends Controller
                         'price' => $combinedBase,
                         'fuel_charge' => $combinedFuel,
                         'fuel_percentage' => 0,
-                        'gst_percentage' => 0,
+                        'gst_percentage' => $gstPctForTotal,
                         'gst_amount' => $combinedGst,
+                        'surcharge_total' => $combinedSurcharge,
+                        'surcharges' => array_values($surchargeList),
+                        'total_base_price' => $combinedBase,
+                        'total_fuel_price' => $combinedFuel,
+                        'total_surcharge' => $combinedSurcharge,
                         'is_multi_package' => true,
                         'box_breakdown' => $boxBreakdown,
                     ];
@@ -3468,6 +3672,8 @@ class CustomerController extends Controller
                     $combinedBase = 0;
                     $combinedFuel = 0;
                     $combinedGst = 0;
+                    $combinedSurcharge = 0;
+                    $surchargeList = [];
                     $firstMatchedRate = null;
                     $allBoxesMatched = true;
 					
@@ -3515,27 +3721,38 @@ class CustomerController extends Controller
                         	$boxRate = $boxRate[0];
                         	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
 
-	                        // Calculate per-box amounts
+	                        // Calculate per-box amounts. Base, fuel and surcharge are
+	                        // box-specific; GST is applied once on the combined total.
 	                        $base = floatval($boxRate->price);
 	                        $fuel = floatval($boxRate->fuel_charge) > 0 
 	                            ? floatval($boxRate->fuel_charge) 
 	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-	                        $gst = floatval($boxRate->gst_amount) > 0 
-	                            ? floatval($boxRate->gst_amount) 
-	                            : (($base + $fuel) * floatval($boxRate->gst_percentage) / 100);
+
+	                        // Each box carries its own surcharges from its own matched rate.
+	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+	                        if (!empty($boxSurchargeIds)) {
+	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+	                                $surchargeList[$s->id] = [
+	                                    'name' => $s->name,
+	                                    'code' => $s->code,
+	                                    'price' => (float) $s->price,
+	                                ];
+	                            }
+	                        }
 
 	                        $boxBreakdown[] = [
 	                            'box' => $index + 1,
 	                            'weight' => $pkgWt,
 	                            'base' => $base,
 	                            'fuel' => $fuel,
-	                            'gst' => $gst,
-	                            'total' => $base + $fuel + $gst,
+	                            'surcharge' => $boxSurcharge,
+	                            'total' => $base + $fuel + $boxSurcharge,
 	                        ];
 
 	                        $combinedBase += $base;
 	                        $combinedFuel += $fuel;
-	                        $combinedGst += $gst;
+	                        $combinedSurcharge += $boxSurcharge;
 	                        
                         }
                         /*else{
@@ -3547,6 +3764,14 @@ class CustomerController extends Controller
                         }*/ 
                         
                     }//end foreach loop
+
+                    // GST is applied once on the combined total
+                    // (total base + total fuel + total surcharge).
+                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                    $combinedGst = $fixedGst > 0
+                        ? $fixedGst
+                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
 
                    
                     $allRates[] = [
@@ -3567,8 +3792,13 @@ class CustomerController extends Controller
                         'price' => $combinedBase,
                         'fuel_charge' => $combinedFuel,
                         'fuel_percentage' => 0,
-                        'gst_percentage' => 0,
+                        'gst_percentage' => $gstPctForTotal,
                         'gst_amount' => $combinedGst,
+                        'surcharge_total' => $combinedSurcharge,
+                        'surcharges' => array_values($surchargeList),
+                        'total_base_price' => $combinedBase,
+                        'total_fuel_price' => $combinedFuel,
+                        'total_surcharge' => $combinedSurcharge,
                         'is_multi_package' => true,
                         'box_breakdown' => $boxBreakdown,
                     ];
@@ -3605,6 +3835,37 @@ class CustomerController extends Controller
                 $rate['zone_no'] = $rate['zone_no'] ?? $zoneNumber;
                 $rate['zone_name'] = $zoneName;
                 $rate['zone_code'] = $zoneCode;
+                return $rate;
+            }, $allRates);
+
+            // Attach surcharge breakdown to every rate card. Multi-package cards
+            // already carry per-box surcharge totals (each box's own matched rate
+            // contributes its own surcharges, and its GST is already included in
+            // gst_amount). Single-rate cards fall back to the surcharges attached
+            // to the selected rate (surcharge_id) and add GST on that portion.
+            $allRates = array_map(function ($rate) {
+                $surcharges = $rate['surcharges'] ?? collect();
+                $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
+                $cr = !empty($rate['rate_id']) ? CourierRate::find((int) $rate['rate_id']) : null;
+                if ($cr && $surchargeTotal <= 0) {
+                    $surchargeTotal = $cr->surcharge_amount;
+                    $surcharges = $cr->surchargeModels()->map(function ($s) {
+                        return [
+                            'name' => $s->name,
+                            'code' => $s->code,
+                            'price' => (float) $s->price,
+                        ];
+                    })->values();
+                    // Add GST on the surcharge portion when GST is
+                    // percentage-based (a fixed gst_amount already covers
+                    // the whole total).
+                    if ($surchargeTotal > 0 && (float) $cr->gst_amount <= 0 && (float) $cr->gst_percentage > 0) {
+                        $rate['gst_amount'] = ((float) ($rate['gst_amount'] ?? 0))
+                            + ($surchargeTotal * (float) $cr->gst_percentage / 100);
+                    }
+                }
+                $rate['surcharges'] = $surcharges;
+                $rate['surcharge_total'] = round($surchargeTotal, 2);
                 return $rate;
             }, $allRates);
 
@@ -4374,8 +4635,9 @@ class CustomerController extends Controller
             ],
         ];
 
-        // return;
-        // print_r($payload);
+        // Temporary UPS payload debug: print the complete generated request
+        // and stop execution before it is sent to the UPS Ship API.
+        // print_r(json_encode($payload));
 
         return $payload;
     }
@@ -4660,7 +4922,7 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status');
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_amount', 'surcharge_total', 'total_price');
                 },
                 'shipperInfo.shipmentTracking' => function ($q) {
                     $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
@@ -4672,7 +4934,7 @@ class CustomerController extends Controller
                     $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
                 },
                 'shipperInfo.serviceRate' => function ($q) {
-                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage');
+                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage', 'surcharge_id');
                 },
             ])
             ->orderBy('created_at', 'desc')
@@ -4699,9 +4961,13 @@ class CustomerController extends Controller
             $packages = $shipper ? $shipper->packageDimensions : collect([]);
             $items = $invoice->invoiceItems;
             $selectedRate = $shipper ? $shipper->serviceRate : null;
-            $displayAmount = $selectedRate
-                ? (float) $selectedRate->inclusive_total
-                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+            // Prefer the stored shipment total (box-wise pricing stored at booking
+            // time) so the displayed price always matches the charged total.
+            $displayAmount = $shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : ($selectedRate
+                    ? (float) $selectedRate->inclusive_total
+                    : round((float) $invoice->invoiceItems->sum('amount'), 2));
 
             // Label data (base64 graphic image) is intentionally NOT loaded here because it is very
             // large. It is fetched on-demand via the shipment-label endpoint when a label is requested.
@@ -4774,6 +5040,13 @@ class CustomerController extends Controller
                         ];
                     })->values()->toArray(),
                     'items_total' => number_format($displayAmount, 2),
+                    'price_breakdown' => $shipper ? [
+                        'base' => $shipper->total_base_price !== null ? (float) $shipper->total_base_price : ($shipper->base_price !== null ? (float) $shipper->base_price : null),
+                        'fuel' => $shipper->total_fuel_price !== null ? (float) $shipper->total_fuel_price : ($shipper->fuel_price !== null ? (float) $shipper->fuel_price : null),
+                        'surcharge' => $shipper->total_surcharge !== null ? (float) $shipper->total_surcharge : ($shipper->surcharge_total !== null ? (float) $shipper->surcharge_total : null),
+                        'gst' => $shipper->gst_amount !== null ? (float) $shipper->gst_amount : null,
+                        'total' => (float) $displayAmount,
+                    ] : null,
                     'charges' => $tracking ? [
                         'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
                         'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
@@ -5121,9 +5394,11 @@ class CustomerController extends Controller
                 ], 404);
             }
 
-            $amount = $shipper->serviceRate
-                ? $shipper->serviceRate->inclusive_total
-                : round((float) $invoice->total_amount, 2);
+            $amount = $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : ($shipper->serviceRate
+                    ? $shipper->serviceRate->inclusive_total
+                    : round((float) $invoice->total_amount, 2));
 
             if ($amount <= 0) {
                 return response()->json([

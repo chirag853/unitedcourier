@@ -264,6 +264,8 @@
                                         class="{{ request()->is('admin/add-zone') ? 'active' : '' }}">Add Zone</a></li>
                                 <li><a href="{{ url('/admin/manage-rate') }}"
                                         class="{{ request()->is('admin/manage-rate') ? 'active' : '' }}">View & Edit Rates</a></li>
+                                <li><a href="{{ url('/admin/manage-surcharges') }}"
+                                        class="{{ request()->is('admin/manage-surcharges') ? 'active' : '' }}">Manage Surcharges</a></li>
                             </ul>
                         </li>
                         @endif

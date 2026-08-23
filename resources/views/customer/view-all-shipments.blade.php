@@ -573,9 +573,13 @@
                                             $selectedRate = $invoice->shipperInfo
                                                 ? $invoice->shipperInfo->serviceRate
                                                 : null;
-                                            $shipmentAmount = $selectedRate
-                                                ? $selectedRate->inclusive_total
-                                                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+                                            $shipmentAmount = $invoice->shipperInfo
+                                                && $invoice->shipperInfo->total_price !== null
+                                                && (float) $invoice->shipperInfo->total_price > 0
+                                                ? (float) $invoice->shipperInfo->total_price
+                                                : ($selectedRate
+                                                    ? $selectedRate->inclusive_total
+                                                    : round((float) $invoice->invoiceItems->sum('amount'), 2));
                                         @endphp
                                         <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
                                             <td class="text-center">
@@ -995,6 +999,31 @@
                         </div>
                     </div>
 
+                    <!-- Price Breakdown -->
+                    <div class="detail-section" id="detailPriceBreakdownSection" style="display:none;">
+                        <h6><i class="ti ti-receipt-2 me-1"></i> Price Breakdown</h6>
+                        <div class="detail-row">
+                            <span class="label">Base Price</span>
+                            <span class="value" id="detailBasePrice">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Fuel Price</span>
+                            <span class="value" id="detailFuelPrice">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Surcharge</span>
+                            <span class="value" id="detailSurchargePrice">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">GST</span>
+                            <span class="value" id="detailGstPrice">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="label">Total</span>
+                            <span class="value fw-semibold" id="detailTotalPrice">-</span>
+                        </div>
+                    </div>
+
                     <!-- Package Dimensions -->
                     <div class="detail-section" id="detailPackagesSection">
                         <h6><i class="ti ti-box me-1"></i> Package Dimensions</h6>
@@ -1368,6 +1397,22 @@
             document.getElementById('detailBillingWeight').textContent = data.charges.billing_weight;
         } else {
             chargesSection.style.display = 'none';
+        }
+
+        // Price Breakdown
+        const priceBreakdownSection = document.getElementById('detailPriceBreakdownSection');
+        if (data.price_breakdown) {
+            priceBreakdownSection.style.display = 'block';
+            const formatPrice = function(v) {
+                return v !== null && v !== undefined ? 'INR ' + parseFloat(v).toFixed(2) : '-';
+            };
+            document.getElementById('detailBasePrice').textContent = formatPrice(data.price_breakdown.base);
+            document.getElementById('detailFuelPrice').textContent = formatPrice(data.price_breakdown.fuel);
+            document.getElementById('detailSurchargePrice').textContent = formatPrice(data.price_breakdown.surcharge);
+            document.getElementById('detailGstPrice').textContent = formatPrice(data.price_breakdown.gst);
+            document.getElementById('detailTotalPrice').textContent = formatPrice(data.price_breakdown.total);
+        } else {
+            priceBreakdownSection.style.display = 'none';
         }
 
         // Show modal
