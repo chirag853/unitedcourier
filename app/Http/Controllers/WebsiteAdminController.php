@@ -26,6 +26,73 @@ use App\Models\NetworkOffice;
  */
 class WebsiteAdminController extends Controller
 {
+    /**
+     * Reject potentially executable HTML before CMS content is validated or saved.
+     *
+     * @param mixed $input
+     * @return bool
+     */
+    private function containsDangerousInput($input)
+    {
+        if (is_string($input)) {
+            return preg_match(
+                '/<\/?\s*script\b|\bon\w+\s*=|(?:javascript|vbscript|data):/i',
+                $input
+            ) === 1;
+        }
+
+        if (is_array($input)) {
+            foreach ($input as $value) {
+                if ($this->containsDangerousInput($value)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Reject dangerous request input before it reaches CMS validation or persistence.
+     *
+     * @param Request $request
+     * @return Request
+     */
+    private function sanitizeInput(Request $request)
+    {
+        if ($this->containsDangerousInput($request->input())) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'content' => 'Script tags and executable HTML are not allowed in website content.',
+            ]);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Remove dangerous HTML from a value when used outside a request handler.
+     *
+     * @param mixed $input
+     * @return mixed
+     */
+    private function sanitizeValue($input)
+    {
+        if (is_string($input)) {
+            $input = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $input);
+            $input = preg_replace('/on\w+\s*=\s*(?:["\'][^"\']*["\']|[^\s>]+)/i', '', $input);
+            $input = preg_replace('/(?:javascript|vbscript|data):/i', '', $input);
+        } elseif (is_array($input)) {
+            foreach ($input as $key => $value) {
+                $input[$key] = $this->sanitizeValue($value);
+            }
+        } elseif (is_object($input)) {
+            foreach ($input as $key => $value) {
+                $input->$key = $this->sanitizeValue($value);
+            }
+        }
+        return $input;
+    }
+
     // ------------------------------------------------------------------
     public function changeAboutUs()
     {
@@ -37,6 +104,8 @@ class WebsiteAdminController extends Controller
 
     public function updateAboutUs(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         $request->validate([
             'about_content' => 'required|string',
         ]);
@@ -51,6 +120,9 @@ class WebsiteAdminController extends Controller
     public function updateAboutContent(Request $request, $id)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             // Validate basic fields first
             $request->validate([
                 'title' => 'nullable|string|max:255',
@@ -74,7 +146,7 @@ class WebsiteAdminController extends Controller
             ]);
 
             $content = \App\Models\AboutPageContent::findOrFail($id);
-            
+
             $updateData = [
                 'title' => $request->title,
                 'subtitle' => $request->subtitle,
@@ -98,35 +170,35 @@ class WebsiteAdminController extends Controller
             // Handle image upload separately
             if ($request->hasFile('image_file')) {
                 $image = $request->file('image_file');
-                
+
                 // Validate image
                 $request->validate([
                     'image_file' => 'image|mimes:jpeg,png,jpg,gif,svg,webp,bmp,tiff|max:10240',
                 ]);
-                
+
                 $imageName = time() . '_' . str_replace(' ', '_', $image->getClientOriginalName());
                 $imagePath = 'website_images/' . $imageName;
-                
+
                 // Ensure directory exists
                 $uploadPath = public_path('website_images');
                 if (!file_exists($uploadPath)) {
                     mkdir($uploadPath, 0755, true);
                 }
-                
+
                 // Move file
                 $image->move($uploadPath, $imageName);
                 $updateData['image'] = $imagePath;
             } else {
                 $updateData['image'] = $request->image;
             }
-            
+
             $content->update($updateData);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -189,8 +261,11 @@ class WebsiteAdminController extends Controller
 
     public function updateHomeContent(Request $request, $id)
     {
+        // Sanitize all input to prevent XSS
+        $request = $this->sanitizeInput($request);
+
         $content = \App\Models\HomePageContent::findOrFail($id);
-        
+
         // Handle image deletion
         if ($request->has('delete_image') && $request->delete_image == 'true') {
             // Delete the actual image file if it exists
@@ -244,14 +319,14 @@ class WebsiteAdminController extends Controller
                 'content' => 'required|string',
                 'sort_order' => 'required|integer|min:0',
             ]);
-            
+
             $content->update([
                 'section' => $request->section,
                 'field_name' => $request->field_name,
                 'content' => $request->content,
                 'sort_order' => $request->sort_order,
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Content updated successfully!'
@@ -272,6 +347,8 @@ class WebsiteAdminController extends Controller
      */
     public function updateAboutMedia(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         $request->validate([
             'media_type' => 'required|in:video,image',
             'media_file' => 'required|file|max:51200', // 50MB max
@@ -334,6 +411,9 @@ class WebsiteAdminController extends Controller
 
     public function updateMultipleHomeContent(Request $request)
     {
+        // Sanitize all input to prevent XSS
+        $request = $this->sanitizeInput($request);
+
         $request->validate([
             'content.*' => 'required|string',
             'id.*' => 'required|integer|exists:home_page_contents,id'
@@ -384,7 +464,7 @@ class WebsiteAdminController extends Controller
     public function updateHome()
     {
         $homeContent = HomePageContent::orderBy('sort_order')->get();
-        
+
         return view('admin.change-home', compact('homeContent'));
     }
 
@@ -393,8 +473,11 @@ class WebsiteAdminController extends Controller
     public function updateServiceContent(Request $request, $id)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $content = \App\Models\ServicePage::findOrFail($id);
-            
+
             $updateData = [
                 'section' => $request->section,
                 'item_key' => $request->item_key,
@@ -424,7 +507,7 @@ class WebsiteAdminController extends Controller
                         'link' => $request->input('content.link'),
                     ]);
                     break;
-                    
+
                 case 'testimonials':
                     $contentData = [
                         'name' => $request->input('content.name'),
@@ -437,7 +520,7 @@ class WebsiteAdminController extends Controller
                     $updateData['avatar_url'] = $request->input('content.avatar');
                     $updateData['rating'] = (int) $request->input('content.rating');
                     break;
-                    
+
                 case 'faq':
                     $contentData = [
                         'question' => $request->input('content.question'),
@@ -446,7 +529,7 @@ class WebsiteAdminController extends Controller
                     $updateData['question'] = $request->input('content.question');
                     $updateData['answer'] = $request->input('content.answer');
                     break;
-                    
+
                 case 'stats':
                     $contentData = [
                         'value' => $request->input('content.value'),
@@ -455,7 +538,7 @@ class WebsiteAdminController extends Controller
                     $updateData['stat_value'] = $request->input('content.value');
                     $updateData['stat_label'] = $request->input('content.label');
                     break;
-                    
+
                 case 'partners':
                     $contentData = [
                         'name' => $request->input('content.name'),
@@ -467,7 +550,7 @@ class WebsiteAdminController extends Controller
                     $updateData['alt_text'] = $request->input('content.alt');
                     break;
             }
-            
+
             $updateData['content'] = $contentData;
             $content->update($updateData);
 
@@ -475,7 +558,7 @@ class WebsiteAdminController extends Controller
                 'success' => true,
                 'message' => 'Service content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -514,6 +597,9 @@ class WebsiteAdminController extends Controller
     public function updateVolumetricCalculatorContent(Request $request, $id)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $content = \App\Models\VolumetricCalculatorPage::findOrFail($id);
 
             // Always write to the data JSON column + normalized columns + data_extra,
@@ -701,6 +787,9 @@ class WebsiteAdminController extends Controller
     public function storeTermsAndConditionsContent(Request $request)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $request->validate([
                 'section_key' => 'required|string|max:100',
                 'title' => 'nullable|string|max:255',
@@ -749,14 +838,17 @@ class WebsiteAdminController extends Controller
     public function updateTermsAndConditionsContent(Request $request, $id)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $content = \App\Models\TermsAndConditionPage::findOrFail($id);
-            
+
             $updateData = [
                 'title' => $request->title,
                 'paragraphs' => $request->paragraphs,
             'sort_order' => $request->sort_order,
             ];
-    
+
             // Handle page meta data
             if ($content->section_key === '_page_meta') {
                 $updateData['effective_date'] = $request->effective_date;
@@ -765,12 +857,12 @@ class WebsiteAdminController extends Controller
             }
 
             $content->update($updateData);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Terms and conditions content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -802,6 +894,9 @@ class WebsiteAdminController extends Controller
     public function storePrivacyPolicyContent(Request $request)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $request->validate([
                 'section_key' => 'required|string|max:100',
                 'title' => 'nullable|string|max:255',
@@ -858,8 +953,11 @@ class WebsiteAdminController extends Controller
     public function updatePrivacyPolicyContent(Request $request, $id)
     {
         try {
+            // Sanitize all input to prevent XSS
+            $request = $this->sanitizeInput($request);
+
             $content = \App\Models\PrivacyPolicyPage::findOrFail($id);
-            
+
             $updateData = [
                 'title' => $request->title,
                 'paragraphs' => $request->paragraphs,
@@ -874,12 +972,12 @@ class WebsiteAdminController extends Controller
             }
 
             $content->update($updateData);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Privacy policy content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -926,9 +1024,11 @@ class WebsiteAdminController extends Controller
 
     public function updateContactPageContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\ContactUsPage::findOrFail($id);
-            
+
             $updateData = [
                 'section_key' => $request->section_key,
                 'title' => $request->title,
@@ -941,7 +1041,7 @@ class WebsiteAdminController extends Controller
             // Handle phone numbers as newline-separated text (phone_numbers_text column)
             if ($request->has('phone_numbers')) {
                 $phoneNumbers = $request->input('phone_numbers');
-                
+
                 if (is_string($phoneNumbers)) {
                     $decoded = json_decode($phoneNumbers, true);
                     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -959,7 +1059,7 @@ class WebsiteAdminController extends Controller
             // Handle email addresses as newline-separated text (email_addresses_text column)
             if ($request->has('email_addresses')) {
                 $emailAddresses = $request->input('email_addresses');
-                
+
                 if (is_string($emailAddresses)) {
                     $decoded = json_decode($emailAddresses, true);
                     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -977,7 +1077,7 @@ class WebsiteAdminController extends Controller
             // Handle list items as newline-separated text (list_items_text column)
             if ($request->has('list_items')) {
                 $listItems = $request->input('list_items');
-                
+
                 if (is_string($listItems)) {
                     $decoded = json_decode($listItems, true);
                     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -995,7 +1095,7 @@ class WebsiteAdminController extends Controller
             // Handle social links as JSON-encoded text (social_links_text column)
             if ($request->has('social_links')) {
                 $socialLinks = $request->input('social_links');
-                
+
                 if (is_string($socialLinks)) {
                     $decoded = json_decode($socialLinks, true);
                     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -1011,12 +1111,12 @@ class WebsiteAdminController extends Controller
             }
 
             $content->update($updateData);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Contact page content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -1055,9 +1155,11 @@ class WebsiteAdminController extends Controller
 
     public function storeWarehousingSolutionsContent(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $newContent = new \App\Models\WarehousingSolutionsPage();
-            
+
             $storeData = [
                 'section' => $request->section === 'features_header' ? 'features' : $request->section,
                 'item_key' => $request->item_key,
@@ -1194,9 +1296,11 @@ class WebsiteAdminController extends Controller
 
     public function updateWarehousingSolutionsContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\WarehousingSolutionsPage::findOrFail($id);
-            
+
             $updateData = [
                 'section' => $request->section === 'features_header' ? 'features' : $request->section,
                 'item_key' => $request->item_key,
@@ -1228,7 +1332,7 @@ class WebsiteAdminController extends Controller
                     $updateData['subtitle'] = $request->input('content.subtitle');
                     $updateData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
-                    
+
                 case 'stats':
                     $contentData = [
                         'stat_number' => $request->input('content.stat_number'),
@@ -1236,7 +1340,7 @@ class WebsiteAdminController extends Controller
                         'suffix' => $request->input('content.suffix'),
                     ];
                     break;
-                    
+
                 case 'overview':
                     $listItems = $request->input('content.list_items');
                     if (is_string($listItems)) {
@@ -1256,7 +1360,7 @@ class WebsiteAdminController extends Controller
                     $updateData['subtitle'] = $request->input('content.subtitle');
                     $updateData['list_items_text'] = is_array($listItems) ? implode("\n", $listItems) : null;
                     break;
-                    
+
                 case 'features_header':
                     $contentData = [
                         'title' => $request->input('content.title'),
@@ -1278,14 +1382,14 @@ class WebsiteAdminController extends Controller
                     $updateData['paragraphs'] = $request->input('content.paragraphs');
                     $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
-                    
+
                 case 'faq':
                     $contentData = [
                         'question' => $request->input('content.question'),
                         'answer' => $request->input('content.answer'),
                     ];
                     break;
-                    
+
                 case 'cta':
                     $contentData = [
                         'title' => $request->input('content.title'),
@@ -1296,14 +1400,14 @@ class WebsiteAdminController extends Controller
                     // Also populate normalized columns
                     $updateData['subtitle'] = $request->input('content.subtitle');
                     break;
-                    
+
                 default:
                     $rawJson = $request->input('content.json');
                     $parsed = json_decode($rawJson, true);
                     $contentData = $parsed !== null ? $parsed : [];
                     break;
             }
-            
+
             $updateData['content'] = $contentData;
 
             // Handle extra_content as a JSON string
@@ -1325,7 +1429,7 @@ class WebsiteAdminController extends Controller
                 'success' => true,
                 'message' => 'Warehousing solutions content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -1376,9 +1480,11 @@ class WebsiteAdminController extends Controller
 
     public function storeEcommerceLogisticsSolutionsContent(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $newContent = new \App\Models\EcommerceLogisticsSolutionsPage();
-            
+
             $storeData = [
                 'section' => $request->section,
                 'item_key' => $request->item_key,
@@ -1552,9 +1658,11 @@ class WebsiteAdminController extends Controller
 
     public function updateEcommerceLogisticsSolutionsContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\EcommerceLogisticsSolutionsPage::findOrFail($id);
-            
+
             $updateData = [
                 'section' => $request->section,
                 'item_key' => $request->item_key,
@@ -1738,9 +1846,11 @@ class WebsiteAdminController extends Controller
 
     public function updateRefundAndCancellationPolicyContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\RefundAndCancellationPolicyPage::findOrFail($id);
-            
+
             $updateData = [
                 'title' => $request->title,
                 'paragraphs' => $request->paragraphs,
@@ -1755,12 +1865,12 @@ class WebsiteAdminController extends Controller
             }
 
             $content->update($updateData);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Refund and cancellation policy content updated successfully!'
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -1794,7 +1904,7 @@ class WebsiteAdminController extends Controller
         $indiaOffices = NetworkOffice::india()->ordered()->get();
         $overseasOffices = NetworkOffice::overseas()->ordered()->get();
         $faqs = \App\Models\Faq::byPage('network')->ordered()->get();
-        
+
         return view('admin.change-network', compact('indiaOffices', 'overseasOffices', 'faqs'));
     }
 
@@ -1802,9 +1912,11 @@ class WebsiteAdminController extends Controller
 
     public function storeNetworkOffice(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $office = NetworkOffice::create($request->all());
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Network office added successfully!',
@@ -1822,10 +1934,12 @@ class WebsiteAdminController extends Controller
 
     public function updateNetworkOffice(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $office = NetworkOffice::findOrFail($id);
             $office->update($request->all());
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Network office updated successfully!',
@@ -1846,7 +1960,7 @@ class WebsiteAdminController extends Controller
         try {
             $office = NetworkOffice::findOrFail($id);
             $office->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Network office deleted successfully!'
@@ -1890,6 +2004,8 @@ class WebsiteAdminController extends Controller
 
     public function storeFaq(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $faq = \App\Models\Faq::create($request->all());
             return response()->json([
@@ -1909,6 +2025,8 @@ class WebsiteAdminController extends Controller
 
     public function updateFaq(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $faq = \App\Models\Faq::findOrFail($id);
             $faq->update($request->all());
@@ -1958,6 +2076,8 @@ class WebsiteAdminController extends Controller
 
     public function storeTestimonial(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $data = $request->only(['customer_name', 'content', 'customer_designation', 'rating', 'is_active', 'sort_order']);
             $data['page'] = 'common';
@@ -1992,6 +2112,8 @@ class WebsiteAdminController extends Controller
 
     public function updateTestimonial(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $testimonial = \App\Models\Testimonial::findOrFail($id);
 
@@ -2114,6 +2236,8 @@ class WebsiteAdminController extends Controller
 
     public function storeBlog(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'blog_title' => 'required|string|max:255',
@@ -2201,6 +2325,8 @@ class WebsiteAdminController extends Controller
 
     public function updateBlog(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'blog_title' => 'required|string|max:255',
@@ -2354,6 +2480,8 @@ class WebsiteAdminController extends Controller
 
     public function storeEbook(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -2421,6 +2549,8 @@ class WebsiteAdminController extends Controller
 
     public function updateEbook(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $ebook = \App\Models\Ebook::findOrFail($id);
 
@@ -2597,6 +2727,8 @@ class WebsiteAdminController extends Controller
 
     public function storeCurrencyCalculator(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -2651,6 +2783,8 @@ class WebsiteAdminController extends Controller
 
     public function updateCurrencyCalculator(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $currencyCalculator = \App\Models\CurrencyCalculatorPage::findOrFail($id);
 
@@ -2823,6 +2957,8 @@ class WebsiteAdminController extends Controller
 
     public function storeWorldWeather(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -2877,6 +3013,8 @@ class WebsiteAdminController extends Controller
 
     public function updateWorldWeather(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $worldWeather = \App\Models\WorldWeatherPage::findOrFail($id);
 
@@ -3023,6 +3161,8 @@ class WebsiteAdminController extends Controller
 
     public function storeWorldTime(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -3225,6 +3365,8 @@ class WebsiteAdminController extends Controller
 
     public function storeExpressAirFreightSolutionsContent(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $newContent = new \App\Models\ExpressAirFreightSolutionsPage();
 
@@ -3375,6 +3517,8 @@ class WebsiteAdminController extends Controller
 
     public function updateExpressAirFreightSolutionsContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\ExpressAirFreightSolutionsPage::findOrFail($id);
 
@@ -3815,6 +3959,8 @@ class WebsiteAdminController extends Controller
 
     public function updateBarcodeGeneratorContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\BarcodeGeneratorPage::findOrFail($id);
 
@@ -3879,6 +4025,8 @@ class WebsiteAdminController extends Controller
 
     public function updateShippingRateCalculatorContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\ShippingRateCalculatorPage::findOrFail($id);
 
@@ -3976,6 +4124,8 @@ class WebsiteAdminController extends Controller
 
     public function updateHsnFinderContent(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $content = \App\Models\HsnFinderPage::findOrFail($id);
 
@@ -4079,6 +4229,8 @@ class WebsiteAdminController extends Controller
 
     public function storePartnership(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -4132,6 +4284,8 @@ class WebsiteAdminController extends Controller
 
     public function updatePartnership(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $partner = \App\Models\PartnershipPage::findOrFail($id);
 
@@ -4260,6 +4414,8 @@ class WebsiteAdminController extends Controller
 
     public function updateAllPartnership(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $data = $request->all();
 
@@ -4384,6 +4540,8 @@ class WebsiteAdminController extends Controller
 
     public function updateDocumentDownloadPageMeta(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'badge' => 'nullable|string|max:255',
@@ -4491,6 +4649,8 @@ class WebsiteAdminController extends Controller
 
     public function storeDocumentDownload(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'title' => 'required|string|max:255',
@@ -4562,6 +4722,8 @@ class WebsiteAdminController extends Controller
 
     public function updateDocumentDownload(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $document = \App\Models\DocumentDownloadPage::findOrFail($id);
 
@@ -4660,6 +4822,8 @@ class WebsiteAdminController extends Controller
 
     public function updateAllDocumentDownload(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $data = $request->all();
 
@@ -4732,6 +4896,8 @@ class WebsiteAdminController extends Controller
 
     public function updateCommonStats(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $stat = \App\Models\FactNumberSectionCommonPage::findOrFail($id);
 
@@ -4787,6 +4953,8 @@ class WebsiteAdminController extends Controller
 
     public function storePartnerLogo(Request $request)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $request->validate([
                 'logo_image' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
@@ -4827,6 +4995,8 @@ class WebsiteAdminController extends Controller
 
     public function updatePartnerLogo(Request $request, $id)
     {
+        $request = $this->sanitizeInput($request);
+
         try {
             $logo = \App\Models\PartnersSectionCommonPage::findOrFail($id);
 
