@@ -7,6 +7,56 @@
         cursor: not-allowed;
         opacity: 1;
     }
+
+    /* Keep the password controls inside the field and prevent browser-specific
+       password reveal buttons from creating an extra box on the right. */
+    .password-input-group .input-custom {
+        padding-right: 48px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    .password-input-group input::-ms-reveal,
+    .password-input-group input::-ms-clear,
+    .password-input-group input::-webkit-credentials-auto-fill-button {
+        display: none;
+    }
+
+    .password-input-group > i {
+        left: 16px;
+        z-index: 1;
+    }
+
+    .password-input-group .password-toggle {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #adb5bd;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 2;
+    }
+
+    .password-input-group .password-toggle:hover,
+    .password-input-group .password-toggle:focus {
+        color: #2563eb;
+        background: transparent;
+        outline: none;
+    }
+
+    .password-input-group .password-toggle i {
+        position: static;
+        font-size: 14px;
+        pointer-events: none;
+    }
 </style>
 
 <div class="hero-gradient-container" style="margin-top: 70px;">
@@ -89,21 +139,11 @@
                             <label class="form-label-custom">Email Address</label>
                             <div class="input-group-custom">
                                 <input type="email" id="emailInput" name="email" class="form-control input-custom"
-                                    placeholder="rahul@unitedcouriers.biz" autocomplete="email" required>
+                                    placeholder="rahul@unitedcouriers.biz" required>
                                 <i class="fas fa-envelope"></i>
                                 <button type="button" class="btn-otp" id="getOtpBtn" onclick="sendRegistrationOtp()" disabled>Get OTP</button>
                             </div>
                             <div id="emailStatus" class="otp-sent-text" style="display: none;"></div>
-                        </div>
-
-                        <!-- Phone Number -->
-                        <div class="mb-4">
-                            <label class="form-label-custom">Phone Number</label>
-                            <div class="input-group-custom">
-                                <input type="tel" id="mobileInput" name="phone_number" class="form-control input-custom" placeholder="99******"
-                                    pattern="[0-9]{10}" maxlength="10" required>
-                                <i class="fas fa-phone-alt"></i>
-                            </div>
                         </div>
 
                         <!-- OTP Input (Conditional) -->
@@ -117,22 +157,34 @@
                             <div id="otpStatus" class="otp-sent-text" style="display: none;"></div>
                         </div>
 
+                        <!-- Phone Number -->
+                        <div class="mb-4">
+                            <label class="form-label-custom">Phone Number</label>
+                            <div class="input-group-custom">
+                                <input type="tel" id="mobileInput" name="phone_number" class="form-control input-custom" placeholder="99******"
+                                    pattern="[0-9]{10}" maxlength="10" required>
+                                <i class="fas fa-phone-alt"></i>
+                            </div>
+                        </div>
+
                         <!-- Password Row -->
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
                                 <label class="form-label-custom" for="password">Create Password</label>
-                                <div class="input-group-custom">
+                                <div class="input-group-custom password-input-group">
                                     <input type="password" id="password" name="password" class="form-control input-custom" placeholder="********"
                                         minlength="6" autocomplete="new-password" required>
                                     <i class="fa-solid fa-lock"></i>
+                                    <button type="button" class="password-toggle" aria-label="Show password"><i class="fas fa-eye"></i></button>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label-custom" for="passwordConfirmation">Confirm Password</label>
-                                <div class="input-group-custom">
+                                <div class="input-group-custom password-input-group">
                                     <input type="password" id="passwordConfirmation" name="password_confirmation" class="form-control input-custom" placeholder="********"
                                         minlength="6" autocomplete="new-password" required>
                                     <i class="fa-solid fa-lock"></i>
+                                    <button type="button" class="password-toggle" aria-label="Show password"><i class="fas fa-eye"></i></button>
                                 </div>
                                 <div id="passwordMismatchError" class="small text-danger mt-1" style="display: none;">
                                     Password and confirm password must match.
@@ -205,40 +257,54 @@ function raf(time) {
 }
 requestAnimationFrame(raf);
 
-// Registration email OTP state
+// Registration OTP state
 let registrationEmailVerified = false;
-let currentRegistrationEmail = '';
+let currentEmail = '';
 
-// Enable/disable Get OTP based on the email address.
+// Enable/disable Get OTP button based on email input
 document.getElementById('emailInput').addEventListener('input', function() {
-    const email = this.value.trim().toLowerCase();
+    const email = this.value.trim();
     const getOtpBtn = document.getElementById('getOtpBtn');
 
-    if (registrationEmailVerified && email !== currentRegistrationEmail) {
+    // If email changes after verification, reset verification state
+    if (registrationEmailVerified && email !== currentEmail) {
         registrationEmailVerified = false;
         getOtpBtn.style.display = '';
-        getOtpBtn.innerHTML = 'Get OTP';
         document.getElementById('otpContainer').style.display = 'none';
         document.getElementById('emailStatus').style.display = 'none';
         document.getElementById('otpStatus').style.display = 'none';
         document.getElementById('otpInput').value = '';
-        this.readOnly = false;
-        this.classList.remove('is-locked');
     }
 
-    getOtpBtn.disabled = !email || !this.checkValidity();
+    if (this.checkValidity() && email.length > 0) {
+        getOtpBtn.disabled = false;
+    } else {
+        getOtpBtn.disabled = true;
+    }
 });
 
-// Send OTP for registration by email.
+// Send OTP for registration
 function sendRegistrationOtp() {
-    const emailInput = document.getElementById('emailInput');
-    const email = emailInput.value.trim().toLowerCase();
+    const email = document.getElementById('emailInput').value.trim();
     const getOtpBtn = document.getElementById('getOtpBtn');
     const emailStatus = document.getElementById('emailStatus');
 
-    if (registrationEmailVerified) return;
+    // No resending once the email address has been verified.
+    if (registrationEmailVerified) {
+        return;
+    }
 
-    if (!email || !emailInput.checkValidity()) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!email) {
+        emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter your email address';
+        emailStatus.className = 'otp-sent-text';
+        emailStatus.style.display = 'block';
+        emailStatus.style.color = '#dc3545';
+        return;
+    }
+
+    if (!emailRegex.test(email)) {
         emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid email address';
         emailStatus.className = 'otp-sent-text';
         emailStatus.style.display = 'block';
@@ -263,7 +329,9 @@ function sendRegistrationOtp() {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
     };
-    if (csrfTokenElement) fetchHeaders['X-CSRF-TOKEN'] = csrfTokenElement.getAttribute('content');
+    if (csrfTokenElement) {
+        fetchHeaders['X-CSRF-TOKEN'] = csrfTokenElement.getAttribute('content');
+    }
 
     fetch('{{ route("customer.send.registration.otp") }}', {
         method: 'POST',
@@ -272,59 +340,67 @@ function sendRegistrationOtp() {
     })
     .then(response => {
         clearTimeout(timeoutId);
-        return response.json();
+        return response.json().then(data => ({ status: response.status, body: data }));
     })
-    .then(data => {
+    .then(({ status, body: data }) => {
         if (data.success) {
-            currentRegistrationEmail = email;
+            currentEmail = email;
             registrationEmailVerified = false;
-            emailStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> OTP sent to your email address.';
+
+            emailStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> OTP sent to your email address!';
             emailStatus.className = 'otp-sent-text';
             emailStatus.style.display = 'block';
             emailStatus.style.color = '#10b981';
+
+            // Show OTP input container
             document.getElementById('otpContainer').style.display = 'block';
             document.getElementById('otpInput').value = '';
             document.getElementById('otpStatus').style.display = 'none';
+
             getOtpBtn.innerHTML = 'Resend OTP';
             getOtpBtn.disabled = false;
         } else {
+            // 409 = already registered; treat as blocking error
             emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Error sending OTP');
             emailStatus.className = 'otp-sent-text';
             emailStatus.style.display = 'block';
             emailStatus.style.color = '#dc3545';
+
             getOtpBtn.innerHTML = 'Get OTP';
             getOtpBtn.disabled = false;
         }
     })
     .catch(error => {
         clearTimeout(timeoutId);
-        console.error('Send registration OTP error:', error);
+        console.error('Send OTP error:', error);
+
         emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Connection error';
         emailStatus.className = 'otp-sent-text';
         emailStatus.style.display = 'block';
         emailStatus.style.color = '#dc3545';
+
         getOtpBtn.innerHTML = 'Get OTP';
         getOtpBtn.disabled = false;
     });
 }
 
-// Verify the email OTP for registration.
+// Verify OTP for registration
 function verifyRegistrationOtp() {
-    const email = document.getElementById('emailInput').value.trim().toLowerCase();
+    const email = document.getElementById('emailInput').value.trim();
     const otp = document.getElementById('otpInput').value.trim();
     const verifyOtpBtn = document.getElementById('verifyOtpBtn');
     const otpStatus = document.getElementById('otpStatus');
     const getOtpBtn = document.getElementById('getOtpBtn');
 
     if (!email || !otp) {
-        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter your email and OTP';
+        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter email address and OTP';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
         otpStatus.style.color = '#dc3545';
         return;
     }
 
-    if (!/^\d{6}$/.test(otp)) {
+    if (otp.length < 6) {
         otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid 6-digit OTP';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
@@ -340,7 +416,9 @@ function verifyRegistrationOtp() {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
     };
-    if (csrfToken) headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
+    if (csrfToken) {
+        headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
+    }
 
     fetch('{{ route("customer.verify.registration.otp") }}', {
         method: 'POST',
@@ -351,40 +429,48 @@ function verifyRegistrationOtp() {
     .then(data => {
         if (data.success) {
             registrationEmailVerified = true;
-            currentRegistrationEmail = email;
+
             otpStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> Email address verified!';
             otpStatus.className = 'otp-sent-text';
             otpStatus.style.display = 'block';
             otpStatus.style.color = '#10b981';
+
             verifyOtpBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
             verifyOtpBtn.disabled = true;
-            getOtpBtn.style.display = 'none';
-            getOtpBtn.disabled = true;
+
+            // Stop resending once the email address is verified: hide the resend button.
+            if (getOtpBtn) {
+                getOtpBtn.style.display = 'none';
+                getOtpBtn.disabled = true;
+            }
+
+            // Lock the email so it can't be changed after verification
+            // (readonly, not disabled, so the value still submits with the form)
             const emailInput = document.getElementById('emailInput');
             emailInput.readOnly = true;
             emailInput.classList.add('is-locked');
 
-            const mobileInput = document.getElementById('mobileInput');
-            mobileInput.readOnly = true;
-            mobileInput.classList.add('is-locked');
-
-            document.getElementById('otpInput').disabled = true;
-            document.getElementById('otpInput').classList.add('is-locked');
+            // Lock the OTP input too once verification is done
+            const otpInput = document.getElementById('otpInput');
+            otpInput.disabled = true;
+            otpInput.classList.add('is-locked');
         } else {
             otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Invalid OTP');
             otpStatus.className = 'otp-sent-text';
             otpStatus.style.display = 'block';
             otpStatus.style.color = '#dc3545';
+
             verifyOtpBtn.innerHTML = 'Verify';
             verifyOtpBtn.disabled = false;
         }
     })
     .catch(error => {
-        console.error('Verify registration OTP error:', error);
+        console.error('Verify OTP error:', error);
         otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Connection error';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
         otpStatus.style.color = '#dc3545';
+
         verifyOtpBtn.innerHTML = 'Verify';
         verifyOtpBtn.disabled = false;
     });
@@ -451,7 +537,7 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         return;
     }
 
-    // Require email OTP verification before submitting registration.
+    // Require OTP verification before submitting registration
     if (!registrationEmailVerified) {
         showFormError('Please verify your email address via OTP before registering.');
         document.getElementById('otpContainer').style.display = 'block';
@@ -520,6 +606,18 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
         showFormError('Registration failed due to a network error. Please try again.');
+    });
+});
+
+document.querySelectorAll('.password-toggle').forEach(function (button) {
+    button.addEventListener('click', function () {
+        var input = this.parentElement.querySelector('input');
+        var icon = this.querySelector('i');
+        var visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        icon.classList.toggle('fa-eye', visible);
+        icon.classList.toggle('fa-eye-slash', !visible);
+        this.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
     });
 });
 </script>

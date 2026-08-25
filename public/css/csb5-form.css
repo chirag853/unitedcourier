@@ -106,6 +106,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
     margin-top: 12px;
     transition: all 0.3s ease;
 }
@@ -119,6 +121,18 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.doc-meta > div {
+    min-width: 0;
+    width: 100%;
+}
+
+.doc-item > .text-end {
+    flex: 0 0 auto;
+    gap: 10px;
 }
 
 .doc-name {
@@ -128,11 +142,20 @@
 }
 
 .file-status {
+    max-width: 100%;
     font-size: 13px;
     color: #4f46e5;
     font-weight: 600;
+    line-height: 1.4;
     margin-top: 4px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     display: none;
+}
+
+.file-status span {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .info-circle {
@@ -206,5 +229,20 @@
     font-size: 13px;
     cursor: pointer;
     font-weight: 600;
-    margin-left: 15px;
+    margin-left: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+    .doc-item {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 18px;
+    }
+
+    .doc-item > .text-end {
+        width: 100%;
+        justify-content: flex-start;
+        text-align: left !important;
+    }
 }

@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Create admin users with module-wise access for United Courier">
     <meta name="keywords" content="user management, access control, courier, logistics">
-    <meta name="author" content="Dreams Technologies">
+    
     <meta name="robots" content="index, follow">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -329,7 +329,10 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Password <span class="text-danger">*</span></label>
-                                <input type="password" class="form-control" name="password" required placeholder="Enter password">
+                                <div class="input-group">
+                                    <input type="password" class="form-control" name="password" required placeholder="Enter password">
+                                    <button type="button" class="btn btn-outline-secondary password-toggle" aria-label="Show password"><i class="ti ti-eye"></i></button>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Designation</label>
@@ -419,7 +422,10 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Password <small class="text-muted">(leave blank to keep current)</small></label>
-                                <input type="password" class="form-control" name="password" id="edit_password" placeholder="Enter new password">
+                                <div class="input-group">
+                                    <input type="password" class="form-control" name="password" id="edit_password" placeholder="Enter new password">
+                                    <button type="button" class="btn btn-outline-secondary password-toggle" aria-label="Show password"><i class="ti ti-eye"></i></button>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Designation</label>
@@ -552,6 +558,15 @@
 
             $('#edit_type').on('change', function () {
                 toggleModuleAccess($(this), $('#editModuleAccessWrap'));
+            });
+
+            $('.password-toggle').on('click', function () {
+                var input = $(this).siblings('input')[0];
+                var icon = $(this).find('i');
+                var visible = input.type === 'text';
+                input.type = visible ? 'password' : 'text';
+                icon.toggleClass('ti-eye', visible).toggleClass('ti-eye-off', !visible);
+                $(this).attr('aria-label', visible ? 'Show password' : 'Hide password');
             });
         });
     </script>

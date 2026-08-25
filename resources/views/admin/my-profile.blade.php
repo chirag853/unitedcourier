@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Manage your admin profile">
     <meta name="keywords" content="admin, profile, settings, courier, logistics">
-    <meta name="author" content="Dreams Technologies">
+    
     <meta name="robots" content="index, follow">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -78,9 +78,7 @@
     @php
         $profileHomeUrl = $admin->canAccessDashboard()
             ? route('admin.dashboard')
-            : ($admin->canAccessDeliveryDashboard()
-                ? route('admin.delivery-dashboard')
-                : route('admin.my-profile'));
+            : route('admin.my-profile');
     @endphp
     <!-- Begin Wrapper -->
     <div class="main-wrapper">
@@ -249,21 +247,30 @@
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
                                             <label class="form-label" for="current_password">Current Password</label>
-                                            <input type="password" class="form-control @error('current_password') is-invalid @enderror" id="current_password" name="current_password" placeholder="Enter current password">
+                                            <div class="input-group">
+                                                <input type="password" class="form-control @error('current_password') is-invalid @enderror" id="current_password" name="current_password" placeholder="Enter current password">
+                                                <button type="button" class="btn btn-outline-secondary password-toggle" aria-label="Show password"><i class="ti ti-eye"></i></button>
+                                            </div>
                                             @error('current_password')
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label class="form-label" for="new_password">New Password</label>
-                                            <input type="password" class="form-control @error('new_password') is-invalid @enderror" id="new_password" name="new_password" placeholder="Enter new password" minlength="6">
+                                            <div class="input-group">
+                                                <input type="password" class="form-control @error('new_password') is-invalid @enderror" id="new_password" name="new_password" placeholder="Enter new password" minlength="6">
+                                                <button type="button" class="btn btn-outline-secondary password-toggle" aria-label="Show password"><i class="ti ti-eye"></i></button>
+                                            </div>
                                             @error('new_password')
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label class="form-label" for="new_password_confirmation">Confirm New Password</label>
-                                            <input type="password" class="form-control" id="new_password_confirmation" name="new_password_confirmation" placeholder="Confirm new password">
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="new_password_confirmation" name="new_password_confirmation" placeholder="Confirm new password">
+                                                <button type="button" class="btn btn-outline-secondary password-toggle" aria-label="Show password"><i class="ti ti-eye"></i></button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -300,6 +307,15 @@
 
     <script>
         $(document).ready(function () {
+            $('.password-toggle').on('click', function () {
+                var input = $(this).siblings('input')[0];
+                var icon = $(this).find('i');
+                var visible = input.type === 'text';
+                input.type = visible ? 'password' : 'text';
+                icon.toggleClass('ti-eye', visible).toggleClass('ti-eye-off', !visible);
+                $(this).attr('aria-label', visible ? 'Show password' : 'Hide password');
+            });
+
             // Password validation: if new password is entered, current password must also be entered
             $('#profileForm').on('submit', function (e) {
                 var newPassword = $('#new_password').val();

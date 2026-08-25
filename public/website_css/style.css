@@ -496,6 +496,55 @@
             width: 100%;
         }
 
+        /* Shared password field treatment for customer password forms. */
+        .password-input-group .input-custom {
+            padding-right: 48px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .password-input-group input::-ms-reveal,
+        .password-input-group input::-ms-clear,
+        .password-input-group input::-webkit-credentials-auto-fill-button {
+            display: none;
+        }
+
+        .password-input-group > i {
+            left: 16px;
+            z-index: 1;
+        }
+
+        .password-input-group .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #adb5bd;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .password-input-group .password-toggle:hover,
+        .password-input-group .password-toggle:focus {
+            color: var(--brand-blue);
+            background: transparent;
+            outline: none;
+        }
+
+        .password-input-group .password-toggle i {
+            position: static;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
         .input-custom:focus {
             background-color: white;
             border-color: var(--brand-blue);

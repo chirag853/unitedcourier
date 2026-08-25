@@ -54,9 +54,10 @@
                             <!-- Password -->
                             <div class="mb-4">
                                 <label class="form-label-custom">New Password</label>
-                                <div class="input-group-custom">
+                                <div class="input-group-custom password-input-group">
                                     <input type="password" name="password" class="form-control input-custom @error('password') is-invalid @enderror" placeholder="Enter new password" required autocomplete="new-password">
                                     <i class="fas fa-lock"></i>
+                                    <button type="button" class="password-toggle" aria-label="Show password"><i class="fas fa-eye"></i></button>
                                 </div>
                                 @error('password')
                                     <div class="text-danger small mt-1">{{ $message }}</div>
@@ -66,9 +67,10 @@
                             <!-- Confirm Password -->
                             <div class="mb-4">
                                 <label class="form-label-custom">Confirm Password</label>
-                                <div class="input-group-custom">
+                                <div class="input-group-custom password-input-group">
                                     <input type="password" name="password_confirmation" class="form-control input-custom" placeholder="Re-enter new password" required autocomplete="new-password">
                                     <i class="fas fa-lock"></i>
+                                    <button type="button" class="password-toggle" aria-label="Show password"><i class="fas fa-eye"></i></button>
                                 </div>
                             </div>
 
@@ -88,3 +90,17 @@
     </div>
 
 @include('website_include.footer')
+
+<script>
+    document.querySelectorAll('.password-toggle').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var input = this.parentElement.querySelector('input');
+            var icon = this.querySelector('i');
+            var visible = input.type === 'text';
+            input.type = visible ? 'password' : 'text';
+            icon.classList.toggle('fa-eye', visible);
+            icon.classList.toggle('fa-eye-slash', !visible);
+            this.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
+        });
+    });
+</script>

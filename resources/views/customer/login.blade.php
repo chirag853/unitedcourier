@@ -213,12 +213,12 @@
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label-custom">Password</label>
-                                    <div class="input-group">
-                                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                                        <input type="password" id="passwordInput" name="password" class="input-custom form-control"
+                                    <label class="form-label-custom" for="passwordInput">Password</label>
+                                    <div class="input-group-custom password-input-group">
+                                        <input type="password" id="passwordInput" name="password" class="form-control input-custom"
                                             placeholder="Enter your password" required autocomplete="current-password">
-                                        <button type="button" class="btn btn-outline-secondary" style="background-color:#f8f9fa;border: 1px solid #e9ecef;" id="togglePasswordBtn"
+                                        <i class="fas fa-lock"></i>
+                                        <button type="button" class="password-toggle" id="togglePasswordBtn"
                                             tabindex="-1" aria-label="Show password">
                                             <i class="fas fa-eye" id="togglePasswordIcon"></i>
                                         </button>

@@ -4834,6 +4834,82 @@ class AdminController extends Controller
     }
 
     /**
+     * Download all available KYC documents for a customer as a ZIP archive.
+     */
+    public function downloadCustomerKycDocuments($id)
+    {
+        $customer = Customer::with(['kycDetail', 'csbForm'])->findOrFail($id);
+        $uploadsRoot = realpath(public_path('uploads'));
+
+        if ($uploadsRoot === false || !class_exists('ZipArchive')) {
+            abort(500, 'Document download is not available.');
+        }
+
+        $documents = [
+            'Personal GST Certificate' => $customer->kycDetail?->gst_certificate_document,
+            'Personal PAN Card' => $customer->kycDetail?->pan_document,
+            'Personal Aadhaar Front' => $customer->kycDetail?->aadhar_front_document,
+            'Personal Aadhaar Back' => $customer->kycDetail?->aadhar_back_document,
+            'Personal Aadhaar Document' => $customer->kycDetail?->aadhar_document,
+            'Personal Signature' => $customer->kycDetail?->signature_document ?: $customer->kycDetail?->signature,
+            'Personal Merchant Agreement' => $customer->kycDetail?->merchant_agreement,
+            'Business GST Certificate' => $customer->csbForm?->gst_certificate_document,
+            'Business GST Document' => $customer->csbForm?->gst_document,
+            'Business IEC Certificate' => $customer->csbForm?->iec_document,
+            'Business AD Code Document' => $customer->csbForm?->ad_code_document,
+            'Business LUT Document' => $customer->csbForm?->lut_document,
+            'Business Aadhaar Document' => $customer->csbForm?->aadhar_document,
+            'Business Signature' => $customer->csbForm?->signature_document,
+            'Business Merchant Agreement' => $customer->csbForm?->merchant_agreement,
+        ];
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'kyc_');
+        $zip = new \ZipArchive();
+        if ($zipPath === false || $zip->open($zipPath, \ZipArchive::OVERWRITE) !== true) {
+            if ($zipPath !== false) {
+                @unlink($zipPath);
+            }
+            abort(500, 'Unable to create document archive.');
+        }
+
+        $added = [];
+        $rootPrefix = rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        foreach ($documents as $label => $storedPath) {
+            $path = trim((string) $storedPath);
+            if ($path === '' || filter_var($path, FILTER_VALIDATE_URL)) {
+                continue;
+            }
+
+            $path = ltrim(str_replace('\\', '/', $path), '/');
+            $path = preg_replace('#^(?:(?:public|uploads)/)+#i', '', $path) ?? $path;
+            if ($path === '' || str_contains($path, '..')) {
+                continue;
+            }
+
+            $absolutePath = realpath($uploadsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path));
+            if ($absolutePath === false || !is_file($absolutePath) || !str_starts_with($absolutePath, $rootPrefix) || isset($added[$absolutePath])) {
+                continue;
+            }
+
+            $extension = pathinfo($absolutePath, PATHINFO_EXTENSION);
+            $archiveName = preg_replace('/[^A-Za-z0-9._-]+/', '_', $label) . ($extension ? '.' . $extension : '');
+            $zip->addFile($absolutePath, $archiveName);
+            $added[$absolutePath] = true;
+        }
+
+        $zip->close();
+        if (!$added) {
+            @unlink($zipPath);
+            abort(404, 'No KYC documents were found for this customer.');
+        }
+
+        $customerName = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')) ?: 'customer';
+        $downloadName = 'kyc-documents-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower($customerName)) . '-' . $customer->id . '.zip';
+
+        return response()->download($zipPath, $downloadName)->deleteFileAfterSend(true);
+    }
+
+    /**
      * Activate or deactivate a customer account.
      */
     public function toggleCustomerStatus($id)

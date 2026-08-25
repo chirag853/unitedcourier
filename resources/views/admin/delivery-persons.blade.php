@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Manage delivery persons for United Courier">
     <meta name="keywords" content="delivery, management, courier, logistics">
-    <meta name="author" content="Dreams Technologies">
+    
     <meta name="robots" content="index, follow">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
