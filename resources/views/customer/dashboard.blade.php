@@ -1,20 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
-
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:23 GMT -->
 
 <head>
     <!-- Meta Tags -->
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Dashboard | CRMS - Advanced Bootstrap 5 Admin Template for Customer Management</title>
+    <title>Customer Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description"
-        content="Streamline your business with our advanced CRM template. Easily integrate and customize to manage sales, support, and customer interactions efficiently. Perfect for any business size">
-    <meta name="keywords"
-        content="Advanced CRM template, customer relationship management, business CRM, sales optimization, customer support software, CRM integration, customizable CRM, business tools, enterprise CRM solutions">
-    <meta name="author" content="Dreams Technologies">
+    
     <meta name="robots" content="index, follow">
 
     <!-- Favicon -->
@@ -40,7 +34,7 @@
 
     <!-- Tabler Icon CSS -->
     <!-- <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}"> -->
-    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+        <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
 
 
     <!-- Select2 CSS -->
@@ -73,6 +67,35 @@
         border-color: #dc3545 !important;
         box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15) !important;
         background-color: #fff5f5 !important;
+    }
+
+    .csbv-upload-area {
+        min-height: 132px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .csbv-upload-area > div:not([style*="display: none"]) {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .csbv-upload-filename {
+        width: 100%;
+        max-width: 100%;
+        padding: 0 4px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        white-space: normal;
+    }
+
+    @media (max-width: 767.98px) {
+        .csbv-upload-area {
+            min-height: 120px;
+        }
     }
 
     .kyc-alert-list {
@@ -436,7 +459,7 @@
                         <div class="progress-bar progress-bar-striped progress-bar-animated {{ $kycRecord->kyc_status == 'pending' ? 'bg-warning' : ($kycRecord->kyc_status == 'under_review' ? 'bg-info' : 'bg-danger') }}"
                             role="progressbar"
                             style="width: {{ $kycRecord->kyc_status == 'pending' ? '33' : ($kycRecord->kyc_status == 'under_review' ? '66' : '100') }}%">
-                            {{ ucfirst($kycRecord->kyc_status) }}
+                            {{ ucwords(str_replace('_', ' ', $kycRecord->kyc_status)) }}
                         </div>
                     </div>
                     <div class="d-flex justify-content-between mt-2">
@@ -452,8 +475,17 @@
                         <p class="mb-0 text-info"><i class="fas fa-hourglass-half"></i> Your KYC application is under
                             review. We'll notify you once it's approved.</p>
                         @elseif($kycRecord->kyc_status == 'rejected')
-                        <p class="mb-0 text-danger"><i class="fas fa-exclamation-triangle"></i> Your KYC application was
+                        <p class="mb-2 text-danger"><i class="fas fa-exclamation-triangle"></i> Your KYC application was
                             rejected. Please review and correct the details below, then re-submit your KYC.</p>
+                        @php
+                            $kycRejectReason = trim((string) data_get($kycDraft?->form_data, 'reject_remark', ''));
+                        @endphp
+                        @if($kycRejectReason !== '')
+                        <div class="alert alert-danger py-2 px-3 mb-0" role="alert">
+                            <strong><i class="fas fa-comment-alt me-1"></i> Rejection Reason:</strong>
+                            <span class="ms-1">{{ $kycRejectReason }}</span>
+                        </div>
+                        @endif
                         @endif
                     </div>
                 </div>
@@ -777,7 +809,7 @@
                         <div class="modal-content" style="border-radius: 16px; border: none; overflow: hidden;">
                             <div class="modal-header" style="background: linear-gradient(135deg, #f8faff 0%, #eef2ff 100%); border-bottom: 1px solid #e2e8f0;">
                                 <h5 class="modal-title fw-bold" id="termsModalLabel" style="color:#222;">
-                                    <i class="far fa-file-alt me-2"></i>Terms & Conditions
+                                    <i class="far fa-file-alt me-2"></i>MERCHANT AGREEMENT
                                 </h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"
                                     aria-label="Close"></button>
@@ -862,7 +894,7 @@
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. Terms & Conditions</div>
+                            <div class="step-label">6. Merchant Agreement</div>
                         </div>
                         <div class="step-item" id="step7-indicator">
                             <div class="step-bar">
@@ -991,17 +1023,17 @@
                         @else
                             <!-- Step 1 Content: Complete KYC (Personal) -->
                             <div id="step1-content" class="step-content active">
-                                <h3 class="kyc-card-title">Complete <span class="gradient-text">KYC</span></h3>
-                                <p class="text-muted mb-1">Please enter your GST details to verify your business
-                                    identity.</p>
+                                <h3 class="kyc-card-title">GST Details <span class="text-muted">(Optional)</span></h3>
+                                <p class="text-muted mb-1">GST is optional for Personal KYC. You may provide and verify
+                                    your GST details, or leave all GST fields empty and continue.</p>
                                 <p class="text-muted small mb-4" style="color: #b45309 !important;">
-                                    <i class="fas fa-info-circle me-1"></i>GST Number and Business Name are both
-                                    required before you can verify.
+                                    <i class="fas fa-info-circle me-1"></i>If you provide GST details, GST Number,
+                                    Business Name, verification, and GST Certificate PDF are all required.
                                 </p>
 
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-8">
-                                        <label class="form-label-custom">GST Number</label>
+                                        <label class="form-label-custom">GST Number <span class="text-muted">(Optional)</span></label>
                                         <div class="input-group-custom">
                                             <input type="text" class="form-control input-custom"
                                                 placeholder="22AAAAA0000A1Z5" id="gstInput" maxlength="15"
@@ -1020,11 +1052,11 @@
 
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-12">
-                                        <label class="form-label-custom" for="gstBusinessName">Business Name</label>
+                                        <label class="form-label-custom" for="gstBusinessName">Business Name <span class="text-muted">(Optional)</span></label>
                                         <div class="input-group-custom">
                                             <input type="text" class="form-control input-custom"
                                                 placeholder="Enter the name registered under this GSTIN"
-                                                id="gstBusinessName" maxlength="255" autocomplete="organization" required>
+                                                id="gstBusinessName" maxlength="255" autocomplete="organization">
                                             <i class="fas fa-building"></i>
                                         </div>
                                     </div>
@@ -1032,7 +1064,7 @@
 
                                 <div class="row g-4 mb-4">
                                     <div class="col-md-12">
-                                        <label class="form-label-custom">Upload GST Certificate</label>
+                                        <label class="form-label-custom">Upload GST Certificate <span class="text-muted">(Optional)</span></label>
                                         <div id="gstCertUploadArea"
                                             style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                             onclick="document.getElementById('gstCertFileInput').click()">
@@ -1059,7 +1091,7 @@
                                 <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
 
                                 <div class="text-end mt-4">
-                                    <button class="btn btn-primary-custom" onclick="nextStep(2)">Continue</button>
+                                    <button class="btn btn-primary-custom" onclick="nextStep(2)">Skip / Continue</button>
                                 </div>
                             </div>
                         @endif
@@ -1149,7 +1181,7 @@
                                     onclick="nextStep(1)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;" id="aadharContinueBtn"
-                                    onclick="nextStep(3)">{{ $isAadhaarOptional ? 'Skip / Continue' : 'Continue' }}</button>
+                                    onclick="{{ $isAadhaarOptional ? 'skipAadhaarStep()' : 'nextStep(3)' }}">{{ $isAadhaarOptional ? 'Skip / Continue' : 'Continue' }}</button>
                             </div>
                         </div>
 
@@ -1183,8 +1215,7 @@
                                     <label class="form-label-custom">Date of Birth</label>
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom" id="panDob"
-                                            placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"
-                                            autocomplete="bday">
+                                            placeholder="DD/MM/YYYY" autocomplete="bday" readonly>
                                         <i class="fas fa-calendar"></i>
                                     </div>
                                 </div>
@@ -1256,7 +1287,7 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label-custom">Upload IEC Certificate</label>
-                                    <div id="bizIecUploadArea"
+                                    <div id="bizIecUploadArea" class="csbv-upload-area"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('bizIecFileInput').click()">
                                         <input type="file" id="bizIecFileInput"
@@ -1272,7 +1303,7 @@
                                         <div id="bizIecPreview" style="display: none;">
                                             <i class="fas fa-check-circle"
                                                 style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
-                                            <p class="mb-0 fw-semibold small" id="bizIecFileName"
+                                            <p class="mb-0 fw-semibold small csbv-upload-filename" id="bizIecFileName"
                                                 style="color: #166534;"></p>
                                         </div>
                                     </div>
@@ -1294,7 +1325,7 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label-custom">Upload AD Code Document</label>
-                                    <div id="bizAdCodeUploadArea"
+                                    <div id="bizAdCodeUploadArea" class="csbv-upload-area"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 16px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('bizAdCodeFileInput').click()">
                                         <input type="file" id="bizAdCodeFileInput"
@@ -1310,7 +1341,7 @@
                                         <div id="bizAdCodePreview" style="display: none;">
                                             <i class="fas fa-check-circle"
                                                 style="font-size: 24px; color: #10b981; display: block; margin-bottom: 4px;"></i>
-                                            <p class="mb-0 fw-semibold small" id="bizAdCodeFileName"
+                                            <p class="mb-0 fw-semibold small csbv-upload-filename" id="bizAdCodeFileName"
                                                 style="color: #166534;"></p>
                                         </div>
                                     </div>
@@ -1348,7 +1379,8 @@
                                 <div class="col-12 col-lg-4">
                                     <label class="form-label-custom" for="bizLutExpiry">LUT Expiry Date</label>
                                     <div class="input-group-custom">
-                                        <input type="date" class="form-control input-custom" id="bizLutExpiry">
+                                        <input type="text" class="form-control input-custom" id="bizLutExpiry"
+                                            placeholder="Select LUT Expiry Date" inputmode="none" autocomplete="off">
                                         <i class="fas fa-calendar"></i>
                                     </div>
                                 </div>
@@ -1562,489 +1594,1002 @@
                                 <div class="document-wrapper">
 
                                     <!-- TITLE -->
-                                    <h1><span class="underline-title">TERMS AND CONDITIONS</span></h1>
-                                    <span class="subhead-company"><strong>UNITED WORLDWIDE COURIERS PVT
-                                            LTD</strong></span>
+                                    <h1><span class="underline-title">MERCHANT AGREEMENT</span></h1>
+                                    <span class="subhead-company"><strong>UNITED WORLDWIDE COURIERS PVT LTD</strong></span>
 
-                                    <!-- Agreement -->
-                                    <h2>Agreement</h2>
-                                    <p>These terms and conditions forms a binding agreement ("Terms & Conditions")
-                                        between you and the Legal Entity that you are representing, if any, (hereinafter
-                                        collectively referred to as "You" or "Your" or "User", which expression shall,
-                                        unless it is repugnant to the subject or context thereof, mean and include its
-                                        legal heirs, executors, administrators, successors, affiliates, and permitted
-                                        assigns) <strong>ON THE ONE PART</strong> and UNITED WORLDWIDE COURIERS PVT LTD
-                                        , a company registered under the Companies Act, 1956, having its registered
-                                        office at Building no 1, Lower Ground Floor, Khasra No 505, Bypass Road,
-                                        Mahipalpur Extension, Mahipalpur, New Delhi, Delhi 110037, (hereinafter referred
-                                        to as "United Worldwide Couriers" or "We" or "Our" or "Us", which expression
-                                        shall, unless it is repugnant to the subject or context thereof, mean and
-                                        include its successors, affiliates and assigns) <strong>ON THE OTHER
-                                            PART</strong>.</p>
-                                    <p>The User and United Worldwide Couriers shall hereinafter collectively be referred
-                                        to as "Parties" and individually as "Party".</p>
+                                    <p>This Merchant Agreement <strong>("Agreement")</strong> is between you company/individual/firm/partnership/body corporate), together with any company or other business entity you are representing, if any (hereinafter collectively referred as "Merchant" or "you" or "User"); and <strong>United Worldwide Couriers Pvt Ltd</strong> , a company registered under the Companies Act, 1956, having its registered office at Building no 1, Lower Ground Floor, Khasra No 505, Bypass Road, Mahipalpur Extension, Mahipalpur, New Delhi, Delhi 110037, offering 'Logistics Management Services', under the name 'United Worldwide Couriers Pvt Ltd' (hereinafter referred to as "United Worldwide Couriers " or "we" or "Company", and together with the User referred jointly as the "Parties" and individually as a "Party"). 
+
+.</p>
+<h2>BACKGROUND</h2>
+                                    <p>This Agreement comes into effect when the Merchant registers to use the Services, clicks to accept the terms, signs any proposal, onboarding form, statement of work, rate sheet, annexure, service order, or other commercial document, ships any consignment through the Company, or otherwise avails any Services from the Company. </p>
+
+                                    <p>Such conduct shall constitute absolute, irrevocable, unconditional, and legally binding acceptance of this Agreement in its entirety. This Agreement governs the Merchant’s access to and use of the Company’s website, dashboard, software, application programming interfaces, mobile applications, communication channels, and all domestic, international, reverse logistics, customs, marketplace, importer of record, payment collection, and allied services offered by the Company from time to time. </p>
+
+                                    <p>You are advised to read this Agreement carefully. You expressly represent and warrant that you will not avail the Services if you do not understand, agree to become a party to, and abide by all of the terms and conditions specified below. Any violation of this Agreement may result in legal liability upon you. </p>
+
+                                    <p>This Agreement, among other things, provides the terms and conditions for use of the Services, primarily through a web-based practice management software hosted and managed remotely through the Website. </p>
+
+                                    <p>This Agreement is an electronic record in terms of Information Technology Act, 2000 and generated by a computer system, and   does not require any physical or digital signatures. This Agreement is published in accordance with the provisions of Rule 3(1) of the Information Technology (Intermediaries guidelines) Rules, 2011 that require publishing of the rules and regulations, privacy policy and terms of usage for access or usage of the website/ service. </p>
+
+                                    <p>United Worldwide Couriers  reserves the right to modify the terms of this Agreement, at any time, without giving you any prior notice. Your use of the Service following any such modification constitutes your agreement to follow and be bound by the terms of the Agreement, as modified. </p>
+
+                                    <p>Any additional terms and conditions, standard operating procedures (SOPs), service-level agreements (SLAs), terms of use, disclaimers and other policies applicable to general and specific areas of this Agreement, Website, Mobile App and/or Service shall be construed to form an integral part of this Agreement and any breach thereof will be construed as a breach of this Agreement. </p>
+
+                                    <p>Your access to use the Services will be solely at the discretion of United Worldwide Couriers . </p>
 
                                     <!-- Introduction -->
-                                    <h2>Introduction</h2>
-                                    <p>We through our Platforms offer logistic/shipping services to you either through
-                                        Shipping Vendors or ourselves ("Services") and/or sell certain Products, in
-                                        accordance and subject to compliance with the terms and conditions contained in
-                                        the Agreement.</p>
-                                    <p>Please read these Terms & Conditions and other documents referred herein
-                                        carefully before registering on, accessing, browsing, downloading or using any
-                                        Services or purchasing any Products offered on the Platforms or any electronic
-                                        device.</p>
+                                    <h2>USER ACCOUNT USAGE</h2>
 
-                                    <!-- Eligibility -->
-                                    <h2>Eligibility</h2>
-                                    <p>The platforms, services, and products are available only to persons competent to
-                                        enter into legally binding agreements under the Indian Contracts Act, 1872. By
-                                        using the platforms or services, you represent that you are 18 years of age or
-                                        older, capable of entering into a legally binding agreement, and not barred from
-                                        accessing or using the platforms or services. You also represent that you have
-                                        full rights, powers, and authority to enter into and perform the Agreement and
-                                        that doing so does not violate any applicable law, covenant, order, judgment, or
-                                        decree binding on you.</p>
+                                    <p>1.1 This Agreement is a master agreement governing the relationship between the Parties in connection with one or more business-to-business and business-to-customer services made available by the Company, including but not limited to logistics management services, shipping aggregation, domestic carriage facilitation, cross-border shipping, customs facilitation, importer of record services, reverse logistics, marketplace management, product marketing support, payment collection, technology access, and all allied services described in the applicable annexures, schedules, dashboard links, and service specifications.</p>
 
-                                    <!-- Account Use -->
-                                    <h2>Account Use</h2>
-                                    <p>You may possess only one account unless otherwise permitted by United Worldwide
-                                        Couriers in writing. Login credentials are intended solely for your personal use
-                                        and must be kept secret and safe. Multiple users may not share the same login,
-                                        and you may not transfer, assign, sublicense, lease, share, or otherwise permit
-                                        unauthorized use of any login credentials, access rights, account, token, or
-                                        system access. You remain responsible for all activities and transactions under
-                                        your account, whether carried out knowingly, negligently, or by employees,
-                                        agents, contractors, affiliates, or any other person using your credentials.</p>
+<p>1.2 The Platforms, the Services and the Products are only available for, and to, persons who are competent to enter into legally binding agreements under the Indian Contracts Act, 1872. For avoidance of any doubt, no Services or Products or access to the Platforms will be available to any person that has been previously stopped/blocked from accessing the Platforms or availing the Services or purchasing the Products by United Worldwide Couriers, unless specifically permitted by United Worldwide Couriers at its sole discretion.</p>
 
-                                    <!-- Platform Access -->
-                                    <h2>Platform Access</h2>
-                                    <p>Subject to compliance with this Agreement, the Company authorizes you personal,
-                                        non-exclusive, non-transferable, limited, revocable privilege to enter and use
-                                        Platforms and/or avail all or some of the Services and/or purchase the Products.
-                                        The availing of any Service(s) by You shall also be subject to compliance with
-                                        all the other rules, guidelines, policies, terms, and conditions specified by Us
-                                        for that particular Service(s) being availed by You. You hereby consent and
-                                        agree to comply with the rules, guidelines, policies, terms and conditions,
-                                        instructions, requests, etc., as may be specified by United Worldwide Couriers,
-                                        from time to time, in relation to each Service availed or to be availed by You.
-                                        Your access to avail the Services will at all times be solely at the discretion
-                                        of United Worldwide Couriers.</p>
-                                    <p>All content, software, layouts, workflows, processes, trademarks, service marks,
-                                        trade names, dashboards, graphics, text, rate logic, data models, and
-                                        compilations made available by the Company are proprietary to the Company or its
-                                        licensors and may not be copied, modified, reverse engineered, distributed,
-                                        sublicensed, publicly displayed, commercially exploited, or otherwise used
-                                        without prior written consent. Access to and continued use of the services
-                                        remains at the sole discretion of the Company.</p>
+<p>1.3 By accessing, browsing, using or registering on the Platforms or availing the Services or purchasing any Products, You are representing the following:</p>
 
-                                    <!-- User Responsibilities -->
-                                    <h2>User Responsibilities</h2>
-                                    <p>You represent and warrant that all information, documents, declarations, bank
-                                        details, tax registrations, KYC records, addresses, phone numbers, contact
-                                        details, and other data provided to the Company are true, correct, current,
-                                        complete, lawful, and not misleading. The Company may require supporting
-                                        documents to verify any information and may suspend or refuse services pending
-                                        successful verification. You must immediately notify the Company of any
-                                        unauthorized use of your passcode or account, any breach of security, and any
-                                        change in your email address, mobile number, or other personal information
-                                        provided for use of the services.</p>
+<ul>
+    <li>You are 18 years of age or older;</li>
+    <li>You are capable of entering into a legally binding agreement as per the Applicable Law;</li>
+    <li>You are not barred or otherwise legally prohibited from accessing or using the Platforms and/or Services and/or Products;</li>
+    <li>You have all necessary rights, powers and authority to enter into and perform the Agreement;</li>
+    <li>That the entrance and performance of the Agreement by You and/or entity You are representing shall not violate any Applicable Law and shall not breach any agreement, covenant, court order, judgment or decree to which You are bound; and</li>
+    <li>That You have read and understood the contents of the Agreement and that the Agreement will not be construed in favour of or against You due to United Worldwide Couriers drafting the Agreement, and that no presumption or burden of proof shall arise favoring or disfavoring United Worldwide Couriers by virtue of being the author of any provisions of the Agreement.</li>
+</ul>
 
-                                    <!-- Lawful Use -->
-                                    <h2>Lawful Use</h2>
-                                    <p>You shall use the services only for lawful purposes and strictly in accordance
-                                        with this Agreement, applicable law, applicable trade controls, customs laws,
-                                        export-import regulations, sanctions laws, tax laws, and generally accepted
-                                        commercial practices. You shall not impersonate any person, misrepresent your
-                                        identity, use the services for unauthorized or unlawful purposes, interfere with
-                                        the platform or networks, access the services through unauthorized means, or
-                                        otherwise engage in activity that disrupts or compromises the services or the
-                                        Company's business. The Company may customize, modify, suspend, restrict, or
-                                        discontinue any feature, service, integration, route, rate, serviceability
-                                        option, collection mode, or operational process at any time, including as
-                                        required by law, government policy, carrier instructions, sanctions, local
-                                        restrictions, security concerns, or operational reasons.</p>
+<p>1.4 You may only possess one account, unless otherwise permitted by United Worldwide Couriers in writing. The login data/credentials are intended solely for Your personal use and therefore, are always to be kept secret and safe. Multiple users are not permitted to share the same/single log-in. You are not entitled to share the login credentials with any third parties for using Services or to disclose these otherwise. Further, You will be at all times responsible to maintain the confidentiality of the login credentials of Your account. You will immediately notify United Worldwide Couriers of any unauthorized use of Your passcode or account or any other breach of security, and in the event Your device has been lost or stolen, You shall request United Worldwide Couriers to block the account and/or change the passcode immediately for the account.</p>
 
-                                    <!-- Privacy and Data -->
-                                    <h2>Privacy and Data</h2>
-                                    <p>By using the website and/or by providing your information, you consent to the
-                                        collection and use of the information you disclose on the website in accordance
-                                        with the Privacy Policy, including consent for sharing your information as set
-                                        out in that policy. You agree that the Company may store personally identifiable
-                                        information such as your name, email address, mobile phone number, address,
-                                        contact details, postal code, and demographic profile information, as well as
-                                        browsing information such as pages visited, links clicked, and frequency of
-                                        access. All such information shall be stored and used in accordance with the
-                                        Privacy Policy.</p>
+<p>1.5 You are responsible for all activities and transactions that occur under, or take place through, Your account, whether knowingly or negligently and if anyone uses Your account, including individuals under 18 years of age, You will still be responsible for ensuring that such individuals comply with these Terms &amp; Conditions and You will be solely responsible for all actions these individuals take in and/or through Your account. You also acknowledge that United Worldwide Couriers does not have any responsibility of ensuring that You meet the aforesaid eligibility requirements.</p>
 
-                                    <!-- Updates and Amendments -->
-                                    <h2>Updates and Amendments</h2>
-                                    <p>Any amendment to this Agreement comes into effect immediately upon posting unless
-                                        otherwise specified, and not on the date on which you may be notified of the
-                                        change. Any failure or delay in notifying you of changes or amendments does not
-                                        affect the validity or effectiveness of those changes. Continued access to or
-                                        use of the platforms and services will be treated as your irrevocable and
-                                        unconditional acceptance of the amended Agreement. You are solely responsible
-                                        for keeping yourself updated by regularly reviewing the Agreement on the
-                                        platforms.</p>
+<p>1.6 Subject to compliance with this Agreement, the Company authorizes the Merchant to access and use the platform, dashboard, website, software, and mobile application solely for booking, managing, tracking, reconciling, communicating, receiving, and administering shipments and related services.</p>
 
-                                    <!-- Communications -->
-                                    <h2>Communications</h2>
-                                    <p>All notices, communications, updates, invoices, rate revisions, dashboard alerts,
-                                        service notifications, legal notices, and operational instructions may be issued
-                                        by the Company through email, dashboard, mobile application, SMS, WhatsApp,
-                                        registered mobile number, support ticketing system, courier, or any other
-                                        officially designated communication channel. You consent to receive
-                                        communications through such channels. The Company may also verify KYC
-                                        information and share necessary details with carriers, insurers, customs
-                                        authorities, importer of record entities, marketplace partners, banks, payment
-                                        partners, police, courts, government agencies, complainants, or any other
-                                        relevant entity for compliance, claims processing, dispute handling, fraud
-                                        review, legal proceedings, or operational processing, in accordance with
-                                        applicable law.</p>
+<p>All content, software, layouts, workflows, processes, trademarks, service marks, trade names, dashboards, graphics, text, rate logic, data models, and compilations made available by the Company are proprietary to the Company or its licensors and shall not be copied, modified, reverse engineered, distributed, sublicensed, publicly displayed, commercially exploited, or otherwise used without prior written consent.</p>
 
-                                    <!-- Booking and Handling -->
-                                    <h2>Booking and Handling</h2>
-                                    <p>You may choose between United Worldwide Couriers Pickup and Self-Ship, subject to
-                                        availability. Under United Worldwide Couriers Pickup, the Company will collect
-                                        shipments from the pickup address you provide; under Self-Ship, you must deliver
-                                        shipments to the nearest hub. Upon arrival at the hub, each shipment will be
-                                        scanned, weighed, and sorted according to destination and selected service. If
-                                        there is a discrepancy between declared and recorded weight, the shipment will
-                                        be placed on hold and you will be notified by email for approval; once approved,
-                                        the shipment will proceed to its destination. After a shipment has left the hub,
-                                        no further weight adjustments will be charged to your account.</p>
+<p>1.7 The Merchant shall not transfer, assign, sublicense, lease, share, or otherwise permit unauthorized use of any login credentials, access rights, account, token, or system access. Multiple users shall not share the same credentials unless expressly permitted in writing by the Company. The Merchant shall remain solely responsible for all activities carried out through its account, whether by employees, agents, contractors, affiliates, or other authorized or unauthorized persons using its credentials, and any such act or omission shall be deemed to be that of the Merchant.</p>
 
-                                    <!-- International Shipments -->
-                                    <h2>International Shipments</h2>
-                                    <p>For international shipments, after export clearance in India, the shipment will
-                                        be customs-cleared in the destination country and received at the local office
-                                        before being handed to the last-mile carrier. Last-mile carriers may vary by
-                                        country and may change from time to time. For shipments routed through branded
-                                        carrier networks such as DHL, UPS, and FedEx, the shipment is connected to the
-                                        carrier's hub in Delhi and tracking is available on the carrier's website using
-                                        the tracking number.</p>
+<p>1.8 The Merchant represents and warrants that all information, documents, declarations, bank details, tax registrations, KYC records, addresses, phone numbers, contact details, and other data provided to the Company are true, correct, current, complete, lawful, and not misleading. The Company may require supporting documents to verify any information and may suspend or refuse Services pending successful verification.</p>
 
-                                    <!-- Delivery and RTO -->
-                                    <h2>Delivery and RTO</h2>
-                                    <p>The Company will attempt delivery of shipments at least once, and many last-mile
-                                        shipping vendors attempt delivery twice depending on their policies. If no one
-                                        is available to receive a shipment, the carrier may, at its discretion, leave it
-                                        with a neighbour, deposit it at the local post office for customer pickup, or
-                                        place it in a secure external location outside the house, including a mailbox. A
-                                        shipment may be deemed undeliverable for reasons including incorrect or
-                                        incomplete address details, customer refusal to accept delivery, or customer
-                                        refusal to pay applicable duties and/or taxes. If a shipment is undeliverable,
-                                        return-to-origin charges will apply, storage charges may apply where applicable,
-                                        and the shipment may be destroyed, returned, or disposed of in accordance with
-                                        the relevant service rules.</p>
+<p>1.9 The Merchant shall use the Services only for lawful purposes and strictly in accordance with this Agreement, applicable law, applicable trade controls, customs laws, export-import regulations, sanctions laws, tax laws, and generally accepted commercial practices. The Merchant shall not impersonate any person, misrepresent its identity, use the Services for unauthorized or unlawful purposes, interfere with the platform or networks, access the Services through unauthorized means, or otherwise engage in activity that disrupts or compromises the Services or the Company’s business.</p>
 
-                                    <!-- Fees and Payment -->
-                                    <h2>Fees and Payment</h2>
-                                    <p>You shall pay all subscription fees, shipping charges, freight, RTO charges,
-                                        reverse pickup charges, COD handling charges, customs-related service fees,
-                                        importer of record charges, storage charges, demurrage, incidental expenses,
-                                        surcharges, accessorial charges, address correction fees, penalties, taxes, and
-                                        all other amounts applicable to the services. Unless expressly stated otherwise,
-                                        all fees are exclusive of taxes and GST and other applicable taxes shall be
-                                        charged in addition. The Company may add new services for additional charges or
-                                        revise existing charges, rates, surcharges, accessorial charges, service
-                                        conditions, or fee structures at any time by notice through dashboard, email,
-                                        mobile application, rate card, calculator link, annexure, or any other official
-                                        communication channel.</p>
+<p>1.10 Access to and continued use of the Services shall remain at the sole discretion of the Company. The Company may customize, modify, suspend, restrict, or discontinue any feature, service, integration, route, rate, serviceability option, collection mode, or operational process at any time, including as required by law, government policy, carrier instructions, sanctions, local restrictions, security concerns, or operational reasons.</p>
 
-                                    <!-- Invoicing and Recovery -->
-                                    <h2>Invoicing and Recovery</h2>
-                                    <p>The Company may issue invoices periodically, including mid-month, month-end, or
-                                        on such other cycle as determined by the Company. You must verify invoice
-                                        contents promptly and, unless a shorter period is prescribed for a specific
-                                        service model, raise any bona fide dispute within five working days of invoice
-                                        availability and pay undisputed amounts within seven days from the invoice date
-                                        or such other due date specified in writing. Failure to raise a dispute within
-                                        the prescribed period constitutes deemed acceptance of the invoice. If you fail
-                                        to pay any amount when due, the Company may suspend shipping, retain and adjust
-                                        outstanding amounts against COD remittances, wallet balances, credits, deposits,
-                                        refunds, or any amounts payable to you, retain custody of shipments, re-route
-                                        shipments, levy interest at 18 percent per annum from the due date until
-                                        realization, forfeit security deposit or wallet balance where contractually
-                                        permitted, and dispose of shipments in accordance with this Agreement where
-                                        defaults are not regularized within the applicable period.</p>
+<p>1.11 For avoidance of doubt, it is hereby stated that any change or amendment made to the Agreement will come into effect immediately upon posting (unless otherwise specified) and not on the day on which You may be notified of the changes. Any failure or delay in updating You of the changes or amendments to the Agreement by United Worldwide Couriers will not impact the validity and effectiveness of those changes or amendments. You will be solely responsible for keeping yourself updated of the changes/amendments in the Agreement by regularly reviewing the Agreement on the Platforms and checking for any updates or changes on a regular basis. Continued access or use of Platforms and/or availing of Service(s) and/or purchase of Product(s) will be deemed to constitute Your irrevocable and unconditional acceptance of the amended Agreement.</p>
 
-                                    <!-- COD and Credits -->
-                                    <h2>COD and Credits</h2>
-                                    <p>For shipments booked under cash on delivery, you appoint the Company as a limited
-                                        collection agent solely for the purpose of collecting the COD amount from the
-                                        consignee through the Company's logistics vendors and remitting the balance
-                                        after deduction of applicable freight, service fees, handling fees, taxes,
-                                        offsets, reversals, and other lawful deductions. The Company has no title in the
-                                        goods. Unless otherwise agreed, COD remittance may be made within eight days
-                                        from delivery of the relevant shipment or in accordance with the remittance
-                                        cycle then followed by the Company, subject to reconciliation, carrier
-                                        remittance, fraud review, dispute review, status verification, valid bank
-                                        details, and absence of offset rights. Where the Merchant operates on a prepaid
-                                        model, sufficient shipping credits must be maintained in the wallet or account
-                                        before availing services, and credit balance may be used only for booking
-                                        shipments. Credit may be forfeited if no shipment is booked for three years from
-                                        the last shipment date, subject to applicable law, and refunds, if approved, may
-                                        be restricted to the original source or mode of payment and may be conditioned
-                                        upon KYC compliance and any surcharge or deduction permitted by law or contract.
-                                    </p>
+<p>1.12 You have provided consent to automatically receive updates such as bug fixes, patches, enhanced functions, missing plug-ins and new versions (collectively, ‘Updates’), for the purpose of effective delivery of the Services. Please note that your continued use of the Platform following such Updates would constitute deemed acceptance by you of the same.</p>
 
-                                    <!-- Weight and Pricing -->
-                                    <h2>Weight and Pricing</h2>
-                                    <p>Each shipment is subject to weight and size limits that may differ by shipping
-                                        vendor and destination. Volumetric dimensional weight will be calculated
-                                        automatically in the booking panel using the formula length cm x breadth cm x
-                                        height cm / 5000. For billing, where volumetric weight is 5 kg or less, charges
-                                        will be based on actual dead weight; where volumetric weight exceeds 5 kg,
-                                        charges will be based on whichever is greater, actual weight or volumetric
-                                        weight. Certain items that require special handling, as defined in the Company's
-                                        internal operational guidelines, will incur an additional special handling fee.
-                                    </p>
+<p>1.9 By using the Website and/or by providing your information, you consent to the collection and use of the information you disclose on the Website in accordance with this Privacy Policy, including but not limited to your consent for sharing your information as per this privacy policy.</p>
 
-                                    <!-- Claims and Refunds -->
-                                    <h2>Claims and Refunds</h2>
-                                    <p>Claims and compensation are available only under the specific circumstances
-                                        described in the Agreement. To initiate a claim, you must provide the United
-                                        Worldwide Couriers airway bill number and all supporting documents to
-                                        Csdunitedcouriers.biz. For claims involving branded carrier networks such as
-                                        DHL, UPS, and FedEx, the same policy applies subject to carrier-specific
-                                        timelines. No claim will be considered if submitted more than sixty working days
-                                        after the inward scan, if the Company notifies you that a shipment is stuck,
-                                        undelivered, or under RTO and you do not respond within seven working days, or
-                                        if required evidence and documents are not provided.</p>
+<p>1.13 Upon clicking a specific third-party link, You will be directed to the respective third party’s page offering the product or service. You irrevocably and unconditionally understand and acknowledge that: (i) You are clicking on the third party link as per Your sole discretion; (ii) accessing the third party websites shall not mean approval by United Worldwide Couriers for such products and/or services; (iii) United Worldwide Couriers shall not be liable for the accuracy of the information being shared on the third party website and cannot be held liable for any claims, losses or damages. It is Your sole responsibility to independently evaluate or obtain independent advice from a competent professional of the accuracy, completeness, and usefulness of all opinions, advice, services, merchandise, and other information provided on third-party websites. United Worldwide Couriers shall not be liable or responsible for any consequence of You accessing such websites and undertaking any transactions on such websites.</p>
 
-                                    <!-- Claim Evidence -->
-                                    <h2>Claim Evidence</h2>
-                                    <p>For no first scan claims, the required AWB and supporting documents must be
-                                        submitted, and compensation will be limited in accordance with the applicable
-                                        limits. For no delivery scan or lost-in-transit claims, you must submit the
-                                        buyer-seller chat and proof of refund along with the required AWB and documents.
-                                        For claims alleging non-connectivity, the signed pickup manifest for the
-                                        disputed shipment must be submitted within three working days of pickup, and
-                                        claims lacking a signed manifest will not be maintainable. For damage,
-                                        pilferage, tampering, crushing, or leakage, the recipient must record negative
-                                        remarks on the proof of delivery at the time of delivery, and such claims will
-                                        be entertained only if made within forty-eight hours of delivery or receipt and
-                                        only where the outer packaging applied by the Company or the shipping vendor is
-                                        damaged, altered, or tampered with.</p>
+<p>1.14 We receive and store certain types of information whenever you interact with us. For example, like many websites, we use “cookies,” and we obtain certain types of information when your web browser accesses our Services. We may also receive/store information about your location and your mobile device, including a unique identifier for your device. We may use this information for internal analysis, legal discrepancies, dispute resolution, fraud detection, abuse prevention, suspicious activity monitoring and to provide you with location-based services, such as advertising, search results, and other personalized content. Please note that your continued use of the Platform following such Updates would constitute deemed acceptance by you of the same. Your data is retained only as long as necessary for the purposes outlined in this policy and to meet legal requirements. We take reasonable steps to delete or de-identify data when no longer needed.</p>
 
-                                    <!-- Liability -->
-                                    <h2>Liability</h2>
-                                    <p>The liability of United Worldwide Couriers in relation to the services is
-                                        strictly limited to the extent expressly provided under this Agreement, the
-                                        applicable Terms and Conditions, annexures, policies, and service-specific
-                                        provisions. The platform and services are provided on an as-is, as-available,
-                                        and reasonable-efforts basis, and the Company does not guarantee uninterrupted,
-                                        error-free, secure, or continuous operation. The Company does not independently
-                                        verify, validate, endorse, or authenticate information, declarations, listings,
-                                        content, documents, data, or materials provided by users, merchants, customers,
-                                        consignees, shipping vendors, or third parties. Shipments are not insured unless
-                                        separately purchased by the merchant.</p>
+<p>1.15 If at any time You do not agree with any provision of the Agreement or do not wish to be bound by the Agreement, You shall immediately cease Your use of the Platforms, Services and Products and forthwith make payment of all outstanding amounts due to United Worldwide Couriers. You shall be bound by and shall continue to adhere and abide by the Agreement, for so long as You avail the Service or owe any amount to United Worldwide Couriers in relation to any of the Service(s) and/or Products.</p>
 
-                                    <!-- Indemnity -->
-                                    <h2>Indemnity</h2>
-                                    <p>You shall indemnify, defend, and hold harmless the Company and its affiliates,
-                                        directors, officers, employees, agents, subcontractors, consultants, licensors,
-                                        service providers, shipping partners, customs agents, importer of record
-                                        entities, marketplace partners, and representatives from and against claims,
-                                        actions, proceedings, losses, damages, liabilities, penalties, duties, taxes,
-                                        interest, costs, and expenses arising out of or related to your access to or use
-                                        of the services, breach of the Agreement, violation of law, misdeclaration,
-                                        under-declaration, wrongful valuation, wrong HS classification, false origin
-                                        declaration, counterfeit goods, restricted goods, prohibited goods, dangerous
-                                        goods, infringing goods, defective or unsafe goods, third-party claims, duties,
-                                        penalties, detention, demurrage, storage charges, or negligent, wrongful, or
-                                        fraudulent acts or omissions by you or your personnel.</p>
 
-                                    <!-- Compliance -->
-                                    <h2>Compliance</h2>
-                                    <p>Each party shall comply with all applicable laws, including state, central,
-                                        customs, and international laws, statutes, rules, and regulations relating to
-                                        its performance under this Agreement. Each party shall pay all fees and charges
-                                        required by applicable law and maintain all licenses, permits, authorizations,
-                                        registrations, and qualifications necessary to perform its obligations. The
-                                        Merchant further represents that it lawfully owns, possesses, controls, sells,
-                                        exports, imports, markets, and ships all goods tendered under this Agreement and
-                                        has obtained all necessary consents, licenses, registrations, declarations, and
-                                        approvals required for the services.</p>
+<h2>2. Eligibility</h2>
+<p>2.1 The Merchant shall pay the Company all subscription fees, shipping charges, freight, RTO charges, reverse pickup charges, COD handling charges, customs-related service fees, importer of record charges, storage charges, demurrage, incidental expenses, surcharges, accessorial charges, address correction fees, penalties, taxes, and all other amounts applicable to the Services as set out in this Agreement, any applicable annexure, rate sheet, live calculator, dashboard, invoice, commercial proposal, or written communication issued by the Company. Unless expressly stated otherwise, all fees are exclusive of taxes and all applicable taxes, including GST, shall be charged in addition.</p>
 
-                                    <!-- Confidentiality -->
-                                    <h2>Confidentiality</h2>
-                                    <p>Each party may receive confidential information of/from the other in the course
-                                        of performance of this Agreement. The receiving party shall keep such
-                                        information strictly confidential, use it only for performance of this
-                                        Agreement, restrict disclosure on a strict need-to-know basis, and protect it
-                                        with at least the same degree of care it uses for its own confidential
-                                        information and in any event not less than reasonable care. Upon termination or
-                                        request, the receiving party shall return or destroy confidential information to
-                                        the extent reasonably practicable and certify compliance if requested.</p>
+<p>2.2 The Company may add new services for additional charges or revise existing charges, rates, surcharges, accessorial charges, service conditions, or fee structures at any time by notice through dashboard, email, mobile application, rate card, calculator link, annexure, or any other official communication channel. Unless the Merchant objects in writing before the stated effective date and ceases use of the affected Services, the revised fee structure shall be deemed accepted.</p>
 
-                                    <!-- Intellectual Property -->
-                                    <h2>Intellectual Property</h2>
-                                    <p>All intellectual property in the Company's platform, software, systems, APIs,
-                                        dashboards, workflows, trademarks, brand assets, websites, documents, templates,
-                                        service descriptions, rate engines, operating methods, and derivative works
-                                        shall remain vested exclusively in the Company or its licensors. All
-                                        intellectual property owned by either party before this Agreement shall remain
-                                        with that party. Any feedback, suggestions, enhancement requests, process
-                                        improvements, or derivative developments created in connection with the services
-                                        may be used by the Company without restriction unless otherwise agreed in
-                                        writing.</p>
+<p>2.3 The Company may issue invoices periodically, including mid-month, month-end, or such other cycle as determined by the Company. The Merchant shall verify invoice contents promptly and, unless a shorter period is prescribed for a specific service model, shall raise any bona fide dispute within five working days of invoice availability and pay undisputed amounts within seven days from invoice date or such other due date specified in writing. Failure to raise a dispute within the prescribed period shall constitute deemed acceptance of the invoice.</p>
 
-                                    <!-- Termination -->
-                                    <h2>Termination</h2>
-                                    <p>This Agreement begins on the date you first avail the services and continues
-                                        unless terminated in accordance with this Agreement. You may request termination
-                                        by thirty days' prior written notice, subject to completion of in-transit
-                                        shipments, reconciliation, settlement of all dues, submission of documents,
-                                        discharge of liabilities, and compliance with any service-specific lock-in or
-                                        closure conditions. The Company may suspend or terminate this Agreement or any
-                                        account immediately, with or without notice, if you breach the Agreement, create
-                                        legal, regulatory, reputational, financial, fraud, sanctions, security, or
-                                        operational risk, ship prohibited or unlawful goods, default in payment, fail
-                                        KYC or compliance verification, receive instructions from a carrier or
-                                        authority, or if the Company elects to discontinue the relationship for lawful
-                                        business convenience.</p>
+<p>2.4 If the Merchant fails to pay any amount when due, the Company shall, without prejudice to any other right or remedy, have the right to suspend shipping, retain and adjust outstanding amounts against COD remittances, wallet balances, credits, deposits, refunds, or any amounts payable to the Merchant, retain custody of shipments, re-route shipments, levy interest at 18 percent per annum from the due date until realization, forfeit security deposit or wallet balance where contractually permitted, and dispose of shipments in accordance with this Agreement where the Merchant fails to regularize defaults within the applicable period. The Merchant acknowledges that freight charges become due upon pickup, shipment initiation, or RTO initiation, as applicable, whether or not already invoiced.</p>
 
-                                    <!-- Misuse -->
-                                    <h2>Misuse</h2>
-                                    <p>The Company may restrict, deactivate, suspend, or terminate the account of any
-                                        Merchant that abuses or misuses the services, including by creating false or
-                                        duplicate profiles, infringing intellectual property rights, shipping prohibited
-                                        or suspicious goods, evading fees, manipulating system workflows,
-                                        under-declaring weight or value, booking shipments outside permitted use,
-                                        circumventing controls, refusing to cooperate in an investigation, or engaging
-                                        in conduct deemed suspicious, fraudulent, harmful, or contrary to the purpose of
-                                        the services. Repeat violations may result in permanent blacklisting and legal
-                                        action.</p>
+<p>2.5 The Merchant shall provide only lawfully owned and valid payment credentials, bank account details, billing details, and other financial information. The Merchant remains solely responsible for the accuracy, legality, and confidentiality of such information. The Company may require bank verification, KYC, source-of-funds information, or any other compliance information before processing remittances, refunds, or wallet withdrawals.</p>
 
-                                    <!-- Governing Law -->
-                                    <h2>Governing Law</h2>
-                                    <p>This Agreement is governed by the laws of India. Subject to the arbitration
-                                        clause, the courts of New Delhi shall have exclusive jurisdiction to determine
-                                        disputes arising out of, under, or in relation to this Agreement. Any dispute
-                                        shall be settled by arbitration in New Delhi in accordance with the Indian
-                                        Arbitration and Conciliation Act, 1996, in the English language, by a sole
-                                        arbitrator appointed by United Courier Services, and the arbitrator's decision
-                                        shall be final, conclusive, and binding on the parties.</p>
+<p>2.6 For shipments booked under cash on delivery, the Merchant appoints the Company as a limited collection agent solely for the purpose of collecting the COD amount from the consignee through the Company’s logistics vendors and remitting the balance after deduction of applicable freight, service fees, handling fees, taxes, offsets, reversals, and other lawful deductions. The Company shall have no title in the goods. Save as otherwise agreed, COD remittance may be made within eight days from delivery of the relevant shipment or in accordance with the remittance cycle then followed by the Company, subject always to reconciliation, carrier remittance, fraud review, dispute review, status verification, valid bank details, and absence of offset rights.</p>
 
-                                    <!-- General Terms -->
-                                    <h2>General Terms</h2>
-                                    <p>No failure or delay in exercising any right, power, or remedy operates as a
-                                        waiver unless in writing. If any provision is invalid or unenforceable, the
-                                        remaining provisions remain in effect, and the parties shall negotiate in good
-                                        faith to replace the invalid provision with one having the same legal and
-                                        commercial effect as far as possible. Neither party is created as a partner,
-                                        joint venturer, fiduciary, employee, or agent of the other, except where the
-                                        Company acts as a limited collection agent for COD remittance to the extent
-                                        expressly stated. This Agreement, together with annexures, schedules, rate
-                                        sheets, dashboard notices, web links, operating procedures, and written addenda,
-                                        constitutes the entire agreement between the parties on its subject matter.</p>
+<p>2.7 Where a shipment status is wrongly updated as delivered, a COD amount has been wrongly remitted, a COD order is subsequently modified, a dispute is raised by a buyer, a fraud event is suspected, or any amount is otherwise found to have been incorrectly credited, the Company may deduct such amount from future remittances, wallet balances, or other monies payable to the Merchant. If any COD amount remains unremitted for 365 days from its due date for reasons not attributable to the Company, including incorrect bank details or failure of the Merchant to complete compliance formalities, the Merchant waives all claims to such amount and the Company may forfeit the same.</p>
 
-                                    <!-- Definitions and Interpretation -->
-                                    <h2>Definitions and Interpretation</h2>
-                                    <h3>Definitions</h3>
-                                    <p>For the purposes of this Agreement:</p>
-                                    <div class="glossary-item"><span class="glossary-term">"Affiliate"</span><span
-                                            class="glossary-def">means, in relation to a Party, any entity that directly
-                                            or indirectly controls, is controlled by, or is under common control with
-                                            that Party.</span></div>
-                                    <div class="glossary-item"><span class="glossary-term">"Applicable Law"</span><span
-                                            class="glossary-def">means all laws, statutes, rules, regulations,
-                                            notifications, circulars, orders, trade controls, sanctions, customs laws,
-                                            tax laws, and governmental requirements applicable to a Party, the Services,
-                                            or the goods.</span></div>
-                                    <div class="glossary-item"><span class="glossary-term">"Confidential
-                                            Information"</span><span class="glossary-def">means with respect to each
-                                            Party, any information or trade secrets, schedules, business plans
-                                            including, without limitation, commercial information, financial
-                                            projections, client information, administrative and/or organizational
-                                            matters of a confidential/secret nature in whatever form which is acquired
-                                            by, or disclosed to, the other Party pursuant to this Agreement, and
-                                            includes any tangible or intangible non-public information that is marked or
-                                            otherwise designated as 'confidential', 'proprietary', 'restricted', or with
-                                            a similar designation by the disclosing Party at the time of its disclosure
-                                            to the other Party, or is otherwise reasonably understood to be confidential
-                                            by the circumstances surrounding its disclosure, but excludes information
-                                            which: (i) is required to be disclosed in a judicial or administrative
-                                            proceeding, or is otherwise requested or required to be disclosed pursuant
-                                            to applicable law or regulation, and (ii) which at the time it is so
-                                            acquired or disclosed, is already in the public domain or becomes so other
-                                            than by reason of any breach or non-performance by the other Party of any of
-                                            the provisions of this Agreement;</span></div>
-                                    <div class="glossary-item"><span class="glossary-term">"Force Majeure
-                                            Event"</span><span class="glossary-def">includes act of God, war, civil
-                                            disturbance, terrorism, strike, lockout, fire, flood, explosion, epidemic,
-                                            pandemic, transport disruption, carrier failure, cyber disruption, customs
-                                            restriction, export-import policy change, sanction, or government action
-                                            beyond reasonable control.</span></div>
-                                    <div class="glossary-item"><span class="glossary-term">"Intellectual
-                                            Property"</span><span class="glossary-def">means all patents, copyrights,
-                                            trademarks, trade names, service marks, logos, domain names, trade secrets,
-                                            designs, software, databases, data rights, know-how, inventions, and all
-                                            allied intellectual property rights and goodwill.</span></div>
-                                    <div class="glossary-item"><span class="glossary-term">"Services"</span><span
-                                            class="glossary-def">means all domestic and international shipping, carriage
-                                            facilitation, logistics management, customs support, importer of record
-                                            services, reverse logistics, COD collection, marketplace support, technology
-                                            access, and allied services provided or facilitated by the Company.</span>
-                                    </div>
-                                    <div class="glossary-item"><span class="glossary-term">"Shipment"</span><span
-                                            class="glossary-def">means any parcel, package, consignment, goods,
-                                            document, or item tendered by or on behalf of the Merchant for any
-                                            Service.</span></div>
+<p>2.8 Where the Merchant operates on a prepaid model, the Merchant shall maintain sufficient shipping credits in its wallet or account before availing Services. Freight and other charges may be auto-adjusted against wallet balances, and any negative balance may be set off against COD or other receivables. Credit balance may be used only for booking shipments and may be forfeited if no shipment is booked for a continuous period of three years from the last shipment date, subject to applicable law. Refunds, if approved, may be restricted to the original source or mode of payment and may be conditioned upon KYC compliance and any surcharge or deduction permitted by law or contract.</p>
 
-                                    <h3>Interpretation</h3>
-                                    <p>Unless the context of this Agreement otherwise requires:</p>
-                                    <ul>
-                                        <li>(a) heading and bold typeface are only for convenience and shall be ignored
-                                            for the purpose of interpretation;</li>
-                                        <li>(b) other terms may be defined elsewhere in the text of this Agreement and,
-                                            unless otherwise indicated, shall have such meaning throughout this
-                                            Agreement;</li>
-                                        <li>(c) references to this Agreement shall be deemed to include any amendments
-                                            or modifications to this Agreement, as the case may be;</li>
-                                        <li>(d) the terms "hereof", "herein", "hereby", "hereto" and derivative or
-                                            similar words refer to this entire Agreement or specified Clauses of this
-                                            Agreement, as the case may be;</li>
-                                        <li>(e) references to a particular section, clause, paragraph, sub-paragraph or
-                                            schedule, exhibit or annexure shall be a reference to that section, clause,
-                                            paragraph, sub-paragraph or schedule, exhibit or annexure in or to this
-                                            Agreement;</li>
-                                        <li>(f) reference to any legislation or law or to any provision thereof shall
-                                            include references to any such law as it may, after the date hereof, from
-                                            time to time, be amended, supplemented or re-enacted, and any reference to
-                                            statutory provision shall include any subordinate legislation made from time
-                                            to time under that provision;</li>
-                                        <li>(g) a provision of this Agreement must not be interpreted against any Party
-                                            solely on the ground that the Party was responsible for the preparation of
-                                            this Agreement or that provision, and the doctrine of contra proferentem
-                                            does not apply vis-à-vis this Agreement;</li>
-                                        <li>(h) references in the singular shall include references in the plural and
-                                            vice versa; and</li>
-                                        <li>(i) references to the word "include" shall be construed without limitation.
-                                        </li>
-                                    </ul>
+<p>2.9 Where the Merchant is granted secured postpaid or rolling credit, such facility is discretionary and may be increased, reduced, suspended, or withdrawn at any time. Used credit may be adjusted from upcoming remittances, wallet balances, deposits, or any amount payable to the Merchant. Non-payment shall entitle the Company to suspend Services and exercise all contractual and legal recovery rights.</p>
 
-                                    <!-- Customer Support -->
-                                    <h2>Customer Support</h2>
-                                    <p>If You have any questions, issues, complaint, or seek any clarity in relations to
-                                        the Agreement and/or Services/Products, please feel free to contact us at <a
-                                            href="mailto:Csd@unitedcouriers.biz">Csd@unitedcouriers.biz</a></p>
+ <h2>3. METHODOLOGY FOR PRICING AND VOLUMETRIC WEIGHT CALCULATION</h2>
 
-                                    <!-- Consolidated Agreement -->
-                                    <div class="consolidated-note">
-                                        <h3 style="margin-top: 0; border-bottom: none; padding-bottom: 0;">Consolidated
-                                            Agreement</h3>
-                                        <p>These Terms and Conditions are intended to be read together with the
-                                            Consolidated Merchant Agreement, which contains the complete and
-                                            comprehensive terms governing the relationship between the parties. In the
-                                            event of any inconsistency, ambiguity, or conflict between these Terms and
-                                            Conditions and the Consolidated Merchant Agreement, the Consolidated
-                                            Merchant Agreement shall prevail to the extent of such inconsistency,
-                                            ambiguity, or conflict.</p>
-                                    </div>
+ <p>3.1 Each individual Shipment is subject to weight and size limits that may differ by Shipping Vendor and destination.</p>
+
+<p>3.2 There is no restriction on the total aggregate weight of all your Shipments or on the number of boxes contained in any single Shipment.</p>
+
+<p>3.3 Volumetric (dimensional) weight will be calculated automatically in the Platforms’ booking panel using the formula: length (cm) × breadth (cm) × height (cm) ÷ 5000.</p>
+
+<p>For example, a parcel measuring 30 cm × 25 cm × 40 cm has a volumetric weight of 30 × 25 × 40 ÷ 5000 = 6 kg.</p>
+
+<p>3.4 Billing for Shipments will follow these rules:</p>
+
+<ul>
+    <li>Where volumetric weight is 5 kg or less, charges will be based on actual (dead) weight;</li>
+    <li>Where volumetric weight exceeds 5 kg, charges will be based on whichever is greater - actual weight or volumetric weight;</li>
+    <li>Certain items that require special handling, as defined in our internal operational guidelines, will incur an additional special handling fee.</li>
+</ul>
+
+ <h2>4. SHIPMENT BOOKING AND OPERATIONAL WORKFLOW</h2>
+
+ <p>4.1 You may choose between two booking methods for Shipments: United Worldwide Couriers-Pickup or Self-Ship. Under United Worldwide Couriers-Pickup, we will collect Shipments from the pickup address you provide. Under Self-Ship, you must deliver Shipments to our nearest hub.</p>
+
+<p>4.2 Upon arrival at our hub, each Shipment will be scanned, weighed and sorted according to destination and selected service. If there is a discrepancy between the weight you declared and the weight recorded at the hub, the Shipment will be placed on hold and we will notify you by email for approval. Once you approve the recorded weight, the Shipment will proceed to its destination. After a Shipment has left our hub, no further weight adjustments will be charged to your account.</p>
+
+<p>4.3 For international Shipments, after export clearance in India, the Shipment will be customs-cleared in the destination country and received at our local office before being handed to the last-mile carrier. Last-mile carriers vary by country (for example: USA - UPS, USPS, FedEx; Europe - DPD or national postal networks; Canada - Canada Post, UPS). These carriers may change from time to time. For Shipments routed through branded carrier networks (for example DHL, UPS, FedEx), the Shipment is connected to the carrier’s hub in Delhi and tracking is available on the carrier’s website using their tracking number.</p>
+
+<p>4.4 Delivery attempts and handling - We will attempt delivery of all Shipments at least once; many last-mile Shipping Vendors attempt delivery twice depending on their policies. If no one is available to receive a Shipment, the carrier may, at their discretion, leave the Shipment with a neighbour, deposit it at the local post office for customer pickup, or place it in a secure external location outside the house (including a mailbox).</p>
+
+<p>4.5 Return to origin (RTO) policy</p>
+
+<p>4.5.1 United Worldwide Couriers Direct Service: If a Shipment is undeliverable for any of the reasons listed below, it will be returned to our or our partner’s local office in the destination country. RTO charges will be billed to your account. In most cases such shipments will be destroyed in the destination country, except for Shipments to the USA and Europe where re-forwarding may be available at an additional cost.</p>
+
+<p>4.5.2 Branded carrier networks (DHL, FedEx, UPS): If a Shipment is undeliverable for any of the reasons below, the carrier may either destroy the Shipment in the destination country (per the carrier’s policy) or return it to you in India; applicable RTO charges will be billed to your account. If the RTO results from your failure to pay duties or taxes, the return and all related charges will be billed to your account.</p>
+
+<p>4.6 Reasons a Shipment may be deemed undeliverable include incorrect or incomplete address details at booking or on the Shipment (for example, missing apartment number or street name); Customer refusal to accept delivery; Customer refusal to pay applicable duties and/or taxes.</p>
+
+<p>4.7 RTO, storage and disposal charges</p>
+
+<p>4.7.1 United Worldwide Couriers reserves the right to return any Shipment not accepted by the Customer and to apply RTO charges at prevailing rates.</p>
+
+<p>4.7.2 If you do not accept an RTO Shipment or cannot be reached, we may levy demurrage/incidental storage charges for any period exceeding seven (7) working days from initiation of the return, up to forty-five (45) working days from that date.</p>
+
+<p>4.7.3 If the Customer fails to accept the returned Shipment beyond ten (10) working days from the first RTO undelivered date or first RTO delivery attempt date, United Worldwide Couriers may dispose of the Shipment. In that case you will forfeit any claims related to the Shipment and will remain liable for disposal charges and any other applicable charges, including demurrage/incidental storage charges.</p>
+
+<h2>5. REFUND AND LIABILITY POLICY </h2>
+
+<p>5.1 Claims and compensation - We aim to deliver all Shipments safely. If a delivery issue occurs, you may be eligible to file a claim and receive compensation as follows.</p>
+
+<p>5.1.1 General requirement to file a claim - To initiate a claim, provide the United Worldwide Couriers airway bill (AWB) number and all supporting documents to Csd@unitedcouriers.biz. Claims for Shipments routed via branded carrier networks (for example, DHL, UPS, FedEx) will be processed under the same policy, subject to any carrier-specific timelines.</p>
+
+<p>5.2 Claim scenarios and compensation</p>
+
+<p>5.2.1 Case 1 - No first scan by the destination last-mile carrier: If no first scan is recorded by the last-mile carrier in the destination country (for example, a United Worldwide Couriers Direct Shipment to the USA shows a carrier allocation such as UPS but no initial scan), compensation is limited as follows:</p>
+
+<p>5.2.1.1 For Shipments weighing 0 - 100 g: 30% of the invoice value plus shipping charges, capped at Rs. 1,000 (INR One Thousand), inclusive of shipping charges.</p>
+
+<p>5.2.1.2 For Shipments over 100 g: 30% of the invoice value plus shipping charges, capped at Rs. 4,000 (INR Four Thousand), inclusive of shipping charges.</p>
+
+<p>5.2.2 Case 2 - No delivery scan or Lost in Transit: Where the last-mile carrier’s delivery scan is not available or the Shipment is otherwise lost in transit (for example when final handling is by a destination postal service), you may claim reimbursement if you have already refunded your buyer for non-delivery. To support this claim, submit the buyer-seller chat and proof of refund along with the required AWB and documents. Claims under branded networks follow the same evidentiary requirements but will be processed according to the carrier’s timelines and policies.</p>
+
+<p>5.2.3 Case 3 - Package lost before inwarding at Delhi hub:</p>
+
+<p>5.2.3.1 If pickup was carried out by United Worldwide Couriers’s team and the package is lost before inwarding at the Delhi hub, refunds will be made in accordance with the refund policy (referenced below).</p>
+
+<p>5.2.3.2 If the pickup was performed by a third-party logistics provider (3PL), only the shipping charges will be refunded.</p>
+
+<p>5.3 Additional terms</p>
+
+<p>5.3.1 All claims are subject to verification and acceptance under United Worldwide Couriers’s Claim Policy. Submission of incomplete or fraudulent documentation may result in denial of the claim.</p>
+
+<p>5.3.2 Where applicable, recoveries from carriers or third parties will be applied against any amounts payable; any net recovery will be distributed in accordance with the Claim Policy.</p>
+
+<p>5.3.3 This Claims and compensation clause is subject to the limits, exclusions and timelines set out in the Claim Policy referenced in this agreement.</p>
+
+<p>5.4 No claims maintainable - Claims are payable only under the specific circumstances described in the Claims and Compensation section. United Worldwide Couriers will not be liable to entertain claims in any other situations, including but not limited to the following:</p>
+
+<p>5.4.1 Non-delivery resulting from incorrect or incomplete information provided by you (for example, wrong name, address, telephone number or other erroneous booking details). Where reconnection or rerouting of a Shipment is possible, United Worldwide Couriers may notify you and may, at its sole discretion, arrange reconnection subject to additional charges; reconnection is not guaranteed.</p>
+
+<p>5.4.2 Any loss, delay, seizure or detention of a Shipment by customs, quarantine or any other governmental or regulatory authority.</p>
+
+<p>5.4.3 Situations where a delivery attempt was made but delivery could not be completed for any reason, including the recipient’s absence or refusal to accept the Shipment.</p>
+
+<p>5.4.4 Damage, leakage, tampering or pilferage attributable to inadequate or unsuitable packaging by you.</p>
+
+<p>5.4.5 Circumstances where the applicable Shipping Vendor does not provide for a refund under its operating rules or contracts.</p>
+
+<p>5.4.6 Where the Shipping Vendor’s records indicate that the Shipment was delivered (per the carrier’s tracking or delivery confirmation), the Shipment will be deemed delivered and no refund claim will be entertained.</p>
+
+<p>United Worldwide Couriers reserves the right to rely on carrier records, investigation findings, and applicable carrier or regulatory policies when assessing any request related to the above exceptions.</p>
+
+<p>5.5 The Claim Policy applies only to United Worldwide Couriers Self-Services (including, without limitation United My Delivery, United Air Premium, United Grd Premium, United Air Express, United Prior Post, United Eco Post, United My Pickup). For Shipments carried by branded carrier networks (for example DHL, FedEx and UPS), the applicable carrier refund/return policy will also apply.</p>
+
+<p>5.5.1 To initiate a claim, email Csd@unitedcouriers.biz with the United Worldwide Couriers AWB and all supporting documents.</p>
+
+<p>5.5.2 On receipt of a claim, United Worldwide Couriers’s support team will investigate, including contacting the relevant local office and/or Shipping Vendor to locate the Shipment and assess the claim.</p>
+
+<p>5.5.3 After completing the investigation, United Worldwide Couriers will communicate the outcome to you or request further information if required.</p>
+
+<p>5.5.4 United Worldwide Couriers will endeavour to close each refund claim within fifteen (15) working days from receipt of your complaint; where investigation requires cooperation from Shipping Vendors, additional time may be necessary.</p>
+
+<p>5.5.5 For United Worldwide Couriers Direct services only: if a Shipment has not been delivered within thirty (30) days of pickup (and there is no dispute), you will be entitled to a refund under this Merchant Agreement. If a dispute arises, the thirty-day period will be measured from one (1) day after the dispute is resolved. The thirty-day refund entitlement does not apply to other services or where additional documents are required.</p>
+
+<p>5.6 For any claim to be valid, the following points need to be observed by You to the extent applicable:</p>
+
+<p>5.6.1 Claims must be made promptly; in any event United Worldwide Couriers will not consider claims submitted more than sixty (60) working days after the date of the inward scan.</p>
+
+<p>5.6.2 If United Worldwide Couriers notifies you that a Shipment is stuck, undelivered or under RTO and you do not respond within seven (7) working days of that communication, the related claim will not be considered.</p>
+
+<p>5.6.3 No claim will be accepted for Shipments showing a scan status of “out for delivery” or “awaiting delivery” unless you provide chat records or screenshots evidencing the buyer’s non-receipt.</p>
+
+<p>5.6.4 For claims alleging non-connectivity (i.e., the Shipment was picked up but not scanned or connected at the hub), you must submit the signed pickup manifest for the disputed Shipment(s) within three (3) working days of pickup. Claims lacking a signed manifest will not be maintainable; normal turnaround times will not apply in case of such disputes.</p>
+
+<p>5.6.5 For damage, pilferage, tampering, crushing or leakage, the recipient must record negative remarks on the proof of delivery (POD) at the time of delivery to preserve the claim. Absent clear negative remarks on the POD, no claim will be maintainable.</p>
+
+<p>5.6.6 Claims for damage, pilferage, tampering, crushing or leakage will be entertained only if made within forty-eight (48) hours of delivery/receipt and only where the outer packaging applied by United Worldwide Couriers or the Shipping Vendor is damaged, altered or tampered with. If the outer packaging is intact, such claims will not be accepted.</p>
+
+<p>5.6.7 Claims for Shipments carried under branded networks (DHL, FedEx, UPS) remain subject to the evidence and submission requirements above, but will also follow the timelines and processes mandated by the relevant carrier.</p>
+
+<p>5.6.8 Where a customer who is not registered under the GST regime has not transacted for three hundred sixty-five (365) consecutive days, any wallet balance held will be refunded to that customer in accordance with United Worldwide Couriers’s refund procedures.</p>
+
+<p>5.6.9 All claims are subject to verification and United Worldwide Couriers’s Claim Policy. Submission of incomplete, inaccurate or fraudulent documents may lead to claim denial. Recoveries from carriers or third parties will be applied against any amounts payable, consistent with the Claim Policy.</p>
+
+
+ <h2>6.HANDLING CHARGES, REMOTE AREA CHARGES, REFORWARDING CHARGES AND OTHER CHARGES </h2>
+
+ <p>6.1 Shipping charges for United Worldwide Couriers-branded services will be determined on a case-by-case basis. If a Shipment is detained by customs, additional charges will apply based on actual costs. Please note that handling charges set out above are for a maximum Shipment weight of:</p>
+
+<ul>
+    <li>In case of USA: 22 KGs (volume or dead weight whichever is higher);</li>
+    <li>In case of UK: 30 KGs (volume or dead weight whichever is higher);</li>
+    <li>In case of Europe: 30 KGs (volume or dead weight whichever is higher);</li>
+    <li>In case of Australia/NZ: 20 KGs (volume or dead weight whichever is higher);</li>
+    <li>In case of Canada: 20 KGs (volume or dead weight whichever is higher);</li>
+    <li>In case of package volume or dead weight is higher than above mentioned slabs, there will be an additional handling charge of Rs. 4,000/- plus GST, up to a maximum of additional 10 KGs higher.</li>
+</ul>
+
+<p>6.2 Remote area charges for United Worldwide Couriers-branded services will be disclosed at the time of booking. For Non-United Worldwide Couriers branded services, remote area charges will apply as per the respective service provider’s policy.</p>
+
+<p>6.3 Tariff and duty adjustments: United Worldwide Couriers may deduct or refund any difference in duty or tariff charged or refunded on a parcel sent using United Worldwide Couriers services. Any such adjustment will be applied directly to your wallet balance without prior notice.</p>
+
+<p>6.4 Reforwarding charges for United Worldwide Couriers-branded services (subject to change) are:</p>
+
+<ul>
+    <li>USA - $15 for up to 500 g, $25 for 500 g to 5 kg;</li>
+    <li>Europe - €20 for up to 500 g, €30 for 500 g to 5 kg;</li>
+    <li>Canada - CAD 20 for up to 500 g, CAD 30 for 500 g to 5 kg;</li>
+    <li>UK - £15 for up to 500 g, £21 for 500 g to 5 kg;</li>
+    <li>For non-United Worldwide Couriers branded services, reforwarding charges will follow the applicable service provider’s policy.</li>
+</ul>
+
+<p>6.5 Misdeclaration charges: If a Shipment you book is found to be misdeclared, United Worldwide Couriers may levy an administrative charge of INR 5,000 per Shipment and recover it from your wallet or settlement without prior notice. RTO requests will not be entertained for misdeclared Shipments. You may opt to self-pick-up the seized Shipment within seven (7) working days of intimation; if you fail to do so, United Worldwide Couriers may destroy or dispose of the Shipment through authorized channels at your sole risk, cost and liability, with no further claim against United Worldwide Couriers.</p>
+
+<p>6.6 Prohibited or restricted items: If a Shipment is found to contain Prohibited or Restricted Items (as defined by this Agreement, applicable law, or carrier/customs rules), you will be in material breach of this Agreement. United Worldwide Couriers may impose a penalty of INR 50,000 per Shipment, recoverable immediately from your wallet or settlement without prior notice. United Worldwide Couriers may notify and cooperate with government or law-enforcement authorities. No RTO or self-pickup requests will be accepted for such shipments; they may be seized and destroyed or disposed of through authorized channels without liability to United Worldwide Couriers. Repeat offences (two or more instances) may result in permanent suspension or banning of your account, and United Worldwide Couriers may pursue all contractual, civil and criminal remedies available under law.</p>
+
+<p>6.7 Special handling fee: Certain goods that require specialised handling, as defined in United Worldwide Couriers’s internal operational guidelines, will attract an applicable special handling fee.</p>
+
+<h2>7. GENERAL REPRESENTATIONS AND WARRANTIES</h2>
+
+<p>Each Party represents and warrants that it has full right, power, legal authority, and capacity to enter into and perform this Agreement, and that its execution and performance of this Agreement do not violate any applicable law, sanction, court order, government direction, corporate authorization, contractual obligation, or third-party right binding upon it. The Merchant further represents and warrants that it lawfully owns, possesses, controls, sells, exports, imports, markets, and ships all goods tendered under this Agreement and has obtained all necessary consents, licenses, registrations, declarations, and approvals required for the Services. </p>
+
+<h2>8. LIMITATION OF LIABILITY</h2>
+
+<p>Notwithstanding anything contained herein or elsewhere, You hereby agree, acknowledge, and confirm that:</p>
+
+<ol>
+    <li>The liability of United Worldwide Couriers in relation to the Services shall be strictly limited to the extent expressly provided under this Agreement, the applicable Terms and Conditions, annexures, policies, and service-specific provisions.</li>
+
+    <li>The Platform and Services are provided on an “as is”, “as available”, and “reasonable efforts” basis, and access to or use of the Platform may be interrupted, suspended, delayed, restricted, or unavailable from time to time during browsing, booking, uploading, transacting, or availing the Services.</li>
+
+    <li>United Worldwide Couriers shall use commercially reasonable efforts to provide and maintain the Services, but does not guarantee uninterrupted, error-free, secure, or continuous operation of the Platform or Services, and shall not be liable for any interruption, suspension, delay, inaccessibility, technical failure, or inability to provide the Services.</li>
+
+    <li>United Worldwide Couriers makes no representation, warranty, undertaking, or guarantee, whether express, implied, statutory, or otherwise, regarding the Platform, Services, Shipping Vendors, delivery timelines, merchantability, fitness for a particular purpose, non-infringement, reliability, availability, or suitability of the Services.</li>
+
+    <li>United Worldwide Couriers does not independently verify, validate, endorse, or authenticate any information, declarations, listings, content, documents, data, or materials uploaded, transmitted, declared, or provided by Users, Merchants, customers, consignees, Shipping Vendors, or third parties, and disclaims all liability arising from reliance thereon.</li>
+
+    <li>You acknowledge and agree that use of the Platform and availing of the Services is entirely at Your sole risk. To the maximum extent permissible under Applicable Law, United Worldwide Couriers, its affiliates, directors, officers, employees, agents, consultants, licensors, technology providers, Shipping Vendors, subcontractors, and service providers shall not be liable for any direct, indirect, incidental, special, exemplary, punitive, consequential, or economic losses or damages whatsoever, including without limitation loss of profits, loss of business, loss of revenue, loss of opportunity, loss of goodwill, business interruption, loss of data, corruption of information, shipment loss, shipment delay, or procurement of substitute services, arising out of or in connection with:</li>
+
+    <ol>
+        <li>use of or inability to use the Platform or Services;</li>
+        <li>system interruption or technical malfunction;</li>
+        <li>cyber incidents, malware, ransomware, bugs, viruses, or unauthorized access;</li>
+        <li>temporary disablement, suspension, withdrawal, or discontinuation of the Platform or Services;</li>
+        <li>acts or omissions of Shipping Vendors, customs authorities, government authorities, payment partners, or third parties; or</li>
+        <li>any breach of security, data compromise, or operational disruption, whether based in contract, tort, negligence, strict liability, statutory liability, or otherwise, even if advised of the possibility of such damages.</li>
+    </ol>
+
+    <li>United Worldwide Couriers shall not be liable for any delay, interruption, suspension, failure, or non-performance arising directly or indirectly from any event beyond its reasonable control, including acts of God, flood, fire, epidemic, pandemic, war, terrorism, civil unrest, labour disputes, transport disruption, carrier failure, customs action, sanctions, cyber incidents, utility failures, governmental action, regulatory restrictions, changes in Applicable Law, or failures of third-party integrations, payment gateways, technology systems, or communication networks.</li>
+
+    <li>Where any action is taken by United Worldwide Couriers pursuant to Your authorization, consent, instructions, declarations, shipment details, or account activity, United Worldwide Couriers shall not be responsible or liable for any resulting loss, damage, liability, expense, or consequence suffered by You or any third party.</li>
+
+    <li>The pricing of Services, operational structure, commercial arrangements, and contractual allocations under this Agreement have been determined in reliance upon the disclaimers, exclusions, limitations of liability, and allocation of risks set out herein, which the Parties acknowledge to be fair, reasonable, and an essential basis of the commercial understanding between the Parties. United Worldwide Couriers would not have agreed to provide the Services on the same commercial terms in the absence of such limitations and exclusions.</li>
+
+    <li>Any liability of United Worldwide Couriers, to the extent expressly accepted under this Agreement, shall extend solely toward the Merchant/User contracting with United Worldwide Couriers. The Merchant/User shall remain solely responsible and liable toward its customers, buyers, consignees, recipients, suppliers, and third parties, and neither United Worldwide Couriers nor any Shipping Vendor shall owe any direct contractual, fiduciary, statutory, or other obligation or liability toward such persons in connection with the Shipments or Services.</li>
+</ol>
+
+<p>Customers are advised to select alternative shipping services with insurance and claims options if they require additional protection for their shipments. Shipments are <strong>NOT insured</strong> unless separately purchased by the Merchant.</p>
+
+ <h2>9. INDEMNITY</h2>
+
+ <p>The Merchant shall indemnify, defend, and hold harmless the Company, its affiliates, directors, officers, employees, agents, subcontractors, consultants, licensors, service providers, shipping partners, customs agents, importer of record entities, marketplace partners, and representatives from and against any and all claims, actions, proceedings, losses, damages, liabilities, penalties, duties, taxes, interest, costs, and expenses, including reasonable legal fees and investigation costs, arising out of or related to: (a) the Merchant’s access to or use of the Services; (b) any breach of this Agreement; (c) violation of law, sanctions, export controls, customs requirements, tax requirements, consumer law, product law, or any government directive; (d) misdeclaration, under-declaration, wrongful valuation, wrong HS classification, wrong description, false origin declaration, counterfeit goods, restricted goods, prohibited goods, dangerous goods, infringing goods, or fraud; (e) defective, unsafe, mislabeled, non-compliant, adulterated, expired, or recalled goods; (f) third-party claims by buyers, consignees, authorities, carriers, payment intermediaries, or intellectual property owners; (g) duties, penalties, clearance charges, detention, demurrage, or storage charges; and (h) negligent, wrongful, or fraudulent acts or omissions of the Merchant or its personnel.</p>
+
+<p>The Company may notify the Merchant of any such claim and the Merchant shall provide all necessary cooperation, documents, witness support, and funding for defense and settlement. The Company may participate in the defense at the Merchant’s cost where its interests are materially affected.</p>
+
+
+ <h2>10. COMPLIANCE WITH LAWS</h2>
+
+ <p>
+    Each Party shall at all times and at its/his/her own expense: (a) strictly comply with all applicable laws (including state, central and custom/international laws/statutes), now or hereafter in effect, relating to its/his/her performance of this Agreement; (b) pay all fees and other charges required by such applicable law; and (c) maintain in full force and effect all licenses, permits, authorizations, registrations and qualification from any authority to the extent necessary to perform its obligations hereunder. 
+ </p>
+
+ <h2>11. USE OF CONFIDENTIAL INFORMATION</h2>
+
+ <p>11.1 Each Party may receive confidential Information of the other in the course of performance of this Agreement. The receiving Party shall keep such information strictly confidential, use it only for performance of this Agreement, restrict disclosure to personnel, professional advisers, contractors, and prospective contractors on a strict need-to-know basis, and protect it with at least the same degree of care it uses for its own confidential information, and in any event not less than reasonable care.</p>
+
+<p>11.2 All confidential Information and all intellectual property rights therein shall remain the sole property of the disclosing Party. No license, assignment, transfer, or other right is granted by implication or otherwise except the limited right to use such information for performance of this Agreement.</p>
+
+<p>11.3 Confidentiality obligations shall not apply to information already lawfully in the public domain, lawfully known to the receiving Party without restriction, independently developed without use of the disclosing Party’s information, or required to be disclosed by law, court order, or government authority, provided lawful notice is given where permitted. Upon termination or request, the receiving Party shall return or destroy confidential Information to the extent reasonably practicable and certify compliance if requested.</p>
+
+<p>11.4 You agree, consent to and acknowledge that as part of the registration process, You will provide personally identifiable information about You like Your Name, email address, mobile phone number, address and contact details, Postal code, Demographic profile (like your age, gender, occupation, education, address etc.), which shall be stored by United Worldwide Couriers and, United Worldwide Couriers may also store information about the pages on the site You visit/access, the links you click on the site, the number of times you access the page and any such browsing information. All such information shall be stored and used in accordance with the Privacy Policy.</p>
+
+<h2>12. INTELLECTUAL PROPERTY RIGHTS</h2>
+
+<p>
+    All intellectual property in the Company’s platform, software, systems, APIs, dashboards, workflows, trademarks, brand assets, websites, documents, templates, service descriptions, rate engines, operating methods, and derivative works shall remain vested exclusively in the Company or its licensors. All intellectual property owned by either Party prior to this Agreement shall remain with that Party. Any feedback, suggestions, enhancement requests, process improvements, or derivative developments created in connection with the Services may be used by the Company without restriction unless otherwise agreed in writing. 
+</p>
+
+
+<h2>13. NON-SOLICITATION</h2>
+
+<p>During the term of this Agreement and for thirty-six months thereafter, the Merchant shall not directly or indirectly solicit, divert, interfere with, induce, or attempt to induce any client, customer, supplier, shipping vendor, partner, employee, contractor, customs partner, or other business relationship of the Company to cease or reduce business with the Company or to provide competing services in circumvention of the Company. </p>
+
+<h2>14. TERM AND TERMINATION</h2>
+
+<p>This Agreement shall commence on the date the Merchant first avails the Services and shall continue unless terminated in accordance with this Agreement. The Merchant may request termination by thirty days’ prior written notice, subject to completion of in-transit shipments, reconciliation, settlement of all dues, submission of documents, discharge of liabilities, and compliance with any service-specific lock-in or closure conditions.</p>
+
+<p>The Company may suspend or terminate this Agreement or any account immediately, with or without notice, if: (a) the Merchant breaches this Agreement; (b) the Merchant’s conduct exposes or may expose the Company or its partners to legal, regulatory, reputational, financial, fraud, sanctions, security, or operational risk; (c) the Merchant ships prohibited, dangerous, counterfeit, or unlawful goods; (d) the Merchant defaults in payment; (e) required KYC or compliance verification fails; (f) instructions are received from a carrier, regulator, payment partner, law enforcement agency, or government authority; or (g) the Company elects to discontinue the relationship for business convenience where lawful.</p>
+
+<p>Upon suspension or termination, the Merchant shall immediately cease unauthorized use of the Services and shall not create a fresh account or access the Services through any alternate identity without the Company’s written approval.</p>
+
+<h2>15. MISUSE OF THE SERVICES</h2>
+
+<p>
+    The Company may restrict, deactivate, suspend, or terminate the account of any Merchant that abuses or misuses the Services, including by creating false or duplicate profiles, infringing intellectual property rights, shipping prohibited or suspicious goods, evading fees, manipulating system workflows, under-declaring weight or value, booking shipments outside permitted use, circumventing controls, refuse to cooperate in an investigation or engaging in any conduct deemed suspicious, fraudulent, harmful, or contrary to the purpose of the Services. Repeat violations may result in permanent blacklisting and legal action. 
+
+
+</p>
+
+<h2>16. GOVERNING LAW AND DISPUTE RESOLUTION</h2>
+
+<p>
+    This Agreement shall be governed by the laws of India and subject to the Clause below, the courts of New Delhi shall have exclusive jurisdiction to determine any disputes arising out of, under, or in relation, to the provisions of this Agreement. Any dispute arising under this Agreement shall be settled by arbitration to be held in New Delhi in accordance with the (Indian) Arbitration and Conciliation Act, 1996, in the English language, and shall be heard and determined by a sole arbitrator appointed by United Worldwide Couriers. The decision of the sole arbitrator shall be final, conclusive and binding on the Parties. Notwithstanding the foregoing, nothing contained herein shall be deemed to prevent either Party from seeking and obtaining injunctive and/or equitable relief from any court of competent jurisdiction. 
+</p>
+
+<h2>17. SEVERABILITY</h2>
+
+<p>The invalidity or unenforceability of any provision in this Agreement shall in no way affect the validity or enforceability of any other provision herein. In the event of the invalidity or unenforceability of any provision of this Agreement, the Parties will immediately negotiate in good faith to replace such a provision with another, which is not prohibited or unenforceable and has, as far as possible, the same legal and commercial effect as that which it replaces. </p>
+
+<h2>18. FORCE MAJEURE</h2>
+
+<p>Neither Party shall be liable for any failure or delay in performance, other than payment obligations already accrued, to the extent caused by events beyond its reasonable control, including acts of God, flood, fire, explosion, epidemic, pandemic, war, civil disturbance, terrorism, labor disruption, carrier failure, transport disruption, sanctions, customs restrictions, import-export policy changes, regulatory action, cyber incidents not caused by that Party’s negligence, governmental orders, or failure of utilities or communication systems. The affected Party shall notify the other Party as soon as reasonably practicable. If a force majeure event continues for more than thirty days, the unaffected Party may modify the affected obligations or temporarily excuse performance, and if it continues beyond sixty days, either Party may terminate the affected Services upon written notice. </p>
+
+
+<h2>19. ENTIRE AGREEMENT, ASSIGNMENT AND SURVIVAL</h2>
+
+<p>This Agreement, together with all annexures, schedules, statements of work, rate sheets, dashboard notices, web links, operating procedures, and written addenda, constitutes the entire agreement between the Parties with respect to its subject matter and supersedes all prior discussions, representations, correspondence, proposals, and understandings on that subject. In the event of inconsistency, the relevant annexure shall prevail only for the subject matter of that annexure, and service-specific terms, SOPs, rate cards, and web-based links may prevail over general terms where expressly stated. </p>
+
+<p>The Merchant shall not assign, transfer, novate, subcontract, or otherwise deal with its rights or obligations under this Agreement without the Company’s prior written consent. The Company may assign or transfer this Agreement, in whole or in part, to any affiliate, successor, acquirer, or business transferee. Provisions which by their nature are intended to survive, including those relating to payment, indemnity, confidentiality, IP, limitation of liability, dispute resolution, audits, and compliance, shall survive termination. </p>
+
+
+ <h2>20. NO PARTNERSHIP OR AGENCY</h2>
+
+ <p>Nothing in this Agreement shall be construed to create a partnership, joint venture, fiduciary relationship, franchise, employment relationship, or agency between the Parties, except that the Company may act as a limited collection agent for COD remittance solely to the extent expressly stated herein. Neither Party shall have authority to bind the other except as expressly provided in writing</p>
+
+
+  <h2>21. WAIVERS AND REMEDIES</h2>
+
+<p>No failure or delay by either Party in exercising any right, power, or remedy shall operate as a waiver thereof. Any waiver must be in writing and limited to the specific instance stated. All rights and remedies under this Agreement are cumulative and in addition to all rights and remedies available under applicable law.</p>
+
+  <h2>22. SPECIFIC PERFORMANCE</h2>
+
+  <p>The Parties acknowledge that breach of obligations relating to confidentiality, intellectual property, restrictive covenants, misuse of systems, non-payment, or unlawful shipment may cause irreparable harm for which damages may be inadequate. Accordingly, the Company shall be entitled to seek specific performance, injunctive relief, and other equitable remedies, in addition to monetary relief and other remedies available under law. </p>
+
+   <h2>23. INDIRECT AND CONSEQUENTIAL LOSSES</h2>
+
+   <p>Save as expressly provided in this Agreement, neither Party shall be liable for indirect or consequential losses, including loss of income, loss of profits, loss of contracts, loss of opportunity, loss of reputation, or business interruption, however arising. This clause shall be read subject to the more specific liability exclusions and caps set out elsewhere in this Agreement. </p>
+
+   <h2>24. CONTACT INFORMATION AND COMMUNICATIONS</h2>
+
+<p>24.1 All notices, communications, updates, invoices, rate revisions, dashboard alerts, service notifications, legal notices, and operational instructions may be issued by the Company through email, dashboard, mobile application, SMS, WhatsApp, registered mobile number, support ticketing system, courier, or any other officially designated communication channel, and such communications shall be legally valid and binding to the extent permitted by law. The Merchant consents to receive communications through such channels.</p>
+
+<p>24.2 The Merchant further agrees that it has voluntarily submitted KYC information and documents as required by the Company from time to time and authorizes the Company to verify such information and to share necessary details with carriers, insurers, customs authorities, importer of record entities, marketplace partners, banks, payment partners, police, courts, government agencies, complainants, or any other relevant entity for compliance, claims processing, dispute handling, fraud review, legal proceedings, or operational processing, in accordance with applicable law.</p>
+
+<p>24.3 You shall be solely responsible for immediately notifying United Couriers Worldwide via email at <a href="mailto:Csd@unitedcouriers.biz">Csd@unitedcouriers.biz</a> of any change in your e-mail address and/or mobile number registered with United Couriers Worldwide and/or any other Personal Information provided by You to United Couriers Worldwide for accessing the Platforms and/or availing the Services and/or purchasing the Products.</p>
+
+<h2>25. DEFINITIONS AND INTERPRETATION</h2>
+
+<p><strong>25.1 Definitions:</strong> For the purposes of this Agreement:</p>
+
+<ul>
+    <li><strong>“Affiliate”</strong> means, in relation to a Party, any entity that directly or indirectly controls, is controlled by, or is under common control with that Party.</li>
+
+    <li><strong>“Applicable Law”</strong> means all laws, statutes, rules, regulations, notifications, circulars, orders, trade controls, sanctions, customs laws, tax laws, and governmental requirements applicable to a Party, the Services, or the goods.</li>
+
+    <li><strong>“Confidential Information”</strong> means with respect to each Party, any information or trade secrets, schedules, business plans including, without limitation, commercial information, financial projections, client information, administrative and/or organizational matters of a confidential/secret nature in whatever form which is acquired by, or disclosed to, the other Party pursuant to this Agreement, and includes any tangible or intangible non-public information that is marked or otherwise designated as ‘confidential’, ‘proprietary’, ‘restricted’, or with a similar designation by the disclosing Party at the time of its disclosure to the other Party, or is otherwise reasonably understood to be confidential by the circumstances surrounding its disclosure, but excludes information which: (i) is required to be disclosed in a judicial or administrative proceeding, or is otherwise requested or required to be disclosed pursuant to applicable law or regulation, and (ii) which at the time it is so acquired or disclosed, is already in the public domain or becomes so other than by reason of any breach or non-performance by the other Party of any of the provisions of this Agreement;</li>
+
+    <li><strong>“Force Majeure Event”</strong> includes act of God, war, civil disturbance, terrorism, strike, lockout, fire, flood, explosion, epidemic, pandemic, transport disruption, carrier failure, cyber disruption, customs restriction, export-import policy change, sanction, or government action beyond reasonable control.</li>
+
+    <li><strong>“Intellectual Property”</strong> means all patents, copyrights, trademarks, trade names, service marks, logos, domain names, trade secrets, designs, software, databases, data rights, know-how, inventions, and all allied intellectual property rights and goodwill.</li>
+
+    <li><strong>“Services”</strong> means all domestic and international shipping, carriage facilitation, logistics management, customs support, importer of record services, reverse logistics, COD collection, marketplace support, technology access, and allied services provided or facilitated by the Company.</li>
+
+    <li><strong>“Shipment”</strong> means any parcel, package, consignment, goods, document, or item tendered by or on behalf of the Merchant for any Service.</li>
+</ul>
+
+<p><strong>25.2 Interpretation:</strong> Unless the context of this Agreement otherwise requires:</p>
+
+<ol type="a">
+    <li>heading and bold typeface are only for convenience and shall be ignored for the purpose of interpretation;</li>
+
+    <li>other terms may be defined elsewhere in the text of this Agreement and, unless otherwise indicated, shall have such meaning throughout this Agreement;</li>
+
+    <li>references to this Agreement shall be deemed to include any amendments or modifications to this Agreement, as the case may be;</li>
+
+    <li>the terms “hereof”, “herein”, “hereby”, “hereto” and derivative or similar words refer to this entire Agreement or specified Clauses of this Agreement, as the case may be;</li>
+
+    <li>references to a particular section, clause, paragraph, sub-paragraph or schedule, exhibit or annexure shall be a reference to that section, clause, paragraph, sub-paragraph or schedule, exhibit or annexure in or to this Agreement;</li>
+
+    <li>reference to any legislation or law or to any provision thereof shall include references to any such law as it may, after the date hereof, from time to time, be amended, supplemented or re-enacted, and any reference to statutory provision shall include any subordinate legislation made from time to time under that provision;</li>
+
+    <li>a provision of this Agreement must not be interpreted against any Party solely on the ground that the Party was responsible for the preparation of this Agreement or that provision, and the doctrine of contra proferentem does not apply vis-à-vis this Agreement;</li>
+
+    <li>references in the singular shall include references in the plural and vice versa; and</li>
+
+    <li>references to the word “include” shall be construed without limitation.</li>
+</ol>
+
+
+ <h2>ANNEXURE A</h2>
+
+  <h2>SERVICE SPECIFICATIONS</h2>
+
+  <p>This Annexure A sets out the service specifications applicable to the Services and is to be read with the Merchant Agreement. Unless expressly stated otherwise, the terms of the Merchant Agreement shall apply.</p>
+
+  <h2>1. SERVICES COVERED</h2>
+
+<p>1.1 This Agreement is a master agreement governing one or more business-to-business and business-to-customer services made available by the Company, including but not limited to logistics management services, shipping aggregation, domestic carriage facilitation, cross-border shipping, customs facilitation, importer of record services, reverse logistics, marketplace management, product marketing support, payment collection, technology access, and all allied services described in the applicable annexures, schedules, dashboard links, and service specifications.</p>
+
+<p>1.2 Subject to compliance with the Merchant Agreement, the Company authorizes the Merchant to access and use the platform, dashboard, website, software, and mobile application solely for booking, managing, tracking, reconciling, communicating, receiving, and administering shipments and related services.</p>
+
+<h2>2. BOOKING METHODS</h2>
+
+<p>2.1 The Merchant may choose between two booking methods for Shipments: United Worldwide Couriers Pickup or Self-Ship.</p>
+
+<ul>
+    <li>Under United Worldwide Couriers Pickup, the Company will collect Shipments from the pickup address provided by the Merchant.</li>
+    <li>Under Self-Ship, the Merchant must deliver Shipments to the Company’s nearest hub.</li>
+</ul>
+
+<h2>3. SHIPMENT HANDLING WORKFLOW</h2>
+
+<p>3.1 Upon arrival at the hub, each Shipment will be scanned, weighed, and sorted according to destination and selected service.</p>
+
+<p>3.2 If there is a discrepancy between the weight declared by the Merchant and the weight recorded at the hub, the Shipment will be placed on hold and the Merchant will be notified by email for approval.</p>
+
+<p>3.3 Once the Merchant approves the recorded weight, the Shipment will proceed to its destination.</p>
+
+<p>3.4 After a Shipment has left the hub, no further weight adjustments will be charged to the Merchant’s account.</p>
+
+<h2>4. INTERNATIONAL SHIPMENTS</h2>
+
+<p>4.1 For international Shipments, after export clearance in India, the Shipment will be customs-cleared in the destination country and received at the local office before being handed to the Last-mile carrier.</p>
+
+<p>4.2 Last-mile carriers vary by country, including USA - UPS, USPS, FedEx; Europe - DPD or national postal networks; and Canada - Canada Post, UPS. These carriers may change from time to time.</p>
+
+<p>4.3 For Shipments routed through branded carrier networks such as DHL, UPS, and FedEx, the Shipment is connected to the carrier’s hub in Delhi and tracking is available on the carrier’s website using the tracking number.</p>
+
+<h2>5. DELIVERY ATTEMPTS AND HANDLING</h2>
+
+<p>5.1 The Company will attempt delivery of all Shipments at least once. Many last-mile Shipping Vendors attempt delivery twice depending on their policies.</p>
+
+<p>5.2 If no one is available to receive a Shipment, the carrier may, at its discretion, leave the Shipment with a neighbour, deposit it at the local post office for customer pickup, or place it in a secure external location outside the house, including a mailbox.</p>
+
+
+<h2>6. RETURN TO ORIGIN</h2>
+
+<p>6.1 If a Shipment is undeliverable under United Worldwide Couriers Direct Service, it will be returned to the Company’s or its partner’s local office in the destination country.</p>
+
+<p>6.2 RTO charges will be billed to the Merchant’s account.</p>
+
+<p>6.3 In most cases such shipments will be destroyed in the destination country, except for Shipments to the USA and Europe where re-forwarding may be available at an additional cost.</p>
+
+<p>6.4 For branded carrier networks such as DHL, FedEx, and UPS, the carrier may either destroy the Shipment in the destination country per the carrier’s policy or return it to the Merchant in India.</p>
+
+<p>6.5 If the RTO results from failure to pay duties or taxes, the return and all related charges will be billed to the Merchant’s account.</p>
+
+<h2>7. UNDELIVERABLE SHIPMENTS</h2>
+
+<p>A Shipment may be deemed undeliverable for the following reasons: incorrect or incomplete address details at booking or on the Shipment, including missing apartment number or street name; customer refusal to accept delivery; and customer refusal to pay applicable duties and/or taxes.</p>
+
+<h2>8. RTO, STORAGE, AND DISPOSAL</h2>
+
+<p>8.1 The Company reserves the right to return any Shipment not accepted by the Customer and to apply RTO charges at prevailing rates.</p>
+
+<p>8.2 If the Merchant does not accept an RTO Shipment or cannot be reached, the Company may levy demurrage/incidental storage charges for any period exceeding seven working days from initiation of the return, up to forty-five working days from that date.</p>
+
+<p>8.3 If the Customer fails to accept the returned Shipment beyond ten working days from the first RTO undelivered date or first RTO delivery attempt date, the Company may dispose of the Shipment.</p>
+
+<p>8.4 In that case, the Merchant will forfeit any claims related to the Shipment and will remain liable for disposal charges and any other applicable charges, including demurrage/incidental storage charges.</p>
+
+<h2>9. PRICING AND VOLUMETRIC WEIGHT</h2>
+
+<p>9.1 Each individual Shipment is subject to weight and size limits that may differ by Shipping Vendor and destination.</p>
+
+<p>9.2 There is no restriction on the total aggregate weight of all Shipments or on the number of boxes contained in any single Shipment.</p>
+
+<p>9.3 Volumetric weight will be calculated automatically in the booking panel using the formula: length (cm) × breadth (cm) × height (cm) ÷ 5000.</p>
+
+<ul>
+    <li>For example, a parcel measuring 30 cm × 25 cm × 40 cm has a volumetric weight of 30 × 25 × 40 ÷ 5000 = 6 kg.</li>
+</ul>
+
+<p>9.4 Where:</p>
+
+<ul>
+    <li>volumetric weight is 5 kg or less, charges will be based on actual dead weight.</li>
+    <li>volumetric weight exceeds 5 kg, charges will be based on whichever is greater, actual weight or volumetric weight.</li>
+</ul>
+
+<p>9.5 Certain items that require special handling, as defined in the internal operational guidelines, will incur an additional special handling fee.</p>
+
+<h2>10. FEES AND CHARGES</h2>
+
+<p>10.1 The Merchant shall pay all subscription fees, shipping charges, freight, RTO charges, reverse pickup charges, COD handling charges, customs-related service fees, importer of record charges, storage charges, demurrage, incidental expenses, surcharges, accessorial charges, address correction fees, penalties, taxes, and all other amounts applicable to the Services as set out in the Agreement, any applicable annexure, rate sheet, live calculator, dashboard, invoice, commercial proposal, or written communication issued by the Company.</p>
+
+<p>10.2 Unless expressly stated otherwise, all fees are exclusive of taxes and all applicable taxes, including GST, shall be charged in addition.</p>
+
+<p>10.3 The Company may add new services for additional charges or revise existing charges, rates, surcharges, accessorial charges, service conditions, or fee structures at any time by notice through dashboard, email, mobile application, rate card, calculator link, annexure, or any other official communication channel.</p>
+
+<p>10.4 Unless the Merchant objects in writing before the stated effective date and ceases use of the affected Services, the revised fee structure shall be deemed accepted.</p>
+
+
+<h2>11. INVOICING AND PAYMENT</h2>
+
+<p>11.1 The Company may issue invoices periodically, including mid-month, month-end, or such other cycle as determined by the Company.</p>
+
+<p>11.2 The Merchant shall verify invoice contents promptly and, unless a shorter period is prescribed for a specific service model, shall raise any bona fide dispute within five working days of invoice availability and pay undisputed amounts within seven days from invoice date or such other due date specified in writing.</p>
+
+<p>11.3 Failure to raise a dispute within the prescribed period shall constitute deemed acceptance of the invoice.</p>
+
+<p>11.4 If the Merchant fails to pay any amount when due, the Company may suspend shipping, retain and adjust outstanding amounts against COD remittances, wallet balances, credits, deposits, refunds, or any amounts payable to the Merchant, retain custody of shipments, re-route shipments, levy interest at 18 percent per annum from the due date until realization, forfeit security deposit or wallet balance where contractually permitted, and dispose of shipments in accordance with the Merchant Agreement where the Merchant fails to regularize defaults within the applicable period.</p>
+
+<p>11.5 Freight charges become due upon pickup, shipment initiation, or RTO initiation, as applicable, whether or not already invoiced.</p>
+
+<h2>12. COD REMITTANCE</h2>
+
+<p>12.1 For shipments booked under cash on delivery, the Merchant appoints the Company as a limited collection agent solely for the purpose of collecting the COD amount from the consignee through the Company’s logistics vendors and remitting the balance after deduction of applicable freight, service fees, handling fees, taxes, offsets, reversals, and other lawful deductions.</p>
+
+<p>12.2 The Company shall have no title in the goods.</p>
+
+<p>12.3 Save as otherwise agreed, COD remittance may be made within eight days from delivery of the relevant shipment or in accordance with the remittance cycle then followed by the Company, subject always to reconciliation, carrier remittance, fraud review, dispute review, status verification, valid bank details, and absence of offset rights.</p>
+
+<p>12.4 Where a shipment status is wrongly updated as delivered, a COD amount has been wrongly remitted, a COD order is subsequently modified, a dispute is raised by a buyer, a fraud event is suspected, or any amount is otherwise found to have been incorrectly credited, the Company may deduct such amount from future remittances, wallet balances, or other monies payable to the Merchant.</p>
+
+<p>12.5 If any COD amount remains unremitted for 365 days from its due date for reasons not attributable to the Company, including incorrect bank details or failure of the Merchant to complete compliance formalities, the Merchant waives all claims to such amount and the Company may forfeit the same.</p>
+
+<h2>13. PREPAID AND CREDIT MODELS</h2>
+
+<p>13.1 Where the Merchant operates on a prepaid model, the Merchant shall maintain sufficient shipping credits in its wallet or account before availing Services.</p>
+
+<p>13.2 Freight and other charges may be auto-adjusted against wallet balances, and any negative balance may be set off against COD or other receivables.</p>
+
+<p>13.3 Credit balance may be used only for booking shipments and may be forfeited if no shipment is booked for a continuous period of three years from the last shipment date, subject to applicable law.</p>
+
+<p>13.4 Refunds, if approved, may be restricted to the original source or mode of payment and may be conditioned upon KYC compliance and any surcharge or deduction permitted by law or contract.</p>
+
+<p>13.5 Where the Merchant is granted secured postpaid or rolling credit, such facility is discretionary and may be increased, reduced, suspended, or withdrawn at any time.</p>
+
+<p>13.6 Used credit may be adjusted from upcoming remittances, wallet balances, deposits, or any amount payable to the Merchant.</p>
+
+<p>13.7 Non-payment shall entitle the Company to suspend Services and exercise all contractual and legal recovery rights.</p>
+
+<h2>14. CLAIMS AND COMPENSATION</h2>
+
+<p>14.1 If a delivery issue occurs, the Merchant may be eligible to file a claim and receive compensation as set out in the Merchant Agreement.</p>
+
+<p>14.2 To initiate a claim, the Merchant must provide the United Worldwide Couriers airway bill (AWB) number and all supporting documents to <a href="mailto:Csd@unitedcouriers.biz">Csd@unitedcouriers.biz</a>.</p>
+
+<p>14.3 Claims for Shipments routed via branded carrier networks such as DHL, UPS, and FedEx will be processed under the same policy, subject to carrier-specific timelines.</p>
+
+<p>14.4 If no first scan is recorded by the destination last-mile carrier in the destination country, compensation is limited to 30 percent of the invoice value plus shipping charges, capped at Rs. 1,000 for Shipments weighing 0 - 100 g and capped at Rs. 4,000 for Shipments over 100 g, inclusive of shipping charges.</p>
+
+<p>14.5 Where the last-mile carrier’s delivery scan is not available or the Shipment is otherwise lost in transit, reimbursement may be claimed if the Merchant has already refunded the buyer for non-delivery, and the buyer-seller chat and proof of refund must be submitted along with the required AWB and documents.</p>
+
+<p>14.6 If pickup was carried out by United Worldwide Couriers’s team and the package is lost before inwarding at the Delhi hub, refunds will be made in accordance with the refund policy.</p>
+
+<p>14.7 If pickup was performed by a third-party logistics provider, only the shipping charges will be refunded.</p>
+
+<p>14.8 All claims are subject to verification and acceptance under the Claim Policy, and incomplete or fraudulent documentation may result in denial of the claim.</p>
+
+<p>14.9 Where applicable, recoveries from carriers or third parties will be applied against any amounts payable, and any net recovery will be distributed in accordance with the Claim Policy.</p>
+
+<p>14.10 Claims are payable only under the specific circumstances described in the Claims and Compensation section, and no claims are maintainable for the other listed situations, including incorrect or incomplete booking information, customs seizure or detention, unsuccessful delivery attempts, inadequate packaging, carrier non-refund situations, or records showing delivery.</p>
+
+<p>14.11 The Claim Policy applies only to United Worldwide Couriers Self-Services, including United My Delivery, United Air Premium, United Grd Premium, United Air Express, United Prior Post, United Eco Post, United My Pickup.</p>
+
+<p>14.12 The Company will endeavour to close each refund claim within fifteen working days from receipt of the complaint, subject to additional time where investigation requires cooperation from Shipping Vendors.</p>
+
+<p>14.13 For United Worldwide Couriers Direct services only, if a Shipment has not been delivered within thirty days of pickup and there is no dispute, the Merchant will be entitled to a refund under the Merchant Agreement.</p>
+
+<p>14.14 If a dispute arises, the thirty-day period will be measured from one day after the dispute is resolved. The thirty-day refund entitlement does not apply to other services or where additional documents are required.</p>
+
+<h2>15. CLAIM CONDITIONS</h2>
+
+<p>15.1 Claims must be made promptly, and in any event the Company will not consider claims submitted more than sixty working days after the date of the inward scan.</p>
+
+<p>15.2 If the Company notifies the Merchant that a Shipment is stuck, undelivered, or under RTO and the Merchant does not respond within seven working days, the related claim will not be considered.</p>
+
+<p>15.3 No claim will be accepted for Shipments showing a scan status of out for delivery or awaiting delivery unless the Merchant provides chat records or screenshots evidencing the buyer’s non-receipt.</p>
+
+<p>15.4 For claims alleging non-connectivity, the Merchant must submit the signed pickup manifest for the disputed Shipment within three working days of pickup.</p>
+
+<p>15.5 For damage, pilferage, tampering, crushing, or leakage, the recipient must record negative remarks on the proof of delivery at the time of delivery to preserve the claim.</p>
+
+<p>15.6 Claims for damage, pilferage, tampering, crushing, or leakage will be entertained only if made within forty-eight hours of delivery or receipt and only where the outer packaging applied by the Company or the Shipping Vendor is damaged, altered, or tampered with.</p>
+
+<p>15.7 Claims for Shipments carried under branded networks remain subject to the evidence and submission requirements above, but will also follow the timelines and processes mandated by the relevant carrier.</p>
+
+<p>15.8 Where a customer who is not registered under the GST regime has not transacted for 365 consecutive days, any wallet balance held will be refunded to that customer in accordance with the refund procedures.</p>
+
+<h2>16. HANDLING AND RELATED CHARGES</h2>
+
+<p>16.1 Shipping charges for branded services will be determined on a case-by-case basis.</p>
+
+<p>16.2 If a Shipment is detained by customs, additional charges will apply based on actual costs.</p>
+
+<p>16.3 Handling charges are set out for a maximum Shipment weight of 22 KGs for USA, 30 KGs for UK, 30 KGs for Europe, 20 KGs for Australia/NZ, and 20 KGs for Canada, based on volume or dead weight, whichever is higher.</p>
+
+<p>16.4 If package volume or dead weight is higher than the above slabs, there will be an additional handling charge of Rs. 4,000 plus GST, up to a maximum of additional 10 KGs higher.</p>
+
+<p>16.5 Remote area charges for branded services will be disclosed at the time of booking.</p>
+
+<p>16.6 For non-branded services, remote area charges will apply as per the respective service provider’s policy.</p>
+
+<p>16.7 Tariff and duty adjustments may be deducted or refunded by the Company and applied directly to the wallet balance without prior notice.</p>
+
+<p>16.8 Reforwarding charges for branded services are as follows: USA - $15 for up to 500 g, $25 for 500 g to 5 kg; Europe - €20 for up to 500 g, €30 for 500 g to 5 kg; UK - £15 for up to 500 g, £21 for 500 g to 5 kg; Canada - CAD 20 for up to 500 g, CAD 30 for 500 g to 5 kg.</p>
+
+<p>16.9 For non-branded services, reforwarding charges will follow the applicable service provider’s policy.</p>
+
+<p>16.10 If a Shipment is found to be misdeclared, the Company may levy an administrative charge of INR 5,000 per Shipment and recover it from the Merchant’s wallet or settlement without prior notice.</p>
+
+<p>16.11 RTO requests will not be entertained for misdeclared Shipments.</p>
+
+<p>16.12 The Merchant may opt to self-pick-up the seized Shipment within seven working days of intimation.</p>
+
+<p>16.13 If the Merchant fails to do so, the Company may destroy or dispose of the Shipment through authorized channels at the Merchant’s sole risk, cost, and liability, with no further claim against the Company.</p>
+
+<p>16.14 If a Shipment contains Prohibited or Restricted Items, the Merchant will be in material breach of the Merchant Agreement.</p>
+
+<p>16.15 The Company may impose a penalty of INR 50,000 per Shipment, recoverable immediately from the Merchant’s wallet or settlement without prior notice.</p>
+
+<p>16.16 No RTO or self-pickup requests will be accepted for such shipments, and they may be seized and destroyed or disposed of through authorized channels without liability to the Company.</p>
+
+<p>16.17 Repeat offences may result in permanent suspension or banning of the Merchant’s account.</p>
+
+<p>16.18 A special handling fee will apply to certain goods that require specialised handling as defined in the Company’s internal operational guidelines.</p>
+
+
+<h2>17. LIABILITY NOTE</h2>
+
+<p>17.1 The liability of United Worldwide Couriers in relation to the Services is strictly limited to the extent expressly provided under the Merchant Agreement, applicable Terms and Conditions, annexures, policies, and service-specific provisions.</p>
+
+<p>17.2 The Platform and Services are provided on an as is, as available, and reasonable efforts basis, and the Company does not guarantee uninterrupted, error-free, secure, or continuous operation.</p>
+
+<p>17.3 The Company does not independently verify, validate, endorse, or authenticate information, declarations, listings, content, documents, data, or materials provided by Users, Merchants, customers, consignees, Shipping Vendors, or third parties.</p>
+
+<p>17.4 Shipments are not insured unless separately purchased by the Merchant.</p>
+
+<h2>18. COMMUNICATIONS</h2>
+
+<p>18.1 All notices, communications, updates, invoices, rate revisions, dashboard alerts, service notifications, legal notices, and operational instructions may be issued by the Company through email, dashboard, mobile application, SMS, WhatsApp, registered mobile number, support ticketing system, courier, or any other officially designated communication channel.</p>
+
+<p>18.2 The Merchant consents to receive communications through such channels.</p>
+
+<p>18.3 The Merchant authorizes the Company to verify KYC information and to share necessary details with carriers, insurers, customs authorities, importer of record entities, marketplace partners, banks, payment partners, police, courts, government agencies, complainants, or any other relevant entity for compliance, claims processing, dispute handling, fraud review, legal proceedings, or operational processing, in accordance with applicable law.</p>
+
+<h2>19. CROSS-REFERENCE</h2>
+
+<p>19.1 This Annexure A is drafted only from the language already present in the Merchant Agreement and is intended to be read together with the Merchant Agreement, any applicable annexures, schedules, rate sheets, SOPs, SLAs, dashboard notices, and service-specific provisions.</p>
+
+<p>19.2 In case of inconsistency, the relevant annexure shall prevail only for the subject matter of that annexure, and service-specific terms, SOPs, rate cards, and web-based links may prevail over general terms where expressly stated.</p>
+
+
+<h2>ANNEXURE B</h2>
+<h2>PROHIBITED, RESTRICTED, DANGEROUS, AND NON-COMPLIANT GOODS</h2>
+
+<h3>Dangerous Goods:</h3>
+
+<ol>
+    <li>Oil-based paint and thinners (flammable liquids)</li>
+    <li>Industrial solvents</li>
+    <li>Insecticides, garden chemicals (fertilizers, poisons)</li>
+    <li>Lithium batteries</li>
+    <li>Magnetized materials</li>
+    <li>Machinery (chain saws, outboard engines containing fuel or that have contained fuel)</li>
+    <li>Fuel for camp stoves, lanterns, torches or heating elements</li>
+    <li>Automobile batteries</li>
+    <li>Infectious substances</li>
+    <li>Any compound, liquid or gas that has toxic and/or infectious characteristics</li>
+    <li>Bleach</li>
+    <li>Flammable adhesives</li>
+    <li>Arms, ammunitions or any weapon with blade (including but not limited to air guns, flares, gunpowder, firework, knives, swords and antique weaponry)</li>
+    <li>Dry ice (Carbon Dioxide, Solid)</li>
+    <li>Any Aerosols, liquids and/or powders or any other flammable substances classified as Dangerous Goods for transport by Air</li>
+    <li>Alcohol</li>
+    <li>Tobacco and tobacco related products</li>
+    <li>Electronic cigarettes</li>
+    <li>Ketamine</li>
+</ol>
+
+
+<h3>Restricted Items:</h3>
+
+<ol>
+    <li>
+        Precious stones, gems and jewellery (including but not limited to antiques,
+        bullion (of any precious metal), diamonds, gold, silver, platinum, trophies
+        related to animal hunting, semi-precious stones in any form (including bricks).
+    </li>
+    <li>Uncrossed (bearer) drafts / cheque, currency and coins</li>
+    <li>Poison</li>
+    <li>Firearms, explosives and military equipment.</li>
+    <li>Hazardous and radioactive material</li>
+    <li>Foodstuff and liquor</li>
+    <li>Any pornographic material</li>
+    <li>
+        Any hazardous chemical items (including but not limited to radioactive
+        material, special chemicals, material, equipment and technologies (SCOMET)
+        items, hazardous/chemical waste, corrosive items (acids), machine parts
+        containing oil, grease, toner).
+    </li>
+    <li>
+        Any plants and their related products (including but not limited to
+        oxidizing substances, sand/soils/ores, sandalwood, wood, wood pulp,
+        edible oils, de-oiled groundnut, endangered species of plants and their
+        parts, asbestos).
+    </li>
+    <li>
+        Any drugs and medicines (including but not limited to cocaine, cannabis,
+        LSD, morphine, opium, psychotropic substances, and such other drugs,
+        poisonous goods, contraband (such as illegal/illicit and counterfeit drugs).
+    </li>
+    <li>
+        Any animals and human body-related items/products (including but not limited
+        to livestock, cremated or disinterred human being’s remains, human beings
+        and any animal embryos, human being and any animal remains, human beings
+        and any animals’ corpses, organs/body parts of human beings and any animals).
+    </li>
+</ol>
+
+<h2>Counterfeit or Fraudulent Products/Shipments</h2>
+
+<p>United Worldwide Couriers is committed to conducting its business in compliance with all applicable laws, regulations, industry standards, and ethical requirements. The Company maintains a <strong>zero-tolerance policy</strong> towards counterfeit, fraudulent, misrepresented, cloned, duplicate, unauthorized, or otherwise unlawful products or shipments, including products or shipments whose origin, authenticity, quality, ownership, or description has been falsely represented.</p>
+
+<p>If United Worldwide Couriers reasonably believes or determines that the Merchant or any of its customers is shipping, selling, attempting to ship, or has previously shipped or sold any counterfeit or fraudulent product or Shipment, including counterfeit electronic products such as mobile phones, smart watches, or similar devices, the Company shall have the right, without prejudice to any other contractual or legal remedy, to take one or more of the following actions:</p>
+
+<p><strong>1.</strong> Seize or place the Shipment on hold and retain custody of the suspected counterfeit or fraudulent product/Shipment pending investigation or further instructions.</p>
+
+<p><strong>2.</strong> Report the matter to the appropriate authorities, including any government authority, customs authority, regulatory body, law-enforcement agency, or police station, where the Company considers such reporting appropriate or is required to do so by law.</p>
+
+<p><strong>3.</strong> Suspend, restrict, terminate, or blacklist the Merchant and/or the relevant customer from using or transacting through United Worldwide Couriers.</p>
+
+<p><strong>4.</strong> Levy liquidated damages of up to INR 10,000 per counterfeit or fraudulent Shipment, plus applicable GST, towards estimated legal, investigation, administrative, compliance, and related expenses incurred by the Company. Where the Company's actual documented expenses exceed INR 10,000, the Company may recover such additional amounts to the extent permitted under Applicable Law.</p>
+
+<p><strong>5.</strong> Recover additional compensation of up to INR 1,00,000, plus applicable GST, towards reputational harm, goodwill impairment, business disruption, investigation, and related losses suffered or reasonably incurred by United Worldwide Couriers as a result of the counterfeit or fraudulent activity, subject to Applicable Law.</p>
+
+<p><strong>6.</strong> Require the Merchant to provide an additional security deposit or financial security in such amount as may reasonably be determined by the Company to cover potential losses, liabilities, claims, penalties, investigation costs, or other expenses arising from the suspected counterfeit or fraudulent Shipment.</p>
+
+<p><strong>7.</strong> Block, retain, suspend, or set off COD amounts, wallet balances, settlements, credits, refunds, or other monies belonging or payable to the Merchant, to the extent reasonably required to secure or recover amounts due to the Company or arising from the suspected counterfeit or fraudulent activity.</p>
+
+<p><strong>8.</strong> Seize, retain, or dispose of other products or Shipments belonging to the Merchant or the relevant customer that are in the custody or possession of United Worldwide Couriers or its logistics partners, where such action is reasonably necessary for investigation, compliance, legal proceedings, or recovery. Subject to Applicable Law and any direction of a competent authority, where the seized products remain unclaimed or unresolved for <strong>thirty (30) days from the date of seizure</strong>, the Company may dispose of such products through an authorized process.</p>
+
+<p><strong>9.</strong> Forfeit any security deposit or financial security maintained with United Worldwide Couriers to the extent necessary to recover amounts lawfully due, including applicable damages, penalties, costs, expenses, claims, or liabilities arising from the counterfeit or fraudulent activity.</p>
+
+<p><strong>10.</strong> The Merchant shall remain fully responsible for any claims, losses, penalties, duties, taxes, legal expenses, regulatory action, investigation costs, third-party claims, and other liabilities arising from or relating to counterfeit or fraudulent products or Shipments tendered by the Merchant or its customers.</p>
+
+<p><strong>11.</strong> The exercise of any of the above rights shall be without prejudice to any other rights or remedies available to United Worldwide Couriers under this Agreement, Applicable Law, or any applicable carrier, customs, regulatory, or governmental requirement.</p>
+
+<p>For avoidance of doubt, the Merchant shall be solely responsible for ensuring that all products and Shipments tendered through United Worldwide Couriers are genuine, lawfully sourced, accurately described, appropriately documented, and compliant with all Applicable Laws and carrier requirements.</p>
+
+
+<h2>Disputed Shipments/Cases</h2>
+
+<p>United Worldwide Couriers, in its sole discretion, shall have the right to levy damages, charges, or other applicable amounts, together with applicable GST, on the Merchant in relation to any Shipment or case that is disputed, questioned, investigated, or subject to a claim by any courier company, customer, consignee, third party, governmental authority, regulatory body, or department.</p>
+
+<p>The amount of such damages, charges, or other applicable amounts may be determined by United Worldwide Couriers on a case-by-case basis, taking into consideration the nature and circumstances of the dispute, the actual or potential loss, liability, cost, expense, penalty, claim, investigation, or other exposure suffered or incurred by the Company, and may vary from case to case, subject to Applicable Law.</p>
+
+<h2>Shipping Non-Essential Items in Government-Prohibited Areas</h2>
+
+<p>If United Worldwide Couriers reasonably believes or determines that the Merchant is shipping or has shipped non-essential items or products into, from, or within any restricted or prohibited area, including any red zone, containment zone, restricted zone, or other area declared or notified as restricted or prohibited by the Central Government or any relevant State Government or governmental authority in India, the Company shall have the right, without prejudice to any other rights or remedies available under this Agreement or Applicable Law, to take appropriate action in relation to such Shipment.</p>
+
+<p>United Worldwide Couriers may levy a penalty or liquidated damages of up to <strong>INR 10,000 per Shipment</strong>, together with applicable GST, towards estimated legal, compliance, administrative, investigation, and related expenses incurred by the Company and/or reputational or goodwill loss arising from such Shipment.</p>
+
+<p>Where the actual damages, losses, liabilities, penalties, legal expenses, investigation costs, or other expenses incurred by United Worldwide Couriers exceed INR 10,000, the Company may recover such additional actual amounts from the Merchant to the extent permitted under Applicable Law.</p>
+
+<p>The Merchant shall remain responsible for ensuring that all Shipments comply with applicable governmental restrictions, transportation restrictions, emergency orders, containment measures, and other applicable laws, notifications, directions, and requirements governing the origin, destination, nature, and movement of the Shipment.</p>
+
+<p>The Company’s rights under this clause shall be without prejudice to any other contractual, statutory, regulatory, or legal rights and remedies available to United Worldwide Couriers.</p>
+
+
+<h2>ANNEXURE C</h2>
+<h2>INTERNATIONAL / CROSS-BORDER TERMS AND CONDITIONS</h2>
+
+<p>This Annexure C sets out the international / cross-border service terms and conditions applicable to the Services and is to be read with the Merchant Agreement. Unless expressly stated otherwise, the terms of the Merchant Agreement shall apply.</p>
+
+<h2>1. SCOPE</h2>
+
+<p><strong>1.1</strong> This Agreement governs the domestic and international shipping, reverse logistics, customs facilitation, marketplace support, importer of record services, payment collection, technology access, and all other allied services offered or facilitated by the Company from time to time, including any services specified in applicable annexures, schedules, rate cards, service specifications, or other written communications issued by the Company.</p>
+
+<p><strong>1.2</strong> Subject to the terms and conditions of this Agreement, the Company authorizes the Merchant to access and use the Platform, dashboard, website, software, and mobile application solely for the purposes of booking, managing, tracking, reconciling, communicating, receiving, and administering Shipments and related Services.</p>
+
+<p><strong>1.3</strong> The Merchant shall use the Platform and Services only for lawful business purposes and in accordance with this Agreement, Applicable Law, and any service-specific terms, policies, operating procedures, or instructions communicated by the Company.</p>
+
+<h2>2. INTERNATIONAL SHIPMENT FLOW</h2>
+
+<p><strong>2.1</strong> For international Shipments, following export clearance in India, the Shipment shall be subject to customs clearance in the destination country and shall be received at the applicable local office before being handed over to the designated last-mile carrier.</p>
+
+<p><strong>2.2</strong> Last-mile carriers may vary depending on the destination country and applicable service. Such carriers may include, without limitation, UPS, USPS, and FedEx in the USA; DPD or national postal networks in Europe; and Canada Post or UPS in Canada. The Company reserves the right to change or substitute last-mile carriers from time to time based on operational requirements, service availability, carrier policies, or destination-specific conditions.</p>
+
+<p><strong>2.3</strong> For Shipments routed through branded carrier networks, including DHL, UPS, and FedEx, the Shipment may be connected to the applicable carrier's hub in Delhi. Where applicable, tracking information may be made available through the relevant carrier's tracking system or website using the applicable tracking number.</p>
+
+<h2>3. DELIVERY HANDLING</h2>
+
+<p><strong>3.1</strong> The Company shall make at least one delivery attempt for each Shipment. Depending on the applicable Shipping Vendor, destination, service type, and carrier policy, additional delivery attempts, including a second delivery attempt, may be made at the carrier's discretion.</p>
+
+<p><strong>3.2</strong> If the consignee or recipient is unavailable to receive a Shipment, the applicable carrier may, subject to its operational policies and applicable law, leave the Shipment with a neighbour, deposit it at a local post office or designated collection location for customer pickup, or place it in a reasonably secure external location, including a mailbox or other designated delivery location.</p>
+
+<h2>4. RETURN TO ORIGIN</h2>
+
+<p><strong>4.1</strong> If a Shipment booked under United Worldwide Couriers Direct Service is determined to be undeliverable, the Shipment may be returned to the Company's or its designated partner's local office in the destination country.</p>
+
+<p><strong>4.2</strong> All applicable Return to Origin (RTO) charges, including transportation, handling, return processing, customs, storage, duties, taxes, and other applicable charges, shall be billed to the Merchant's account.</p>
+
+<p><strong>4.3</strong> In most cases, undeliverable Shipments under United Worldwide Couriers Direct Service may be destroyed or otherwise disposed of in the destination country in accordance with applicable law and operational or carrier requirements. For Shipments destined for the USA or Europe, re-forwarding may be available at an additional cost, subject to availability and applicable service conditions.</p>
+
+<p><strong>4.4</strong> For Shipments routed through branded carrier networks, including DHL, FedEx, and UPS, the applicable carrier may, in accordance with its policies and applicable law, either destroy or otherwise dispose of the Shipment in the destination country or return the Shipment to the Merchant in India. All applicable return, customs, handling, storage, duty, tax, and other related charges shall be payable by the Merchant.</p>
+
+<p><strong>4.5</strong> Where an RTO occurs due to the Merchant's or consignee's failure to pay applicable customs duties, taxes, tariffs, or other governmental charges, the Merchant shall be solely responsible for all return costs and related charges, including transportation, customs, handling, storage, demurrage, duties, taxes, penalties, and any other applicable expenses.</p>
+
+<h2>5. UNDELIVERABLE SHIPMENTS</h2>
+
+<p><strong>5.1</strong> A Shipment may be deemed undeliverable where delivery cannot be completed for reasons including, without limitation, incorrect, incomplete, or inaccurate address details provided at the time of booking or appearing on the Shipment, including a missing apartment number, unit number, street name, postal code, or other required address information.</p>
+
+<p><strong>5.2</strong> A Shipment may also be deemed undeliverable where the customer or consignee refuses to accept the Shipment or refuses to pay any applicable customs duties, taxes, tariffs, or other charges required for delivery.</p>
+
+<h2>6. RTO, STORAGE, AND DISPOSAL</h2>
+
+<p><strong>6.1</strong> The Company reserves the right to return any Shipment that is not accepted by the Customer or otherwise becomes undeliverable and to apply the applicable Return to Origin (RTO) charges at the prevailing rates.</p>
+
+<p><strong>6.2</strong> If the Merchant fails to accept an RTO Shipment or cannot be contacted or reached, the Company may levy demurrage, incidental storage, handling, or other applicable charges for any period exceeding seven (7) working days from the initiation of the return, up to a maximum period of forty-five (45) working days from such date.</p>
+
+<p><strong>6.3</strong> If the Customer fails to accept or receive the returned Shipment for more than ten (10) working days from the date of the first RTO undelivered status or the first RTO delivery attempt, the Company may, subject to Applicable Law and applicable carrier policies, dispose of or otherwise deal with the Shipment through an authorized process.</p>
+
+<p><strong>6.4</strong> Upon disposal of a Shipment under this Clause, the Merchant shall forfeit any claim, refund, compensation, or other entitlement relating to such Shipment and shall remain liable for all applicable disposal, demurrage, incidental storage, handling, transportation, and other charges incurred in connection with the Shipment.</p>
+
+<h2>7. CUSTOMS AND CHARGES</h2>
+
+<p><strong>7.1</strong> If a Shipment is detained, held, examined, delayed, or otherwise subject to action by customs or any other governmental or regulatory authority, the Merchant shall be responsible for all additional charges incurred in connection with such action, including customs, storage, detention, demurrage, handling, inspection, documentation, transportation, duties, taxes, penalties, and other actual costs, as applicable.</p>
+
+<p><strong>7.2</strong> Any adjustment arising from a difference in applicable tariffs, customs duties, taxes, refunds, rebates, or other governmental charges may be deducted from or credited to the Merchant's wallet or account by the Company, without prior notice, subject to reconciliation and Applicable Law.</p>
+
+<p><strong>7.3</strong> Subject to availability and applicable service conditions, the reforwarding charges for branded services shall be as follows:</p>
+
+<p><strong>USA:</strong> USD 15 for Shipments up to 500 g and USD 25 for Shipments from 500 g up to 5 kg.</p>
+
+<p><strong>Europe:</strong> EUR 20 for Shipments up to 500 g and EUR 30 for Shipments from 500 g up to 5 kg.</p>
+
+<p><strong>UK:</strong> GBP 15 for Shipments up to 500 g and GBP 21 for Shipments from 500 g up to 5 kg.</p>
+
+<p><strong>Canada:</strong> CAD 20 for Shipments up to 500 g and CAD 30 for Shipments from 500 g up to 5 kg.</p>
+
+<p><strong>7.4</strong> For non-branded services, reforwarding charges shall be determined in accordance with the applicable rates, policies, terms, and conditions of the relevant service provider or Shipping Vendor.</p>
+
+<h2>8. HANDLING AND SPECIAL CHARGES</h2>
+
+<p><strong>8.1</strong> Shipping charges for branded services shall be determined on a case-by-case basis based on the destination, service type, Shipment characteristics, applicable carrier rates, and other operational factors.</p>
+
+<p><strong>8.2</strong> Handling charges for branded services shall apply to a maximum Shipment weight of 22 KGs for the USA, 30 KGs for the UK, 30 KGs for Europe, 20 KGs for Australia/NZ, and 20 KGs for Canada, calculated on the basis of volumetric weight or actual dead weight, whichever is higher.</p>
+
+<p><strong>8.3</strong> Where the volumetric weight or actual dead weight of a Shipment exceeds the applicable weight slab specified above, an additional handling charge of <strong>INR 4,000 plus applicable GST</strong> shall apply for additional weight of up to 10 KGs above the applicable slab.</p>
+
+<p><strong>8.4</strong> Remote area charges applicable to branded services shall be disclosed to the Merchant at the time of booking or as otherwise communicated through the applicable booking platform.</p>
+
+<p><strong>8.5</strong> For non-branded services, remote area charges shall be applicable in accordance with the rates, policies, and terms of the respective service provider or Shipping Vendor.</p>
+
+<p><strong>8.6</strong> Certain goods requiring specialised handling, processing, packaging, transportation, documentation, or other operational treatment, as determined under the Company's internal operational guidelines, shall be subject to an applicable special handling fee.</p>
+
+<h2>9. CLAIMS AND COMPENSATION</h2>
+
+<p><strong>9.1</strong> Claims relating to Shipments routed through branded carrier networks, including DHL, UPS, and FedEx, shall be processed in accordance with the applicable Claim Policy, subject to the evidence requirements, timelines, procedures, exclusions, and conditions prescribed by the relevant carrier.</p>
+
+<p><strong>9.2</strong> To initiate a claim, the Merchant must provide the United Worldwide Couriers airway bill (AWB) number together with all relevant supporting documents by email to <strong>Csd@unitedcouriers.biz</strong>.</p>
+
+<p><strong>9.3</strong> Where no first scan is recorded by the destination last-mile carrier in the destination country, compensation shall be limited to <strong>30% of the invoice value plus applicable shipping charges</strong>, subject to a maximum amount of <strong>INR 1,000</strong> for Shipments weighing from 0 to 100 g and <strong>INR 4,000</strong> for Shipments weighing more than 100 g. Such maximum amounts shall be inclusive of shipping charges.</p>
+
+<p><strong>9.4</strong> Where the last-mile carrier's delivery scan is unavailable or the Shipment is otherwise lost in transit, the Merchant may claim reimbursement provided that the Merchant has already refunded the buyer for the non-delivery. The Merchant must submit the buyer-seller communication or chat records and proof of refund, together with the applicable AWB and other supporting documents.</p>
+
+<p><strong>9.5</strong> Where pickup was carried out by the United Worldwide Couriers team and the Shipment is lost before inwarding at the Delhi hub, any applicable refund shall be processed in accordance with the applicable refund and Claim Policy.</p>
+
+<p><strong>9.6</strong> Where pickup was performed by a third-party logistics provider (3PL), the Merchant shall be entitled only to a refund of the applicable shipping charges, subject to verification and the applicable Claim Policy.</p>
+
+<p><strong>9.7</strong> All claims shall be subject to verification, investigation, and acceptance under the applicable Claim Policy. Submission of incomplete, inaccurate, misleading, or fraudulent documentation may result in rejection or denial of the claim.</p>
+
+<p><strong>9.8</strong> Where applicable, any recovery received from a carrier, Shipping Vendor, insurer, third party, or other source shall first be applied against amounts payable or losses incurred in connection with the Shipment. Any net recovery shall be dealt with in accordance with the applicable Claim Policy.</p>
+
+<p><strong>9.9</strong> Claims must be submitted promptly. In any event, the Company shall not consider a claim submitted more than <strong>sixty (60) working days</strong> after the date of the inward scan, unless otherwise required by Applicable Law or the applicable carrier's mandatory claim process.</p>
+
+<p><strong>9.10</strong> If the Company notifies the Merchant that a Shipment is stuck, undelivered, or under Return to Origin (RTO), and the Merchant fails to respond within <strong>seven (7) working days</strong> from such notification, the related claim may be rejected or deemed not maintainable.</p>
+
+<p><strong>9.11</strong> No claim shall be accepted for a Shipment showing a tracking status of <strong>"out for delivery"</strong> or <strong>"awaiting delivery"</strong> unless the Merchant provides sufficient evidence, including buyer-seller chat records, screenshots, or other documentary evidence, demonstrating that the buyer did not receive the Shipment.</p>
+
+<p><strong>9.12</strong> For claims alleging non-connectivity, including circumstances where a Shipment was picked up but was not scanned, inwarded, or connected at the applicable hub, the Merchant must submit the duly signed pickup manifest for the disputed Shipment within <strong>three (3) working days</strong> from the date of pickup.</p>
+
+<p><strong>9.13</strong> In cases involving damage, pilferage, tampering, crushing, leakage, or similar physical issues, the recipient must record clear and specific negative remarks on the proof of delivery (POD) at the time of delivery in order to preserve the claim.</p>
+
+<p><strong>9.14</strong> Claims relating to damage, pilferage, tampering, crushing, or leakage shall be entertained only if submitted within <strong>forty-eight (48) hours</strong> from delivery or receipt and where the outer packaging applied by the Company or the relevant Shipping Vendor is demonstrably damaged, altered, opened, or tampered with. Where the outer packaging remains intact, such claims may not be accepted.</p>
+
+<p><strong>9.15</strong> Claims for Shipments carried through branded carrier networks shall remain subject to the evidence and submission requirements specified above and shall additionally be governed by the timelines, procedures, exclusions, and claim requirements prescribed by the relevant carrier.</p>
+
+<p><strong>9.16</strong> The Claim Policy shall apply only to United Worldwide Couriers Self-Services, including <strong>United My Delivery, United Air Premium, United Grd Premium, United Air Express, United Prior Post, United Eco Post, and United My Pickup</strong>.</p>
+
+<p><strong>9.17</strong> The Company shall endeavour to close each refund or compensation claim within <strong>fifteen (15) working days</strong> from receipt of the complaint and all required supporting documents. Where investigation requires cooperation, confirmation, or documentation from a Shipping Vendor, carrier, customs authority, or other third party, additional time may be required.</p>
+
+<p><strong>9.18</strong> For United Worldwide Couriers Direct Services only, where a Shipment has not been delivered within <strong>thirty (30) days</strong> from the date of pickup and no dispute is pending in relation to the Shipment, the Merchant shall be entitled to a refund in accordance with the Merchant Agreement and applicable Claim Policy.</p>
+
+<p><strong>9.19</strong> Where a dispute arises in relation to the Shipment, the thirty (30) day period referred to above shall be calculated from the day immediately following the date on which such dispute is finally resolved.</p>
+
+<p><strong>9.20</strong> The thirty (30) day refund entitlement specified above shall apply only to United Worldwide Couriers Direct Services and shall not apply to other services or in circumstances where additional documents, verification, investigation, carrier confirmation, or other information is required to determine the claim.</p>
+
+<h2>10. LIABILITY AND RISK</h2>
+
+<p><strong>10.1</strong> The liability of United Worldwide Couriers in relation to the Services is strictly limited to the extent expressly provided under the Merchant Agreement, applicable Terms and Conditions, annexures, policies, and service-specific provisions.</p>
+
+<p><strong>10.2</strong> The Platform and Services are provided on an “as is”, “as available”, and “reasonable efforts” basis, and the Company does not guarantee uninterrupted, error-free, secure, or continuous operation.</p>
+
+<p><strong>10.3</strong> The Company does not independently verify, validate, endorse, or authenticate information, declarations, listings, content, documents, data, or materials provided by Users, Merchants, customers, consignees, Shipping Vendors, or third parties.</p>
+
+<p><strong>10.4</strong> Shipments are not insured unless separately purchased by the Merchant.</p>
+
+<h2>11. CROSS-REFERENCE</h2>
+
+<p><strong>11.1</strong> This Annexure C is drafted only from the language already present in the Merchant Agreement and is intended to be read together with the Merchant Agreement, any applicable annexures, schedules, rate sheets, SOPs, SLAs, dashboard notices, and service-specific provisions.</p>
+
+<p><strong>11.2</strong> In case of inconsistency, the relevant annexure shall prevail only for the subject matter of that annexure, and service-specific terms, SOPs, rate cards, and web-based links may prevail over general terms where expressly stated.</p>
+
+
+<h2>ANNEXURE D</h2>
+<h2>CLAIMS, MANIFEST, POD, AND SUPPORTING DOCUMENTS</h2>
+
+<p>This Annexure D sets out the documentation requirements applicable to claims, manifests, proof of delivery, and supporting evidence, and is to be read with the Merchant Agreement and all other applicable annexures. Unless expressly stated otherwise, the terms of the Merchant Agreement shall apply.</p>
+
+<h2>1. CLAIM INITIATION</h2>
+
+<p><strong>1.1</strong> To initiate a claim, the Merchant must provide the United Worldwide Couriers airway bill (AWB) number and all supporting documents to Csd@unitedcouriers.biz.</p>
+
+<p><strong>1.2</strong> Claims for Shipments routed via branded carrier networks such as DHL, UPS, and FedEx will be processed under the same policy, subject to carrier-specific timelines.</p>
+
+<h2>2. PICKUP MANIFEST</h2>
+
+<p><strong>2.1</strong> For claims alleging non-connectivity, meaning the Shipment was picked up but not scanned or connected at the hub, the Merchant must submit the signed pickup manifest for the disputed Shipment within three working days of pickup.</p>
+
+<p><strong>2.2</strong> Claims lacking a signed manifest will not be maintainable, and normal turnaround times will not apply in such disputes.</p>
+
+<h2>3. PROOF OF DELIVERY</h2>
+
+<p><strong>3.1</strong> For damage, pilferage, tampering, crushing, or leakage, the recipient must record negative remarks on the proof of delivery at the time of delivery to preserve the claim.</p>
+
+<p><strong>3.2</strong> Absent clear negative remarks on the POD, no claim will be maintainable for such issues.</p>
+
+<p><strong>3.3</strong> Claims for damage, pilferage, tampering, crushing, or leakage will be entertained only if made within forty-eight hours of delivery or receipt and only where the outer packaging applied by the Company or the Shipping Vendor is damaged, altered, or tampered with.</p>
+
+<h2>4. SUPPORTING DOCUMENTS</h2>
+
+<p><strong>4.1</strong> For no first scan claims, the Merchant must submit the required AWB and supporting documents, and the claim will be assessed in accordance with the applicable compensation limits.</p>
+
+<p><strong>4.2</strong> For no delivery scan or lost-in-transit claims, the Merchant must submit the buyer-seller chat and proof of refund along with the required AWB and documents.</p>
+
+<p><strong>4.3</strong> For claims involving branded networks, the same evidentiary requirements apply, subject to the applicable carrier timelines and policies.</p>
+
+<h2>5. CLAIM TIMELINES</h2>
+
+<p><strong>5.1</strong> Claims must be made promptly, and in any event the Company will not consider claims submitted more than sixty working days after the date of the inward scan.</p>
+
+<p><strong>5.2</strong> If the Company notifies the Merchant that a Shipment is stuck, undelivered, or under RTO and the Merchant does not respond within seven working days, the related claim will not be considered.</p>
+
+<h2>6. VERIFICATION AND REJECTION</h2>
+
+<p><strong>6.1</strong> All claims are subject to verification and acceptance under the Claim Policy.</p>
+
+<p><strong>6.2</strong> Submission of incomplete, inaccurate, or fraudulent documents may result in denial of the claim.</p>
+
+<p><strong>6.3</strong> Where applicable, recoveries from carriers or third parties will be applied against amounts payable, and any net recovery will be distributed in accordance with the Claim Policy.</p>
+
+<h2>7. GENERAL REFERENCE</h2>
+
+<p>This Annexure D is intended only to govern documentation, evidence, and claim-processing requirements. Compensation limits, exclusions, RTO treatment, and service-specific claim outcomes shall be governed by the Merchant Agreement and the applicable claim policy.</p>
+
 
                                     <!-- Authorized Signature (right-aligned) -->
                                     <div id="billSignatureBlock"
@@ -2061,8 +2606,8 @@
                                     <hr>
                                     <div
                                         style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-top: 0.5rem; color: #34537a; font-size: 0.9rem;">
-                                        <span>© UNITED WORLDWIDE COURIERS PVT LTD</span>
-                                        <span>New Delhi · India</span>
+                                        <span>Â© UNITED WORLDWIDE COURIERS PVT LTD</span>
+                                        <span>New Delhi Â· India</span>
                                     </div>
                                 </div>
 
@@ -2164,8 +2709,8 @@
                     kycData = Object.assign(kycData, savedKycDraft || {});
 
                     // Verification state is stored with internal session-key names
-                    // in the draft. Normalize it before the form is restored so a
-                    // verified GST business name is available on the first render.
+                    // in the draft. Normalize it before the form is restored so
+                    // all verified identity fields survive a refresh or resume.
                     if (!kycData.gst_number) {
                         kycData.gst_number = kycData.kyc_gst_number || @json(session('kyc_gst_number', ''));
                     }
@@ -2177,6 +2722,43 @@
                             kycData.kyc_gst_cashfree_verified ||
                             kycData.kyc_gst_verified ||
                             @json((bool) session('kyc_gst_cashfree_verified', false))
+                        );
+                    }
+                    if (!kycData.aadhar_number) {
+                        kycData.aadhar_number = String(
+                            kycData.kyc_aadhar_number || @json(session('kyc_aadhar_number', ''))
+                        ).replace(/\s+/g, '');
+                    }
+                    if (!kycData.aadhar_verified) {
+                        kycData.aadhar_verified = Boolean(
+                            kycData.kyc_aadhar_cashfree_verified ||
+                            kycData.kyc_aadhar_verified ||
+                            @json((bool) session('kyc_aadhar_cashfree_verified', false))
+                        );
+                    }
+                    if (!kycData.pan_number) {
+                        kycData.pan_number = String(
+                            kycData.kyc_pan_number || @json(session('kyc_pan_number', ''))
+                        ).replace(/\s+/g, '').toUpperCase();
+                    }
+                    if (!kycData.pan_holder_name) {
+                        kycData.pan_holder_name = kycData.kyc_pan_holder_name || @json(session('kyc_pan_holder_name', ''));
+                    }
+                    if (!kycData.pan_dob) {
+                        kycData.pan_dob = formatRequestDob(
+                            kycData.kyc_pan_dob || @json(session('kyc_pan_dob', ''))
+                        );
+                    } else {
+                        kycData.pan_dob = formatRequestDob(kycData.pan_dob);
+                    }
+                    if (!kycData.pan_dob) {
+                        kycData.pan_verified = false;
+                    }
+                    if (!kycData.pan_verified) {
+                        kycData.pan_verified = Boolean(
+                            kycData.kyc_pan_cashfree_verified ||
+                            kycData.kyc_pan_verified ||
+                            @json((bool) session('kyc_pan_cashfree_verified', false))
                         );
                     }
 
@@ -2195,14 +2777,65 @@
                         kycData[key] = value;
                     }
 
+                    function parseValidPanDob(value) {
+                        const normalized = String(value || '').trim();
+                        let match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        let year;
+                        let month;
+                        let day;
+
+                        if (match) {
+                            year = Number(match[1]);
+                            month = Number(match[2]);
+                            day = Number(match[3]);
+                        } else {
+                            match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                            if (!match) return null;
+                            day = Number(match[1]);
+                            month = Number(match[2]);
+                            year = Number(match[3]);
+                        }
+
+                        const today = new Date();
+                        const date = new Date(year, month - 1, day);
+                        if (year < 1900 || year > today.getFullYear() ||
+                            month < 1 || month > 12 || day < 1 || day > 31 ||
+                            date.getFullYear() !== year || date.getMonth() !== month - 1 ||
+                            date.getDate() !== day || date >= new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+                            return null;
+                        }
+
+                        const paddedMonth = String(month).padStart(2, '0');
+                        const paddedDay = String(day).padStart(2, '0');
+                        return {
+                            ymd: `${String(year).padStart(4, '0')}-${paddedMonth}-${paddedDay}`,
+                            dmy: `${paddedDay}/${paddedMonth}/${String(year).padStart(4, '0')}`
+                        };
+                    }
+
                     function formatDisplayDob(value) {
-                        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                        return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || '');
+                        const parsed = parseValidPanDob(value);
+                        return parsed ? parsed.dmy : '';
                     }
 
                     function formatRequestDob(value) {
-                        const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                        return match ? `${match[3]}-${match[2]}-${match[1]}` : String(value || '').trim();
+                        const parsed = parseValidPanDob(value);
+                        return parsed ? parsed.ymd : '';
+                    }
+
+                    function syncKycDatePickerValue(id, value) {
+                        const field = document.getElementById(id);
+                        if (!field) return;
+                        if (!value) {
+                            if (field._flatpickr) field._flatpickr.clear(false);
+                            else field.value = '';
+                            return;
+                        }
+                        if (field._flatpickr) {
+                            field._flatpickr.setDate(value, false, 'Y-m-d');
+                        } else {
+                            field.value = value;
+                        }
                     }
 
                     function captureKycDraftData() {
@@ -2424,12 +3057,20 @@
                             endYearField.add(new Option('Select Start Year First', ''));
                             endYearField.disabled = true;
                             expiryField.removeAttribute('min');
+                            if (expiryField._flatpickr) expiryField._flatpickr.set('minDate', null);
                             syncBusinessLutBondYear();
                             return;
                         }
 
                         expiryField.min = `${startYear + 1}-01-01`;
-                        if (expiryField.value && expiryField.value < expiryField.min) expiryField.value = '';
+                        if (expiryField._flatpickr) expiryField._flatpickr.set('minDate', expiryField.min);
+                        if (expiryField.value && expiryField.value < expiryField.min) {
+                            if (expiryField._flatpickr) {
+                                expiryField._flatpickr.clear();
+                            } else {
+                                expiryField.value = '';
+                            }
+                        }
                         endYearField.add(new Option('Select End Year', ''));
                         for (let offset = 1; offset <= 5; offset += 1) {
                             const endYear = String(startYear + offset);
@@ -2881,8 +3522,8 @@
 
                         if (!panField || !holderField || !dobField || !panFileInput || !verifyBtn || !panStatus) return;
 
-                        // Normalize PAN to uppercase, no spaces. Personal KYC accepts every
-                        // valid PAN entity type; only Business KYC rejects individual ('P') PAN.
+                        // Normalize PAN to uppercase, no spaces. Personal KYC requires
+                        // an individual PAN ('P'); Business KYC requires an entity PAN.
                         const pan = panField.value.replace(/\s+/g, '').toUpperCase();
 
                         if (!pan) {
@@ -2896,7 +3537,12 @@
                             return;
                         }
                         if (isBusinessFlow && pan.charAt(3) === 'P') {
-                            showKycAlert('please upload business pan card', 'please upload business pan card');
+                            showKycAlert('Business PAN required', 'Please upload a business PAN card, not a personal PAN card.');
+                            markFieldInvalid(panField);
+                            return;
+                        }
+                        if (!isBusinessFlow && pan.charAt(3) !== 'P') {
+                            showKycAlert('Personal PAN required', 'Please upload a personal PAN card. Business PAN cards are not accepted for Personal KYC.');
                             markFieldInvalid(panField);
                             return;
                         }
@@ -2910,12 +3556,17 @@
                             markFieldInvalid(dobField);
                             return;
                         }
-                        const panDob = formatRequestDob(dobField.value);
-                        if (!/^\d{4}-\d{2}-\d{2}$/.test(panDob)) {
-                            showKycAlert('Invalid date of birth', 'Please enter the date in DD/MM/YYYY format.');
+                        const parsedPanDob = parseValidPanDob(dobField.value);
+                        if (!parsedPanDob) {
+                            showKycAlert('Invalid date of birth', 'Please select a valid past date in DD/MM/YYYY format.');
+                            if (dobField._flatpickr) dobField._flatpickr.clear();
+                            else dobField.value = '';
+                            kycData.pan_dob = '';
+                            kycData.pan_verified = false;
                             markFieldInvalid(dobField);
                             return;
                         }
+                        const panDob = parsedPanDob.ymd;
                         const hasPanFile = Boolean(panFileInput.files && panFileInput.files[0]);
                         const hasStoredPanPath = Boolean(kycData.pan_document);
                         if (!hasPanFile && !hasStoredPanPath) {
@@ -2929,7 +3580,9 @@
                         const verifyData = new FormData();
                         verifyData.append('pan_number', pan);
                         verifyData.append('pan_holder_name', holderField.value.trim());
-                        verifyData.append('pan_dob', panDob);
+                        // Send a strictly validated DD/MM/YYYY value. The controller
+                        // normalizes it to Y-m-d before validation/storage.
+                        verifyData.append('pan_dob', parsedPanDob.dmy);
                         if (hasPanFile) {
                             verifyData.append('pan_document', panFileInput.files[0]);
                         } else {
@@ -3170,6 +3823,45 @@
                         document.addEventListener('DOMContentLoaded', initFileUploadPreviews);
                     } else {
                         initFileUploadPreviews();
+                    }
+
+                    // Optional Courier/Aggregator users can deliberately discard any
+                    // restored Aadhaar draft data and continue without Aadhaar.
+                    function skipAadhaarStep() {
+                        if (!isAadhaarOptional) {
+                            nextStep(3);
+                            return;
+                        }
+
+                        const aadharInput = document.getElementById('aadharInput');
+                        const frontInput = document.getElementById('aadharFrontFileInput');
+                        const backInput = document.getElementById('aadharBackFileInput');
+                        const verifyButton = document.getElementById('verifyAadharBtn');
+                        const status = document.getElementById('aadharStatus');
+                        const frontPlaceholder = document.getElementById('aadharFrontUploadPlaceholder');
+                        const frontPreview = document.getElementById('aadharFrontPreview');
+                        const backPlaceholder = document.getElementById('aadharBackUploadPlaceholder');
+                        const backPreview = document.getElementById('aadharBackPreview');
+
+                        if (aadharInput) aadharInput.value = '';
+                        if (frontInput) frontInput.value = '';
+                        if (backInput) backInput.value = '';
+                        if (frontPlaceholder) frontPlaceholder.style.display = 'block';
+                        if (frontPreview) frontPreview.style.display = 'none';
+                        if (backPlaceholder) backPlaceholder.style.display = 'block';
+                        if (backPreview) backPreview.style.display = 'none';
+                        if (status) status.style.display = 'none';
+                        if (verifyButton) verifyButton.disabled = false;
+
+                        delete kycData.aadhar_number;
+                        delete kycData.aadhar_verified;
+                        delete kycData.aadhar_front_document;
+                        delete kycData.aadhar_back_document;
+                        delete kycData.aadhar_front_file;
+                        delete kycData.aadhar_back_file;
+                        delete kycData.aadhar_address;
+                        saveKycDraft(3);
+                        renderKycStep(3, true);
                     }
 
                     // Validate that the current step is complete before allowing forward navigation
@@ -3700,8 +4392,7 @@
                         restoreVerifiedState('gstInput', 'verifyGstBtn', 'gstStatus', kycData.gst_verified,
                             'GST verification restored from your saved KYC.', 'gstBusinessName');
                         restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus',
-                            kycData.aadhar_verified || (isAadhaarOptional && !kycData.aadhar_number
-                                && !kycData.aadhar_front_document && !kycData.aadhar_back_document),
+                            kycData.aadhar_verified,
                             kycData.aadhar_verified
                                 ? 'Aadhaar verification restored from your saved KYC.'
                                 : 'Aadhaar verification is optional for your account type.',
@@ -3757,7 +4448,9 @@
                         formData.append('gst_certificate_number', kycData.gst_certificate_number || kycData.gst_number || '');
                         formData.append('pan_number', kycData.pan_number || '');
                         formData.append('pan_holder_name', kycData.pan_holder_name || '');
-                        formData.append('pan_dob', kycData.pan_dob || '');
+                        // Flatpickr displays DD/MM/YYYY, but Laravel's date rule expects
+                        // an unambiguous request value such as YYYY-MM-DD.
+                        formData.append('pan_dob', formatRequestDob(kycData.pan_dob));
                         formData.append('iec_number', kycData.iec_number || '');
                         formData.append('ad_code', kycData.ad_code || '');
                         formData.append('lut_expiry_date', kycData.lut_expiry_date || '');
@@ -3800,12 +4493,28 @@
                         fetch('{{ route("customer.csb5-form.store") }}', {
                                 method: 'POST',
                                 headers: {
+                                    'Accept': 'application/json',
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                                     'X-Requested-With': 'XMLHttpRequest'
                                 },
                                 body: formData
                             })
-                            .then(response => response.json())
+                            .then(async response => {
+                                const contentType = response.headers.get('content-type') || '';
+                                const data = contentType.includes('application/json')
+                                    ? await response.json()
+                                    : {
+                                        success: false,
+                                        message: (await response.text()).trim()
+                                    };
+
+                                data.httpStatus = response.status;
+                                if (!data.message) {
+                                    data.message = 'Server returned HTTP ' + response.status + '.';
+                                }
+
+                                return data;
+                            })
                             .then(data => {
                                 if (data.success) {
                                     const messageDiv = document.querySelector('#step7-content p.text-muted');
@@ -3827,7 +4536,8 @@
                                     const validationErrors = data.errors
                                         ? Object.values(data.errors).flat().join('\n')
                                         : '';
-                                    alert('Error: ' + (validationErrors || data.message || 'Unknown error'));
+                                    const status = data.httpStatus ? ' (HTTP ' + data.httpStatus + ')' : '';
+                                    alert('Error' + status + ': ' + (validationErrors || data.message || 'Unknown server response'));
                                     if (submitBtn) {
                                         submitBtn.innerHTML = 'Go to Dashboard';
                                         submitBtn.disabled = false;
@@ -3835,8 +4545,8 @@
                                 }
                             })
                             .catch(error => {
-                                console.error('Error:', error);
-                                alert('An error occurred while submitting your Business KYC application.');
+                                console.error('CSB submission error:', error);
+                                alert('CSB form submission failed before the server response was received: ' + error.message);
                                 if (submitBtn) {
                                     submitBtn.innerHTML = 'Go to Dashboard';
                                     submitBtn.disabled = false;
@@ -4060,186 +4770,6 @@
                     <!-- start row -->
                     <h6 class="mb-2">Dashboard</h6>
 
-                    <div class="row row-gap-3 mb-4">
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1 text-dark">Shipments Booked</p>
-                                                <h2 class="mb-1 fs-16">{{ $totalBooked }}</h2>
-                                                @if($bookedChangePercent > 0)
-                                                <p class="text-success mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $bookedChangePercent }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                @elseif($bookedChangePercent < 0) <p class="text-danger mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($bookedChangePercent) }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                    @else
-                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                                    @endif
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-primary border border-primary">
-                                                <i class="fa-solid fa-truck-ramp-box fs-16 text-primary"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
-
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1 text-dark">Pickup Pending</p>
-                                                <h2 class="mb-1 fs-16">{{ $pickupPending }}</h2>
-                                                @if($pickupPendingChangePercent > 0)
-                                                <p class="text-success mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $pickupPendingChangePercent }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                @elseif($pickupPendingChangePercent < 0) <p
-                                                    class="text-danger mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($pickupPendingChangePercent) }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                    @else
-                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                                    @endif
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-success border border-success">
-                                                <i class="ti ti-carousel-vertical fs-16 text-success"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
-
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1 text-dark">Out of Delivery</p>
-                                                <h2 class="mb-1 fs-16">{{ $outForDelivery }}</h2>
-                                                @if($outForDeliveryChangePercent > 0)
-                                                <p class="text-success mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $outForDeliveryChangePercent }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                @elseif($outForDeliveryChangePercent < 0) <p
-                                                    class="text-danger mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($outForDeliveryChangePercent) }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                    @else
-                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                                    @endif
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                                <i class="fa-regular fa-truck fs-16 text-warning"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
-
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1 text-dark">Delivered</p>
-                                                <h2 class="mb-1 fs-16">{{ $delivered }}</h2>
-                                                @if($deliveredChangePercent > 0)
-                                                <p class="text-success mb-0 fs-13"> <i
-                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $deliveredChangePercent }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                @elseif($deliveredChangePercent < 0) <p class="text-danger mb-0 fs-13">
-                                                    <i
-                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($deliveredChangePercent) }}%<span
-                                                        class="text-body ms-1">from last month</span></p>
-                                                    @else
-                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
-                                                    @endif
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-danger border border-danger mb-3">
-                                                <i class="fa-solid fa-people-carry-box fs-16 text-primary"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
-
-                    </div>
-                    <!-- end row -->
-
-                    <!-- Shipment Analytics Section -->
-                    <h6 class="mb-2 mt-4">Shipment Analytics</h6>
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button class="chart-filter-btn active" data-filter="this_month"
-                            onclick="loadChartData('this_month', this)">This Month</button>
-                        <button class="chart-filter-btn" data-filter="today"
-                            onclick="loadChartData('today', this)">Today</button>
-                        <button class="chart-filter-btn" data-filter="yesterday"
-                            onclick="loadChartData('yesterday', this)">Yesterday</button>
-                        <button class="chart-filter-btn" data-filter="last_month"
-                            onclick="loadChartData('last_month', this)">Last Month</button>
-                        <button class="chart-filter-btn" data-filter="last_year"
-                            onclick="loadChartData('last_year', this)">Last Year</button>
-                    </div>
-
-                    <div class="row row-gap-3 mb-4">
-                        <!-- Status Breakdown Doughnut Chart -->
-                        <div class="col-xl-5 col-sm-12 d-flex">
-                            <div class="chart-card flex-fill">
-                                <h6>Status Breakdown</h6>
-                                <div style="position: relative; max-height: 320px;">
-                                    <canvas id="statusChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Date-wise Shipment Trend Bar Chart -->
-                        <div class="col-xl-7 col-sm-12 d-flex">
-                            <div class="chart-card flex-fill">
-                                <h6>Shipment Trends</h6>
-                                <div style="position: relative; max-height: 320px;">
-                                    <canvas id="trendChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- End Shipment Analytics Section -->
 
                     <!-- start row -->
                     <h6 class="mb-2">Upgrade Your Service</h6>
@@ -4281,118 +4811,6 @@
 
 
 
-                    <!-- start row -->
-                    <div class="row mb-4">
-
-                        <div class="col-sm-12">
-                            <div>
-                                <div class="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-3">
-                                    <h5 class="d-flex align-items-center mb-0">Recent Orders<span
-                                            class="badge bg-soft-dark ms-2 text-dark fs-12">{{ $recentShipments->count() }}
-                                            Orders</span></h5>
-                                    <a href="{{ route('customer.view-all-shipments') }}"
-                                        class="btn btn-md btn-primary d-flex align-items-center"><i
-                                            class="ti ti-eye me-2"></i>View All</a>
-                                </div>
-                                <div class="card-body p-0">
-
-                                    <div class="table-responsive">
-                                        <table class="table table-nowrap border">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>
-                                                        <div class="form-check form-check-md">
-                                                            <input class="form-check-input" type="checkbox"
-                                                                id="select-all">
-                                                        </div>
-                                                    </th>
-                                                    <th>AWBNO</th>
-                                                    <th>Date</th>
-                                                    <th>Destination</th>
-                                                    <th>Service</th>
-                                                    <th>Network</th>
-                                                    <th>Network No.</th>
-                                                    <th>PCS</th>
-                                                    <th>CHG Weight</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach($recentShipments as $shipment)
-                                                @php
-                                                $consignee = $shipment->consigneeInfo;
-                                                $packages = $shipment->packageDimensions;
-                                                $pcs = $packages ? $packages->count() : 0;
-                                                $chgWeight = $packages ? $packages->max('chargeable_weight') : 0;
-                                                $statusBadgeClass = [
-                                                'draft' => 'badge-soft-warning',
-                                                'ready' => 'badge-soft-info',
-                                                'assigned_for_pickup' => 'badge-soft-primary',
-                                                'packed' => 'badge-soft-warning',
-                                                'manifested' => 'badge-soft-purple',
-                                                'dispatched' => 'badge-soft-info',
-                                                'ready_to_dispatch' => 'badge-soft-warning',
-                                                'delivered' => 'badge-soft-success',
-                                                'cancelled' => 'badge-soft-danger',
-                                                'disputed' => 'badge-soft-danger',
-                                                'on_hold' => 'badge-soft-secondary',
-                                                'received' => 'badge-soft-success',
-                                                ];
-                                                $badgeClass = $statusBadgeClass[$shipment->status] ??
-                                                'badge-soft-secondary';
-                                                $statusTitleMap = \App\Models\Tracking::getStatusTitleMap();
-                                                $statusLabel = $statusTitleMap[$shipment->status] ??
-                                                ucfirst($shipment->status);
-                                                @endphp
-                                                <tr>
-                                                    <td>
-                                                        <div class="form-check form-check-md"><input
-                                                                class="form-check-input" type="checkbox"></div>
-                                                    </td>
-
-                                                    <td>
-                                                        <a
-                                                            href="{{ route('customer.view-all-shipments') }}">{{ $shipment->awb_number ?? 'N/A' }}</a>
-                                                    </td>
-
-                                                    <td>{{ $shipment->created_at ? $shipment->created_at->format('d M Y') : '-' }}
-                                                    </td>
-                                                    <td>{{ $consignee ? ($consignee->delivery_destination ?? $consignee->city ?? '-') : '-' }}
-                                                    </td>
-                                                    <td>{{ $shipment->shipping_method ?? '-' }}</td>
-                                                    <td>{{ $shipment->shipping_method ?? '-' }}</td>
-                                                    <td>{{ $shipment->awb_number ?? '-' }}</td>
-                                                    <td>{{ $pcs }}</td>
-                                                    <td>{{ number_format($chgWeight, 3) }}</td>
-                                                    <td>
-                                                        <div class="d-inline-flex align-items-center">
-                                                            <a href="{{ route('customer.view-all-shipments') }}"
-                                                                class="btn btn-icon btn-sm btn-outline-white border-0"><i
-                                                                    class="ti ti-eye"></i></a>
-                                                            <span class="badge {{ $badgeClass }}">
-                                                                {{ $statusLabel }}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                @endforeach
-
-                                                @if($recentShipments->count() === 0)
-                                                <tr>
-                                                    <td colspan="10" class="text-center text-muted py-4">No shipments
-                                                        found. Create your first shipment to see data here.</td>
-                                                </tr>
-                                                @endif
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div><!-- end col -->
-
-                    </div>
-                    <!-- end row -->
-
 
 
                     <!-- start row -->
@@ -4409,7 +4827,7 @@
                                                 <p class="fs-14 mb-1 text-dark">Wallet Balance</p>
                                                 <h2 class="mb-1 fs-16">₹ {{ number_format($walletBalance, 2) }}</h2>
                                                 <br>
-                                                <a href="#"
+                                                <a href="{{ route('customer.wallet-history') }}"
                                                     style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Recharge
                                                     Now</a>
                                             </div>
@@ -4453,63 +4871,7 @@
 
                             </div>
                         </div>
-                        <!-- /Total Companies -->
-
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1">Value of product shipped</p>
-                                                <h2 class="mb-1 fs-16">₹ {{ number_format($totalShippedValue, 2) }}</h2>
-                                                <br>
-                                                <a href="#"
-                                                    style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Download
-                                                    Report</a>
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                                <i class="fa-solid fa-download fs-16 text-warning"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
-
-                        <!-- Total Companies -->
-                        <div class="col-xl-3 col-sm-6 d-flex">
-                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
-                                <div class="card-body position-relative z-1">
-                                    <div class="d-flex align-items-start justify-content-between">
-                                        <div class="d-flex align-items-start justify-content-between">
-                                            <div>
-                                                <p class="fs-14 mb-1">Shipped Cost</p>
-                                                <h2 class="mb-1 fs-16">₹ {{ number_format($totalShippedCost, 2) }}</h2>
-                                                <br>
-                                                <a href="#"
-                                                    style="border: 1px solid #000; padding: 3px 6px; border-radius: 3px;">Download
-                                                    Report</a>
-                                            </div>
-                                        </div>
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <span
-                                                class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
-                                                <i class="fa-solid fa-coins fs-16 text-warning"></i>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- /Total Companies -->
+<!-- /Total Companies -->
 
                     </div>
                     <!-- end row -->
@@ -4573,221 +4935,45 @@
 
         <!-- Flatpickr JS -->
         <script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}" type="text/javascript"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                if (typeof flatpickr !== 'function') return;
+
+                var panDob = document.getElementById('panDob');
+                if (panDob && typeof flatpickr === 'function') {
+                    flatpickr(panDob, {
+                        dateFormat: 'd/m/Y',
+                        maxDate: new Date(new Date().setFullYear(new Date().getFullYear() - 18)),
+                        allowInput: false,
+                        onChange: function () {
+                            invalidatePanVerification();
+                        }
+                    });
+                }
+
+                var lutExpiry = document.getElementById('bizLutExpiry');
+                if (lutExpiry) {
+                    flatpickr(lutExpiry, {
+                        dateFormat: 'Y-m-d',
+                        altInput: true,
+                        altFormat: 'd/m/Y',
+                        allowInput: false,
+                        disableMobile: true
+                    });
+                    syncKycDatePickerValue('bizLutExpiry', kycData.lut_expiry_date);
+                }
+            });
+        </script>
 
         <!-- Main JS -->
         <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
 
         <!-- Dashboard Charts Script -->
-        <script>
-        let statusChart = null;
-        let trendChart = null;
 
-        // Color palette for status chart
-        const statusColors = {
-            draft: '#6c757d',
-            ready: '#0d6efd',
-            assigned_for_pickup: '#198754',
-            packed: '#fd7e14',
-            manifested: '#6610f2',
-            dispatched: '#20c997',
-            ready_to_dispatch: '#ffc107',
-            delivered: '#0dcaf0',
-            cancelled: '#dc3545',
-            disputed: '#e83e8c',
-            on_hold: '#495057',
-            received: '#17a2b8'
-        };
-
-        function loadChartData(filter, btnElement) {
-            // Update active button
-            document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
-            if (btnElement) btnElement.classList.add('active');
-
-            fetch('{{ route("customer.dashboard-chart-data") }}?filter=' + filter, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        renderStatusChart(data.statusCounts, data.statusMap);
-                        renderTrendChart(data.dateWiseCounts, data.filter);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching chart data:', error);
-                });
-        }
-
-        function renderStatusChart(statusCounts, statusMap) {
-            const labels = [];
-            const values = [];
-            const colors = [];
-
-            for (const [status, count] of Object.entries(statusCounts)) {
-                labels.push(statusMap[status] || status);
-                values.push(count);
-                colors.push(statusColors[status] || '#adb5bd');
-            }
-
-            if (statusChart) {
-                statusChart.destroy();
-            }
-
-            const ctx = document.getElementById('statusChart').getContext('2d');
-            statusChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors,
-                        borderWidth: 2,
-                        borderColor: '#fff',
-                        hoverOffset: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 16,
-                                usePointStyle: true,
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
-                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
-                                }
-                            }
-                        }
-                    },
-                    cutout: '55%'
-                }
-            });
-        }
-
-        function renderTrendChart(dateWiseCounts, filter) {
-            const labels = Object.keys(dateWiseCounts);
-            const values = Object.values(dateWiseCounts);
-
-            // Format labels for display
-            const displayLabels = labels.map(label => {
-                if (filter === 'last_year') {
-                    // Format "2025-01" as "Jan 2025"
-                    const [year, month] = label.split('-');
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
-                        'Nov', 'Dec'
-                    ];
-                    return monthNames[parseInt(month) - 1] + ' ' + year;
-                } else {
-                    // Format "2025-06-15" as "15 Jun"
-                    const parts = label.split('-');
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
-                        'Nov', 'Dec'
-                    ];
-                    return parseInt(parts[2]) + ' ' + monthNames[parseInt(parts[1]) - 1];
-                }
-            });
-
-            if (trendChart) {
-                trendChart.destroy();
-            }
-
-            const ctx = document.getElementById('trendChart').getContext('2d');
-            trendChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: displayLabels,
-                    datasets: [{
-                        label: 'Shipments Created',
-                        data: values,
-                        backgroundColor: 'rgba(91, 94, 255, 0.7)',
-                        borderColor: '#5b5eff',
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        maxBarThickness: 40
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: {
-                                usePointStyle: true,
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return 'Shipments: ' + context.parsed.y;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1,
-                                font: {
-                                    size: 11
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(0,0,0,0.05)'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                font: {
-                                    size: 11
-                                },
-                                maxRotation: 45,
-                                minRotation: 0
-                            },
-                            grid: {
-                                display: false
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Load default chart data on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
-        });
-        </script>
-
-        <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js"
-            data-cf-settings="5d3b6c488f778ded9171c76c-|49" defer></script>
-        <script defer
-            src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015"
-            integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ=="
-            data-cf-beacon='{"rayId":"967b314f0fc122a8","version":"2025.7.0","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"token":"3ca157e612a14eccbb30cf6db6691c29","b":1}'
-            crossorigin="anonymous"></script>
+        <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js" defer></script>
+        <script defer src="https://static.cloudflareinsights.com/beacon.min.js"></script>
 
 </body>
 
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:26 GMT -->
 
 </html>

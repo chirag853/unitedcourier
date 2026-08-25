@@ -26,7 +26,19 @@
             <!-- phone -->
             <div class="col-12">
                 <div class="input-group-custom">
-                    <input type="tel" name="phone" class="form-control input-custom" placeholder="Phone" required>
+                    <input
+                        type="tel"
+                        name="phone"
+                        class="form-control input-custom"
+                        placeholder="Phone"
+                        inputmode="numeric"
+                        minlength="10"
+                        maxlength="10"
+                        pattern="[6-9][0-9]{9}"
+                        title="Enter a valid 10-digit Indian mobile number"
+                        oninput="this.value = this.value.replace(/\D/g, '').slice(0, 10);"
+                        required
+                    >
                     <i class="fas fa-phone"></i>
                 </div>
             </div>

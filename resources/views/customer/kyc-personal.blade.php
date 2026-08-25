@@ -29,7 +29,7 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
 
     <!-- Tabler Icon CSS -->
-    <link rel="stylesheet" href="http://127.0.0.1:8000/assets/plugins/tabler-icons/tabler-icons.min.css">
+        <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
 
     <!-- Select2 CSS -->
     <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
@@ -129,7 +129,7 @@
 
                         <form id="personalKycForm" action="{{ route('customer.kyc.personal.store') }}" method="POST"
                             enctype="multipart/form-data"
-                            data-verify-pan-url="{{ route('verify.pan') }}"
+                            data-verify-pan-url="{{ route('customer.verify.pan') }}"
                             data-aadhar-verified="{{ (isset($kycDetail) && $kycDetail && $kycDetail->aadhar_verified) ? '1' : '0' }}"
                             data-pan-verified="{{ (isset($kycDetail) && $kycDetail && $kycDetail->pan_verified) ? '1' : '0' }}">
                             @csrf
@@ -281,10 +281,10 @@
                                     <div class="col-md-6">
                                         <label class="section-label">Date of Birth (as per PAN)</label>
                                         <div class="input-wrapper">
-                                            <input type="date" class="input-custom" id="panDob"
-                                                placeholder="Select Date of Birth *" name="pan_dob"
+                                            <input type="text" class="input-custom" id="panDob"
+                                                placeholder="DD/MM/YYYY" name="pan_dob"
                                                 value="{{ old('pan_dob', $kycDetail->pan_dob ?? '') }}"
-                                                required>
+                                                autocomplete="bday" readonly required>
                                             <i class="fas fa-calendar"></i>
                                         </div>
                                     </div>
@@ -599,6 +599,9 @@
     <!-- End Wrapper -->
 
 
+    <!-- Flatpickr JS -->
+    <script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}"></script>
+
     <!-- jQuery -->
     <script src="{{ asset('assets/js/jquery-3.7.1.min.js') }}"></script>
 
@@ -611,8 +614,19 @@
     <!-- Select2 JS -->
     <script src="{{ asset('assets/plugins/select2/js/select2.min.js') }}"></script>
 
-    <!-- Flatpickr JS -->
-    <script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var panDob = document.getElementById('panDob');
+            if (panDob && typeof flatpickr === 'function') {
+                flatpickr(panDob, {
+                    dateFormat: 'd/m/Y',
+                    maxDate: new Date(new Date().setFullYear(new Date().getFullYear() - 18)),
+                    allowInput: false
+                });
+            }
+        });
+    </script>
 
     <!-- Main JS -->
     <script src="{{ asset('assets/js/script.js') }}"></script>

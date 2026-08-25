@@ -58,6 +58,25 @@ class KycController extends Controller
             array_flip($allowedFields)
         );
 
+        // Keep Cashfree verification metadata server-side. The browser sends
+        // public form fields during autosave, while submission after refresh
+        // relies on these internal keys being restored into the session.
+        $verificationKeys = [
+            'kyc_gst_number', 'kyc_gst_business_name', 'kyc_gst_address',
+            'kyc_gst_verified', 'kyc_gst_cashfree_verified',
+            'kyc_aadhar_number', 'kyc_aadhar_verified',
+            'kyc_aadhar_cashfree_verified', 'kyc_aadhar_front_hash',
+            'kyc_aadhar_verification_id', 'kyc_pan_number',
+            'kyc_pan_holder_name', 'kyc_pan_dob', 'kyc_pan_verified',
+            'kyc_pan_cashfree_verified', 'kyc_pan_document_hash',
+            'kyc_pan_verification_id',
+        ];
+        foreach ($verificationKeys as $key) {
+            if (session()->has($key)) {
+                $formData[$key] = session($key);
+            }
+        }
+
         // Merge autosaved form fields with the existing draft. Cashfree
         // verification markers are stored in the same form_data payload and
         // must survive later step saves, refreshes, and logout/login cycles.
@@ -286,6 +305,15 @@ class KycController extends Controller
                 \App\Support\KycVerificationState::restore($customer);
             }
 
+            // Normalize PAN DOB before Laravel's date rule so the client can
+            // submit the user-facing DD/MM/YYYY format safely.
+            if ($request->filled('pan_dob')) {
+                $normalizedPanDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+                if ($normalizedPanDob !== null) {
+                    $request->merge(['pan_dob' => $normalizedPanDob]);
+                }
+            }
+
             // Normalize boolean-ish fields that arrive as strings via FormData
             foreach (['gst_verified', 'otp_verified', 'aadhar_verified', 'pan_verified', 'terms_accepted'] as $boolField) {
                 if ($request->has($boolField)) {
@@ -364,8 +392,24 @@ class KycController extends Controller
                 ? strtoupper(preg_replace('/\s+/', '', $request->gst_number))
                 : null;
             $gstBusinessName = trim((string) $request->input('gst_business_name'));
+            $gstCertificateDraftPath = $storedDraftPath('gst_certificate_document');
+            $hasGstCertificate = $request->hasFile('gst_certificate_document')
+                || $gstCertificateDraftPath !== null;
+            $hasAnyGstData = $gstNumber !== null
+                || $gstBusinessName !== ''
+                || $request->boolean('gst_verified')
+                || $hasGstCertificate;
 
-            if ($gstNumber && (
+            // GST is optional for Personal KYC. If the customer chooses to
+            // provide it, every GST field and Cashfree verification is required.
+            if ($hasAnyGstData && ($gstNumber === null || $gstBusinessName === '' || !$hasGstCertificate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'GST is optional for Personal KYC. To provide GST, enter the GSTIN and Business Name, verify them, and upload the GST Certificate PDF; otherwise leave all GST fields empty.',
+                ], 422);
+            }
+
+            if ($hasAnyGstData && (
                 !$request->boolean('gst_verified')
                 || session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
@@ -377,13 +421,6 @@ class KycController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Verify the submitted GSTIN through Cashfree before submitting KYC.',
-                ], 422);
-            }
-
-            if ($gstNumber && !$request->hasFile('gst_certificate_document') && !$storedDraftPath('gst_certificate_document')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Upload the GST Certificate PDF when submitting GST details.',
                 ], 422);
             }
 
@@ -489,10 +526,12 @@ class KycController extends Controller
             }
 
             // Handle GST Certificate upload (fresh file or stored draft path)
-            $gstCertificatePath = $this->resolveFinalKycDocument(
-                $customer, $request, 'gst_certificate_document',
-                $storedDraftPath('gst_certificate_document'), '_gst_certificate_'
-            );
+            $gstCertificatePath = $hasAnyGstData
+                ? $this->resolveFinalKycDocument(
+                    $customer, $request, 'gst_certificate_document',
+                    $gstCertificateDraftPath, '_gst_certificate_'
+                )
+                : null;
 
             // Handle Aadhaar front document upload
             $aadharFrontPath = $this->resolveFinalKycDocument(
@@ -522,9 +561,9 @@ class KycController extends Controller
             $kycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'personal',
-                'gst_number' => $gstNumber,
+                'gst_number' => $hasAnyGstData ? $gstNumber : null,
                 'gst_certificate_document' => $gstCertificatePath,
-                'gst_verified' => $request->gst_verified ?? false,
+                'gst_verified' => $hasAnyGstData && $request->boolean('gst_verified'),
                 'otp_verified' => $request->otp_verified ?? false,
                 'aadhar_number' => $aadharNumber,
                 'aadhar_verified' => $request->aadhar_verified ?? false,
@@ -533,7 +572,7 @@ class KycController extends Controller
                 'aadhar_back_document' => $aadharBackPath,
                 'pan_number' => $panNumber,
                 'pan_holder_name' => $request->pan_holder_name,
-                'pan_dob' => $request->pan_dob,
+                'pan_dob' => $panDob,
                 'pan_document' => $panDocumentPath,
                 'pan_verified' => $request->pan_verified ?? false,
                 'signature_document' => $signaturePath,
@@ -861,21 +900,45 @@ class KycController extends Controller
             return null;
         }
 
-        // DB-backed values may carry a time component (e.g. "2010-06-11 00:00:00"
-        // or "2010-06-11T00:00:00.000000Z"); keep only the date part.
-        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $dob, $matches)) {
-            $dob = $matches[0];
+        // Accept only complete date formats. A date-shaped string is not enough:
+        // values such as 0619-98-19 must fail instead of being rearranged.
+        $date = null;
+        $expected = null;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[ T].*)?$/', $dob, $match)) {
+            $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $match[1] . '-' . $match[2] . '-' . $match[3]);
+            $expected = $match[1] . '-' . $match[2] . '-' . $match[3];
+        } elseif (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $dob, $match)) {
+            $date = \DateTimeImmutable::createFromFormat('!d/m/Y', $dob);
+            $expected = $dob;
+        } elseif (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $dob, $match)) {
+            $date = \DateTimeImmutable::createFromFormat('!d-m-Y', $dob);
+            $expected = $dob;
+        } elseif (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})$/', $dob, $match)) {
+            $date = \DateTimeImmutable::createFromFormat('!d.m.Y', $dob);
+            $expected = $dob;
         }
 
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
-            $date = \DateTimeImmutable::createFromFormat('!' . $format, $dob);
-            $errors = \DateTimeImmutable::getLastErrors();
-            if ($date && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
-                return $date->format('Y-m-d');
-            }
+        $errors = \DateTimeImmutable::getLastErrors();
+        if (!$date || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
         }
 
-        return null;
+        $year = (int) $date->format('Y');
+        if ($year < 1900 || $date >= new \DateTimeImmutable('today')) {
+            return null;
+        }
+
+        if (str_contains($expected, '/')) {
+            $matchesExpected = $date->format('d/m/Y') === $expected;
+        } elseif (str_contains($expected, '.')) {
+            $matchesExpected = $date->format('d.m.Y') === $expected;
+        } elseif (preg_match('/^\d{2}-\d{2}-\d{4}$/', $expected)) {
+            $matchesExpected = $date->format('d-m-Y') === $expected;
+        } else {
+            $matchesExpected = $date->format('Y-m-d') === $expected;
+        }
+
+        return $matchesExpected ? $date->format('Y-m-d') : null;
     }
 
     /**
@@ -1439,6 +1502,13 @@ class KycController extends Controller
                 'kyc_pan_verification_id',
             ]);
 
+            if ($request->filled('pan_dob')) {
+                $normalizedPanDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+                if ($normalizedPanDob !== null) {
+                    $request->merge(['pan_dob' => $normalizedPanDob]);
+                }
+            }
+
             $validated = $request->validate([
                 'pan_number' => ['required', 'string', 'regex:/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/'],
                 'pan_holder_name' => ['required', 'string', 'max:255'],
@@ -1461,17 +1531,29 @@ class KycController extends Controller
                 ], 422);
             }
 
-            // Business KYC must use the registered business entity's PAN
-            // (e.g. 'C' for company, 'F' for firm). Personal KYC accepts both
-            // the account holder's individual PAN and a business PAN.
-            if ($this->isBusinessCustomer($customer) && $this->isIndividualPan($pan)) {
+            $isBusinessCustomer = $this->isBusinessCustomer($customer);
+
+            // Business KYC accepts entity PANs, while Personal KYC must use
+            // an individual PAN (PAN fourth character must be P).
+            if ($isBusinessCustomer && $this->isIndividualPan($pan)) {
                 \Log::warning('Business KYC PAN rejected: PAN belongs to an individual.', [
                     'customer_id' => $customer->id,
                     'pan_number' => $pan,
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'please upload business pan card',
+                    'message' => 'Please upload a business PAN card, not a personal PAN card.',
+                ], 422);
+            }
+
+            if (!$isBusinessCustomer && !$this->isIndividualPan($pan)) {
+                \Log::warning('Personal KYC PAN rejected: PAN belongs to a business entity.', [
+                    'customer_id' => $customer->id,
+                    'pan_number' => $pan,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please upload a personal PAN card. Business PAN cards are not accepted for Personal KYC.',
                 ], 422);
             }
 
@@ -1737,6 +1819,15 @@ class KycController extends Controller
                 \App\Support\KycVerificationState::restore($customer);
             }
 
+            // Normalize the user-facing DD/MM/YYYY value before Laravel's
+            // date validation and before persisting it to the database.
+            if ($request->filled('pan_dob')) {
+                $normalizedPanDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+                if ($normalizedPanDob !== null) {
+                    $request->merge(['pan_dob' => $normalizedPanDob]);
+                }
+            }
+
             // Validate the request
             $validated = $request->validate([
                 'aadhar_number' => 'required|string|size:12',
@@ -1779,6 +1870,12 @@ class KycController extends Controller
             }
 
             $panNumber = strtoupper(preg_replace('/\s+/', '', $validated['pan_number']));
+            if (!$this->isIndividualPan($panNumber)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please submit an individual PAN card for Personal KYC. Business PAN cards are not accepted.',
+                ], 422);
+            }
             $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
             $panDob = $this->normalizePanDob($validated['pan_dob']);
             $panFile = $request->file('pan_document');
@@ -1873,7 +1970,7 @@ class KycController extends Controller
                 'aadhar_address' => $validated['aadhar_address'],
                 'pan_number' => $panNumber,
                 'pan_holder_name' => $validated['pan_holder_name'],
-                'pan_dob' => $validated['pan_dob'],
+                'pan_dob' => $panDob,
                 'pan_document' => $panDocumentPath,
                 'pan_verified' => true,
                 'signature_document' => $signaturePath,

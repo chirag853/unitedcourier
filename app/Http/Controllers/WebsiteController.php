@@ -852,7 +852,7 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
         $validated = $request->validate([
             'full_name' => 'required|string|max:255',
             'email'     => 'required|email|max:255',
-            'phone'     => 'required|string|max:20',
+            'phone'     => ['required', 'regex:/^[6-9][0-9]{9}$/'],
             'message'   => 'required|string|max:5000',
             'page_name' => 'nullable|string|max:255',
         ]);

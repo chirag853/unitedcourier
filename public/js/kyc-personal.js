@@ -97,6 +97,44 @@
             return '';
         }
 
+        function parseValidPanDob(value) {
+            var normalized = String(value || '').trim();
+            var match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            var year;
+            var month;
+            var day;
+
+            if (match) {
+                year = Number(match[1]);
+                month = Number(match[2]);
+                day = Number(match[3]);
+            } else {
+                match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (!match) {
+                    return null;
+                }
+                day = Number(match[1]);
+                month = Number(match[2]);
+                year = Number(match[3]);
+            }
+
+            var today = new Date();
+            var date = new Date(year, month - 1, day);
+            if (year < 1900 || year > today.getFullYear() ||
+                month < 1 || month > 12 || day < 1 || day > 31 ||
+                date.getFullYear() !== year || date.getMonth() !== month - 1 ||
+                date.getDate() !== day || date >= new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+                return null;
+            }
+
+            var paddedMonth = String(month).padStart(2, '0');
+            var paddedDay = String(day).padStart(2, '0');
+            return {
+                ymd: String(year).padStart(4, '0') + '-' + paddedMonth + '-' + paddedDay,
+                dmy: paddedDay + '/' + paddedMonth + '/' + String(year).padStart(4, '0')
+            };
+        }
+
         var imageOnlyDocumentNames = ['aadhar_front_document', 'aadhar_back_document', 'pan_document'];
 
         function validateImageDocument(input, required) {
@@ -174,6 +212,11 @@
                     showAlert('Invalid PAN format. It must be 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).', 'error');
                     return;
                 }
+                if (pan.charAt(3) !== 'P') {
+                    showAlert('Please upload a personal PAN card. Business PAN cards are not accepted for Personal KYC.', 'error');
+                    panInput.focus();
+                    return;
+                }
                 if (!holderInput || !holderInput.value.trim()) {
                     showAlert('Please enter the PAN holder name before verification.', 'error');
                     return;
@@ -182,6 +225,19 @@
                     showAlert('Please enter the PAN date of birth before verification.', 'error');
                     return;
                 }
+
+                var parsedPanDob = parseValidPanDob(dobInput.value);
+                if (!parsedPanDob) {
+                    showAlert('Please select a valid PAN date of birth in DD/MM/YYYY format.', 'error');
+                    if (dobInput._flatpickr) {
+                        dobInput._flatpickr.clear();
+                    } else {
+                        dobInput.value = '';
+                    }
+                    dobInput.focus();
+                    return;
+                }
+
                 if (!validateImageDocument(documentInput, true)) {
                     return;
                 }
@@ -190,7 +246,7 @@
                 var verifyData = new FormData();
                 verifyData.append('pan_number', pan);
                 verifyData.append('pan_holder_name', holderInput.value.trim());
-                verifyData.append('pan_dob', dobInput.value);
+                verifyData.append('pan_dob', parsedPanDob.dmy);
                 verifyData.append('pan_document', documentInput.files[0]);
 
                 panVerified = false;
@@ -290,6 +346,15 @@
             }
 
             var formData = new FormData(form);
+            var submittedDob = document.getElementById('panDob');
+            var parsedSubmittedDob = submittedDob ? parseValidPanDob(submittedDob.value) : null;
+            if (!parsedSubmittedDob) {
+                showAlert('Please select a valid PAN date of birth in DD/MM/YYYY format.', 'error');
+                showPanel(2);
+                if (submittedDob) submittedDob.focus();
+                return;
+            }
+            formData.set('pan_dob', parsedSubmittedDob.dmy);
 
             if (terms && terms.checked && !formData.has('terms_accepted')) {
                 formData.append('terms_accepted', '1');

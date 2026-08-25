@@ -416,130 +416,140 @@ class CustomerController extends Controller
     }
 
     /**
-     * Send OTP for registration (does NOT require an existing customer).
-     * Prevents duplicate registrations by checking if the phone is already in use.
+     * Send an email OTP for registration (does NOT require an existing customer).
+     * Prevents duplicate registrations by checking if the email is already in use.
      */
     public function sendRegistrationOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'phone_number' => 'required|string|max:20'
+            'email' => 'required|email|max:255',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Phone number is required'
+                'message' => 'Please enter a valid email address.',
             ], 422);
         }
 
+        $email = strtolower(trim($request->email));
+
         try {
-            // Prevent duplicate registration: if the phone is already registered, block OTP send
-            $existingCustomer = Customer::where('phone_number', $request->phone_number)->first();
-            if ($existingCustomer) {
+            if (Customer::whereRaw('LOWER(email) = ?', [$email])->exists()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This phone number is already registered. Please login instead.'
+                    'message' => 'This email address is already registered. Please login instead.',
                 ], 409);
             }
 
-            // Generate 6-digit OTP
             $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-            // Store OTP in session with a registration-specific prefix (5 min expiry)
             session([
                 'registration_otp' => $otp,
-                'registration_phone' => $request->phone_number,
+                'registration_email' => $email,
                 'registration_otp_expires_at' => now()->addMinutes(5)->timestamp,
-                'registration_phone_verified' => false,
+                'registration_email_verified' => false,
             ]);
 
-            // Send OTP via SMS
-            $smsSent = $this->sendOtpViaSms($request->phone_number, $otp);
-
-            if (!$smsSent) {
-                \Log::warning('Registration SMS sending failed. OTP for ' . $request->phone_number . ': ' . $otp);
-            }
+            Mail::send('emails.registration-otp', ['otp' => $otp], function ($mail) use ($email) {
+                $mail->to($email)
+                    ->replyTo(config('mail.support_address'), config('mail.from.name'))
+                    ->subject('Your Registration Verification Code');
+            });
 
             return response()->json([
                 'success' => true,
-                'message' => 'OTP sent successfully to your mobile number.'
+                'message' => 'OTP sent successfully to your email address.',
             ], 200);
+        } catch (\Throwable $e) {
+            session()->forget([
+                'registration_otp',
+                'registration_email',
+                'registration_otp_expires_at',
+                'registration_email_verified',
+            ]);
+            Log::error('Registration OTP email error for ' . $email . ': ' . $e->getMessage());
 
-        } catch (\Exception $e) {
-            \Log::error('sendRegistrationOtp error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Server error. Please try again.'
+                'message' => 'Unable to send the OTP email. Please try again.',
             ], 500);
         }
     }
 
     /**
-     * Verify OTP for registration (does NOT log the user in).
-     * Marks the phone number as verified in session so store() can proceed.
+     * Verify an email OTP for registration (does NOT log the user in).
+     * Marks the email as verified in session so store() can proceed.
      */
     public function verifyRegistrationOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'phone_number' => 'required|string|max:20',
-            'otp' => 'required|string|size:6'
+            'email' => 'required|email|max:255',
+            'otp' => 'required|digits:6',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid OTP format'
+                'message' => 'Please enter a valid email address and 6-digit OTP.',
             ], 422);
         }
 
+        $email = strtolower(trim($request->email));
+
         try {
             $sessionOtp = session('registration_otp');
-            $sessionPhone = session('registration_phone');
+            $sessionEmail = session('registration_email');
             $expiresAt = session('registration_otp_expires_at');
 
-            if (!$sessionOtp || !$sessionPhone) {
+            if (!$sessionOtp || !$sessionEmail || !$expiresAt) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No OTP was requested. Please click "Get OTP" first.'
+                    'message' => 'No OTP was requested. Please click "Get OTP" first.',
                 ], 400);
             }
 
             if (now()->timestamp > $expiresAt) {
-                session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
+                session()->forget([
+                    'registration_otp',
+                    'registration_email',
+                    'registration_otp_expires_at',
+                    'registration_email_verified',
+                ]);
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'OTP has expired. Please request a new OTP.'
+                    'message' => 'OTP has expired. Please request a new OTP.',
                 ], 400);
             }
 
-            if ($sessionPhone !== $request->phone_number) {
+            if (!hash_equals($sessionEmail, $email)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Phone number mismatch. Please request a new OTP.'
+                    'message' => 'Email address mismatch. Please request a new OTP.',
                 ], 400);
             }
 
-            if ((string) $sessionOtp !== $request->otp) {
+            if (!hash_equals((string) $sessionOtp, (string) $request->otp)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid OTP. Please try again.'
+                    'message' => 'Invalid OTP. Please try again.',
                 ], 400);
             }
 
-            // OTP verified — mark phone as verified, clear OTP value but keep the verified flag
             session()->forget(['registration_otp', 'registration_otp_expires_at']);
-            session(['registration_phone_verified' => true]);
+            session(['registration_email_verified' => true]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Phone number verified successfully! You can now complete your registration.'
+                'message' => 'Email address verified successfully! You can now complete your registration.',
             ], 200);
+        } catch (\Throwable $e) {
+            Log::error('verifyRegistrationOtp error: ' . $e->getMessage());
 
-        } catch (\Exception $e) {
-            \Log::error('verifyRegistrationOtp error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Verification failed. Please try again.'
+                'message' => 'Verification failed. Please try again.',
             ], 500);
         }
     }
@@ -1873,14 +1883,15 @@ class CustomerController extends Controller
             ], 422);
         }
 
-        // Require OTP verification: the phone number must have been verified via OTP
-        $phoneVerified = session('registration_phone_verified', false);
-        $verifiedPhone = session('registration_phone');
+        // Require server-side OTP verification for the exact submitted email address.
+        $email = strtolower(trim($request->email));
+        $emailVerified = session('registration_email_verified', false);
+        $verifiedEmail = session('registration_email');
 
-        if (!$phoneVerified || $verifiedPhone !== $request->phone_number) {
+        if (!$emailVerified || !$verifiedEmail || !hash_equals($verifiedEmail, $email)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Please verify your phone number via OTP before registering.'
+                'message' => 'Please verify your email address via OTP before registering.',
             ], 403);
         }
 
@@ -1888,7 +1899,7 @@ class CustomerController extends Controller
             $customer = Customer::create([
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
-                'email' => $request->email,
+                'email' => $email,
                 'phone_number' => $request->phone_number,
                 'alternate_phone_number' => $request->alternate_phone_number,
                 'password_hash' => Hash::make($request->password),
@@ -1916,8 +1927,13 @@ class CustomerController extends Controller
                 Log::error('Registration email error for customer ' . $customer->id . ': ' . $mailException->getMessage());
             }
 
-            // Clear registration OTP session data after successful registration
-            session()->forget(['registration_otp', 'registration_phone', 'registration_otp_expires_at', 'registration_phone_verified']);
+            // Clear registration OTP session data after successful registration.
+            session()->forget([
+                'registration_otp',
+                'registration_email',
+                'registration_otp_expires_at',
+                'registration_email_verified',
+            ]);
 
             \App\Support\SystemLogger::log(
                 'customer.register',

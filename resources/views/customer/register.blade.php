@@ -88,10 +88,12 @@
                         <div class="mb-4">
                             <label class="form-label-custom">Email Address</label>
                             <div class="input-group-custom">
-                                <input type="email" name="email" class="form-control input-custom"
-                                    placeholder="rahul@unitedcouriers.biz" required>
+                                <input type="email" id="emailInput" name="email" class="form-control input-custom"
+                                    placeholder="rahul@unitedcouriers.biz" autocomplete="email" required>
                                 <i class="fas fa-envelope"></i>
+                                <button type="button" class="btn-otp" id="getOtpBtn" onclick="sendRegistrationOtp()" disabled>Get OTP</button>
                             </div>
+                            <div id="emailStatus" class="otp-sent-text" style="display: none;"></div>
                         </div>
 
                         <!-- Phone Number -->
@@ -101,9 +103,7 @@
                                 <input type="tel" id="mobileInput" name="phone_number" class="form-control input-custom" placeholder="99******"
                                     pattern="[0-9]{10}" maxlength="10" required>
                                 <i class="fas fa-phone-alt"></i>
-                                <button type="button" class="btn-otp" id="getOtpBtn" onclick="sendRegistrationOtp()" disabled>Get OTP</button>
                             </div>
-                            <div id="phoneStatus" class="otp-sent-text" style="display: none;"></div>
                         </div>
 
                         <!-- OTP Input (Conditional) -->
@@ -205,66 +205,44 @@ function raf(time) {
 }
 requestAnimationFrame(raf);
 
-// Registration OTP state
-let registrationPhoneVerified = false;
-let currentPhoneNumber = '';
+// Registration email OTP state
+let registrationEmailVerified = false;
+let currentRegistrationEmail = '';
 
-// Enable/disable Get OTP button based on phone number input
-document.getElementById('mobileInput').addEventListener('input', function() {
-    const phone = this.value.trim();
+// Enable/disable Get OTP based on the email address.
+document.getElementById('emailInput').addEventListener('input', function() {
+    const email = this.value.trim().toLowerCase();
     const getOtpBtn = document.getElementById('getOtpBtn');
 
-    // If phone changes after verification, reset verification state
-    if (registrationPhoneVerified && phone !== currentPhoneNumber) {
-        registrationPhoneVerified = false;
+    if (registrationEmailVerified && email !== currentRegistrationEmail) {
+        registrationEmailVerified = false;
         getOtpBtn.style.display = '';
+        getOtpBtn.innerHTML = 'Get OTP';
         document.getElementById('otpContainer').style.display = 'none';
-        document.getElementById('phoneStatus').style.display = 'none';
+        document.getElementById('emailStatus').style.display = 'none';
         document.getElementById('otpStatus').style.display = 'none';
         document.getElementById('otpInput').value = '';
+        this.readOnly = false;
+        this.classList.remove('is-locked');
     }
 
-    if (phone.length >= 10) {
-        getOtpBtn.disabled = false;
-    } else {
-        getOtpBtn.disabled = true;
-    }
+    getOtpBtn.disabled = !email || !this.checkValidity();
 });
 
-// Send OTP for registration
+// Send OTP for registration by email.
 function sendRegistrationOtp() {
-    const phone = document.getElementById('mobileInput').value.trim();
+    const emailInput = document.getElementById('emailInput');
+    const email = emailInput.value.trim().toLowerCase();
     const getOtpBtn = document.getElementById('getOtpBtn');
-    const phoneStatus = document.getElementById('phoneStatus');
+    const emailStatus = document.getElementById('emailStatus');
 
-    // No resending once the phone number has been verified.
-    if (registrationPhoneVerified) {
-        return;
-    }
+    if (registrationEmailVerified) return;
 
-    if (!phone) {
-        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a phone number';
-        phoneStatus.className = 'otp-sent-text';
-        phoneStatus.style.display = 'block';
-        phoneStatus.style.color = '#dc3545';
-        return;
-    }
-
-    let cleanPhone = phone.replace(/[\s+()-]/g, '');
-
-    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
-        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid phone number (10-15 digits)';
-        phoneStatus.className = 'otp-sent-text';
-        phoneStatus.style.display = 'block';
-        phoneStatus.style.color = '#dc3545';
-        return;
-    }
-
-    if (!/^\d+$/.test(cleanPhone)) {
-        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Phone number should contain only digits';
-        phoneStatus.className = 'otp-sent-text';
-        phoneStatus.style.display = 'block';
-        phoneStatus.style.color = '#dc3545';
+    if (!email || !emailInput.checkValidity()) {
+        emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid email address';
+        emailStatus.className = 'otp-sent-text';
+        emailStatus.style.display = 'block';
+        emailStatus.style.color = '#dc3545';
         return;
     }
 
@@ -274,10 +252,10 @@ function sendRegistrationOtp() {
     const timeoutId = setTimeout(() => {
         getOtpBtn.innerHTML = 'Get OTP';
         getOtpBtn.disabled = false;
-        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Request timeout. Please try again.';
-        phoneStatus.className = 'otp-sent-text';
-        phoneStatus.style.display = 'block';
-        phoneStatus.style.color = '#dc3545';
+        emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Request timeout. Please try again.';
+        emailStatus.className = 'otp-sent-text';
+        emailStatus.style.display = 'block';
+        emailStatus.style.color = '#dc3545';
     }, 10000);
 
     const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
@@ -285,78 +263,68 @@ function sendRegistrationOtp() {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
     };
-    if (csrfTokenElement) {
-        fetchHeaders['X-CSRF-TOKEN'] = csrfTokenElement.getAttribute('content');
-    }
+    if (csrfTokenElement) fetchHeaders['X-CSRF-TOKEN'] = csrfTokenElement.getAttribute('content');
 
     fetch('{{ route("customer.send.registration.otp") }}', {
         method: 'POST',
         headers: fetchHeaders,
-        body: JSON.stringify({ phone_number: cleanPhone })
+        body: JSON.stringify({ email: email })
     })
     .then(response => {
         clearTimeout(timeoutId);
-        return response.json().then(data => ({ status: response.status, body: data }));
+        return response.json();
     })
-    .then(({ status, body: data }) => {
+    .then(data => {
         if (data.success) {
-            currentPhoneNumber = cleanPhone;
-            registrationPhoneVerified = false;
-
-            phoneStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> OTP sent successfully!';
-            phoneStatus.className = 'otp-sent-text';
-            phoneStatus.style.display = 'block';
-            phoneStatus.style.color = '#10b981';
-
-            // Show OTP input container
+            currentRegistrationEmail = email;
+            registrationEmailVerified = false;
+            emailStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> OTP sent to your email address.';
+            emailStatus.className = 'otp-sent-text';
+            emailStatus.style.display = 'block';
+            emailStatus.style.color = '#10b981';
             document.getElementById('otpContainer').style.display = 'block';
             document.getElementById('otpInput').value = '';
             document.getElementById('otpStatus').style.display = 'none';
-
             getOtpBtn.innerHTML = 'Resend OTP';
             getOtpBtn.disabled = false;
         } else {
-            // 409 = already registered; treat as blocking error
-            phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Error sending OTP');
-            phoneStatus.className = 'otp-sent-text';
-            phoneStatus.style.display = 'block';
-            phoneStatus.style.color = '#dc3545';
-
+            emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Error sending OTP');
+            emailStatus.className = 'otp-sent-text';
+            emailStatus.style.display = 'block';
+            emailStatus.style.color = '#dc3545';
             getOtpBtn.innerHTML = 'Get OTP';
             getOtpBtn.disabled = false;
         }
     })
     .catch(error => {
         clearTimeout(timeoutId);
-        console.error('Send OTP error:', error);
-
-        phoneStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Connection error';
-        phoneStatus.className = 'otp-sent-text';
-        phoneStatus.style.display = 'block';
-        phoneStatus.style.color = '#dc3545';
-
+        console.error('Send registration OTP error:', error);
+        emailStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Connection error';
+        emailStatus.className = 'otp-sent-text';
+        emailStatus.style.display = 'block';
+        emailStatus.style.color = '#dc3545';
         getOtpBtn.innerHTML = 'Get OTP';
         getOtpBtn.disabled = false;
     });
 }
 
-// Verify OTP for registration
+// Verify the email OTP for registration.
 function verifyRegistrationOtp() {
-    const phone = document.getElementById('mobileInput').value.trim();
+    const email = document.getElementById('emailInput').value.trim().toLowerCase();
     const otp = document.getElementById('otpInput').value.trim();
     const verifyOtpBtn = document.getElementById('verifyOtpBtn');
     const otpStatus = document.getElementById('otpStatus');
     const getOtpBtn = document.getElementById('getOtpBtn');
 
-    if (!phone || !otp) {
-        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter phone number and OTP';
+    if (!email || !otp) {
+        otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter your email and OTP';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
         otpStatus.style.color = '#dc3545';
         return;
     }
 
-    if (otp.length < 6) {
+    if (!/^\d{6}$/.test(otp)) {
         otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Please enter a valid 6-digit OTP';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
@@ -372,61 +340,51 @@ function verifyRegistrationOtp() {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
     };
-    if (csrfToken) {
-        headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
-    }
+    if (csrfToken) headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
 
     fetch('{{ route("customer.verify.registration.otp") }}', {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ phone_number: phone, otp: otp })
+        body: JSON.stringify({ email: email, otp: otp })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            registrationPhoneVerified = true;
-
-            otpStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> Phone number verified!';
+            registrationEmailVerified = true;
+            currentRegistrationEmail = email;
+            otpStatus.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> Email address verified!';
             otpStatus.className = 'otp-sent-text';
             otpStatus.style.display = 'block';
             otpStatus.style.color = '#10b981';
-
             verifyOtpBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
             verifyOtpBtn.disabled = true;
+            getOtpBtn.style.display = 'none';
+            getOtpBtn.disabled = true;
+            const emailInput = document.getElementById('emailInput');
+            emailInput.readOnly = true;
+            emailInput.classList.add('is-locked');
 
-            // Stop resending once the phone number is verified: hide the resend button.
-            if (getOtpBtn) {
-                getOtpBtn.style.display = 'none';
-                getOtpBtn.disabled = true;
-            }
-
-            // Lock the phone number so it can't be changed after verification
-            // (readonly, not disabled, so the value still submits with the form)
             const mobileInput = document.getElementById('mobileInput');
             mobileInput.readOnly = true;
             mobileInput.classList.add('is-locked');
 
-            // Lock the OTP input too once verification is done
-            const otpInput = document.getElementById('otpInput');
-            otpInput.disabled = true;
-            otpInput.classList.add('is-locked');
+            document.getElementById('otpInput').disabled = true;
+            document.getElementById('otpInput').classList.add('is-locked');
         } else {
             otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> ' + (data.message || 'Invalid OTP');
             otpStatus.className = 'otp-sent-text';
             otpStatus.style.display = 'block';
             otpStatus.style.color = '#dc3545';
-
             verifyOtpBtn.innerHTML = 'Verify';
             verifyOtpBtn.disabled = false;
         }
     })
     .catch(error => {
-        console.error('Verify OTP error:', error);
+        console.error('Verify registration OTP error:', error);
         otpStatus.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545;"></i> Connection error';
         otpStatus.className = 'otp-sent-text';
         otpStatus.style.display = 'block';
         otpStatus.style.color = '#dc3545';
-
         verifyOtpBtn.innerHTML = 'Verify';
         verifyOtpBtn.disabled = false;
     });
@@ -493,9 +451,9 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         return;
     }
 
-    // Require OTP verification before submitting registration
-    if (!registrationPhoneVerified) {
-        showFormError('Please verify your phone number via OTP before registering.');
+    // Require email OTP verification before submitting registration.
+    if (!registrationEmailVerified) {
+        showFormError('Please verify your email address via OTP before registering.');
         document.getElementById('otpContainer').style.display = 'block';
         document.getElementById('otpInput').focus();
         return;
