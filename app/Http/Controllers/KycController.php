@@ -327,7 +327,9 @@ class KycController extends Controller
             // Validate the request (text fields + file fields)
             $validated = $request->validate([
                 'gst_number' => 'nullable|string|size:15|regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
-                'gst_business_name' => 'required_with:gst_number|string|max:255',
+                // Personal KYC GST is optional. The grouped completeness and
+                // verification checks below run only when any GST data exists.
+                'gst_business_name' => 'nullable|string|max:255',
                 'gst_certificate_document' => 'nullable|file|mimes:pdf|max:5120',
                 'gst_certificate_document_path' => 'nullable|string',
                 'gst_verified' => 'nullable|boolean',
@@ -615,6 +617,16 @@ class KycController extends Controller
                 'kyc_id' => $kyc->id
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::warning('KYC submit validation error.', [
+                'errors' => $e->errors(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Please correct the highlighted KYC fields and try again.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Illuminate\Database\QueryException $e) {
             \Log::error('KYC submit database error: ' . $e->getMessage());
             if ($e->getCode() === '23000' && ($identifier = $this->databaseKycIdentifierFromException($e))) {
