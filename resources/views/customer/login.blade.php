@@ -38,7 +38,57 @@
     /* OTP login is temporarily hidden from the frontend only. */
     #otp-tab,
     #otp-pane {
-      display: none !important;
+        display: none !important;
+    }
+
+    /* Keep the custom eye control inside the password field and hide browser-native controls. */
+    #password-pane .password-input-group {
+        position: relative;
+    }
+
+    #password-pane .password-input-group .input-custom {
+        padding-right: 52px !important;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    #password-pane .password-input-group input::-ms-reveal,
+    #password-pane .password-input-group input::-ms-clear,
+    #password-pane .password-input-group input::-webkit-password-reveal-button,
+    #password-pane .password-input-group input::-webkit-credentials-auto-fill-button {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    #password-pane .password-input-group > .password-toggle {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #adb5bd;
+        cursor: pointer;
+        transform: translateY(-50%);
+    }
+
+    #password-pane .password-input-group > .password-toggle:hover,
+    #password-pane .password-input-group > .password-toggle:focus {
+        color: var(--brand-blue, #1a237e);
+        background: transparent;
+        outline: none;
+    }
+
+    #password-pane .password-input-group > .password-toggle i {
+        position: static;
+        pointer-events: none;
     }
 </style>
 <link href="{{ asset('css/uc-login.css') }}" rel="stylesheet">
@@ -219,7 +269,7 @@
                                             placeholder="Enter your password" required autocomplete="current-password">
                                         <i class="fas fa-lock"></i>
                                         <button type="button" class="password-toggle" id="togglePasswordBtn"
-                                            tabindex="-1" aria-label="Show password">
+                                            aria-label="Show password">
                                             <i class="fas fa-eye" id="togglePasswordIcon"></i>
                                         </button>
                                     </div>
