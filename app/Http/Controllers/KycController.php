@@ -47,7 +47,7 @@ class KycController extends Controller
             'billing_address', 'billing_gst', 'billing_contact', 'billing_email',
             'terms_accepted', 'is_csb_v', 'is_gst', 'is_lut',
             'gst_certificate_number', 'gst_certificate_verified', 'iec_number',
-            'ad_code', 'lut_expiry_date', 'lut_bond_year', 'bank_account_number',
+            'ad_code', 'lut_number', 'lut_expiry_date', 'lut_bond_year', 'bank_account_number',
             'bank_type',
             'gst_certificate_document', 'aadhar_front_document', 'aadhar_back_document',
             'pan_document', 'signature_document', 'lut_document', 'iec_document',
@@ -441,6 +441,10 @@ class KycController extends Controller
                 : null;
             $panHolderName = $this->normalizePanHolderName((string) $request->input('pan_holder_name'));
             $panDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+            $existingPersonalKyc = KycDetail::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->latest('id')
+                ->first();
             $hasAnyPanData = $panNumber
                 || $panHolderName
                 || $panDob
@@ -453,20 +457,44 @@ class KycController extends Controller
                 $panRealPath = $panFile
                     ? $panFile->getRealPath()
                     : ($storedDraftPath('pan_document') !== null ? public_path($storedDraftPath('pan_document')) : null);
-                $panDocumentHash = $panRealPath ? hash_file('sha256', $panRealPath) : null;
+                $panDocumentHash = $panRealPath && is_file($panRealPath)
+                    ? hash_file('sha256', $panRealPath)
+                    : null;
+                $existingPanPath = !empty($existingPersonalKyc?->pan_document)
+                    ? public_path($existingPersonalKyc->pan_document)
+                    : null;
+                $existingPanHash = $existingPanPath && is_file($existingPanPath)
+                    ? hash_file('sha256', $existingPanPath)
+                    : null;
+                $matchesStoredVerifiedPan = (bool) $existingPersonalKyc?->pan_verified
+                    && $panDocumentHash !== null
+                    && $existingPanHash !== null
+                    && hash_equals(
+                        strtoupper(preg_replace('/\s+/', '', (string) $existingPersonalKyc->pan_number)),
+                        (string) $panNumber
+                    )
+                    && hash_equals(
+                        $this->normalizePanHolderName((string) $existingPersonalKyc->pan_holder_name),
+                        $panHolderName
+                    )
+                    && $this->normalizePanDob((string) $existingPersonalKyc->pan_dob) === $panDob
+                    && hash_equals($existingPanHash, $panDocumentHash);
+                $matchesCurrentCashfreeVerification = (bool) session('kyc_pan_cashfree_verified')
+                    && session('kyc_pan_number') === $panNumber
+                    && hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
+                    && hash_equals((string) session('kyc_pan_dob', ''), (string) $panDob)
+                    && $panDocumentHash !== null
+                    && hash_equals(
+                        (string) session('kyc_pan_document_hash', ''),
+                        $panDocumentHash
+                    );
+
                 if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', (string) $panNumber)
                     || $panHolderName === ''
                     || $panDob === null
                     || !$request->boolean('pan_verified')
                     || !$panRealPath
-                    || !session('kyc_pan_cashfree_verified')
-                    || session('kyc_pan_number') !== $panNumber
-                    || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
-                    || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
-                    || !hash_equals(
-                        (string) session('kyc_pan_document_hash', ''),
-                        (string) $panDocumentHash
-                    )) {
+                    || (!$matchesStoredVerifiedPan && !$matchesCurrentCashfreeVerification)) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before submitting KYC.',
@@ -490,19 +518,48 @@ class KycController extends Controller
                 $aadharBackRealPath = $request->hasFile('aadhar_back_document')
                     ? $request->file('aadhar_back_document')->getRealPath()
                     : ($storedDraftPath('aadhar_back_document') !== null ? public_path($storedDraftPath('aadhar_back_document')) : null);
-                $aadharFrontHash = $aadharFrontRealPath
+                $aadharFrontHash = $aadharFrontRealPath && is_file($aadharFrontRealPath)
                     ? hash_file('sha256', $aadharFrontRealPath)
                     : null;
+                $aadharBackHash = $aadharBackRealPath && is_file($aadharBackRealPath)
+                    ? hash_file('sha256', $aadharBackRealPath)
+                    : null;
+                $existingAadhaarFrontPath = !empty($existingPersonalKyc?->aadhar_front_document)
+                    ? public_path($existingPersonalKyc->aadhar_front_document)
+                    : null;
+                $existingAadhaarBackPath = !empty($existingPersonalKyc?->aadhar_back_document)
+                    ? public_path($existingPersonalKyc->aadhar_back_document)
+                    : null;
+                $existingAadhaarFrontHash = $existingAadhaarFrontPath && is_file($existingAadhaarFrontPath)
+                    ? hash_file('sha256', $existingAadhaarFrontPath)
+                    : null;
+                $existingAadhaarBackHash = $existingAadhaarBackPath && is_file($existingAadhaarBackPath)
+                    ? hash_file('sha256', $existingAadhaarBackPath)
+                    : null;
+                $matchesStoredVerifiedAadhaar = (bool) $existingPersonalKyc?->aadhar_verified
+                    && $aadharFrontHash !== null
+                    && $aadharBackHash !== null
+                    && $existingAadhaarFrontHash !== null
+                    && $existingAadhaarBackHash !== null
+                    && hash_equals(
+                        preg_replace('/\s+/', '', (string) $existingPersonalKyc->aadhar_number),
+                        (string) $aadharNumber
+                    )
+                    && hash_equals($existingAadhaarFrontHash, $aadharFrontHash)
+                    && hash_equals($existingAadhaarBackHash, $aadharBackHash);
+                $matchesCurrentAadhaarVerification = (bool) session('kyc_aadhar_cashfree_verified')
+                    && session('kyc_aadhar_number') === $aadharNumber
+                    && $aadharFrontHash !== null
+                    && hash_equals(
+                        (string) session('kyc_aadhar_front_hash', ''),
+                        $aadharFrontHash
+                    );
+
                 if (!preg_match('/^[2-9][0-9]{11}$/', (string) $aadharNumber)
                     || !$request->boolean('aadhar_verified')
                     || !$aadharFrontRealPath
                     || !$aadharBackRealPath
-                    || !session('kyc_aadhar_cashfree_verified')
-                    || session('kyc_aadhar_number') !== $aadharNumber
-                    || !hash_equals(
-                        (string) session('kyc_aadhar_front_hash', ''),
-                        (string) $aadharFrontHash
-                    )) {
+                    || (!$matchesStoredVerifiedAadhaar && !$matchesCurrentAadhaarVerification)) {
                     return response()->json([
                         'success' => false,
                         'message' => $isAadhaarOptional

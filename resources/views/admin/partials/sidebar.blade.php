@@ -184,7 +184,7 @@
                         <li class="submenu">
                             <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
-                                <i class="ti ti-dashboard"></i><span>Customer</span><span class="menu-arrow"></span>
+                                <i class="ti ti-dashboard"></i><span>Order</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
                                 <li class="submenu submenu-two">

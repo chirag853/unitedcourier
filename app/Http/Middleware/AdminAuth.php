@@ -50,7 +50,7 @@ class AdminAuth
         }
 
         // Delivery pages are exclusively scoped to Delivery_person accounts.
-        if ($admin && in_array($routeUri, ['delivery-dashboard', 'delivery-dashboard-chart-data', 'delivery-orders', 'pickup-delivery'], true)) {
+        if ($admin && in_array($routeUri, ['delivery-dashboard', 'delivery-dashboard-chart-data', 'delivery-orders', 'pickup-delivery', 'received-in-hub'], true)) {
             if (!$admin->canAccessDeliveryDashboard()) {
                 if ($request->expectsJson()) {
                     return response()->json([

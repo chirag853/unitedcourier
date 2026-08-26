@@ -54,6 +54,7 @@ class Tracking extends Model
             'draft'              => 'Order Created',
             'ready'              => 'Payment Confirmed',
             'assigned_for_pickup'=> 'Assigned for Pickup',
+            'confirm_pickup'     => 'Pickup Confirmed',
             'packed'             => 'Shipment Packed',
             'manifested'         => 'Shipment Manifested',
             'dispatched'         => 'Shipment Dispatched',

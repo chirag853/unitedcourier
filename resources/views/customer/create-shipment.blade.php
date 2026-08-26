@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/contacts.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:56:43 GMT -->
+
 
 <head>
     <!-- Meta Tags -->
@@ -3571,7 +3571,6 @@
                                                                     <option value="GST (Normal)" {{ old('shipper_kyc_type') == 'GST (Normal)' ? 'selected' : '' }}>GST (Normal)</option>
                                                                     <option value="Aadhar Card" {{ old('shipper_kyc_type') == 'Aadhar Card' ? 'selected' : '' }}>Aadhar Card</option>
                                                                     <option value="PAN Card" {{ old('shipper_kyc_type') == 'PAN Card' ? 'selected' : '' }}>PAN Card</option>
-                                                                    <option value="Passport Number" {{ old('shipper_kyc_type') == 'Passport Number' ? 'selected' : '' }}>Passport Number</option>
                                                                 </select>
                                                             </div>
                                                         </div>
@@ -7433,55 +7432,69 @@
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-4">
-                                                            <div class="mb-4">
-                                                                <label class="form-label">Bond UT/IGST</label>
-                                                                <div class="d-flex flex-wrap gap-2">
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="bondut"
-                                                                            name="bond_ut_igst" value="Bond UT" {{ old('bond_ut_igst') == 'Bond UT' ? 'checked' : '' }}
-                                                                            class="form-check-input">
-                                                                        <label class="form-check-label"
-                                                                            for="bondut">Bond
-                                                                            UT</label>
-                                                                    </div>
-                                                                    <div class="form-check">
-                                                                        <input type="radio" id="igst"
-                                                                            name="bond_ut_igst" value="IGST" {{ old('bond_ut_igst') == 'IGST' ? 'checked' : '' }}
-                                                                            class="form-check-input">
-                                                                        <label class="form-check-label"
-                                                                            for="igst">IGST</label>
+                                                        @php
+                                                            $hasCsbGst = (bool) ($csbForm?->is_gst);
+                                                            $hasCsbLut = (bool) ($csbForm?->is_lut);
+                                                            $oldCsbTaxType = old('csb_tax_type');
+                                                            $defaultCsbTaxType = $hasCsbGst && !$hasCsbLut
+                                                                ? 'gst'
+                                                                : ($hasCsbLut && !$hasCsbGst
+                                                                    ? 'lut'
+                                                                    : $oldCsbTaxType);
+                                                        @endphp
+                                                        <input type="hidden" name="csb_tax_type" id="csbTaxType"
+                                                            value="{{ $defaultCsbTaxType }}">
+                                                        @if($hasCsbGst && $hasCsbLut)
+                                                            <div class="col-md-4" id="csbTaxTypeSelector">
+                                                                <div class="mb-4">
+                                                                    <label class="form-label">Tax information</label>
+                                                                    <div class="d-flex flex-wrap gap-3">
+                                                                        <div class="form-check">
+                                                                            <input type="radio" id="csbGstOption" name="csb_tax_type_radio"
+                                                                                value="gst" class="form-check-input" {{ $defaultCsbTaxType === 'gst' ? 'checked' : '' }}>
+                                                                            <label class="form-check-label" for="csbGstOption">GST</label>
+                                                                        </div>
+                                                                        <div class="form-check">
+                                                                            <input type="radio" id="csbLutOption" name="csb_tax_type_radio"
+                                                                                value="lut" class="form-check-input" {{ $defaultCsbTaxType === 'lut' ? 'checked' : '' }}>
+                                                                            <label class="form-check-label" for="csbLutOption">LUT</label>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                        {{--
-                                                        <div class="col-md-4">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">LUT Number</label>
-                                                                <input type="text" class="form-control"
-                                                                    name="lut_number" value="{{ old('lut_number') }}" placeholder="LUT Number">
+                                                        @endif
+                                                        @if(!$hasCsbGst && !$hasCsbLut)
+                                                            <div class="col-md-4" id="csbTaxAvailabilityMessage">
+                                                                <div class="alert alert-warning mb-4">GST/LUT information is not available in your CSB profile.</div>
                                                             </div>
-                                                        </div>
+                                                        @endif
+                                                        {{--
                                                         --}}
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">IEC Code </label>
-                                                                <input type="text" class="form-control" name="iec_code" value="{{ old('iec_code') }}"
+                                                                <input type="text" class="form-control" name="iec_code" value="{{ old('iec_code', $csbForm?->iec_number) }}"
                                                                     placeholder="IEC Code">
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-4">
+                                                        <div class="col-md-4" id="csbGstDetails" style="display: {{ $hasCsbGst ? ($defaultCsbTaxType === 'gst' ? 'block' : 'none') : 'none' }};">
                                                             <div class="mb-3">
-                                                                <label class="form-label">GST Number </label>
+                                                                <label class="form-label">GST Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="gst_number" value="{{ old('gst_number') }}" placeholder="GST Number">
+                                                                    name="gst_number" value="{{ old('gst_number', $csbForm?->gst_certificate_number ?: $csbForm?->billing_gst) }}" placeholder="GST Number">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4" id="csbLutDetails" style="display: {{ $hasCsbLut ? ($defaultCsbTaxType === 'lut' ? 'block' : 'none') : 'none' }};">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">LUT Number</label>
+                                                                <input type="text" class="form-control"
+                                                                    name="lut_number" value="{{ old('lut_number', $csbForm?->lut_number) }}" placeholder="LUT Number">
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">AD Code</label>
-                                                                <input type="text" class="form-control" name="ad_code" value="{{ old('ad_code') }}"
+                                                                <input type="text" class="form-control" name="ad_code" value="{{ old('ad_code', $csbForm?->ad_code) }}"
                                                                     placeholder="AD Code">
                                                             </div>
                                                         </div>
@@ -7489,7 +7502,7 @@
                                                             <div class="mb-3 mb-md-0">
                                                                 <label class="form-label">Bank Account Number</label>
                                                                 <input type="text" class="form-control"
-                                                                    name="bank_account_number" value="{{ old('bank_account_number') }}"
+                                                                    name="bank_account_number" value="{{ old('bank_account_number', $csbForm?->bank_account_number) }}"
                                                                     placeholder="Bank Account Number">
                                                             </div>
                                                         </div>
@@ -8811,6 +8824,28 @@
         </script>
     @endif
     <script>
+    // Show only the GST or LUT details selected from the customer's CSB profile.
+    document.addEventListener('DOMContentLoaded', function() {
+        const taxTypeInput = document.getElementById('csbTaxType');
+        const taxTypeSelector = document.getElementById('csbTaxTypeSelector');
+        const availabilityMessage = document.getElementById('csbTaxAvailabilityMessage');
+        const gstDetails = document.getElementById('csbGstDetails');
+        const lutDetails = document.getElementById('csbLutDetails');
+        const taxRadios = document.querySelectorAll('[name="csb_tax_type_radio"]');
+
+        function syncCsbTaxDetails() {
+            const selectedType = Array.from(taxRadios).find(radio => radio.checked)?.value || taxTypeInput?.value || '';
+            if (taxTypeInput) taxTypeInput.value = selectedType;
+            if (gstDetails) gstDetails.style.display = selectedType === 'gst' ? 'block' : 'none';
+            if (lutDetails) lutDetails.style.display = selectedType === 'lut' ? 'block' : 'none';
+            if (taxTypeSelector) taxTypeSelector.style.display = taxRadios.length > 1 ? 'block' : 'none';
+            if (availabilityMessage) availabilityMessage.style.display = taxRadios.length ? 'none' : 'block';
+        }
+
+        taxRadios.forEach(radio => radio.addEventListener('change', syncCsbTaxDetails));
+        syncCsbTaxDetails();
+    });
+
     // Toggle CSB Information section based on Origin Type selection
     document.addEventListener('DOMContentLoaded', function() {
         const originTypeSelect = document.getElementById('originType');
@@ -9444,7 +9479,6 @@
     //   GST (Normal)      -> ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
     //   Aadhar Card       -> ^[2-9]{1}[0-9]{11}$  (12 digits, first digit 2-9)
     //   PAN Card          -> ^[A-Z]{5}[0-9]{4}[A-Z]{1}$
-    //   Passport Number   -> ^[A-Z][0-9]{7}$
     window.KYC_PATTERNS = {
         'GST (Normal)': {
             regex: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
@@ -9460,11 +9494,6 @@
             regex: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
             hint: 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).',
             placeholder: 'e.g. ABCDE1234F'
-        },
-        'Passport Number': {
-            regex: /^[A-Z][0-9]{7}$/,
-            hint: 'Passport number must be 1 letter followed by 7 digits (e.g. A1234567).',
-            placeholder: 'e.g. A1234567'
         }
     };
 
@@ -9537,6 +9566,22 @@
     @php
         $kycForPrefill = $customer->kycDetail ?? null;
         $csbForPrefill = $customer->csbForm ?? null;
+        $customerGstNumber = collect([
+            $csbForPrefill?->gst_certificate_number,
+            $csbForPrefill?->billing_gst,
+            $kycForPrefill?->gst_number,
+            $kycForPrefill?->billing_gst,
+        ])->first(fn ($value) => filled($value)) ?? '';
+        $customerAadharNumber = collect([
+            $kycForPrefill?->aadhar_number,
+            $csbForPrefill?->aadhar_number,
+        ])->first(fn ($value) => filled($value)) ?? '';
+        $customerPanNumber = $kycForPrefill?->pan_number ?? '';
+        $customerShipmentKycType = $customerGstNumber !== ''
+            ? 'GST (Normal)'
+            : ($customerAadharNumber !== '' ? 'Aadhar Card' : ($customerPanNumber !== '' ? 'PAN Card' : ''));
+        $customerShipmentKycNumber = $customerGstNumber
+            ?: ($customerAadharNumber ?: $customerPanNumber);
         $customerPrefill = [
             'company_names'  => $kycForPrefill->organization_name ?? trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
             'contact_person' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
@@ -9548,16 +9593,16 @@
             'state'          => '',
             'phone_number'   => $customer->phone_number ?? '',
             'emails'         => $customer->email ?? '',
+            'shipper_kyc_type' => $customerShipmentKycType,
+            'shipper_kyc_number' => $customerShipmentKycNumber,
             'bond_ut_igst'   => $csbForPrefill?->is_csb_v
                 ? ($csbForPrefill->is_lut ? 'Bond UT' : 'IGST')
                 : '',
             'lut_number'     => $csbForPrefill?->is_csb_v && $csbForPrefill->is_lut
-                ? ($csbForPrefill->lut_bond_year ?? '')
+                ? ($csbForPrefill->lut_number ?? '')
                 : '',
             'iec_code'       => $csbForPrefill?->is_csb_v ? ($csbForPrefill->iec_number ?? '') : '',
-            'gst_number'     => $csbForPrefill?->is_csb_v
-                ? ($csbForPrefill->gst_certificate_number ?? $csbForPrefill->billing_gst ?? '')
-                : '',
+            'gst_number'     => $customerGstNumber,
             'ad_code'        => $csbForPrefill?->is_csb_v ? ($csbForPrefill->ad_code ?? '') : '',
             'bank_account_number' => $csbForPrefill?->is_csb_v
                 ? ($csbForPrefill->bank_account_number ?? '')
@@ -9574,7 +9619,7 @@
                         ? ($savedCustomer->is_lut ? 'Bond UT' : 'IGST')
                         : '',
                     'lut_number' => $isCsbV && $savedCustomer->is_lut
-                        ? $savedCustomer->lut_bond_year
+                        ? $savedCustomer->lut_number
                         : '',
                     'iec_code' => $isCsbV ? $savedCustomer->iec_number : '',
                     'gst_number' => $savedCustomer->kyc_type === 'GST (Normal)'
@@ -9629,12 +9674,16 @@
                 el.value = normalizedValue;
             }
 
+            // Select2 needs the normal jQuery change event to refresh the visible
+            // selection after the underlying select value is changed.
+            if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
+                jQuery(el).trigger('change');
+            } else {
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
             // Notify calculations, validation, and other dependent form listeners.
             el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
-                jQuery(el).trigger('change.select2');
-            }
         }
 
         function getField(name) {
@@ -9652,16 +9701,16 @@
             'shipper_address_line1', 'shipper_address_line2', 'shipper_address_line3',
             'shipper_pincode', 'shipper_city', 'shipper_state',
             'shipper_phone_number', 'shipper_emails', 'shipper_email_opt_out',
-            'shipper_kyc_type', 'shipper_kyc_number'
+            'shipper_kyc_type', 'shipper_kyc_number', 'gst_number'
         ];
         const sameCustomerAutofillFieldNames = [
             'shipper_company_names', 'shipper_contact_person',
             'shipper_address_line1', 'shipper_address_line2', 'shipper_address_line3',
-            'shipper_pincode', 'shipper_city', 'shipper_state',
-            'shipper_phone_number', 'shipper_emails'
+            'shipper_phone_number', 'shipper_emails',
+            'shipper_kyc_type', 'shipper_kyc_number', 'gst_number'
         ];
         const savedCustomerCsbFieldNames = [
-            'bond_ut_igst', 'lut_number', 'iec_code', 'gst_number',
+            'bond_ut_igst', 'lut_number', 'iec_code',
             'ad_code', 'bank_account_number'
         ];
         function setShipperFieldsLocked(names, locked) {
@@ -9927,6 +9976,9 @@
                 setField('shipper_state', customerData.state || '');
                 setField('shipper_phone_number', customerData.phone_number || '');
                 setField('shipper_emails', customerData.emails || '');
+                setField('shipper_kyc_type', customerData.shipper_kyc_type || '');
+                setField('shipper_kyc_number', customerData.shipper_kyc_number || '');
+                setField('gst_number', customerData.gst_number || '');
                 setShipperFieldsLocked(sameCustomerAutofillFieldNames, true);
                 syncSameCustomerCsbFields();
             } else {
@@ -10181,6 +10233,18 @@
                             (name === 'ecommerce' ? 'E-Commerce' : 'Scheme') + ' selection is required.', 'csbinfo');
                     }
                 });
+
+                const taxTypeInput = form.querySelector('[name="csb_tax_type"]');
+                const availableTaxRadios = form.querySelectorAll('[name="csb_tax_type_radio"]');
+                if (!taxTypeInput?.value) {
+                    addError(
+                        availableTaxRadios[0] || taxTypeInput,
+                        availableTaxRadios.length > 1
+                            ? 'Please select GST or LUT.'
+                            : 'GST or LUT information is not available in your CSB profile.',
+                        'csbinfo'
+                    );
+                }
             }
 
             requireFields([

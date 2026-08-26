@@ -120,6 +120,7 @@
                                         'delivered' => 'bg-success',
                                         'cancelled', 'disputed' => 'bg-danger',
                                         'assigned_for_pickup' => 'bg-warning text-dark',
+                                        'confirm_pickup' => 'bg-warning text-dark',
                                         'received', 'ready_to_dispatch', 'dispatched' => 'bg-info',
                                         default => 'bg-secondary',
                                     };

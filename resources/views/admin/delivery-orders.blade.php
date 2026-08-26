@@ -182,7 +182,7 @@
                                 <th>Delivery Type</th>
                                 <th>Status</th>
                                 <th>Assigned / Updated</th>
-                                @if($view === 'pending')<th class="text-end">Action</th>@endif
+                                @if(in_array($view, ['pending', 'process_pickup'], true))<th class="text-end">Action</th>@endif
                             </tr>
                             </thead>
                             <tbody>
@@ -193,6 +193,7 @@
                                         'delivered' => 'bg-success',
                                         'cancelled', 'disputed' => 'bg-danger',
                                         'assigned_for_pickup' => 'bg-warning text-dark',
+                                        'confirm_pickup' => 'bg-warning text-dark',
                                         'received', 'ready_to_dispatch', 'dispatched' => 'bg-info',
                                         'on_hold' => 'bg-dark',
                                         default => 'bg-secondary',
@@ -233,9 +234,9 @@
                                     <td>{{ $delivery->delivery_type ? ucfirst(str_replace('_', ' ', $delivery->delivery_type)) : '-' }}</td>
                                     <td><span class="badge {{ $badgeClass }}">{{ $statusTitle }}</span></td>
                                     <td>{{ $delivery->assigned_at ? \Carbon\Carbon::parse($delivery->assigned_at)->format('d M Y, h:i A') : '-' }}</td>
-                                    @if($view === 'pending')
+                                    @if(in_array($view, ['pending', 'process_pickup'], true))
                                         <td class="text-end">
-                                            @if($delivery->status === 'assigned_for_pickup')
+                                            @if($view === 'pending' && $delivery->status === 'assigned_for_pickup')
                                                 <button type="button" class="btn btn-sm btn-primary pickup-btn"
                                                         data-bs-toggle="modal" data-bs-target="#pickupConfirmationModal"
                                                         data-shipment-id="{{ $delivery->id }}"
@@ -249,6 +250,14 @@
                                                         data-delivery-phone="{{ $delivery->destination_phone ?: '-' }}">
                                                     <i class="ti ti-package-import me-1"></i>Pickup
                                                 </button>
+                                            @elseif($view === 'process_pickup' && in_array($delivery->status, ['confirm_pickup', 'received'], true))
+                                                <button type="button" class="btn btn-sm btn-success received-hub-btn"
+                                                        data-bs-toggle="modal" data-bs-target="#receivedInHubModal"
+                                                        data-shipment-id="{{ $delivery->id }}"
+                                                        data-awb="{{ $delivery->awb_number ?: 'AWB pending' }}"
+                                                        data-invoice="{{ $delivery->invoice_number ?: '-' }}">
+                                                    <i class="ti ti-building-warehouse me-1"></i>Received in Hub
+                                                </button>
                                             @else
                                                 <span class="text-muted small">In Process</span>
                                             @endif
@@ -257,7 +266,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $view === 'pending' ? 7 : 6 }}" class="text-center text-muted py-5">
+                                    <td colspan="{{ in_array($view, ['pending', 'process_pickup'], true) ? 7 : 6 }}" class="text-center text-muted py-5">
                                         <i class="ti ti-package-off fs-30 d-block mb-2"></i>
                                         @if($search !== '')
                                             No deliveries match your search.
@@ -310,7 +319,7 @@
                         <div class="border rounded p-3 h-100">
                             <h6 class="text-success"><i class="ti ti-map-pin-check me-1"></i>Delivery Details</h6>
                             <div class="pickup-detail-label">Delivery Name</div><div class="pickup-detail-value mb-2" id="modalDeliveryName">-</div>
-                            <div class="pickup-detail-label">Complete Address</div><div class="pickup-detail-value mb-2" id="modalDeliveryAddress">-</div>
+                            <div class="pickup-detail-label">Complete Address</div><div class="pickup-detail-value mb-2" id="modalDeliveryAddress">Building A-219, First Floor, Road No. 5, Mahipalpur Extension, New Delhi 110037</div>
                             <div class="pickup-detail-label">Phone Number</div><div class="pickup-detail-value" id="modalDeliveryPhone">-</div>
                         </div>
                     </div>
@@ -325,6 +334,43 @@
     </div>
 </div>
 
+<div class="modal fade" id="receivedInHubModal" tabindex="-1" aria-labelledby="receivedInHubModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="receivedInHubModalLabel">Received in Hub</h5>
+                    <small class="text-muted">Confirm whether this shipment has been received at the hub.</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="receivedInHubAlert" class="alert d-none" role="alert"></div>
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <div class="pickup-detail-label">AWB Number</div>
+                        <div class="pickup-detail-value" id="receivedHubAwb">-</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="pickup-detail-label">Invoice Number</div>
+                        <div class="pickup-detail-value" id="receivedHubInvoice">-</div>
+                    </div>
+                </div>
+                <div class="alert alert-warning mb-0">
+                    <i class="ti ti-alert-triangle me-1"></i>
+                    Has this shipment been received in the hub?
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">No</button>
+                <button type="button" class="btn btn-success" id="confirmReceivedInHubButton">
+                    <i class="ti ti-check me-1"></i>Yes, Received in Hub
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ asset('js/jquery-3.7.1.min.js') }}"></script>
 <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
@@ -334,6 +380,7 @@
     const confirmPickupButton = document.getElementById('confirmPickupButton');
     const pickupModalAlert = document.getElementById('pickupModalAlert');
     let selectedShipmentId = null;
+    let selectedHubShipmentId = null;
 
     pickupModal?.addEventListener('show.bs.modal', event => {
         const button = event.relatedTarget;
@@ -346,8 +393,7 @@
         const detailFields = {
             modalAwb: 'awb', modalInvoice: 'invoice', modalPickupName: 'pickupName',
             modalPickupAddress: 'pickupAddress', modalPickupPhone: 'pickupPhone',
-            modalDeliveryName: 'deliveryName', modalDeliveryAddress: 'deliveryAddress',
-            modalDeliveryPhone: 'deliveryPhone'
+            modalDeliveryName: 'deliveryName', modalDeliveryPhone: 'deliveryPhone'
         };
         Object.entries(detailFields).forEach(([elementId, dataKey]) => {
             document.getElementById(elementId).textContent = button.dataset[dataKey] || '-';
@@ -380,6 +426,49 @@
             pickupModalAlert.textContent = error.message;
             confirmPickupButton.disabled = false;
             confirmPickupButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Confirm Pickup';
+        }
+    });
+
+    const receivedInHubModal = document.getElementById('receivedInHubModal');
+    const confirmReceivedInHubButton = document.getElementById('confirmReceivedInHubButton');
+    const receivedInHubAlert = document.getElementById('receivedInHubAlert');
+
+    receivedInHubModal?.addEventListener('show.bs.modal', event => {
+        const button = event.relatedTarget;
+        selectedHubShipmentId = button?.dataset.shipmentId || null;
+        document.getElementById('receivedHubAwb').textContent = button?.dataset.awb || '-';
+        document.getElementById('receivedHubInvoice').textContent = button?.dataset.invoice || '-';
+        receivedInHubAlert.className = 'alert d-none';
+        receivedInHubAlert.textContent = '';
+        if (confirmReceivedInHubButton) confirmReceivedInHubButton.disabled = false;
+    });
+
+    confirmReceivedInHubButton?.addEventListener('click', async () => {
+        if (!selectedHubShipmentId) return;
+        confirmReceivedInHubButton.disabled = true;
+        confirmReceivedInHubButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+        try {
+            const response = await fetch('{{ route('admin.received-in-hub') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({ shipment_id: selectedHubShipmentId })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Unable to update shipment status.');
+
+            receivedInHubAlert.className = 'alert alert-success';
+            receivedInHubAlert.textContent = data.message;
+            setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+            receivedInHubAlert.className = 'alert alert-danger';
+            receivedInHubAlert.textContent = error.message;
+            confirmReceivedInHubButton.disabled = false;
+            confirmReceivedInHubButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Received in Hub';
         }
     });
 </script>

@@ -85,6 +85,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         Route::get('/delivery-dashboard-chart-data', [AdminController::class, 'deliveryDashboardChartData'])->name('admin.delivery-dashboard-chart-data');
         Route::get('/delivery-orders', [AdminController::class, 'deliveryOrders'])->name('admin.delivery-orders');
         Route::post('/pickup-delivery', [AdminController::class, 'pickupDelivery'])->name('admin.pickup-delivery');
+        Route::post('/received-in-hub', [AdminController::class, 'receivedInHub'])->name('admin.received-in-hub');
         Route::get('/notifications-data', [AdminController::class, 'notificationsData'])->name('admin.notifications.data');
         Route::patch('/notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('admin.notifications.read-all');
         Route::patch('/notifications/{id}/read', [AdminController::class, 'markNotificationRead'])->name('admin.notifications.read');
@@ -548,6 +549,9 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     // Customer Profile, Activate/Deactivate, Excel Export
     Route::get('/customer-profile/{id}', [AdminController::class, 'customerProfile'])->name('admin.customer-profile');
     Route::get('/customer/{id}/kyc-documents/download', [AdminController::class, 'downloadCustomerKycDocuments'])->name('admin.customer.kyc-documents.download');
+    Route::get('/customer/{id}/kyc-document/{document}/download', [AdminController::class, 'downloadCustomerKycDocument'])
+        ->where('document', '[a-z_]+')
+        ->name('admin.customer.kyc-document.download');
     Route::post('/customer/{id}/toggle-status', [AdminController::class, 'toggleCustomerStatus'])->name('admin.customer.toggle-status');
     Route::post('/customer/{id}/toggle-shipment-access', [AdminController::class, 'toggleShipmentAccess'])->name('admin.customer.toggle-shipment-access');
     Route::get('/kyc-export', [AdminController::class, 'exportKycExcel'])->name('admin.kyc-export');

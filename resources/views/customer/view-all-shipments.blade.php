@@ -434,6 +434,13 @@
 
                             <div id="readyBulkActions" class="bulk-action-bar">
                                 <span id="readyBulkTotal" class="fw-bold text-primary"></span>
+                                <div class="d-flex align-items-center gap-1">
+                                    <label class="form-label mb-0 small fw-semibold">Label Size:</label>
+                                    <select class="form-select form-select-sm bulk-label-size" style="width:auto;">
+                                        <option value="a4" selected>A4</option>
+                                        <option value="4x6">4x6</option>
+                                    </select>
+                                </div>
                                 <button type="button" class="btn btn-primary btn-sm" id="bulkReadyPrintBtn" disabled>
                                     <i class="ti ti-printer me-1"></i>Print Selected
                                 </button>
@@ -444,6 +451,13 @@
 
                             <div id="packedBulkActions" class="bulk-action-bar">
                                 <span id="packedBulkTotal" class="fw-bold text-primary"></span>
+                                <div class="d-flex align-items-center gap-1">
+                                    <label class="form-label mb-0 small fw-semibold">Label Size:</label>
+                                    <select class="form-select form-select-sm bulk-label-size" style="width:auto;">
+                                        <option value="a4" selected>A4</option>
+                                        <option value="4x6">4x6</option>
+                                    </select>
+                                </div>
                                 <button type="button" class="btn btn-primary btn-sm" id="bulkPackedPrintBtn" disabled>
                                     <i class="ti ti-printer me-1"></i>Print Selected
                                 </button>
@@ -481,7 +495,7 @@
                                     <label class="form-label">Status</label>
                                     <select name="status" class="form-select">
                                         <option value="all">All Statuses</option>
-                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
                                             <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
                                         @endforeach
                                     </select>
@@ -505,7 +519,7 @@
                 <div class="card border-0 shadow-sm rounded-4 shipment-status-card">
                     <div class="card-body p-3">
                         <div class="shipment-status-filters" aria-label="Shipment status filters">
-                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
                                 <a href="{{ request()->fullUrlWithQuery(['status' => $value, 'page' => null]) }}"
                                    class="btn {{ request('status', 'all') === $value ? 'btn-primary' : 'btn-light' }} rounded-pill status-filter-btn"
                                    data-filter="{{ $value }}">
@@ -530,7 +544,7 @@
                                 $selectedStatus = request('status');
                                 $isAllOrdersView = $selectedStatus === null || $selectedStatus === 'all';
                                 $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
-                                $postPackedStatuses = ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
+                                $postPackedStatuses = ['packed', 'manifested', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
                                 $hideCurrencyColumn = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideIncotermsAndPayColumns = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hidePrintLabelColumn = $isAllOrdersView || $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
@@ -635,7 +649,9 @@
                                                         'ready' => 'badge bg-info',
                                                         'packed' => 'badge bg-primary',
                                                         'manifested' => 'badge bg-secondary',
-                                                        'received' => 'badge bg-success',
+                                                        'assigned_for_pickup' => 'badge bg-warning text-dark',
+                                                        'received' => 'badge bg-info',
+                                                        'confirm_pickup' => 'badge bg-warning text-dark',
                                                         'dispatched' => 'badge bg-dark',
                                                         'delivered' => 'badge bg-success',
                                                         'cancelled' => 'badge bg-danger',
@@ -647,7 +663,9 @@
                                                         'ready' => 'Ready',
                                                         'packed' => 'Packed',
                                                         'manifested' => 'Manifested',
+                                                        'assigned_for_pickup' => 'In-Transit to Hub',
                                                         'received' => 'Received',
+                                                        'confirm_pickup' => 'In-Transit to Hub',
                                                         'dispatched' => 'Dispatched',
                                                         'delivered' => 'Delivered',
                                                         'cancelled' => 'Cancelled',
@@ -758,7 +776,7 @@
                                                     </button>
                                                 </div>
                                             </td>
-                                            <td @class(['text-center', 'd-none' => $showActionColumn || $hideCancelColumn || in_array($rowStatus, ['packed', 'manifested', 'received', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'], true)])>
+                                            <td @class(['text-center', 'd-none' => $showActionColumn || $hideCancelColumn || in_array($rowStatus, ['packed', 'manifested', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'], true)])>
                                                 @if($invoice->status === 'cancelled')
                                                     <button class="btn btn-cancel" disabled>
                                                         <i class="ti ti-x"></i> Cancelled
@@ -1223,6 +1241,23 @@
                         </div>
                     </div>
                     <hr>
+                    <!-- Shipment Info -->
+                    <div id="printShipmentInfoSection" style="margin-bottom:10px;font-size:12px;">
+                        <strong style="font-size:13px;">SHIPMENT INFO</strong>
+                        <div style="display:flex;flex-wrap:wrap;margin-top:4px;">
+                            <div style="width:50%;padding:2px 0;"><strong>Invoice No.:</strong> <span
+                                    id="printInvoiceNo">-</span></div>
+                            <div style="width:50%;padding:2px 0;"><strong>Invoice Date:</strong> <span
+                                    id="printInvoiceDate">-</span></div>
+                            <div style="width:50%;padding:2px 0;"><strong>Reference No.:</strong> <span
+                                    id="printReferenceNo">-</span></div>
+                            <div style="width:50%;padding:2px 0;"><strong>Method:</strong> <span
+                                    id="printMethod">-</span></div>
+                            <div style="width:50%;padding:2px 0;"><strong>Service Code:</strong> <span
+                                    id="printServiceCode">-</span></div>
+                        </div>
+                    </div>
+                    <hr>
                     <!-- Invoice Items -->
                     <div id="printItemsSection">
                         <strong style="font-size:13px;">INVOICE ITEMS</strong>
@@ -1254,11 +1289,20 @@
                         <div id="printPackagesContainer" class="mt-1"></div>
                     </div>
                 </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="printLabel()">
-                        <i class="ti ti-printer me-1"></i>Print
-                    </button>
+                <div class="modal-footer border-0 pt-0 justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 fw-semibold" for="printLabelSize">Label Size:</label>
+                        <select id="printLabelSize" class="form-select form-select-sm" style="width:auto;">
+                            <option value="a4" selected>A4</option>
+                            <option value="4x6">4x6</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="printLabel()">
+                            <i class="ti ti-printer me-1"></i>Print
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1620,6 +1664,13 @@
                     $('#printConsigneeName,#printConsigneeContact,#printConsigneeAddress,#printConsigneeCityStateZip').text('-');
                     $('#printConsigneePhone').text('-');
                 }
+
+                // Shipment Info
+                $('#printInvoiceNo').text(data.invoice_number || '-');
+                $('#printInvoiceDate').text(data.invoice_date || '-');
+                $('#printReferenceNo').text(data.reference_number || '-');
+                $('#printMethod').text(data.shipping_method || '-');
+                $('#printServiceCode').text(data.service_code || '-');
 
                 // Invoice Items
                 const itemsTable = document.getElementById('printItemsTable');
@@ -2594,6 +2645,16 @@
                 '<span>Phone: ' + (consignee.phone || '-') + '</span>' +
                 '</div>' +
                 '</div>' +
+                '<div style="margin-bottom:12px;font-size:12px;">' +
+                '<strong>SHIPMENT INFO</strong>' +
+                '<div style="display:flex;flex-wrap:wrap;margin-top:4px;">' +
+                '<div style="width:50%;padding:2px 0;"><strong>Invoice No.:</strong> ' + (data.invoice_number || '-') + '</div>' +
+                '<div style="width:50%;padding:2px 0;"><strong>Invoice Date:</strong> ' + (data.invoice_date || '-') + '</div>' +
+                '<div style="width:50%;padding:2px 0;"><strong>Reference No.:</strong> ' + (data.reference_number || '-') + '</div>' +
+                '<div style="width:50%;padding:2px 0;"><strong>Method:</strong> ' + (data.shipping_method || '-') + '</div>' +
+                '<div style="width:50%;padding:2px 0;"><strong>Service Code:</strong> ' + (data.service_code || '-') + '</div>' +
+                '</div>' +
+                '</div>' +
                 '<div style="margin-bottom:12px;">' +
                 '<strong>INVOICE ITEMS</strong>' +
                 '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;">' +
@@ -2647,11 +2708,19 @@
                 return;
             }
 
+            const sizeSelect = document.querySelector('.bulk-label-size');
+            const labelSize = sizeSelect ? sizeSelect.value : 'a4';
+            const is4x6 = labelSize === '4x6';
             let html = '<!DOCTYPE html><html><head><title>Print Selected Labels</title><style>' +
-                'body{font-family:Arial,sans-serif;padding:18px;color:#000;font-size:12px;} ' +
+                // @page margin stays 0 so the browser does not print its own
+                // header/footer (date/time). Spacing is handled via body padding.
+                (is4x6
+                    ? '@page{size:4in 6in;margin:0;} body{padding:3mm;font-size:10px;} '
+                    : '@page{size:A4;margin:0;} body{padding:8mm;} ') +
+                'body{font-family:Arial,sans-serif;color:#000;margin:0;box-sizing:border-box;} ' +
                 'table{border-collapse:collapse;width:100%;} ' +
                 'th,td{border:1px solid #333;padding:4px;text-align:left;} ' +
-                '@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}' +
+                '@media print{body{margin:0;}}' +
                 '</style></head><body>';
 
             selectedData.forEach(function (data) {
@@ -2674,11 +2743,23 @@
         // Print Label function (outside document.ready so it's globally accessible)
         function printLabel() {
             const modalBody = document.getElementById('printLabelBody');
+            const sizeSelect = document.getElementById('printLabelSize');
+            const labelSize = sizeSelect ? sizeSelect.value : 'a4';
+            const is4x6 = labelSize === '4x6';
             const content = modalBody.cloneNode(true);
             const printWindow = window.open('', '_blank', 'width=800,height=700');
             printWindow.document.write('<!DOCTYPE html><html><head><title>Print Label</title>');
             printWindow.document.write('<style>');
-            printWindow.document.write('body{font-family:Arial,sans-serif;padding:15px;color:#000;font-size:12px;}');
+            // @page margin must stay 0 so the browser does not print its own
+            // header/footer (date/time). Spacing is handled via body padding.
+            if (is4x6) {
+                printWindow.document.write('body{font-family:Arial,sans-serif;padding:3mm;color:#000;font-size:10px;}');
+                printWindow.document.write('table th,table td{padding:2px 3px;font-size:9px;}');
+                printWindow.document.write('@page{size:4in 6in;margin:0;}');
+            } else {
+                printWindow.document.write('body{font-family:Arial,sans-serif;padding:8mm;color:#000;font-size:12px;}');
+                printWindow.document.write('@page{size:A4;margin:0;}');
+            }
             printWindow.document.write('table{border-collapse:collapse;width:100%;margin-bottom:8px;}');
             printWindow.document.write('table th,table td{border:1px solid #333;padding:3px 5px;text-align:left;}');
             printWindow.document.write('table th{background:#eee;font-weight:bold;}');
@@ -2689,7 +2770,11 @@
             printWindow.document.write('.col-6{flex:1;border:1px solid #333;padding:8px;}');
             printWindow.document.write('hr{border:none;border-top:1px dashed #ccc;margin:8px 0;}');
             printWindow.document.write('svg{max-width:100%;height:auto;}');
-            printWindow.document.write('@media print{body{margin:0;padding:10px;} @page{size:A4;margin:10mm;}}');
+            if (!is4x6) {
+                printWindow.document.write('@media print{body{margin:0;padding:8mm;}}');
+            } else {
+                printWindow.document.write('@media print{body{margin:0;padding:3mm;}}');
+            }
             printWindow.document.write('</style></head><body>');
             printWindow.document.write(content.innerHTML);
             printWindow.document.write('</body></html>');

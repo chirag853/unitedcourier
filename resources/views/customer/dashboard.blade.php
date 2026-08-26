@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 
@@ -1271,6 +1271,21 @@
                             <p class="text-muted mb-4">Complete your CSB-V details: Export Codes, LUT, Banking and Billing
                                 information.</p>
 
+                            <div class="mb-4">
+                                <label class="form-label-custom d-block">Select Tax Type <span class="text-danger">*</span></label>
+                                <p class="text-muted small mb-2">Select GST, LUT, or both. At least one option is required.</p>
+                                <div class="d-flex flex-wrap gap-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="bizGstType">
+                                        <label class="form-check-label fw-semibold" for="bizGstType">GST</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="bizLutType">
+                                        <label class="form-check-label fw-semibold" for="bizLutType">LUT (Against Bond or UT)</label>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- ===== Export Codes Section ===== -->
                             <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-export me-2"></i>Export Codes</h5>
 
@@ -1351,9 +1366,18 @@
                             <hr class="my-4" style="border-color:#e2e8f0;">
 
                             <!-- ===== LUT Details Section ===== -->
+                            <div id="bizLutDetailsSection">
                             <h5 class="fw-bold mt-2 mb-3" style="color:#4338ca;"><i class="fas fa-file-contract me-2"></i>LUT Details</h5>
 
                             <div class="row g-3 align-items-end mb-3">
+                                <div class="col-12 col-lg-4">
+                                    <label class="form-label-custom" for="bizLutNumber">LUT Number</label>
+                                    <div class="input-group-custom">
+                                        <input type="text" class="form-control input-custom" id="bizLutNumber"
+                                            maxlength="100" placeholder="Enter LUT number">
+                                        <i class="fas fa-hashtag"></i>
+                                    </div>
+                                </div>
                                 <div class="col-12 col-lg-4">
                                     <label class="form-label-custom" for="bizLutBondStartYear">LUT Bond Start Year</label>
                                     <div class="input-group-custom">
@@ -1408,6 +1432,7 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
                             </div>
 
                             <hr class="my-4" style="border-color:#e2e8f0;">
@@ -2678,12 +2703,13 @@
                         signature_document: '',
                         // Business KYC (CSB-V) fields
                         is_csb_v: true,
-                        is_gst: true,
-                        is_lut: true,
+                        is_gst: false,
+                        is_lut: false,
                         gst_certificate_number: '',
                         gst_certificate_verified: false,
                         iec_number: '',
                         ad_code: '',
+                        lut_number: '',
                         lut_expiry_date: '',
                         lut_bond_year: '',
                         bank_account_number: '',
@@ -2852,10 +2878,20 @@
                         readKycField('bizGstCertNumber', 'gst_certificate_number', value => value.trim().toUpperCase());
                         readKycField('bizIecNumber', 'iec_number');
                         readKycField('bizAdCode', 'ad_code', value => value.replace(/\D/g, '').slice(0, 14));
-                        kycData.is_lut = true;
-                        syncBusinessLutBondYear();
-                        readKycField('bizLutExpiry', 'lut_expiry_date', value => value);
-                        readKycField('bizLutBondYear', 'lut_bond_year');
+                        const gstType = document.getElementById('bizGstType');
+                        const lutType = document.getElementById('bizLutType');
+                        if (gstType) kycData.is_gst = gstType.checked;
+                        if (lutType) kycData.is_lut = lutType.checked;
+                        if (kycData.is_lut) {
+                            readKycField('bizLutNumber', 'lut_number');
+                            syncBusinessLutBondYear();
+                            readKycField('bizLutExpiry', 'lut_expiry_date', value => value);
+                            readKycField('bizLutBondYear', 'lut_bond_year');
+                        } else {
+                            kycData.lut_number = '';
+                            kycData.lut_expiry_date = '';
+                            kycData.lut_bond_year = '';
+                        }
                         readKycField('bizBankType', 'bank_type', value => value);
                         readKycField('bizBankAccount', 'bank_account_number');
                         readKycField('bizBillingGst', 'billing_gst', value => value.trim().toUpperCase());
@@ -2968,12 +3004,12 @@
                             const file = e.target.files && e.target.files[0];
                             if (!file) return;
                             if (!file.type.match(/image\/(png|jpe?g)/i)) {
-                                alert('Please upload a PNG or JPG image of your signature.');
+                                showKycAlert('Attention Needed', 'Please upload a PNG or JPG image of your signature.');
                                 resetSignatureUpload();
                                 return;
                             }
                             if (file.size > 2 * 1024 * 1024) {
-                                alert('Signature image must be smaller than 2MB.');
+                                showKycAlert('Attention Needed', 'Signature image must be smaller than 2MB.');
                                 resetSignatureUpload();
                                 return;
                             }
@@ -3213,7 +3249,7 @@
                         });
                     }
 
-                    // ===== KYC Alert Modal helper (replaces browser alert()) =====
+                    // ===== KYC Alert Modal helper (replaces browser alerts) =====
                     function showKycAlert(title, messageHtml) {
                         const modalEl = document.getElementById('kycAlertModal');
                         if (!modalEl) {
@@ -3674,12 +3710,12 @@
                         const allowedExtensions = ['jpg', 'jpeg', 'png'];
                         const allowedMimeTypes = ['image/jpeg', 'image/png'];
                         if (!allowedExtensions.includes(extension) || !allowedMimeTypes.includes(file.type)) {
-                            alert('Only JPG, JPEG, or PNG images are allowed for GST, Aadhaar, and PAN documents.');
+                            showKycAlert('Attention Needed', 'Only JPG, JPEG, or PNG images are allowed for GST, Aadhaar, and PAN documents.');
                             input.value = '';
                             return false;
                         }
                         if (file.size > 5 * 1024 * 1024) {
-                            alert('The selected image must not exceed 5 MB.');
+                            showKycAlert('Attention Needed', 'The selected image must not exceed 5 MB.');
                             input.value = '';
                             return false;
                         }
@@ -3689,12 +3725,12 @@
                     function validatePdfOnlyKycFile(file, input) {
                         const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
                         if (extension !== 'pdf' || file.type !== 'application/pdf') {
-                            alert('Only a PDF file is allowed for the GST Certificate.');
+                            showKycAlert('Attention Needed', 'Only a PDF file is allowed for the GST Certificate.');
                             input.value = '';
                             return false;
                         }
                         if (file.size > 5 * 1024 * 1024) {
-                            alert('The GST Certificate PDF must not exceed 5 MB.');
+                            showKycAlert('Attention Needed', 'The GST Certificate PDF must not exceed 5 MB.');
                             input.value = '';
                             return false;
                         }
@@ -3705,12 +3741,12 @@
                         const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
                         const allowedExtensions = ['jpg', 'jpeg', 'png'];
                         if (!allowedExtensions.includes(extension)) {
-                            alert('Authorized Signature must be a JPG, JPEG, or PNG image.');
+                            showKycAlert('Attention Needed', 'Authorized Signature must be a JPG, JPEG, or PNG image.');
                             input.value = '';
                             return false;
                         }
                         if (file.size > 5 * 1024 * 1024) {
-                            alert('Authorized Signature must not exceed 5 MB.');
+                            showKycAlert('Attention Needed', 'Authorized Signature must not exceed 5 MB.');
                             input.value = '';
                             return false;
                         }
@@ -3872,19 +3908,19 @@
                                 // Step 1: Verify GST Certificate and its registered business name.
                                 const businessName = document.getElementById('bizGstBusinessName');
                                 if (!businessName || !businessName.value.trim()) {
-                                    alert('Please enter the Business Name registered under this GSTIN.');
+                                    showKycAlert('Attention Needed', 'Please enter the Business Name registered under this GSTIN.');
                                     if (businessName) businessName.focus();
                                     return false;
                                 }
                                 if ((!kycData.gst_certificate_verified && !kycData.gst_verified)
                                     || businessName.value.trim().toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
-                                    alert('Please verify your GST Certificate number before continuing.');
+                                    showKycAlert('Attention Needed', 'Please verify your GST Certificate number before continuing.');
                                     return false;
                                 }
                                 const gstFile = document.getElementById('bizGstCertFileInput');
                                 if (!gstFile || !gstFile.files || !gstFile.files[0]) {
                                     if (!kycData.gst_certificate_document) {
-                                        alert('Please upload your GST Certificate document before continuing.');
+                                        showKycAlert('Attention Needed', 'Please upload your GST Certificate document before continuing.');
                                         return false;
                                     }
                                 }
@@ -3902,30 +3938,30 @@
 
                                 if (!isAadhaarOptional || hasAnyAadhaarData) {
                                     if (!kycData.aadhar_verified) {
-                                        alert(isAadhaarOptional
+                                        showKycAlert('Attention Needed', isAadhaarOptional
                                             ? 'Complete Aadhaar verification, or clear Aadhaar details to skip this optional step.'
                                             : 'Please verify your Aadhaar number before continuing.');
                                         return false;
                                     }
                                     if (!hasFrontFile) {
-                                        alert('Please upload the front side of your Aadhaar before continuing.');
+                                        showKycAlert('Attention Needed', 'Please upload the front side of your Aadhaar before continuing.');
                                         return false;
                                     }
                                     if (!hasBackFile) {
-                                        alert('Please upload the back side of your Aadhaar before continuing.');
+                                        showKycAlert('Attention Needed', 'Please upload the back side of your Aadhaar before continuing.');
                                         return false;
                                     }
                                 }
                             } else if (step === 3) {
                                 // Step 3: Verify PAN
                                 if (!kycData.pan_verified) {
-                                    alert('Please verify your PAN before continuing.');
+                                    showKycAlert('Attention Needed', 'Please verify your PAN before continuing.');
                                     return false;
                                 }
                                 const panFile = document.getElementById('panFileInput');
                                 if (!panFile || !panFile.files || !panFile.files[0]) {
                                     if (!kycData.pan_document) {
-                                        alert('Please upload your PAN card before continuing.');
+                                        showKycAlert('Attention Needed', 'Please upload your PAN card before continuing.');
                                         return false;
                                     }
                                 }
@@ -3933,6 +3969,9 @@
                                 // Step 4: validate every CSB-V field and upload before Continue.
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
+                                const gstType = document.getElementById('bizGstType');
+                                const lutType = document.getElementById('bizLutType');
+                                const lutNumber = document.getElementById('bizLutNumber');
                                 const lutStartYear = document.getElementById('bizLutBondStartYear');
                                 const lutEndYear = document.getElementById('bizLutBondEndYear');
                                 const lutExpiry = document.getElementById('bizLutExpiry');
@@ -3949,7 +3988,7 @@
                                 const allowedDocumentTypes = ['application/pdf', 'image/jpeg', 'image/png'];
                                 const fiveMb = 5 * 1024 * 1024;
                                 const fail = (message, field) => {
-                                    alert(message);
+                                    showKycAlert('Attention Needed', message);
                                     if (field) {
                                         field.focus();
                                         if (field.type === 'file') {
@@ -3975,21 +4014,25 @@
                                     return true;
                                 };
 
+                                if (!gstType.checked && !lutType.checked) return fail('Please select GST, LUT, or both before continuing.', gstType);
                                 if (!iecInput || !/^[A-Z0-9]{10}$/.test(iecInput.value.trim().toUpperCase())) return fail('IEC Number must be exactly 10 letters or digits.', iecInput);
                                 if (!validateFile(iecFile, 'IEC Certificate', allowedDocumentTypes, fiveMb, kycData.iec_document)) return false;
                                 if (!adCodeInput || !/^\d{14}$/.test(adCodeInput.value.trim())) return fail('AD Code must be exactly 14 numeric digits.', adCodeInput);
                                 if (!validateFile(adCodeFile, 'AD Code Document', allowedDocumentTypes, fiveMb, kycData.ad_code_document)) return false;
                                 syncBusinessLutBondYear();
-                                const startYear = Number(lutStartYear && lutStartYear.value);
-                                const endYear = Number(lutEndYear && lutEndYear.value);
-                                if (!startYear) return fail('Please select the LUT Bond Start Year.', lutStartYear);
-                                if (!endYear) return fail('Please select the LUT Bond End Year.', lutEndYear);
-                                if (endYear < startYear + 1 || endYear > startYear + 5) return fail('LUT Bond End Year must be within five years after the Start Year.', lutEndYear);
-                                if (!lutExpiry || !lutExpiry.value) return fail('Please select the LUT Expiry Date.', lutExpiry);
-                                const minimumExpiryDate = `${startYear + 1}-01-01`;
-                                if (lutExpiry.value < minimumExpiryDate) return fail(`LUT Expiry Date must be on or after ${minimumExpiryDate}.`, lutExpiry);
-                                if (!lutBondYear || !/^\d{4}-\d{2}$/.test(lutBondYear.value)) return fail('Please select valid LUT Bond Start and End Years.', lutStartYear);
-                                if (!validateFile(lutFile, 'LUT Document', ['application/pdf'], fiveMb, kycData.lut_document)) return false;
+                                if (lutType.checked) {
+                                    if (!lutNumber || !lutNumber.value.trim()) return fail('Please enter the LUT Number.', lutNumber);
+                                    const startYear = Number(lutStartYear && lutStartYear.value);
+                                    const endYear = Number(lutEndYear && lutEndYear.value);
+                                    if (!startYear) return fail('Please select the LUT Bond Start Year.', lutStartYear);
+                                    if (!endYear) return fail('Please select the LUT Bond End Year.', lutEndYear);
+                                    if (endYear < startYear + 1 || endYear > startYear + 5) return fail('LUT Bond End Year must be within five years after the Start Year.', lutEndYear);
+                                    if (!lutExpiry || !lutExpiry.value) return fail('Please select the LUT Expiry Date.', lutExpiry);
+                                    const minimumExpiryDate = `${startYear + 1}-01-01`;
+                                    if (lutExpiry.value < minimumExpiryDate) return fail(`LUT Expiry Date must be on or after ${minimumExpiryDate}.`, lutExpiry);
+                                    if (!lutBondYear || !/^\d{4}-\d{2}$/.test(lutBondYear.value)) return fail('Please select valid LUT Bond Start and End Years.', lutStartYear);
+                                    if (!validateFile(lutFile, 'LUT Document', ['application/pdf'], fiveMb, kycData.lut_document)) return false;
+                                }
                                 if (!bankType || !['private', 'government'].includes(bankType.value)) return fail('Please select your Bank Category.', bankType);
                                 if (!bankAccount || !/^\d{9,18}$/.test(bankAccount.value.trim())) return fail('Bank Account Number must contain 9 to 18 digits.', bankAccount);
                                 if (billingGst && billingGst.value.trim() && !/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(billingGst.value.trim().toUpperCase())) return fail('Billing GST Number must be a valid 15-character GSTIN.', billingGst);
@@ -4002,7 +4045,7 @@
                                 const sigFile = document.getElementById('bizSignatureFileInput');
                                 const selectedSignature = sigFile && sigFile.files && sigFile.files[0];
                                 if (!selectedSignature && !kycData.signature_document) {
-                                    alert('Please upload your Authorized Signature.');
+                                    showKycAlert('Attention Needed', 'Please upload your Authorized Signature.');
                                     return false;
                                 }
                                 if (selectedSignature && !validateBusinessSignatureFile(selectedSignature, sigFile)) return false;
@@ -4022,46 +4065,46 @@
 
                                 if (hasAnyGstData) {
                                     if (gstNumber.length !== 15) {
-                                        alert('Please enter a valid 15-character GST number.');
+                                        showKycAlert('Attention Needed', 'Please enter a valid 15-character GST number.');
                                         if (gstField) gstField.focus();
                                         return false;
                                     }
                                     if (!businessNameValue) {
-                                        alert('Please enter the Business Name registered under this GSTIN.');
+                                        showKycAlert('Attention Needed', 'Please enter the Business Name registered under this GSTIN.');
                                         if (businessName) businessName.focus();
                                         return false;
                                     }
                                     if (!hasGstFile && !hasStoredGstPath) {
-                                        alert('Please upload your GST Certificate PDF before continuing.');
+                                        showKycAlert('Attention Needed', 'Please upload your GST Certificate PDF before continuing.');
                                         return false;
                                     }
                                     if (!kycData.gst_verified
                                         || gstNumber !== String(kycData.gst_number || '').trim().toUpperCase()
                                         || businessNameValue.toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
-                                        alert('Please verify your GST details before continuing.');
+                                        showKycAlert('Attention Needed', 'Please verify your GST details before continuing.');
                                         return false;
                                     }
                                 }
                             } else if (step === 2) {
                                 // Step 2: Verify Aadhar
-                                if (!kycData.aadhar_verified) { alert('Please verify your Aadhar number before continuing.'); return false; }
+                                if (!kycData.aadhar_verified) { showKycAlert('Attention Needed', 'Please verify your Aadhar number before continuing.'); return false; }
                                 const frontFile = document.getElementById('aadharFrontFileInput');
                                 const backFile = document.getElementById('aadharBackFileInput');
                                 const hasFrontStored = Boolean(kycData.aadhar_front_document);
                                 const hasBackStored = Boolean(kycData.aadhar_back_document);
-                                if (!frontFile || (!frontFile.files || !frontFile.files[0]) && !hasFrontStored) { alert('Please upload the front side of your Aadhaar.'); return false; }
-                                if (!backFile || (!backFile.files || !backFile.files[0]) && !hasBackStored) { alert('Please upload the back side of your Aadhaar.'); return false; }
+                                if (!frontFile || (!frontFile.files || !frontFile.files[0]) && !hasFrontStored) { showKycAlert('Attention Needed', 'Please upload the front side of your Aadhaar.'); return false; }
+                                if (!backFile || (!backFile.files || !backFile.files[0]) && !hasBackStored) { showKycAlert('Attention Needed', 'Please upload the back side of your Aadhaar.'); return false; }
                             } else if (step === 3) {
                                 // Step 3: Verify PAN
-                                if (!kycData.pan_verified) { alert('Please verify your PAN before continuing.'); return false; }
+                                if (!kycData.pan_verified) { showKycAlert('Attention Needed', 'Please verify your PAN before continuing.'); return false; }
                                 const panFile = document.getElementById('panFileInput');
-                                if (!panFile || (!panFile.files || !panFile.files[0]) && !kycData.pan_document) { alert('Please upload your PAN card.'); return false; }
+                                if (!panFile || (!panFile.files || !panFile.files[0]) && !kycData.pan_document) { showKycAlert('Attention Needed', 'Please upload your PAN card.'); return false; }
                             } else if (step === 4) {
                                 // Step 4: Upload Signature
                                 const selectedSignature = signatureFileInput
                                     && signatureFileInput.files
                                     && signatureFileInput.files[0];
-                                if (!selectedSignature && !kycData.signature_document) { alert('Please upload your signature before continuing.'); return false; }
+                                if (!selectedSignature && !kycData.signature_document) { showKycAlert('Attention Needed', 'Please upload your signature before continuing.'); return false; }
                             }
                         }
                         return true;
@@ -4083,9 +4126,17 @@
                         if (stepNumber === (isBusinessFlow ? 6 : 5)) {
                             const billSignatureImg = document.getElementById('billSignatureImg');
                             const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
-                            const termsSignaturePreviewUrl = isBusinessFlow
+                            // Object URLs only exist until the current page is closed.
+                            // Fall back to the persisted signature path so the
+                            // merchant agreement is populated after logout/login
+                            // and when a rejected KYC is resumed.
+                            const storedSignaturePreviewUrl = kycData.signature_document
+                                && typeof kycData.signature_document === 'string'
+                                ? '{{ asset('') }}' + kycData.signature_document
+                                : '';
+                            const termsSignaturePreviewUrl = (isBusinessFlow
                                 ? businessSignaturePreviewUrl
-                                : signaturePreviewUrl;
+                                : signaturePreviewUrl) || storedSignaturePreviewUrl;
                             if (billSignatureImg) {
                                 billSignatureImg.src = termsSignaturePreviewUrl || '';
                                 billSignatureImg.style.display = termsSignaturePreviewUrl ? 'block' : 'none';
@@ -4120,6 +4171,9 @@
                                 // Leaving step 4 (CSB-V merged) -> save IEC + AD Code + LUT + Bank + Billing
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
+                                const gstType = document.getElementById('bizGstType');
+                                const lutType = document.getElementById('bizLutType');
+                                const lutNumber = document.getElementById('bizLutNumber');
                                 const lutExpiry = document.getElementById('bizLutExpiry');
                                 const lutBondYear = document.getElementById('bizLutBondYear');
                                 const bankType = document.getElementById('bizBankType');
@@ -4130,10 +4184,18 @@
                                 const billingAddress = document.getElementById('bizBillingAddress');
                                 if (iecInput) kycData.iec_number = iecInput.value.trim();
                                 if (adCodeInput) kycData.ad_code = adCodeInput.value.replace(/\D/g, '').slice(0, 14);
-                                kycData.is_lut = true;
-                                syncBusinessLutBondYear();
-                                if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
-                                if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
+                                if (gstType) kycData.is_gst = gstType.checked;
+                                if (lutType) kycData.is_lut = lutType.checked;
+                                if (kycData.is_lut) {
+                                    if (lutNumber) kycData.lut_number = lutNumber.value.trim();
+                                    syncBusinessLutBondYear();
+                                    if (lutExpiry) kycData.lut_expiry_date = lutExpiry.value;
+                                    if (lutBondYear) kycData.lut_bond_year = lutBondYear.value.trim();
+                                } else {
+                                    kycData.lut_number = '';
+                                    kycData.lut_expiry_date = '';
+                                    kycData.lut_bond_year = '';
+                                }
                                 if (bankType) kycData.bank_type = bankType.value;
                                 if (bankAccount) kycData.bank_account_number = bankAccount.value.trim();
                                 if (billingGst) kycData.billing_gst = billingGst.value.trim().toUpperCase();
@@ -4334,6 +4396,7 @@
                             bizGstBusinessName: kycData.gst_business_name || kycData.organization_name,
                             bizIecNumber: kycData.iec_number,
                             bizAdCode: kycData.ad_code,
+                            bizLutNumber: kycData.lut_number,
                             bizLutExpiry: kycData.lut_expiry_date,
                             bizBankType: kycData.bank_type,
                             bizBankAccount: kycData.bank_account_number,
@@ -4347,7 +4410,14 @@
                             if (field && values[id] !== undefined && values[id] !== null) field.value = values[id];
                         });
 
-                        kycData.is_lut = true;
+                        const gstType = document.getElementById('bizGstType');
+                        const lutType = document.getElementById('bizLutType');
+                        const isCheckedValue = value => value === true || value === 1 || value === '1';
+                        kycData.is_gst = isCheckedValue(kycData.is_gst);
+                        kycData.is_lut = isCheckedValue(kycData.is_lut);
+                        if (gstType) gstType.checked = kycData.is_gst;
+                        if (lutType) lutType.checked = kycData.is_lut;
+                        toggleBusinessLutDetails();
                         const bondYearMatch = String(kycData.lut_bond_year || '').match(/^(\d{4})-(\d{2})$/);
                         const startYearField = document.getElementById('bizLutBondStartYear');
                         if (bondYearMatch && startYearField) {
@@ -4375,6 +4445,7 @@
                         restoreStoredKycDocPreview('pan_document', 'panUploadPlaceholder', 'panPreview', 'panFileName', true);
                         restoreStoredKycDocPreview('signature_document', 'signatureUploadPlaceholder', 'signaturePreview', 'signatureFileName', true);
                         if (kycData.signature_document && signaturePreviewImg) {
+                            if (signatureUploadPlaceholder) signatureUploadPlaceholder.style.display = 'none';
                             signaturePreviewImg.src = '{{ asset('') }}' + kycData.signature_document;
                             if (signaturePreviewWrap) signaturePreviewWrap.style.display = 'block';
                         }
@@ -4385,6 +4456,8 @@
                         restoreStoredKycDocPreview('ad_code_document', 'bizAdCodeUploadPlaceholder', 'bizAdCodePreview', 'bizAdCodeFileName');
                         restoreStoredKycDocPreview('lut_document', 'bizLutUploadPlaceholder', 'bizLutPreview', 'bizLutFileName');
                         if (kycData.signature_document && businessSignaturePreviewImg) {
+                            const bizSignaturePlaceholder = document.getElementById('bizSignatureUploadPlaceholder');
+                            if (bizSignaturePlaceholder) bizSignaturePlaceholder.style.display = 'none';
                             businessSignaturePreviewImg.src = '{{ asset('') }}' + kycData.signature_document;
                             if (businessSignaturePreviewWrap) businessSignaturePreviewWrap.style.display = 'block';
                         }
@@ -4406,6 +4479,12 @@
                         renderKycStep(savedKycStep, false);
                     }
 
+                    function toggleBusinessLutDetails() {
+                        const lutType = document.getElementById('bizLutType');
+                        const section = document.getElementById('bizLutDetailsSection');
+                        if (section) section.style.display = lutType && lutType.checked ? '' : 'none';
+                    }
+
                     function initKycDraftAutosave() {
                         const lutStartYear = document.getElementById('bizLutBondStartYear');
                         const lutEndYear = document.getElementById('bizLutBondEndYear');
@@ -4415,6 +4494,8 @@
                             });
                         }
                         if (lutEndYear) lutEndYear.addEventListener('change', syncBusinessLutBondYear);
+                        const lutType = document.getElementById('bizLutType');
+                        if (lutType) lutType.addEventListener('change', toggleBusinessLutDetails);
 
                         document.querySelectorAll('.step-content input:not([type="file"]), .step-content select, .step-content textarea')
                             .forEach(function(field) {
@@ -4439,11 +4520,13 @@
                             submitBtn.disabled = true;
                         }
 
+                        captureKycDraftData();
+
                         // Build FormData for file uploads
                         const formData = new FormData();
                         formData.append('is_csb_v', kycData.is_csb_v ? 1 : 0);
                         formData.append('is_gst', kycData.is_gst ? 1 : 0);
-                        formData.append('is_lut', 1);
+                        formData.append('is_lut', kycData.is_lut ? 1 : 0);
                         formData.append('gst_business_name', kycData.gst_business_name || '');
                         formData.append('gst_certificate_number', kycData.gst_certificate_number || kycData.gst_number || '');
                         formData.append('pan_number', kycData.pan_number || '');
@@ -4453,6 +4536,7 @@
                         formData.append('pan_dob', formatRequestDob(kycData.pan_dob));
                         formData.append('iec_number', kycData.iec_number || '');
                         formData.append('ad_code', kycData.ad_code || '');
+                        formData.append('lut_number', kycData.lut_number || '');
                         formData.append('lut_expiry_date', kycData.lut_expiry_date || '');
                         formData.append('lut_bond_year', kycData.lut_bond_year || '');
                         formData.append('bank_account_number', kycData.bank_account_number || '');
@@ -4537,7 +4621,7 @@
                                         ? Object.values(data.errors).flat().join('\n')
                                         : '';
                                     const status = data.httpStatus ? ' (HTTP ' + data.httpStatus + ')' : '';
-                                    alert('Error' + status + ': ' + (validationErrors || data.message || 'Unknown server response'));
+                                    showKycAlert('Attention Needed', 'Error' + status + ': ' + (validationErrors || data.message || 'Unknown server response'));
                                     if (submitBtn) {
                                         submitBtn.innerHTML = 'Go to Dashboard';
                                         submitBtn.disabled = false;
@@ -4546,7 +4630,7 @@
                             })
                             .catch(error => {
                                 console.error('CSB submission error:', error);
-                                alert('CSB form submission failed before the server response was received: ' + error.message);
+                                showKycAlert('Attention Needed', 'CSB form submission failed before the server response was received: ' + error.message);
                                 if (submitBtn) {
                                     submitBtn.innerHTML = 'Go to Dashboard';
                                     submitBtn.disabled = false;
@@ -4770,6 +4854,186 @@
                     <!-- start row -->
                     <h6 class="mb-2">Dashboard</h6>
 
+                    <div class="row row-gap-3 mb-4">
+                        <!-- Total Companies -->
+                        <div class="col-xl-3 col-sm-6 d-flex">
+                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                                <div class="card-body position-relative z-1">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div class="d-flex align-items-start justify-content-between">
+                                            <div>
+                                                <p class="fs-14 mb-1 text-dark">Shipments Booked</p>
+                                                <h2 class="mb-1 fs-16">{{ $totalBooked }}</h2>
+                                                @if($bookedChangePercent > 0)
+                                                <p class="text-success mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $bookedChangePercent }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                @elseif($bookedChangePercent < 0) <p class="text-danger mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($bookedChangePercent) }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                    @else
+                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                                    @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <span
+                                                class="avatar avatar-md rounded-circle bg-soft-primary border border-primary">
+                                                <i class="fa-solid fa-truck-ramp-box fs-16 text-primary"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                        <!-- /Total Companies -->
+
+                        <!-- Total Companies -->
+                        <div class="col-xl-3 col-sm-6 d-flex">
+                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                                <div class="card-body position-relative z-1">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div class="d-flex align-items-start justify-content-between">
+                                            <div>
+                                                <p class="fs-14 mb-1 text-dark">In-Transit to Hub</p>
+                                                <h2 class="mb-1 fs-16">{{ $pickupPending }}</h2>
+                                                @if($pickupPendingChangePercent > 0)
+                                                <p class="text-success mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $pickupPendingChangePercent }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                @elseif($pickupPendingChangePercent < 0) <p
+                                                    class="text-danger mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($pickupPendingChangePercent) }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                    @else
+                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                                    @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <span
+                                                class="avatar avatar-md rounded-circle bg-soft-success border border-success">
+                                                <i class="ti ti-carousel-vertical fs-16 text-success"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                        <!-- /Total Companies -->
+
+                        <!-- Total Companies -->
+                        <div class="col-xl-3 col-sm-6 d-flex">
+                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                                <div class="card-body position-relative z-1">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div class="d-flex align-items-start justify-content-between">
+                                            <div>
+                                                <p class="fs-14 mb-1 text-dark">Out of Delivery</p>
+                                                <h2 class="mb-1 fs-16">{{ $outForDelivery }}</h2>
+                                                @if($outForDeliveryChangePercent > 0)
+                                                <p class="text-success mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $outForDeliveryChangePercent }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                @elseif($outForDeliveryChangePercent < 0) <p
+                                                    class="text-danger mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($outForDeliveryChangePercent) }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                    @else
+                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                                    @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <span
+                                                class="avatar avatar-md rounded-circle bg-soft-warning border border-warning">
+                                                <i class="fa-regular fa-truck fs-16 text-warning"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                        <!-- /Total Companies -->
+
+                        <!-- Total Companies -->
+                        <div class="col-xl-3 col-sm-6 d-flex">
+                            <div class="card flex-fill mb-0 position-relative overflow-hidden">
+                                <div class="card-body position-relative z-1">
+                                    <div class="d-flex align-items-start justify-content-between">
+                                        <div class="d-flex align-items-start justify-content-between">
+                                            <div>
+                                                <p class="fs-14 mb-1 text-dark">Delivered</p>
+                                                <h2 class="mb-1 fs-16">{{ $delivered }}</h2>
+                                                @if($deliveredChangePercent > 0)
+                                                <p class="text-success mb-0 fs-13"> <i
+                                                        class="ti ti-arrow-bar-up me-1"></i>{{ $deliveredChangePercent }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                @elseif($deliveredChangePercent < 0) <p class="text-danger mb-0 fs-13">
+                                                    <i
+                                                        class="ti ti-arrow-bar-down me-1"></i>{{ abs($deliveredChangePercent) }}%<span
+                                                        class="text-body ms-1">from last month</span></p>
+                                                    @else
+                                                    <p class="text-muted mb-0 fs-13">No change from last month</p>
+                                                    @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <span
+                                                class="avatar avatar-md rounded-circle bg-soft-danger border border-danger mb-3">
+                                                <i class="fa-solid fa-people-carry-box fs-16 text-primary"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                        <!-- /Total Companies -->
+
+                    </div>
+                    <!-- end row -->
+
+                    <!-- Shipment Analytics Section -->
+                    <h6 class="mb-2 mt-4">Shipment Analytics</h6>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button class="chart-filter-btn active" data-filter="this_month"
+                            onclick="loadChartData('this_month', this)">This Month</button>
+                        <button class="chart-filter-btn" data-filter="today"
+                            onclick="loadChartData('today', this)">Today</button>
+                        <button class="chart-filter-btn" data-filter="yesterday"
+                            onclick="loadChartData('yesterday', this)">Yesterday</button>
+                        <button class="chart-filter-btn" data-filter="last_month"
+                            onclick="loadChartData('last_month', this)">Last Month</button>
+                        <button class="chart-filter-btn" data-filter="last_year"
+                            onclick="loadChartData('last_year', this)">Last Year</button>
+                    </div>
+
+                    <div class="row row-gap-3 mb-4">
+                        <!-- Status Breakdown Doughnut Chart -->
+                        <div class="col-xl-5 col-sm-12 d-flex">
+                            <div class="chart-card flex-fill">
+                                <h6>Status Breakdown</h6>
+                                <div style="position: relative; max-height: 320px;">
+                                    <canvas id="statusChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Date-wise Shipment Trend Bar Chart -->
+                        <div class="col-xl-7 col-sm-12 d-flex">
+                            <div class="chart-card flex-fill">
+                                <h6>Shipment Trends</h6>
+                                <div style="position: relative; max-height: 320px;">
+                                    <canvas id="trendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- End Shipment Analytics Section -->
 
                     <!-- start row -->
                     <h6 class="mb-2">Upgrade Your Service</h6>
@@ -4812,6 +5076,91 @@
 
 
 
+
+                    <!-- Recent Orders Section -->
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2 mt-4">
+                        <h6 class="mb-0">Recent Orders <span class="badge bg-soft-primary text-primary ms-1">{{ $recentShipments->count() }} Orders</span></h6>
+                        <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                            View All <i class="ti ti-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+
+                    <div class="card border-0 shadow-sm rounded-4 mb-4">
+                        <div class="card-body p-0">
+                            @if($recentShipments->isEmpty())
+                                <div class="text-center text-muted py-5 px-3">
+                                    <i class="ti ti-package-off fs-32 d-block mb-2"></i>
+                                    <p class="mb-0">No recent orders found.</p>
+                                </div>
+                            @else
+                                <div class="table-responsive recent-orders-table">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="ps-3 text-nowrap">AWBNO</th>
+                                                <th class="text-nowrap">Date</th>
+                                                <th class="text-nowrap">Destination</th>
+                                                <th class="text-nowrap">Service</th>
+                                                <th class="text-nowrap">Network</th>
+                                                <th class="text-nowrap">Network No.</th>
+                                                <th class="text-nowrap text-center">PCS</th>
+                                                <th class="text-nowrap text-end">CHG Weight</th>
+                                                <th class="text-nowrap">Status</th>
+                                                <th class="pe-3 text-center">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($recentShipments as $shipment)
+                                                @php
+                                                    $status = $shipment->status ?: 'draft';
+                                                    $statusStyles = [
+                                                        'draft' => ['label' => 'Draft', 'class' => 'bg-warning text-dark'],
+                                                        'ready' => ['label' => 'Ready', 'class' => 'bg-info'],
+                                                        'packed' => ['label' => 'Packed', 'class' => 'bg-primary'],
+                                                        'manifested' => ['label' => 'Manifested', 'class' => 'bg-primary'],
+                                                        'received' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
+                                                        'confirm_pickup' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
+                                                        'assigned_for_pickup' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
+                                                        'dispatched' => ['label' => 'Dispatched', 'class' => 'bg-info'],
+                                                        'delivered' => ['label' => 'Delivered', 'class' => 'bg-success'],
+                                                        'cancelled' => ['label' => 'Cancelled', 'class' => 'bg-danger'],
+                                                        'disputed' => ['label' => 'Disputed', 'class' => 'bg-danger'],
+                                                        'on_hold' => ['label' => 'On Hold', 'class' => 'bg-warning text-dark'],
+                                                    ];
+                                                    $statusStyle = $statusStyles[$status] ?? ['label' => ucfirst(str_replace('_', ' ', $status)), 'class' => 'bg-secondary'];
+                                                    $destination = $shipment->consigneeInfo?->delivery_destination ?: ($shipment->consigneeInfo?->city ?: '-');
+                                                    $service = $shipment->serviceRate?->service;
+                                                    $packages = $shipment->packageDimensions;
+                                                    $chargeableWeight = $packages->sum(fn ($package) => (float) $package->chargeable_weight);
+                                                @endphp
+                                                <tr>
+                                                    <td class="ps-3 text-nowrap">
+                                                        <span class="fw-semibold text-primary">{{ $shipment->awb_number ?: 'Pending' }}</span>
+                                                    </td>
+                                                    <td class="text-nowrap">{{ optional($shipment->created_at)->format('d M Y') ?: '-' }}</td>
+                                                    <td>
+                                                        <span class="d-inline-block text-truncate" style="max-width: 150px;" title="{{ $destination }}">{{ $destination }}</span>
+                                                    </td>
+                                                    <td class="text-nowrap">{{ $shipment->shipping_method ?: ($service?->description ?: '-') }}</td>
+                                                    <td class="text-nowrap">{{ $service?->network ?: '-' }}</td>
+                                                    <td class="text-nowrap">{{ $service?->service_code ?: ($service?->method_code ?: '-') }}</td>
+                                                    <td class="text-center">{{ $packages->count() ?: 1 }}</td>
+                                                    <td class="text-end text-nowrap">{{ number_format($chargeableWeight, 2) }} kg</td>
+                                                    <td class="text-nowrap"><span class="badge {{ $statusStyle['class'] }}">{{ $statusStyle['label'] }}</span></td>
+                                                    <td class="pe-3 text-center">
+                                                        <a href="{{ route('customer.view-all-shipments', ['awb_number' => $shipment->awb_number]) }}" class="btn btn-sm btn-light rounded-circle" title="View order" aria-label="View order">
+                                                            <i class="ti ti-eye"></i>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                    <!-- End Recent Orders Section -->
 
                     <!-- start row -->
                     <h6 class="mb-2">Financials</h6>
@@ -4969,6 +5318,205 @@
         <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
 
         <!-- Dashboard Charts Script -->
+        <script>
+        let statusChart = null;
+        let trendChart = null;
+
+        // Color palette for status chart
+        const statusColors = {
+            draft: '#6c757d',
+            ready: '#0d6efd',
+            assigned_for_pickup: '#198754',
+            packed: '#fd7e14',
+            manifested: '#6610f2',
+            dispatched: '#20c997',
+            ready_to_dispatch: '#ffc107',
+            delivered: '#0dcaf0',
+            cancelled: '#dc3545',
+            disputed: '#e83e8c',
+            on_hold: '#495057',
+            received: '#17a2b8'
+        };
+
+        function loadChartData(filter, btnElement) {
+            // Update active button
+            document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+
+            fetch('{{ route("customer.dashboard-chart-data") }}?filter=' + filter, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderStatusChart(data.statusCounts, data.statusMap);
+                        renderTrendChart(data.dateWiseCounts, data.filter);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching chart data:', error);
+                });
+        }
+
+        function renderStatusChart(statusCounts, statusMap) {
+            const labels = [];
+            const values = [];
+            const colors = [];
+
+            for (const [status, count] of Object.entries(statusCounts)) {
+                labels.push(statusMap[status] || status);
+                values.push(count);
+                colors.push(statusColors[status] || '#adb5bd');
+            }
+
+            if (statusChart) {
+                statusChart.destroy();
+            }
+
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 16,
+                                usePointStyle: true,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderTrendChart(dateWiseCounts, filter) {
+            const labels = Object.keys(dateWiseCounts);
+            const values = Object.values(dateWiseCounts);
+
+            // Format labels for display
+            const displayLabels = labels.map(label => {
+                if (filter === 'last_year') {
+                    // Format "2025-01" as "Jan 2025"
+                    const [year, month] = label.split('-');
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
+                        'Nov', 'Dec'
+                    ];
+                    return monthNames[parseInt(month) - 1] + ' ' + year;
+                } else {
+                    // Format "2025-06-15" as "15 Jun"
+                    const parts = label.split('-');
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
+                        'Nov', 'Dec'
+                    ];
+                    return parseInt(parts[2]) + ' ' + monthNames[parseInt(parts[1]) - 1];
+                }
+            });
+
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            trendChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: displayLabels,
+                    datasets: [{
+                        label: 'Shipments Created',
+                        data: values,
+                        backgroundColor: 'rgba(91, 94, 255, 0.7)',
+                        borderColor: '#5b5eff',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 40
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Shipments: ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load default chart data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
+        });
+        </script>
 
         <script src="../../cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js" defer></script>
         <script defer src="https://static.cloudflareinsights.com/beacon.min.js"></script>

@@ -112,21 +112,92 @@
                         <form id="csbvForm" action="{{ route('customer.csb5-form.standalone.store') }}" method="POST"
                             enctype="multipart/form-data" novalidate>
                             @csrf
-                            {{-- Compatibility fields prevent previously cached CSB5 JavaScript from failing. --}}
+                            {{-- Compatibility field keeps CSB-V fixed for this standalone form. --}}
                             <input type="checkbox" id="csbvToggle" name="is_csb_v" value="1" checked hidden
                                 aria-hidden="true" tabindex="-1">
-                            <input type="checkbox" id="gstType" hidden aria-hidden="true" tabindex="-1">
-                            <!-- Tax Choice -->
-                            <div class="mb-4">
-                            </div>
 
-                            <div class="section-title-alt">Tell us about your Tax type?</div>
-                            <div class="d-flex gap-4 mb-4">
+                            @php
+                                $savedGstNumber = old('gst_certificate_number', $csbForm->gst_certificate_number ?? ($verifiedGstSource?->gst_number ?? ''));
+                                $savedGstBusinessName = old('gst_business_name', $csbForm->gst_business_name ?? ($verifiedGstSource?->organization_name ?? ''));
+                            @endphp
+
+                            <div class="section-title-alt">Select Tax Type <span class="text-danger">*</span></div>
+                            <p class="text-muted small mb-2">Select GST, LUT, or both. At least one option is required.</p>
+                            <div class="d-flex flex-wrap gap-4 mb-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="gstType" name="is_gst"
+                                        value="1" {{ old('is_gst', $csbForm->is_gst ?? false) ? 'checked' : '' }}
+                                        onchange="toggleCsbTaxSections();">
+                                    <label class="form-check-label fw-bold" for="gstType">GST</label>
+                                </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="lutType" name="is_lut"
-                                        value="1">
-                                    <label class="form-check-label fw-bold" for="lutType">LUT (Against Bond or
-                                        UT)</label>
+                                        value="1" {{ old('is_lut', $csbForm->is_lut ?? false) ? 'checked' : '' }}
+                                        onchange="toggleCsbTaxSections();">
+                                    <label class="form-check-label fw-bold" for="lutType">LUT (Against Bond or UT)</label>
+                                </div>
+                            </div>
+
+                            <div id="gstSectionWrapper">
+                                <div class="section-title-alt">GST Registration</div>
+                                <p class="text-muted small mb-2">
+                                    Enter and verify your GSTIN and registered business name through Cashfree.
+                                </p>
+                                <div class="row g-3 mb-2" id="csbGstSection"
+                                data-gst-required="{{ $csbGstRequired ? '1' : '0' }}"
+                                data-gst-reusable="0"
+                                data-verify-url="{{ route('customer.verify.gst') }}">
+                                <div class="col-md-6">
+                                    <label class="section-label" for="csbGstNumber">GSTIN</label>
+                                    <div class="input-wrapper">
+                                        <input type="text" class="input-custom" id="csbGstNumber"
+                                            name="gst_certificate_number" maxlength="15" inputmode="text"
+                                            placeholder="Enter 15-character GSTIN *"
+                                            value="{{ $savedGstNumber }}">
+                                        <i class="fas fa-receipt"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="section-label" for="csbGstBusinessName">Registered Business Name</label>
+                                    <div class="input-wrapper">
+                                        <input type="text" class="input-custom" id="csbGstBusinessName"
+                                            name="gst_business_name" maxlength="255"
+                                            placeholder="Enter registered business name *"
+                                            value="{{ $savedGstBusinessName }}">
+                                        <i class="fas fa-building"></i>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="csbGstCertPath"
+                                    value="{{ $csbForm->gst_certificate_document ?? ($csbForm->gst_document ?? ($verifiedGstSource->gst_certificate_document ?? '')) }}">
+                                <div class="col-12">
+                                    <label class="section-label" for="csbGstCertificate">GST Certificate PDF</label>
+                                    <div class="doc-item compact" id="csbGstDocContainer">
+                                        <div class="doc-meta">
+                                            <span class="doc-name">GST Certificate (PDF)</span>
+                                            <div id="csbGstFileInfo" class="file-status">Selected: <span id="csbGstFileName">file.pdf</span></div>
+                                        </div>
+                                        <div class="text-end d-flex align-items-center">
+                                            <input type="file" id="csbGstCertificate" name="gst_certificate_document"
+                                                style="display: none;" accept=".pdf,application/pdf"
+                                                onchange="handleDocSelect(this, 'csbGstFileName', 'csbGstFileInfo', 'csbGstRemoveFile', '.csbGstUploadBtn', '#csbGstDocContainer'); setCsb5GstDirty();">
+                                            <button type="button" id="csbGstUploadBtn" class="link-alt border-0 bg-transparent csbGstUploadBtn"
+                                                onclick="document.getElementById('csbGstCertificate').click();">
+                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                            </button>
+                                            <span id="csbGstRemoveFile" class="text-danger-alt csbGstRemoveFile" style="display: none;"
+                                                onclick="clearDocInput('csbGstCertificate', 'csbGstFileName', 'csbGstFileInfo', 'csbGstRemoveFile', '.csbGstUploadBtn', '#csbGstDocContainer'); setCsb5GstDirty();"><i
+                                                    class="fas fa-trash-alt"></i> Remove</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div id="csbGstVerificationStatus" class="small text-muted" role="status">
+                                        Click VERIFY GST to validate your details through Cashfree before submission.
+                                    </div>
+                                    <button type="button" id="verifyCsbGstBtn" class="btn-gradient mt-2">
+                                        <i class="fas fa-shield-alt me-1"></i> VERIFY GST
+                                    </button>
+                                </div>
                                 </div>
                             </div>
 
@@ -256,8 +327,18 @@
                                 $currentLutYear = now()->year;
                                 $lutStartYears = range($currentLutYear, $currentLutYear + 5);
                             @endphp
-                            <div class="section-title-alt">LUT Details</div>
-                            <div class="row g-3">
+                            <div id="lutSectionWrapper">
+                                <div class="section-title-alt">LUT Details</div>
+                                <div class="row g-3" id="lutDetailsSection">
+                                <div class="col-md-6">
+                                    <label class="section-label" for="lutNumber">LUT Number</label>
+                                    <div class="input-wrapper">
+                                        <input type="text" class="input-custom" name="lut_number" id="lutNumber"
+                                            maxlength="100" placeholder="Enter LUT number"
+                                            value="{{ old('lut_number', $csbForm->lut_number ?? '') }}">
+                                        <i class="fas fa-hashtag"></i>
+                                    </div>
+                                </div>
                                 <div class="col-md-4">
                                     <label class="section-label" for="lutBondStartYear">LUT Bond Start Year</label>
                                     <div class="input-wrapper select-wrapper">
@@ -324,6 +405,7 @@
                                             class="fas fa-trash-alt"></i> Remove</span>
                                 </div>
                             </div>
+                            </div>
 
                             <div class="section-title-alt">Billing Details</div>
                             <div class="row g-3">
@@ -332,6 +414,7 @@
                                     <div class="input-wrapper">
                                         <textarea class="input-custom" rows="3"
                                             placeholder="Enter Billing Address *" name="billing_address"
+                                            id="billingAddress"
                                             style="padding-left: 48px; padding-top: 16px;"
                                             required>{{ old('billing_address', $csbForm->billing_address ?? '') }}</textarea>
                                         <i class="fas fa-map-marker-alt" style="top: 22px;"></i>
@@ -423,16 +506,14 @@
                     </div>
                 </div>
 
-                <!-- CSB5 Form Custom JS -->
+                <!-- CSB5 Form Custom JS (fully inline so it can never be broken by a stale cache) -->
                 <script>
-                    // Inline helpers so the new upload widgets work even if the
-                    // external csb5-form.js is served from a stale cache.
+                    // ---- Global helpers used by inline onchange/onclick attributes ----
                     function handleDocSelect(input, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
                         if (input.files && input.files.length > 0) {
                             var file = input.files[0];
-                            var name = file.name;
                             var nameEl = document.getElementById(nameId);
-                            if (nameEl) { nameEl.textContent = name; }
+                            if (nameEl) { nameEl.textContent = file.name; }
                             var infoEl = document.getElementById(infoId);
                             if (infoEl) { infoEl.style.display = 'block'; }
                             var removeEl = document.querySelector('.' + removeClass);
@@ -443,6 +524,7 @@
                             if (container) { container.classList.add('has-file'); }
                         }
                     }
+
                     function clearDocInput(inputId, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
                         var input = document.getElementById(inputId);
                         if (input) { input.value = ''; }
@@ -456,59 +538,377 @@
                         if (container) { container.classList.remove('has-file'); }
                     }
 
-                    // Initialize linked LUT years inline as a cache-safe fallback.
-                    (function initializeLutBondYears() {
-                        var startYearSelect = document.getElementById('lutBondStartYear');
-                        var endYearSelect = document.getElementById('lutBondEndYear');
-                        var combinedYearInput = document.getElementById('lutBondYear');
-                        var expiryDateInput = document.getElementById('lutExpiryDate');
+                    // Show GST info only when the GST checkbox is selected and
+                    // LUT info only when the LUT checkbox is selected.
+                    function toggleCsbTaxSections() {
+                        var gstCheckbox = document.getElementById('gstType');
+                        var lutCheckbox = document.getElementById('lutType');
+                        var gstOn = !!(gstCheckbox && gstCheckbox.checked);
+                        var lutOn = !!(lutCheckbox && lutCheckbox.checked);
+                        var gstWrap = document.getElementById('gstSectionWrapper');
+                        var lutWrap = document.getElementById('lutSectionWrapper');
+                        if (gstWrap) {
+                            gstWrap.style.display = gstOn ? '' : 'none';
+                            gstWrap.querySelectorAll('input, select, button').forEach(function (el) {
+                                el.disabled = !gstOn;
+                            });
+                        }
+                        if (lutWrap) {
+                            lutWrap.style.display = lutOn ? '' : 'none';
+                            lutWrap.querySelectorAll('input, select, button').forEach(function (el) {
+                                el.disabled = !lutOn;
+                            });
+                        }
+                    }
+                    toggleCsbTaxSections();
 
-                        if (!startYearSelect || !endYearSelect || !combinedYearInput || !expiryDateInput) {
-                            return;
+                    function setCsb5GstDirty() {
+                        var status = document.getElementById('csbGstVerificationStatus');
+                        if (status && document.getElementById('csbGstCertificate')) {
+                            status.textContent = 'GST details changed. Verify GST again before submission.';
+                            status.className = 'small text-muted';
+                        }
+                    }
+
+                    // ---- Main wiring ----
+                    (function initializeCsb5Form() {
+                        if (window.__csb5FormInitialized) return;
+                        window.__csb5FormInitialized = true;
+
+                        var form = document.getElementById('csbvForm');
+
+                        // --- LUT document upload widget ---
+                        try {
+                            var lutUploadBtn = document.getElementById('uploadBtn');
+                            var lutFileInput = document.getElementById('lutFileInput');
+                            var lutFileInfo = document.getElementById('fileInfo');
+                            var lutFileName = document.getElementById('fileNameDisplay');
+                            var lutRemoveFile = document.getElementById('removeFile');
+                            var lutDocContainer = document.getElementById('lutDocContainer');
+
+                            lutUploadBtn && lutUploadBtn.addEventListener('click', function () { lutFileInput.click(); });
+                            lutFileInput && lutFileInput.addEventListener('change', function () {
+                                if (lutFileInput.files.length > 0) {
+                                    lutFileName.textContent = lutFileInput.files[0].name;
+                                    lutFileInfo.style.display = 'block';
+                                    lutRemoveFile.style.display = 'inline-block';
+                                    lutUploadBtn.style.display = 'none';
+                                    lutDocContainer.classList.add('has-file');
+                                }
+                            });
+                            lutRemoveFile && lutRemoveFile.addEventListener('click', function () {
+                                lutFileInput.value = '';
+                                lutFileInfo.style.display = 'none';
+                                lutRemoveFile.style.display = 'none';
+                                lutUploadBtn.style.display = 'inline-block';
+                                lutDocContainer.classList.remove('has-file');
+                            });
+                        } catch (e) { console.error('[CSB5] LUT upload init failed:', e); }
+
+                        // --- Linked LUT bond years ---
+                        try {
+                            var startYearSelect = document.getElementById('lutBondStartYear');
+                            var endYearSelect = document.getElementById('lutBondEndYear');
+                            var combinedYearInput = document.getElementById('lutBondYear');
+                            var expiryDateInput = document.getElementById('lutExpiryDate');
+
+                            function syncLutBondYear() {
+                                combinedYearInput.value = startYearSelect.value && endYearSelect.value
+                                    ? startYearSelect.value + '-' + endYearSelect.value.slice(-2)
+                                    : '';
+                            }
+
+                            function populateLutBondEndYear(useSavedYear) {
+                                var startYear = parseInt(startYearSelect.value, 10);
+                                var savedEndYear = useSavedYear ? endYearSelect.getAttribute('data-saved-end-year') : '';
+                                endYearSelect.innerHTML = '';
+
+                                if (!startYear) {
+                                    endYearSelect.appendChild(new Option('Select Start Year First', ''));
+                                    endYearSelect.disabled = true;
+                                    expiryDateInput.removeAttribute('min');
+                                    syncLutBondYear();
+                                    return;
+                                }
+
+                                expiryDateInput.min = String(startYear + 1) + '-01-01';
+                                if (expiryDateInput.value && expiryDateInput.value < expiryDateInput.min) {
+                                    expiryDateInput.value = '';
+                                }
+
+                                endYearSelect.appendChild(new Option('Select End Year', ''));
+                                for (var yearOffset = 1; yearOffset <= 5; yearOffset++) {
+                                    endYearSelect.appendChild(new Option(String(startYear + yearOffset), String(startYear + yearOffset)));
+                                }
+                                endYearSelect.disabled = false;
+                                endYearSelect.value = savedEndYear && endYearSelect.querySelector('option[value="' + savedEndYear + '"]')
+                                    ? savedEndYear
+                                    : String(startYear + 1);
+                                syncLutBondYear();
+                            }
+
+                            startYearSelect.addEventListener('change', function () { populateLutBondEndYear(false); });
+                            endYearSelect.addEventListener('change', syncLutBondYear);
+                            populateLutBondEndYear(true);
+                        } catch (e) { console.error('[CSB5] LUT years init failed:', e); }
+
+                        // --- GST verification (same API as the KYC dashboard) ---
+                        var csbGstSection = document.getElementById('csbGstSection');
+                        var csbGstNumber = document.getElementById('csbGstNumber');
+                        var csbGstBusinessName = document.getElementById('csbGstBusinessName');
+                        var csbGstCertificate = document.getElementById('csbGstCertificate');
+                        var csbGstVerificationStatus = document.getElementById('csbGstVerificationStatus');
+                        var verifyCsbGstBtn = document.getElementById('verifyCsbGstBtn');
+                        var csbGstVerified = false;
+
+                        function normalizedGst(value) {
+                            return String(value || '').replace(/\s+/g, '').toUpperCase();
                         }
 
-                        function updateEndYear(restoreSavedYear) {
-                            var startYear = parseInt(startYearSelect.value, 10);
-                            var savedEndYear = restoreSavedYear ? endYearSelect.getAttribute('data-saved-end-year') : '';
-                            endYearSelect.innerHTML = '';
+                        function setCsbGstVerificationState(verified, message, success) {
+                            csbGstVerified = verified;
+                            if (!csbGstVerificationStatus) return;
+                            csbGstVerificationStatus.textContent = message;
+                            csbGstVerificationStatus.className = success ? 'small text-success' : 'small text-muted';
+                        }
 
-                            if (!startYear) {
-                                endYearSelect.appendChild(new Option('Select Start Year First', ''));
-                                endYearSelect.disabled = true;
-                                expiryDateInput.removeAttribute('min');
-                                combinedYearInput.value = '';
+                        try {
+                            [csbGstNumber, csbGstBusinessName].forEach(function (input) {
+                                input && input.addEventListener('input', function () {
+                                    if (input === csbGstNumber) input.value = normalizedGst(input.value);
+                                    setCsbGstVerificationState(false, 'GST details changed. Verify GST again before submission.', false);
+                                });
+                            });
+                        } catch (e) { console.error('[CSB5] GST input init failed:', e); }
+
+                        verifyCsbGstBtn && verifyCsbGstBtn.addEventListener('click', async function () {
+                            console.log('[CSB5] VERIFY GST clicked');
+                            var gst = normalizedGst(csbGstNumber && csbGstNumber.value);
+                            var businessName = ((csbGstBusinessName && csbGstBusinessName.value) || '').trim();
+                            var file = csbGstCertificate && csbGstCertificate.files ? csbGstCertificate.files[0] : null;
+                            var storedPath = ((document.getElementById('csbGstCertPath') || {}).value || '').trim();
+
+                            if (!/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gst)) {
+                                showCsb5ValidationError('Enter a valid 15-character GSTIN.', csbGstNumber);
                                 return;
                             }
+                            if (!businessName) {
+                                showCsb5ValidationError('Enter the registered Business Name.', csbGstBusinessName);
+                                return;
+                            }
+                            if (!file && !storedPath) {
+                                showCsb5ValidationError('Please upload the GST Certificate PDF.', csbGstCertificate);
+                                return;
+                            }
+                            if (file && !validateCsb5File(form, 'gst_certificate_document', 'the GST Certificate', ['pdf'], 5)) return;
 
-                            expiryDateInput.min = String(startYear + 1) + '-01-01';
-                            if (expiryDateInput.value && expiryDateInput.value < expiryDateInput.min) {
-                                expiryDateInput.value = '';
+                            // Same payload shape as the KYC "Verify GST" request.
+                            var formData = new FormData();
+                            formData.append('gst_number', gst);
+                            formData.append('business_name', businessName);
+                            if (file) {
+                                formData.append('gst_certificate_document', file);
+                            } else {
+                                formData.append('gst_certificate_document_path', storedPath);
                             }
 
-                            endYearSelect.appendChild(new Option('Select End Year', ''));
-                            for (var yearOffset = 1; yearOffset <= 5; yearOffset++) {
-                                var endYear = String(startYear + yearOffset);
-                                endYearSelect.appendChild(new Option(endYear, endYear));
+                            verifyCsbGstBtn.disabled = true;
+                            verifyCsbGstBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                            setCsbGstVerificationState(false, 'Verifying GST through Cashfree...', false);
+
+                            try {
+                                var response = await fetch(csbGstSection.dataset.verifyUrl, {
+                                    method: 'POST',
+                                    body: formData,
+                                    headers: {
+                                        'X-CSRF-TOKEN': form.querySelector('input[name="_token"]').value,
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'Accept': 'application/json'
+                                    }
+                                });
+                                var contentType = response.headers.get('content-type');
+                                var data = contentType && contentType.includes('application/json')
+                                    ? await response.json()
+                                    : await response.text().then(function (text) {
+                                        console.error('[CSB5] Non-JSON GST response:', text);
+                                        throw new Error('Server error (non-JSON response). Please try again.');
+                                    });
+
+                                if (!response.ok || !data.success) {
+                                    throw new Error(data.message || 'GST verification failed.');
+                                }
+
+                                // Success behaviour mirrors the KYC verify flow.
+                                csbGstVerified = true;
+                                var verifiedBusinessName = (data.business_name || businessName).trim();
+                                csbGstNumber.value = normalizedGst(data.gst_number || gst);
+                                csbGstBusinessName.value = verifiedBusinessName;
+
+                                if (data.address) {
+                                    var billingAddress = document.getElementById('billingAddress');
+                                    if (billingAddress) billingAddress.value = data.address;
+                                }
+
+                                setCsbGstVerificationState(true, data.message || 'GST number and Business Name verified successfully.', true);
+                                verifyCsbGstBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
+                                csbGstNumber.readOnly = true;
+                                csbGstBusinessName.readOnly = true;
+                            } catch (error) {
+                                console.error('[CSB5] GST verification error:', error);
+                                var message = error && error.message ? error.message : 'GST verification could not be completed.';
+                                setCsbGstVerificationState(false, message, false);
+                                alert(message);
+                                verifyCsbGstBtn.disabled = false;
+                                verifyCsbGstBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> VERIFY GST';
                             }
-                            endYearSelect.disabled = false;
-                            endYearSelect.value = savedEndYear && endYearSelect.querySelector('option[value="' + savedEndYear + '"]')
-                                ? savedEndYear
-                                : String(startYear + 1);
-                            combinedYearInput.value = String(startYear) + '-' + endYearSelect.value.slice(-2);
+                        });
+
+                        // --- Validation helpers ---
+                        function showCsb5ValidationError(message, field) {
+                            alert(message);
+                            if (field) {
+                                if (field.type !== 'file') field.focus();
+                                var container = field.type === 'file' ? field.closest('.doc-item') : field.closest('.input-wrapper');
+                                if (container) container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                            return false;
                         }
 
-                        startYearSelect.addEventListener('change', function () {
-                            updateEndYear(false);
+                        function validateCsb5File(targetForm, name, label, allowedExtensions, maxMb, required) {
+                            if (required === undefined) required = true;
+                            var input = targetForm.querySelector('[name="' + name + '"]');
+                            var fileItem = input && input.files ? input.files[0] : null;
+                            if (!fileItem) return required ? showCsb5ValidationError('Please upload ' + label + '.', input) : true;
+
+                            var extension = fileItem.name.indexOf('.') > -1 ? fileItem.name.split('.').pop().toLowerCase() : '';
+                            if (allowedExtensions.indexOf(extension) === -1) {
+                                return showCsb5ValidationError(label + ' must be a ' + allowedExtensions.join(', ').toUpperCase() + ' file.', input);
+                            }
+                            var imageOnly = allowedExtensions.every(function (ext) { return ['jpg', 'jpeg', 'png'].indexOf(ext) > -1; });
+                            if (imageOnly && ['image/jpeg', 'image/png'].indexOf(fileItem.type) === -1) {
+                                return showCsb5ValidationError(label + ' must be a valid JPG, JPEG, or PNG image.', input);
+                            }
+                            if (fileItem.size > maxMb * 1024 * 1024) {
+                                return showCsb5ValidationError(label + ' must not exceed ' + maxMb + ' MB.', input);
+                            }
+                            return true;
+                        }
+
+                        function validateCsb5Form(targetForm) {
+                            function fieldValue(name) {
+                                var el = targetForm.querySelector('[name="' + name + '"]');
+                                return el ? el.value.trim() : '';
+                            }
+                            var standardDocuments = ['pdf', 'jpg', 'jpeg', 'png'];
+
+                            if (!/^\d{14}$/.test(fieldValue('ad_code'))) return showCsb5ValidationError('AD Code must be exactly 14 numeric digits.', targetForm.querySelector('[name="ad_code"]'));
+                            if (!/^[A-Z0-9]{10}$/.test(fieldValue('iec_number').toUpperCase())) return showCsb5ValidationError('IEC Number must be exactly 10 letters or digits.', targetForm.querySelector('[name="iec_number"]'));
+
+                            var gstEnabled = !!(document.getElementById('gstType') || {}).checked;
+                            var lutEnabled = !!(document.getElementById('lutType') || {}).checked;
+                            if (!gstEnabled && !lutEnabled) return showCsb5ValidationError('Please select GST, LUT, or both before continuing.', document.getElementById('gstType'));
+
+                            if (gstEnabled) {
+                                var gstCertInput = targetForm.querySelector('[name="gst_certificate_document"]');
+                                var hasGstCertFile = Boolean(gstCertInput && gstCertInput.files && gstCertInput.files[0]);
+                                var storedGstCertPath = ((document.getElementById('csbGstCertPath') || {}).value || '').trim();
+                                if (!/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(normalizedGst(fieldValue('gst_certificate_number')))) {
+                                    return showCsb5ValidationError('Enter a valid 15-character GSTIN.', targetForm.querySelector('[name="gst_certificate_number"]'));
+                                }
+                                if (!fieldValue('gst_business_name')) return showCsb5ValidationError('Please enter the registered Business Name.', targetForm.querySelector('[name="gst_business_name"]'));
+                                if (!hasGstCertFile && !storedGstCertPath) return showCsb5ValidationError('Please upload the GST Certificate PDF.', gstCertInput);
+                                if (hasGstCertFile && !validateCsb5File(targetForm, 'gst_certificate_document', 'the GST Certificate', ['pdf'], 5)) return false;
+                                if (!csbGstVerified) return showCsb5ValidationError('Verify the GSTIN and Business Name through Cashfree before continuing.', verifyCsbGstBtn);
+                            }
+
+                            if (!validateCsb5File(targetForm, 'ad_code_document', 'the AD Code Document', standardDocuments, 5)) return false;
+                            if (!validateCsb5File(targetForm, 'iec_document', 'the IEC Document', standardDocuments, 5)) return false;
+                            if (!/^\d{9,18}$/.test(fieldValue('bank_account_number'))) return showCsb5ValidationError('Bank Account Number must contain 9 to 18 digits.', targetForm.querySelector('[name="bank_account_number"]'));
+                            if (['private', 'government'].indexOf(fieldValue('bank_type')) === -1) return showCsb5ValidationError('Please select a valid Bank Type.', targetForm.querySelector('[name="bank_type"]'));
+
+                            if (lutEnabled) {
+                                if (!fieldValue('lut_number')) return showCsb5ValidationError('Please enter the LUT Number.', targetForm.querySelector('[name="lut_number"]'));
+                                syncLutBondYear();
+                                var startYear = parseInt(fieldValue('lut_bond_start_year'), 10);
+                                var endYear = parseInt(fieldValue('lut_bond_end_year'), 10);
+                                if (!startYear) return showCsb5ValidationError('Please select the LUT Bond Start Year.', targetForm.querySelector('[name="lut_bond_start_year"]'));
+                                if (!endYear) return showCsb5ValidationError('Please select the LUT Bond End Year.', targetForm.querySelector('[name="lut_bond_end_year"]'));
+                                if (endYear < startYear + 1 || endYear > startYear + 5) return showCsb5ValidationError('LUT Bond End Year must be within five years after the Start Year.', targetForm.querySelector('[name="lut_bond_end_year"]'));
+                                if (!fieldValue('lut_expiry_date')) return showCsb5ValidationError('Please select the LUT Expiry Date.', targetForm.querySelector('[name="lut_expiry_date"]'));
+                                if (fieldValue('lut_expiry_date') < (startYear + 1) + '-01-01') return showCsb5ValidationError('LUT Expiry Date must be on or after ' + (startYear + 1) + '-01-01.', targetForm.querySelector('[name="lut_expiry_date"]'));
+                                if (!validateCsb5File(targetForm, 'lut_document', 'the LUT Document', ['pdf'], 5)) return false;
+                            }
+
+                            if (fieldValue('billing_address').length < 10 || fieldValue('billing_address').length > 1000) return showCsb5ValidationError('Billing Address must contain 10 to 1000 characters.', targetForm.querySelector('[name="billing_address"]'));
+                            if (!/^[6-9]\d{9}$/.test(fieldValue('billing_contact'))) return showCsb5ValidationError('Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.', targetForm.querySelector('[name="billing_contact"]'));
+                            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fieldValue('billing_email'))) return showCsb5ValidationError('Please enter a valid Billing Email address.', targetForm.querySelector('[name="billing_email"]'));
+                            if (!validateCsb5File(targetForm, 'merchant_agreement', 'the signed Merchant Agreement', ['pdf'], 10)) return false;
+                            if (!targetForm.querySelector('[name="terms_accepted"]').checked) return showCsb5ValidationError('Please accept the declaration and terms before continuing.', targetForm.querySelector('[name="terms_accepted"]'));
+                            return true;
+                        }
+
+                        // --- Form Submit ---
+                        form.addEventListener('submit', function (e) {
+                            e.preventDefault();
+                            console.log('[CSB5] Form submit triggered');
+                            var btn = form.querySelector('.btn-gradient[type="submit"]') || form.querySelector('.btn-gradient');
+                            if (!validateCsb5Form(form)) return;
+
+                            var formData = new FormData(form);
+                            formData.set('is_csb_v', '1');
+                            formData.set('is_gst', document.getElementById('gstType').checked ? '1' : '0');
+                            formData.set('is_lut', document.getElementById('lutType').checked ? '1' : '0');
+                            formData.set('lut_verified', '0');
+
+                            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> SUBMITTING...';
+                            btn.style.opacity = '0.8';
+                            btn.style.pointerEvents = 'none';
+
+                            fetch(form.action, {
+                                method: 'POST',
+                                body: formData,
+                                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+                            })
+                                .then(function (response) {
+                                    var contentType = response.headers.get('content-type');
+                                    return contentType && contentType.includes('application/json')
+                                        ? response.json()
+                                        : response.text().then(function (text) {
+                                            console.error('[CSB5] Non-JSON submit response:', text);
+                                            return { success: false, message: 'Server error (non-JSON response). Please try again.' };
+                                        });
+                                })
+                                .then(function (data) {
+                                    if (data.success) {
+                                        btn.innerHTML = 'SUCCESS';
+                                        btn.style.background = '#10b981';
+                                        btn.style.opacity = '1';
+                                        setTimeout(function () { window.location.href = data.redirect; }, 1000);
+                                    } else {
+                                        btn.innerHTML = 'CONTINUE';
+                                        btn.style.opacity = '1';
+                                        btn.style.pointerEvents = 'auto';
+                                        if (data.errors) {
+                                            var errorMessage = 'Please fix the following errors:\n';
+                                            Object.keys(data.errors).forEach(function (key) {
+                                                errorMessage += '- ' + data.errors[key][0] + '\n';
+                                            });
+                                            alert(errorMessage);
+                                        } else alert(data.message || 'An error occurred. Please try again.');
+                                    }
+                                })
+                                .catch(function (error) {
+                                    console.error('[CSB5] Submit error:', error);
+                                    btn.innerHTML = 'CONTINUE';
+                                    btn.style.opacity = '1';
+                                    btn.style.pointerEvents = 'auto';
+                                    alert('An error occurred. Please try again.');
+                                });
                         });
-                        endYearSelect.addEventListener('change', function () {
-                            combinedYearInput.value = startYearSelect.value && endYearSelect.value
-                                ? startYearSelect.value + '-' + endYearSelect.value.slice(-2)
-                                : '';
-                        });
-                        updateEndYear(true);
-                    }());
+
+                        console.log('[CSB5] Form initialized successfully');
+                    })();
                 </script>
-                <script src="{{ asset('js/csb5-form.js') }}?v={{ filemtime(public_path('js/csb5-form.js')) ?: 1 }}"></script>
 
 
             </div>

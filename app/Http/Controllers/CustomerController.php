@@ -577,7 +577,8 @@ class CustomerController extends Controller
 
         // Calculate totals for stat cards
         $totalBooked = array_sum($statusCounts);
-        $pickupPending = $statusCounts['assigned_for_pickup'] ?? 0;
+        // "In-Transit to Hub" groups pickup-assigned and picked-up shipments.
+        $pickupPending = ($statusCounts['assigned_for_pickup'] ?? 0) + ($statusCounts['received'] ?? 0) + ($statusCounts['confirm_pickup'] ?? 0);
         $outForDelivery = ($statusCounts['dispatched'] ?? 0) + ($statusCounts['ready_to_dispatch'] ?? 0);
         $delivered = $statusCounts['delivered'] ?? 0;
 
@@ -595,7 +596,7 @@ class CustomerController extends Controller
             ->pluck('count', 'status')
             ->toArray();
         $thisMonthBooked = array_sum($thisMonthStatusCounts);
-        $thisMonthPickupPending = $thisMonthStatusCounts['assigned_for_pickup'] ?? 0;
+        $thisMonthPickupPending = ($thisMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($thisMonthStatusCounts['received'] ?? 0) + ($thisMonthStatusCounts['confirm_pickup'] ?? 0);
         $thisMonthOutForDelivery = ($thisMonthStatusCounts['dispatched'] ?? 0) + ($thisMonthStatusCounts['ready_to_dispatch'] ?? 0);
         $thisMonthDelivered = $thisMonthStatusCounts['delivered'] ?? 0;
 
@@ -607,7 +608,7 @@ class CustomerController extends Controller
             ->pluck('count', 'status')
             ->toArray();
         $lastMonthBooked = array_sum($lastMonthStatusCounts);
-        $lastMonthPickupPending = $lastMonthStatusCounts['assigned_for_pickup'] ?? 0;
+        $lastMonthPickupPending = ($lastMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($lastMonthStatusCounts['received'] ?? 0) + ($lastMonthStatusCounts['confirm_pickup'] ?? 0);
         $lastMonthOutForDelivery = ($lastMonthStatusCounts['dispatched'] ?? 0) + ($lastMonthStatusCounts['ready_to_dispatch'] ?? 0);
         $lastMonthDelivered = $lastMonthStatusCounts['delivered'] ?? 0;
 
@@ -619,7 +620,7 @@ class CustomerController extends Controller
 
         // Recent shipments for the orders table (latest 20)
         $recentShipments = ShipperInfo::where('customer_id', $customerId)
-            ->with(['consigneeInfo', 'packageDimensions'])
+            ->with(['consigneeInfo', 'packageDimensions', 'serviceRate.service'])
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get();
@@ -644,6 +645,100 @@ class CustomerController extends Controller
         $kycDraft = KycDraft::where('customer_id', $customerId)
             ->where('kyc_type', $kycType)
             ->first();
+
+        // The draft row and its files are cleared right after submission, so
+        // when a customer returns to a rejected (or otherwise non-approved)
+        // application the wizard would start empty and previously uploaded
+        // documents like the signature would disappear. Rebuild the wizard
+        // state from the stored KYC record in that case.
+        if (!$kycDraft) {
+            // Use the latest submitted KYC record for resume data. The signature
+            // belongs to the submitted merchant agreement and must remain
+            // available after logout/login, including after an approval/rejection.
+            $storedKyc = KycDetail::where('customer_id', $customerId)
+                ->where('kyc_type', $kycType)
+                ->latest('id')
+                ->first();
+
+            if ($storedKyc) {
+                $fallbackFormData = array_filter([
+                    'gst_number' => $storedKyc->gst_number,
+                    'gst_verified' => (bool) $storedKyc->gst_verified,
+                    'aadhar_number' => $storedKyc->aadhar_number,
+                    'aadhar_verified' => (bool) $storedKyc->aadhar_verified,
+                    'pan_number' => $storedKyc->pan_number,
+                    'pan_holder_name' => $storedKyc->pan_holder_name,
+                    'pan_dob' => $storedKyc->pan_dob?->format('Y-m-d'),
+                    'pan_verified' => (bool) $storedKyc->pan_verified,
+                    'organization_name' => $storedKyc->organization_name,
+                    'authorized_signatory' => $storedKyc->authorized_signatory,
+                    'billing_address' => $storedKyc->billing_address,
+                    'billing_gst' => $storedKyc->billing_gst,
+                    'billing_contact' => $storedKyc->billing_contact,
+                    'billing_email' => $storedKyc->billing_email,
+                    'terms_accepted' => (bool) $storedKyc->terms_accepted,
+                    'gst_certificate_document' => $storedKyc->gst_certificate_document,
+                    'aadhar_front_document' => $storedKyc->aadhar_front_document,
+                    'aadhar_back_document' => $storedKyc->aadhar_back_document,
+                    'pan_document' => $storedKyc->pan_document,
+                    'signature_document' => $storedKyc->signature_document ?: $storedKyc->signature,
+                ], fn ($value) => $value !== null && $value !== '');
+
+                if ($kycType === 'business') {
+                    $csbForm = CsbForm::where('customer_id', $customerId)->latest('id')->first();
+
+                    if ($csbForm) {
+                        $fallbackFormData = array_merge($fallbackFormData, array_filter([
+                            'is_csb_v' => (bool) $csbForm->is_csb_v,
+                            'is_gst' => (bool) $csbForm->is_gst,
+                            'is_lut' => (bool) $csbForm->is_lut,
+                            'gst_certificate_number' => $csbForm->gst_certificate_number,
+                            'iec_number' => $csbForm->iec_number,
+                            'ad_code' => $csbForm->ad_code,
+                            'lut_number' => $csbForm->lut_number,
+                            'lut_expiry_date' => $csbForm->lut_expiry_date?->format('Y-m-d'),
+                            'lut_bond_year' => $csbForm->lut_bond_year,
+                            'bank_account_number' => $csbForm->bank_account_number,
+                            'bank_type' => $csbForm->bank_type,
+                            'gst_certificate_document' => $csbForm->gst_certificate_document,
+                            'aadhar_front_document' => $csbForm->aadhar_document,
+                            'iec_document' => $csbForm->iec_document,
+                            'ad_code_document' => $csbForm->ad_code_document,
+                            'lut_document' => $csbForm->lut_document,
+                            'signature_document' => $csbForm->signature_document,
+                        ], fn ($value) => $value !== null && $value !== ''));
+                    }
+                }
+
+                $kycDraft = new KycDraft([
+                    'customer_id' => $customerId,
+                    'kyc_type' => $kycType,
+                    'current_step' => 1,
+                ]);
+                $kycDraft->form_data = $fallbackFormData;
+            }
+        }
+
+        // Always hydrate the resumed draft with the persisted signature. A draft
+        // may exist after rejection while its signature was saved on KycDetail
+        // or CsbForm, so relying only on draft form_data loses it on login.
+        $persistedKyc = KycDetail::where('customer_id', $customerId)
+            ->where('kyc_type', $kycType)
+            ->latest('id')
+            ->first(['signature_document', 'signature']);
+        $persistedSignature = $persistedKyc?->signature_document ?: $persistedKyc?->signature;
+        if (!$persistedSignature) {
+            $persistedSignature = CsbForm::where('customer_id', $customerId)
+                ->latest('id')
+                ->value('signature_document');
+        }
+        if ($persistedSignature && $kycDraft) {
+            $draftFormData = is_array($kycDraft->form_data) ? $kycDraft->form_data : [];
+            if (empty($draftFormData['signature_document'])) {
+                $draftFormData['signature_document'] = $persistedSignature;
+                $kycDraft->form_data = $draftFormData;
+            }
+        }
 
         return response()
             ->view('customer.dashboard', compact(
@@ -1018,6 +1113,7 @@ class CustomerController extends Controller
         }
 
         $customer = auth()->guard('customer')->user();
+        $csbForm = $customer->csbForm;
         // Only enabled services (status = 1) are offered to the customer.
         $courierServices = \App\Models\CourierService::where('status', 1)->get();
         $zones = \App\Models\Zone::orderBy('zone_name')->get();
@@ -1030,6 +1126,7 @@ class CustomerController extends Controller
 
         return view('customer.create-shipment', compact(
             'customer',
+            'csbForm',
             'courierServices',
             'zones',
             'destinations',
@@ -1129,10 +1226,32 @@ class CustomerController extends Controller
 
         $customer = auth()->guard('customer')->user();
 
-        // Fetch existing CSB form (if any) to pre-fill the form
+        // Fetch existing CSB form and KYC records so verified GST can be reused safely.
         $csbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();
+        $personalKyc = KycDetail::where('customer_id', $customer->id)
+            ->where('kyc_type', 'personal')
+            ->latest('id')
+            ->first();
+        $businessKyc = KycDetail::where('customer_id', $customer->id)
+            ->where('kyc_type', 'business')
+            ->latest('id')
+            ->first();
 
-        return view('customer.csb5-form', compact('customer', 'csbForm'));
+        $personalGstVerified = (bool) $personalKyc?->gst_verified
+            && !empty($personalKyc?->gst_number)
+            && !empty($personalKyc?->organization_name);
+        // CSB-V may reuse GST only when it was verified in personal KYC.
+        // A business KYC GST must not hide the fresh CSB-V verification flow
+        // when personal KYC has no GST.
+        $verifiedGstSource = $personalGstVerified ? $personalKyc : null;
+        $csbGstRequired = !$verifiedGstSource;
+
+        return view('customer.csb5-form', compact(
+            'customer',
+            'csbForm',
+            'verifiedGstSource',
+            'csbGstRequired'
+        ));
     }
 
     public function storeCsb5Form(Request $request)
@@ -1150,16 +1269,38 @@ class CustomerController extends Controller
             // logout / login does not require re-verifying documents.
             \App\Support\KycVerificationState::restore($customer);
 
+            $request->merge([
+                'is_gst' => $request->boolean('is_gst'),
+                'is_lut' => $request->boolean('is_lut'),
+            ]);
+            if (!$request->boolean('is_gst') && !$request->boolean('is_lut')) {
+                throw ValidationException::withMessages([
+                    'tax_type' => 'Select GST, LUT, or both before submitting the CSB-V form.',
+                ]);
+            }
+
             $isStandaloneCsb5 = $request->routeIs('customer.csb5-form.standalone.store');
             $existingCsbForm = CsbForm::where('customer_id', $customer->id)->latest()->first();
+            $existingPersonalKyc = KycDetail::where('customer_id', $customer->id)
+                ->where('kyc_type', 'personal')
+                ->latest('id')
+                ->first();
             $existingBusinessKyc = KycDetail::where('customer_id', $customer->id)
                 ->where('kyc_type', 'business')
-                ->latest()
+                ->latest('id')
                 ->first();
 
-            $canReuseVerifiedGst = (bool) $existingBusinessKyc?->gst_verified
-                && !empty($existingBusinessKyc?->gst_number)
-                && !empty($existingBusinessKyc?->organization_name);
+            $personalGstVerified = (bool) $existingPersonalKyc?->gst_verified
+                && !empty($existingPersonalKyc?->gst_number)
+                && !empty($existingPersonalKyc?->organization_name);
+            // The Cashfree GST verification API is only ever called from the
+            // explicit "VERIFY GST" button on the CSB-V page. Previously
+            // verified values (KYC or this page) are accepted through the
+            // session check below, but any changed GSTIN must be verified by
+            // clicking VERIFY again.
+            $verifiedGstSource = $personalGstVerified ? $existingPersonalKyc : null;
+            $canReuseVerifiedGst = (bool) $verifiedGstSource;
+            $gstRequiredForCsb5 = $isStandaloneCsb5 && $request->boolean('is_gst');
             $canReuseVerifiedPan = (bool) $existingBusinessKyc?->pan_verified
                 && !empty($existingBusinessKyc?->pan_number)
                 && !empty($existingBusinessKyc?->pan_holder_name)
@@ -1179,8 +1320,8 @@ class CustomerController extends Controller
 
             if ($reusedGst) {
                 $request->merge([
-                    'gst_certificate_number' => $existingBusinessKyc->gst_number,
-                    'gst_business_name' => $existingBusinessKyc->organization_name,
+                    'gst_certificate_number' => $verifiedGstSource->gst_number,
+                    'gst_business_name' => $verifiedGstSource->organization_name,
                 ]);
             }
 
@@ -1211,21 +1352,22 @@ class CustomerController extends Controller
             $validated = $request->validate([
                 'is_csb_v' => 'nullable|boolean',
                 'gst_business_name' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 || $gstRequiredForCsb5),
                     'nullable', 'string', 'max:255'
                 ],
-                'is_gst' => 'nullable|boolean',
-                'is_lut' => 'nullable|boolean',
+                'is_gst' => 'required|boolean',
+                'is_lut' => 'required|boolean',
                 'gst_certificate_number' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
+                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 || $gstRequiredForCsb5),
                     'nullable', 'string', 'size:15'
                 ],
                 'gst_certificate_document' => [
                     \Illuminate\Validation\Rule::requiredIf(
-                        !$isStandaloneCsb5
+                        (!$isStandaloneCsb5 || $gstRequiredForCsb5)
                         && !$existingCsbForm?->gst_certificate_document
                         && !$existingCsbForm?->gst_document
                         && !$existingBusinessKyc?->gst_certificate_document
+                        && !$existingPersonalKyc?->gst_certificate_document
                         && !$request->filled('gst_certificate_document_path')
                         && !$storedDraftPath('gst_certificate_document')
                     ),
@@ -1294,6 +1436,7 @@ class CustomerController extends Controller
                     'nullable', 'file', 'mimes:pdf', 'max:5120'
                 ],
                 'lut_document_path' => ['nullable', 'string'],
+                'lut_number' => ['required_if:is_lut,1', 'nullable', 'string', 'max:100'],
                 'lut_expiry_date' => 'required_if:is_lut,1|nullable|date|after_or_equal:today',
                 'lut_bond_year' => ['required_if:is_lut,1', 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
                 'billing_address' => 'required|string|min:10|max:1000',
@@ -1321,6 +1464,7 @@ class CustomerController extends Controller
                 'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
                 'lut_expiry_date.after_or_equal' => 'The LUT Expiry Date cannot be in the past.',
                 'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
+                'lut_number.required_if' => 'The LUT Number is required when LUT is selected.',
                 'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
                 'terms_accepted.accepted' => 'You must accept the declaration and terms.',
             ]);
@@ -1334,18 +1478,17 @@ class CustomerController extends Controller
             $gstBusinessName = trim((string) ($validated['gst_business_name'] ?? ''));
             $hasGstIdentity = $gstNumber !== null && $gstBusinessName !== '';
 
-            $matchesVerifiedGst = $hasGstIdentity
-                && $canReuseVerifiedGst
-                && hash_equals(
-                    strtoupper(preg_replace('/\s+/', '', (string) $existingBusinessKyc->gst_number)),
-                    $gstNumber
-                )
-                && strcasecmp(
-                    trim((string) $existingBusinessKyc->organization_name),
-                    $gstBusinessName
-                ) === 0;
+            if ($gstRequiredForCsb5 && !$hasGstIdentity) {
+                throw ValidationException::withMessages([
+                    'gst_certificate_number' => 'GSTIN and registered business name are required when GST is selected.',
+                ]);
+            }
 
-            if ($hasGstIdentity && !$matchesVerifiedGst && (
+            // The submitted GSTIN is accepted only when the exact same values
+            // were verified through Cashfree via a VERIFY click (session state
+            // persisted by KycVerificationState). Any changed GSTIN or Business
+            // Name forces the customer to click VERIFY GST again.
+            if ($hasGstIdentity && (
                 session('kyc_gst_number') !== $gstNumber
                 || !session('kyc_gst_cashfree_verified')
                 || strcasecmp(
@@ -1555,15 +1698,18 @@ class CustomerController extends Controller
                 'is_lut' => $validated['is_lut'],
                 'gst_certificate_number' => $gstNumber
                     ?? ($existingCsbForm->gst_certificate_number ?? null)
-                    ?? ($existingBusinessKyc->gst_number ?? null),
+                    ?? ($verifiedGstSource?->gst_number),
                 'gst_certificate_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_certificate_document ?? null)
                     ?? ($existingCsbForm->gst_document ?? null)
-                    ?? ($existingBusinessKyc->gst_certificate_document ?? null),
+                    ?? ($existingBusinessKyc->gst_certificate_document ?? null)
+                    ?? ($existingPersonalKyc->gst_certificate_document ?? null),
                 'gst_document' => $gstDocumentPath
                     ?? ($existingCsbForm->gst_document ?? null)
                     ?? ($existingCsbForm->gst_certificate_document ?? null)
-                    ?? ($existingBusinessKyc->gst_certificate_document ?? null),
+                    ?? ($existingBusinessKyc->gst_certificate_document ?? null)
+                    ?? ($existingPersonalKyc->gst_certificate_document ?? null),
+                'lut_number' => $validated['is_lut'] ? ($validated['lut_number'] ?? null) : null,
                 'lut_verified' => false,
                 'ad_code' => $validated['ad_code'],
                 'ad_code_document' => $adCodeDocumentPath ?? ($existingCsbForm->ad_code_document ?? null),
@@ -1571,9 +1717,11 @@ class CustomerController extends Controller
                 'iec_document' => $iecDocumentPath ?? ($existingCsbForm->iec_document ?? null),
                 'bank_account_number' => $validated['bank_account_number'],
                 'bank_type' => $validated['bank_type'],
-                'lut_document' => $lutDocumentPath ?? ($existingCsbForm->lut_document ?? null),
-                'lut_expiry_date' => $validated['lut_expiry_date'] ?? null,
-                'lut_bond_year' => $validated['lut_bond_year'] ?? null,
+                'lut_document' => $validated['is_lut']
+                    ? ($lutDocumentPath ?? ($existingCsbForm->lut_document ?? null))
+                    : null,
+                'lut_expiry_date' => $validated['is_lut'] ? ($validated['lut_expiry_date'] ?? null) : null,
+                'lut_bond_year' => $validated['is_lut'] ? ($validated['lut_bond_year'] ?? null) : null,
                 'aadhar_number' => $aadhar,
                 'aadhar_verified' => $aadharVerified,
                 'aadhar_document' => $aadharFrontPath
@@ -1601,7 +1749,7 @@ class CustomerController extends Controller
             $businessKycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'business',
-                'gst_number' => $gstNumber ?? ($existingBusinessKyc->gst_number ?? null),
+                'gst_number' => $gstNumber ?? ($verifiedGstSource?->gst_number),
                 'gst_verified' => $hasGstIdentity
                     ? true
                     : (bool) ($existingBusinessKyc->gst_verified ?? false),
@@ -2059,6 +2207,7 @@ class CustomerController extends Controller
                 // CSB Information
                 'ecommerce' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
                 'scheme' => 'required_if:origin_type,CSB V|nullable|in:Yes,No',
+                'csb_tax_type' => 'nullable|in:gst,lut',
                 'bond_ut_igst' => 'nullable|in:Bond UT,IGST',
                 'lut_number' => 'nullable|string|max:100',
                 'iec_code' => 'nullable|string|max:50',
@@ -2203,6 +2352,43 @@ class CustomerController extends Controller
                         ]
                     ], 422);
                 }
+            }
+
+            // GST/LUT selection for CSB V is controlled by the customer's approved
+            // CSB profile. Do not trust browser-submitted tax details.
+            if ($validatedData['origin_type'] === 'CSB V') {
+                $customerCsbForm = $customer->csbForm;
+                $hasGst = (bool) ($customerCsbForm?->is_gst);
+                $hasLut = (bool) ($customerCsbForm?->is_lut);
+
+                if (!$hasGst && !$hasLut) {
+                    throw ValidationException::withMessages([
+                        'csb_tax_type' => 'GST or LUT information is not available in your CSB profile.',
+                    ]);
+                }
+
+                // A single available option is authoritative; only use the submitted
+                // radio selection when both GST and LUT are enabled in the profile.
+                $selectedTaxType = $hasGst && !$hasLut
+                    ? 'gst'
+                    : (!$hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
+
+                if ($hasGst && $hasLut && !in_array($selectedTaxType, ['gst', 'lut'], true)) {
+                    throw ValidationException::withMessages([
+                        'csb_tax_type' => 'Please select GST or LUT for this shipment.',
+                    ]);
+                }
+                $validatedData['csb_tax_type'] = $selectedTaxType;
+                $validatedData['bond_ut_igst'] = $selectedTaxType === 'lut' ? 'Bond UT' : 'IGST';
+                $validatedData['lut_number'] = $selectedTaxType === 'lut'
+                    ? $customerCsbForm->lut_number
+                    : null;
+                $validatedData['gst_number'] = $selectedTaxType === 'gst'
+                    ? ($customerCsbForm->gst_certificate_number ?: $customerCsbForm->billing_gst)
+                    : null;
+                $validatedData['iec_code'] = $customerCsbForm->iec_number;
+                $validatedData['ad_code'] = $customerCsbForm->ad_code;
+                $validatedData['bank_account_number'] = $customerCsbForm->bank_account_number;
             }
 
             // Server-side validation: enforce max invoice total based on origin_type.
@@ -4925,6 +5111,13 @@ class CustomerController extends Controller
             ->when($status && $status !== 'all', function ($q) use ($status) {
                 if ($status === 'cancelled') {
                     $q->where('status', 'cancelled');
+                } elseif ($status === 'assigned_for_pickup' || $status === 'confirm_pickup') {
+                    // Pickup-assigned and pickup-confirmed shipments are both
+                    // shown together under "In-Transit to Hub". Hub-received
+                    // shipments have their own dedicated "Received" tab.
+                    $q->whereHas('shipperInfo', function ($shipperQuery) {
+                        $shipperQuery->whereIn('status', ['assigned_for_pickup', 'confirm_pickup']);
+                    });
                 } else {
                     $q->whereHas('shipperInfo', function ($shipperQuery) use ($status) {
                         $shipperQuery->where('status', $status);
@@ -4957,7 +5150,7 @@ class CustomerController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        $statusCounts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'received' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
+        $statusCounts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'assigned_for_pickup' => 0, 'received' => 0, 'confirm_pickup' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
         $countInvoices = ShipmentInvoice::whereHas('shipperInfo', function ($q) use ($customerId) {
             $q->where('customer_id', $customerId);
         })->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
@@ -4968,6 +5161,11 @@ class CustomerController extends Controller
                 $statusCounts[$countStatus]++;
             }
         }
+
+        // "In-Transit to Hub" groups pickup-assigned and pickup-confirmed shipments;
+        // "Received" (hub arrival) keeps its own count and tab.
+        $statusCounts['assigned_for_pickup'] += ($statusCounts['confirm_pickup'] ?? 0);
+        unset($statusCounts['confirm_pickup']);
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
         $shipmentDetails = $invoices->getCollection()->mapWithKeys(function($invoice) {
@@ -5001,6 +5199,9 @@ class CustomerController extends Controller
                     'invoice_currency' => $invoice->invoice_currency,
                     'incoterms' => $invoice->incoterms,
                     'reference_number' => $invoice->reference_number,
+                    'service_code' => ($shipper && $shipper->serviceRate && $shipper->serviceRate->service)
+                        ? $shipper->serviceRate->service->service_code
+                        : null,
                     'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
                     'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
                     'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? '')) : null,

@@ -285,8 +285,8 @@
                                             @foreach($kycDetails as $key => $kyc)
                                             <tr>
                                                 <td>{{ $key + 1 }}</td>
-                                                <td>
-                                                    <strong>{{ $kyc->customer->first_name ?? '' }} {{ $kyc->customer->last_name ?? '' }}</strong>
+                                                <td class="customer-name-cell">
+                                                    <strong>{{ trim(($kyc->customer->first_name ?? '') . ' ' . ($kyc->customer->last_name ?? '')) ?: ($kyc->customer->name ?? 'Customer') }}</strong>
                                                     <div class="small">
                                                         <a href="mailto:{{ $kyc->customer->email ?? '' }}" class="text-decoration-none">{{ $kyc->customer->email ?? '—' }}</a>
                                                     </div>
@@ -515,7 +515,7 @@
                 e.preventDefault();
                 rejectFormToSubmit = this;
                 $('#rejectRemarkInput').val('');
-                $('#rk-customer-name').text($(this).closest('tr').find('.org-cell').text().trim() || 'Customer');
+                $('#rk-customer-name').text($(this).closest('tr').find('.customer-name-cell strong').text().trim() || 'Customer');
                 $('#rejectKycModal').modal('show');
             });
 

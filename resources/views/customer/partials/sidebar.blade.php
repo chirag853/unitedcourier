@@ -67,7 +67,7 @@
 
                                 <li class="submenu">
                                     <a href="javascript:void(0);" class="{{ request()->routeIs('customer.exporter-customers*', 'customer.create-shipment*', 'customer.bulk-upload*', 'customer.view-all-shipments') ? 'active subdrop' : '' }}">
-                                        <i class="ti ti-dashboard"></i><span>Customer</span><span
+                                        <i class="ti ti-dashboard"></i><span>Orders</span><span
                                             class="menu-arrow"></span>
                                     </a>
                                     <ul>

@@ -2210,16 +2210,22 @@
                             return '—';
                         };
                         $previewDocuments = [
-                            'GST Certificate' => $docUrl($kyc?->gst_certificate_document, $kyc?->gst_document, $alt?->gst_certificate_document, $alt?->gst_document),
-                            'PAN Card' => $docUrl($kyc?->pan_document, $alt?->pan_document),
-                            'Aadhaar Front' => $docUrl($kyc?->aadhar_front_document, $kyc?->aadhar_document, $alt?->aadhar_front_document, $alt?->aadhar_document),
-                            'Aadhaar Back' => $docUrl($kyc?->aadhar_back_document, $alt?->aadhar_back_document),
-                            'IEC Certificate' => $docUrl($kyc?->iec_document, $alt?->iec_document),
-                            'AD Code Document' => $docUrl($kyc?->ad_code_document, $alt?->ad_code_document),
-                            'LUT Document' => $docUrl($kyc?->lut_document, $alt?->lut_document),
-                            'Signature' => $docUrl($kyc?->signature_document, $kyc?->signature, $alt?->signature_document, $alt?->signature),
-                            'Merchant Agreement' => $docUrl($kyc?->merchant_agreement, $alt?->merchant_agreement),
+                            'gst_certificate' => ['label' => 'GST Certificate', 'url' => $docUrl($kyc?->gst_certificate_document, $kyc?->gst_document, $alt?->gst_certificate_document, $alt?->gst_document)],
+                            'pan_card' => ['label' => 'PAN Card', 'url' => $docUrl($kyc?->pan_document, $alt?->pan_document)],
+                            'aadhar_front' => ['label' => 'Aadhaar Front', 'url' => $docUrl($kyc?->aadhar_front_document, $kyc?->aadhar_document, $alt?->aadhar_front_document, $alt?->aadhar_document)],
+                            'aadhar_back' => ['label' => 'Aadhaar Back', 'url' => $docUrl($kyc?->aadhar_back_document, $alt?->aadhar_back_document)],
+                            'iec_certificate' => ['label' => 'IEC Certificate', 'url' => $docUrl($kyc?->iec_document, $alt?->iec_document)],
+                            'ad_code_document' => ['label' => 'AD Code Document', 'url' => $docUrl($kyc?->ad_code_document, $alt?->ad_code_document)],
+                            'lut_document' => ['label' => 'LUT Document', 'url' => $docUrl($kyc?->lut_document, $alt?->lut_document)],
+                            'signature' => ['label' => 'Signature', 'url' => $docUrl($kyc?->signature_document, $kyc?->signature, $alt?->signature_document, $alt?->signature)],
+                            'merchant_agreement' => ['label' => 'Merchant Agreement', 'url' => $docUrl($kyc?->merchant_agreement, $alt?->merchant_agreement)],
                         ];
+                        $hasSignedMerchantAgreement = !empty($previewDocuments['signature']['url'])
+                            && !empty($previewDocuments['merchant_agreement']['url']);
+                        $selectedTaxTypes = array_filter([
+                            data_get($businessKyc, 'is_gst') ? 'GST' : null,
+                            data_get($businessKyc, 'is_lut') ? 'LUT' : null,
+                        ]);
                     @endphp
                     <div class="row g-3 mb-4">
                         <div class="col-md-6"><strong>Customer Code:</strong> {{ $customer->customer_code ?? '—' }}</div>
@@ -2231,18 +2237,30 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-md-6"><h6>Identity Details</h6><div class="small text-muted">GST: {{ $previewValue('gst_number') }}<br>Aadhaar: {{ $previewValue('aadhar_number') }}<br>PAN: {{ $previewValue('pan_number') }}<br>PAN Holder: {{ $previewValue('pan_holder_name') }}</div></div>
-                        <div class="col-md-6"><h6>Business Details</h6><div class="small text-muted">Organization: {{ $previewValue('organization_name') }}<br>IEC: {{ $previewValue('iec_number') }}<br>AD Code: {{ $previewValue('ad_code') }}<br>Bank: {{ $previewValue('bank_type') }} / {{ $previewValue('bank_account_number') }}</div></div>
+                        <div class="col-md-6"><h6>Business Details</h6><div class="small text-muted">Organization: {{ $previewValue('organization_name') }}<br>Tax Type: {{ $selectedTaxTypes ? implode(', ', $selectedTaxTypes) : '—' }}<br>LUT Number: {{ data_get($businessKyc, 'lut_number') ?: '—' }}<br>IEC: {{ $previewValue('iec_number') }}<br>AD Code: {{ $previewValue('ad_code') }}<br>Bank: {{ $previewValue('bank_type') }} / {{ $previewValue('bank_account_number') }}</div></div>
                         <div class="col-md-6"><h6>Billing Details</h6><div class="small text-muted">GST: {{ $previewValue('billing_gst') }}<br>Contact: {{ $previewValue('billing_contact') }}<br>Email: {{ $previewValue('billing_email') }}<br>Address: {{ $previewValue('billing_address') }}</div></div>
                         <div class="col-md-6"><h6>Agreement</h6><div class="small text-muted">Terms: {{ $previewValue('terms_accepted') === true || $previewValue('terms_accepted') === 1 ? 'Accepted' : ($previewValue('terms_accepted') === '—' ? '—' : 'Not Accepted') }}<br>Accepted At: {{ $previewValue('terms_accepted_at') }}<br>Agreement Accepted At: {{ $previewValue('merchant_agreement_accepted_at') }}</div></div>
                     </div>
                     <hr>
                     <h6>Documents</h6>
                     <div class="list-group mb-2">
-                        @foreach($previewDocuments as $label => $url)
-                            @if($url)
-                                <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap"><span><i class="ti ti-file me-1"></i>{{ $label }} <small class="text-muted">({{ $docName($url) }})</small></span><a class="btn btn-sm btn-outline-primary document-preview-link" href="{{ $url }}" data-doc-label="{{ $label }}"><i class="ti ti-eye"></i> View</a></div>
+                        @foreach($previewDocuments as $documentKey => $document)
+                            @if($document['url'])
+                                <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                    <span><i class="ti ti-file me-1"></i>{{ $document['label'] }} <small class="text-muted">({{ $docName($document['url']) }})</small></span>
+                                    <div class="d-flex gap-2">
+                                        <a class="btn btn-sm btn-outline-primary document-preview-link" href="{{ $document['url'] }}" data-doc-label="{{ $document['label'] }}"><i class="ti ti-eye"></i> View</a>
+                                        <a class="btn btn-sm btn-outline-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => $documentKey]) }}"><i class="ti ti-download me-1"></i>Download</a>
+                                    </div>
+                                </div>
                             @endif
                         @endforeach
+                        @if($hasSignedMerchantAgreement)
+                            <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                <span><i class="ti ti-file-type-pdf me-1 text-danger"></i>Merchant Agreement (Signed) <small class="text-muted">(generated PDF)</small></span>
+                                <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}"><i class="ti ti-download me-1"></i>Download</a>
+                            </div>
+                        @endif
                     </div>
                 </div>
                 <div class="modal-footer">

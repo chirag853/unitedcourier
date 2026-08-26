@@ -57,7 +57,7 @@ class AdminController extends Controller
 
         // In-transit shipments (any shipment that has left the draft/pending stage
         // and has not reached a terminal state)
-        $inTransitStatuses = ['assigned_for_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
+        $inTransitStatuses = ['assigned_for_pickup', 'confirm_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
         $inTransit = collect($inTransitStatuses)->sum(fn ($status) => $shipmentStatusCounts[$status] ?? 0);
 
         // Delivery success rate: delivered / (total - cancelled - disputed)
@@ -275,7 +275,7 @@ class AdminController extends Controller
             ->whereBetween('created_at', [$startDate, $endDate])
             ->sum('amount');
 
-        $inTransitStatuses = ['assigned_for_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
+        $inTransitStatuses = ['assigned_for_pickup', 'confirm_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
         $periodInTransit = collect($inTransitStatuses)->sum(fn ($status) => $shipmentStatusCounts[$status] ?? 0);
 
         $totalPeriodShipments = array_sum($shipmentStatusCounts);
@@ -353,7 +353,7 @@ class AdminController extends Controller
         $totalAssigned = array_sum($statusCounts);
         $completed = $statusCounts['delivered'] ?? 0;
         $pendingPickup = $statusCounts['assigned_for_pickup'] ?? 0;
-        $inProgressStatuses = ['received', 'ready_to_dispatch', 'dispatched'];
+        $inProgressStatuses = ['received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched'];
         $performedStatuses = array_merge($inProgressStatuses, ['delivered']);
         $inProgress = collect($inProgressStatuses)->sum(fn ($status) => $statusCounts[$status] ?? 0);
         $performed = collect($performedStatuses)->sum(fn ($status) => $statusCounts[$status] ?? 0);
@@ -428,23 +428,27 @@ class AdminController extends Controller
 
         $pendingStatuses = [
             'received',
+            'confirm_pickup',
             'ready_to_dispatch',
             'dispatched',
             'delivered',
             'cancelled',
             'disputed',
         ];
+        // Confirmed pickup rows remain in Process Pickup until the hub confirms receipt.
+        $processPickupStatuses = ['confirm_pickup'];
+        $completedStatuses = ['received', 'delivered'];
         $pendingCount = (clone $baseQuery)->whereNotIn('shipper_info.status', $pendingStatuses)->count();
-        $processPickupCount = (clone $baseQuery)->where('shipper_info.status', 'received')->count();
-        $completedCount = (clone $baseQuery)->where('shipper_info.status', 'delivered')->count();
+        $processPickupCount = (clone $baseQuery)->whereIn('shipper_info.status', $processPickupStatuses)->count();
+        $completedCount = (clone $baseQuery)->whereIn('shipper_info.status', $completedStatuses)->count();
         $historyCount = (clone $baseQuery)->count();
 
         if ($view === 'pending') {
             $baseQuery->whereNotIn('shipper_info.status', $pendingStatuses);
         } elseif ($view === 'process_pickup') {
-            $baseQuery->where('shipper_info.status', 'received');
+            $baseQuery->whereIn('shipper_info.status', $processPickupStatuses);
         } elseif ($view === 'completed') {
-            $baseQuery->where('shipper_info.status', 'delivered');
+            $baseQuery->whereIn('shipper_info.status', $completedStatuses);
         }
 
         $search = trim((string) $request->input('search', ''));
@@ -531,26 +535,96 @@ class AdminController extends Controller
             return response()->json(['success' => false, 'message' => 'This delivery is not assigned to you.'], 403);
         }
 
-        if (in_array($shipment->status, ['delivered', 'cancelled', 'disputed', 'received', 'ready_to_dispatch', 'dispatched'], true)) {
+        if (in_array($shipment->status, ['delivered', 'cancelled', 'disputed', 'received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched'], true)) {
             return response()->json(['success' => false, 'message' => 'This delivery is already in process or completed.'], 422);
         }
 
         DB::transaction(function () use ($shipment) {
             Tracking::create([
                 'awb_number' => $shipment->awb_number,
-                'status' => 'received',
+                'status' => 'confirm_pickup',
                 'title' => 'Pickup Confirmed - In Process',
                 'shipper_id' => $shipment->shipper_id,
                 'uwc_id' => $shipment->awb_number,
             ]);
 
             DB::table('shipper_info')->where('id', $shipment->shipper_id)->update([
-                'status' => 'received',
+                'status' => 'confirm_pickup',
                 'updated_at' => now(),
             ]);
         });
 
         return response()->json(['success' => true, 'message' => 'Pickup confirmed. Delivery moved to In Process.']);
+    }
+
+    /**
+     * Mark a picked-up shipment as received in the hub. The Complete Delivery
+     * view includes received shipments, while the No option remains non-destructive.
+     */
+    public function receivedInHub(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate(['shipment_id' => 'required|integer']);
+
+        $shipment = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->where('shipment_invoice.id', $request->integer('shipment_id'))
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->select(
+                'shipment_invoice.id',
+                'shipper_info.id as shipper_id',
+                'shipper_info.awb_number',
+                'shipper_info.status'
+            )
+            ->first();
+
+        if (!$shipment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This delivery is not assigned to you.',
+            ], 403);
+        }
+
+        if ($shipment->status === 'received') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipment is already in Complete Delivery.',
+            ]);
+        }
+
+        if ($shipment->status !== 'confirm_pickup') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only Process Pickup shipments can be received in hub.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($shipment) {
+            Tracking::create([
+                'awb_number' => $shipment->awb_number,
+                'status' => 'received',
+                'title' => 'Shipment Received in Hub',
+                'shipper_id' => $shipment->shipper_id,
+                'uwc_id' => $shipment->awb_number,
+            ]);
+
+            DB::table('shipper_info')
+                ->where('id', $shipment->shipper_id)
+                ->where('status', 'confirm_pickup')
+                ->update([
+                    'status' => 'received',
+                    'updated_at' => now(),
+                ]);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Shipment received in hub and moved to Complete Delivery.',
+        ]);
     }
 
     /**
@@ -805,19 +879,29 @@ class AdminController extends Controller
             $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
             if ($shipmentInvoice && $shipmentInvoice->shipper_id) {
                 $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
-                if ($shipper && $shipper->awb_number) {
-                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
-                    \App\Models\Tracking::create([
-                        'awb_number' => $shipper->awb_number,
-                        'status'     => 'assigned_for_pickup',
-                        'title'      => 'Assigned for Pickup',
-                        'shipper_id' => $shipper->id,
-                        'shipping_id' => $createShipment ? $createShipment->id : null,
-                        'uwc_id'     => $shipper->awb_number,
-                    ]);
-                    // Update shipper status so it moves to "Assigned for Pickup" tab
-                    $shipper->status = 'assigned_for_pickup';
-                    $shipper->save();
+                if ($shipper) {
+                    // The tracking record needs an AWB, so it is only created
+                    // once the AWB exists. The pickup assignment itself always
+                    // moves the shipment to "Assigned for Pickup" so customers
+                    // see it under "In-Transit to Hub" right away.
+                    if ($shipper->awb_number) {
+                        $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                        \App\Models\Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'status'     => 'assigned_for_pickup',
+                            'title'      => 'Assigned for Pickup',
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id'     => $shipper->awb_number,
+                        ]);
+                    }
+                    // Never downgrade shipments that already moved past pickup
+                    // (e.g. reassigning a delivered order must not reset it).
+                    $pastPickupStatuses = ['received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled', 'disputed'];
+                    if (!in_array($shipper->status, $pastPickupStatuses, true)) {
+                        $shipper->status = 'assigned_for_pickup';
+                        $shipper->save();
+                    }
                 }
             }
 
@@ -3428,7 +3512,7 @@ class AdminController extends Controller
 
         $customerCount = 0;
 
-        DB::transaction(function () use ($validated, &$rate, &$customerCount) {
+        DB::transaction(function () use ($validated, $surchargeIds, &$rate, &$customerCount) {
             $rate = \App\Models\CourierRate::create([
                 'customer_id'     => 0,
                 'service_id'      => $validated['service_id'],
@@ -4907,6 +4991,115 @@ class AdminController extends Controller
         $downloadName = 'kyc-documents-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower($customerName)) . '-' . $customer->id . '.zip';
 
         return response()->download($zipPath, $downloadName)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Download one KYC document, or generate the electronically signed agreement.
+     */
+    public function downloadCustomerKycDocument($id, string $document)
+    {
+        $customer = Customer::with(['kycDetail', 'csbForm'])->findOrFail($id);
+        $uploadsRoot = realpath(public_path('uploads'));
+        if ($uploadsRoot === false) {
+            abort(500, 'Document download is not available.');
+        }
+
+        if ($document === 'signed_merchant_agreement') {
+            return $this->downloadSignedMerchantAgreement($customer, $uploadsRoot);
+        }
+
+        $documents = [
+            'gst_certificate' => ['GST Certificate', $customer->csbForm?->gst_certificate_document ?: $customer->csbForm?->gst_document ?: $customer->kycDetail?->gst_certificate_document],
+            'pan_card' => ['PAN Card', $customer->kycDetail?->pan_document],
+            'aadhar_front' => ['Aadhaar Front', $customer->kycDetail?->aadhar_front_document ?: $customer->csbForm?->aadhar_document],
+            'aadhar_back' => ['Aadhaar Back', $customer->kycDetail?->aadhar_back_document],
+            'iec_certificate' => ['IEC Certificate', $customer->csbForm?->iec_document],
+            'ad_code_document' => ['AD Code Document', $customer->csbForm?->ad_code_document],
+            'lut_document' => ['LUT Document', $customer->csbForm?->lut_document],
+            'signature' => ['Signature', $customer->csbForm?->signature_document ?: $customer->kycDetail?->signature_document ?: $customer->kycDetail?->signature],
+            'merchant_agreement' => ['Merchant Agreement', $customer->csbForm?->merchant_agreement ?: $customer->kycDetail?->merchant_agreement],
+        ];
+
+        if (!isset($documents[$document])) {
+            abort(404, 'Unknown KYC document.');
+        }
+
+        [$label, $storedPath] = $documents[$document];
+        $sourcePath = $this->resolveKycUploadedFile($storedPath, $uploadsRoot);
+        if ($sourcePath === null) {
+            abort(404, 'The requested KYC document was not found.');
+        }
+
+        $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
+        $customerCode = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($customer->customer_code ?: $customer->id));
+        $downloadName = $customerCode . '-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower($label))
+            . ($extension !== '' ? '.' . $extension : '');
+
+        return response()->download($sourcePath, $downloadName);
+    }
+
+    private function downloadSignedMerchantAgreement(Customer $customer, string $uploadsRoot)
+    {
+        $signaturePath = $this->resolveKycUploadedFile(
+            $customer->csbForm?->signature_document
+                ?: $customer->kycDetail?->signature_document
+                ?: $customer->kycDetail?->signature,
+            $uploadsRoot
+        );
+        $agreementPath = $this->resolveKycUploadedFile(
+            $customer->csbForm?->merchant_agreement ?: $customer->kycDetail?->merchant_agreement,
+            $uploadsRoot
+        );
+
+        if ($signaturePath === null || $agreementPath === null) {
+            abort(404, 'A signature and accepted merchant agreement are required to generate the signed agreement.');
+        }
+
+        $mimeType = mime_content_type($signaturePath) ?: 'image/png';
+        $signatureDataUri = 'data:' . $mimeType . ';base64,' . base64_encode((string) file_get_contents($signaturePath));
+        $acceptedAt = $customer->csbForm?->merchant_agreement_accepted_at
+            ?: $customer->kycDetail?->merchant_agreement_accepted_at
+            ?: $customer->kycDetail?->terms_accepted_at;
+
+        try {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.signed-merchant-agreement', compact(
+                'customer',
+                'acceptedAt',
+                'signatureDataUri'
+            ))->setPaper('a4');
+        } catch (\Throwable $exception) {
+            Log::error('Unable to generate signed merchant agreement.', [
+                'customer_id' => $customer->id,
+                'error' => $exception->getMessage(),
+            ]);
+            abort(500, 'Unable to generate the signed merchant agreement.');
+        }
+
+        $customerCode = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($customer->customer_code ?: $customer->id));
+        return $pdf->download($customerCode . '-signed-merchant-agreement.pdf');
+    }
+
+    private function resolveKycUploadedFile($storedPath, string $uploadsRoot): ?string
+    {
+        $path = trim((string) $storedPath);
+        if ($path === '' || filter_var($path, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+        $path = preg_replace('#^(?:(?:public|uploads)/)+#i', '', $path) ?? $path;
+        if ($path === '' || str_contains($path, '..')) {
+            return null;
+        }
+
+        $absolutePath = realpath($uploadsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path));
+        $rootPrefix = rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+        return $absolutePath !== false
+            && is_file($absolutePath)
+            && str_starts_with($absolutePath, $rootPrefix)
+                ? $absolutePath
+                : null;
     }
 
     /**

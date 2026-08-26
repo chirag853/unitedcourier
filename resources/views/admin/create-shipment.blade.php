@@ -3511,7 +3511,6 @@
                                                                     <option>GST (Normal)</option>
                                                                     <option>Aadhar Card</option>
                                                                     <option>PAN Card</option>
-                                                                    <option>Passport Number</option>
                                                                 </select>
                                                             </div>
                                                         </div>

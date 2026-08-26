@@ -15,6 +15,7 @@ class CsbForm extends Model
         'is_csb_v',
         'is_gst',
         'is_lut',
+        'lut_number',
         'lut_verified',
         'lut_expiry_date',
         'lut_bond_year',

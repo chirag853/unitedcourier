@@ -69,7 +69,7 @@ class Admin extends Authenticatable
             'manage_rate' => [
                 'label' => 'Manage Rate',
                 'icon' => 'ti-currency-rupee',
-                'routes' => ['manage-rate*'],
+                'routes' => ['manage-rate*', 'manage-surcharges*'],
             ],
             'services' => [
                 'label' => 'Courier Services',
