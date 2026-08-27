@@ -73,7 +73,7 @@
                     <a href="#" class="social-btn">
                         <i class="fab fa-twitter"></i>
                     </a>
-                    <a href="#" class="social-btn">
+                    <a href="https://www.instagram.com/unitedworldwidecouriers?igsi=MXdyazk1c3B3M2FucA==" class="social-btn" target="_blank">
                         <i class="fab fa-instagram"></i>
                     </a>
                     <a href="#" class="social-btn">
@@ -130,10 +130,22 @@
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <div>
-                        <a href="{{ route('contact-us') }}" target="_blank"> Plot No. Khasara No. 629, 630, <br>631/1,
-                            Village Rangpuri, New Delhi - 110037</a>
+                        <a href="{{ route('contact-us') }}" target="_blank">UWC Headquarters <br>Building A-219, First Floor, Road No. 5<br>Mahipalpur Extension, New Delhi 110037</a>
                     </div>
                 </div>
+
+                <div class="contact-item">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <div>
+                        <a href="{{ route('contact-us') }}" target="_blank">UWC Warehouse <br>Plot No. Khasara No. 629, 630, <br>631/1, Village Rangpuri, New Delhi - 110037</a>
+                    </div>
+                </div>
+
+
                 <div class="contact-item">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -238,7 +250,7 @@
                 © 2026 United Worldwide Couriers. All rights reserved.
             </div>
             <ul class="legal-links">
-                <li class="copyright">Designed & Developed By <a href="https://adomantra.com/"> Adomantra Digital
+                <li class="copyright">Designed & Developed By <a href="https://www.adomantra.com/" target="_blank" class="copyright"> Adomantra Digital
                         India Pvt Ltd</a></li>
             </ul>
         </div>

@@ -1,44 +1,55 @@
 <?php
 
 namespace App\Http\Controllers;
-use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Validator;
-use App\Models\Customer;
-use App\Models\ExporterCustomer;
-use App\Models\Wallet;
+
 use App\Models\BusinessCategory;
-use App\Models\KycDetail;
-use App\Models\AboutPageContent;
-use App\Models\HomePageContent;
-use App\Models\ShipperInfo;
 use App\Models\ConsigneeInfo;
-use App\Models\PackageDimension;
+use App\Models\CourierRate;
+use App\Models\CourierService;
+use App\Models\CreateShipment;
+use App\Models\CsbForm;
 use App\Models\CsbInformation;
+use App\Models\Customer;
+use App\Models\Destination;
+use App\Models\ExporterCustomer;
+use App\Models\HomePageContent;
+use App\Models\HsHtsCode;
+use App\Models\KycDetail;
+use App\Models\KycDraft;
+use App\Models\PackageDimension;
+use App\Models\PaymentOrder;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
-use App\Models\CsbForm;
-use App\Models\KycDraft;
-use App\Models\CreateShipment;
-use App\Models\ShipmentTracking;
-use App\Models\Tracking;
 use App\Models\ShipmentLog;
+use App\Models\ShipmentTracking;
+use App\Models\ShipperInfo;
+use App\Models\SurCharge;
+use App\Models\Tracking;
+use App\Models\Wallet;
 use App\Models\WalletTransaction;
-use App\Models\CourierService;
-use App\Models\CourierRate;
-use App\Models\PaymentOrder;
+use App\Models\Zone;
 use App\Services\AdomantraApiClient;
 use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
-use Illuminate\Support\Facades\Http;
+use App\Support\KycVerificationState;
+use App\Support\SystemLogger;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
@@ -56,20 +67,20 @@ class CustomerController extends Controller
     public function loginWithPassword(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'email'],
+            'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
 
         $customer = Customer::where('email', $credentials['email'])->first();
 
-        if (!$customer) {
+        if (! $customer) {
             return response()->json([
                 'success' => false,
                 'message' => 'No account found with this email address.',
             ], 422);
         }
 
-        if (!Hash::check($credentials['password'], $customer->getAuthPassword())) {
+        if (! Hash::check($credentials['password'], $customer->getAuthPassword())) {
             return response()->json([
                 'success' => false,
                 'message' => 'Incorrect password. Please try again.',
@@ -77,7 +88,7 @@ class CustomerController extends Controller
         }
 
         // Block login if the account has been deactivated by an admin
-        if (isset($customer->status) && !$customer->status) {
+        if (isset($customer->status) && ! $customer->status) {
             return response()->json([
                 'success' => false,
                 'message' => 'Your account has been deactivated. Please contact support for assistance.',
@@ -91,22 +102,22 @@ class CustomerController extends Controller
 
         // Restore any saved KYC verification state so resuming an in-progress
         // KYC does not require re-verifying documents after a logout.
-        \App\Support\KycVerificationState::restore($customer);
+        KycVerificationState::restore($customer);
 
         session([
-            'customer_id'   => $customer->id,
-            'customer_name' => $customer->first_name . ' ' . $customer->last_name,
+            'customer_id' => $customer->id,
+            'customer_name' => $customer->first_name.' '.$customer->last_name,
         ]);
 
-        \App\Support\SystemLogger::log(
+        SystemLogger::log(
             'customer.login',
-            'Customer logged in: ' . $customer->email,
+            'Customer logged in: '.$customer->email,
             'customer'
         );
 
         return response()->json([
-            'success'  => true,
-            'message'  => 'Login successful! Redirecting...',
+            'success' => true,
+            'message' => 'Login successful! Redirecting...',
             'redirect' => route('customer.dashboard'),
         ]);
     }
@@ -158,8 +169,8 @@ class CustomerController extends Controller
     public function resetPassword(Request $request)
     {
         $request->validate([
-            'token'    => ['required'],
-            'email'    => ['required', 'email'],
+            'token' => ['required'],
+            'email' => ['required', 'email'],
             'password' => ['required', 'confirmed', PasswordRule::min(6)],
         ]);
 
@@ -185,7 +196,7 @@ class CustomerController extends Controller
             ->withInput($request->only('email'))
             ->withErrors(['email' => __($status)]);
     }
-    
+
     public function register()
     {
         $businessCategories = BusinessCategory::active()->ordered()->get();
@@ -199,11 +210,11 @@ class CustomerController extends Controller
 
         return view('customer.register', compact('groupedBusinessCategories'));
     }
-    
+
     // public function index()
     // {
     //     $homeContent = HomePageContent::all();
-        
+
     //     // Group by section type
     //     $heroData = $homeContent->where('section', 'hero')->pluck('content', 'field_name');
     //     $aboutData = $homeContent->where('section', 'about')->pluck('content', 'field_name');
@@ -212,20 +223,18 @@ class CustomerController extends Controller
     //     $shippingSolutions = $homeContent->where('section', 'shipping_solutions')->orderBy('sort_order')->get();
     //     $testimonials = $homeContent->where('section', 'testimonial')->orderBy('sort_order')->get();
     //     $faqs = $homeContent->where('section', 'faq')->orderBy('sort_order')->get();
-        
+
     //     // Group service cards by sort_order (1, 2, 3)
     //     $serviceCard1 = $serviceCards->where('sort_order', 1)->pluck('content', 'field_name');
     //     $serviceCard2 = $serviceCards->where('sort_order', 2)->pluck('content', 'field_name');
     //     $serviceCard3 = $serviceCards->where('sort_order', 3)->pluck('content', 'field_name');
-        
+
     //     // Group shipping solutions by sort_order (1, 2, 3, 4)
     //     $shippingSolution1 = $shippingSolutions->where('sort_order', 1)->pluck('content', 'field_name');
     //     $shippingSolution2 = $shippingSolutions->where('sort_order', 2)->pluck('content', 'field_name');
     //     $shippingSolution3 = $shippingSolutions->where('sort_order', 3)->pluck('content', 'field_name');
     //     $shippingSolution4 = $shippingSolutions->where('sort_order', 4)->pluck('content', 'field_name');
-        
-        
-        
+
     /**
      * Send OTP via SMS using authkey.io API
      */
@@ -235,12 +244,11 @@ class CustomerController extends Controller
         $sid = config('services.sms.sender_id');
         $countryCode = config('services.sms.country_code');
 
-        $url = "https://api.authkey.io/request?authkey=" . $authkey
-            . "&mobile=" . $mobile
-            . "&country_code=" . $countryCode
-            . "&sid=" . $sid
-            . "&otp=" . $otp;
-
+        $url = 'https://api.authkey.io/request?authkey='.$authkey
+            .'&mobile='.$mobile
+            .'&country_code='.$countryCode
+            .'&sid='.$sid
+            .'&otp='.$otp;
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
@@ -253,11 +261,12 @@ class CustomerController extends Controller
         curl_close($ch);
 
         if ($curlError) {
-            \Log::error('SMS cURL error: ' . $curlError);
+            \Log::error('SMS cURL error: '.$curlError);
+
             return false;
         }
 
-        \Log::info('SMS API Response - HTTP: ' . $httpCode . ' | Body: ' . ($response ?: 'empty'));
+        \Log::info('SMS API Response - HTTP: '.$httpCode.' | Body: '.($response ?: 'empty'));
 
         return true;
     }
@@ -265,23 +274,23 @@ class CustomerController extends Controller
     public function checkPhone(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'phone_number' => 'required|string|max:20'
+            'phone_number' => 'required|string|max:20',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Phone number is required'
+                'message' => 'Phone number is required',
             ], 422);
         }
 
         try {
             $customer = Customer::where('phone_number', $request->phone_number)->first();
 
-            if (!$customer) {
+            if (! $customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This phone number is not registered. Please register yourself first.'
+                    'message' => 'This phone number is not registered. Please register yourself first.',
                 ], 404);
             }
 
@@ -292,28 +301,29 @@ class CustomerController extends Controller
             session([
                 'login_otp' => $otp,
                 'login_phone' => $request->phone_number,
-                'login_otp_expires_at' => now()->addMinutes(5)->timestamp
+                'login_otp_expires_at' => now()->addMinutes(5)->timestamp,
             ]);
 
             // Send OTP via SMS
             $smsSent = $this->sendOtpViaSms($request->phone_number, $otp);
 
-            if (!$smsSent) {
+            if (! $smsSent) {
                 // Log the OTP for development/testing if SMS fails
-                \Log::warning('SMS sending failed. OTP for ' . $request->phone_number . ': ' . $otp);
+                \Log::warning('SMS sending failed. OTP for '.$request->phone_number.': '.$otp);
             }
 
             return response()->json([
                 'success' => true,
                 'message' => 'OTP sent successfully to your registered mobile number.',
-                'customer_id' => $customer->id
+                'customer_id' => $customer->id,
             ], 200);
 
         } catch (\Exception $e) {
-            \Log::error('checkPhone error: ' . $e->getMessage());
+            \Log::error('checkPhone error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Server error. Please try again.'
+                'message' => 'Server error. Please try again.',
             ], 500);
         }
     }
@@ -322,13 +332,13 @@ class CustomerController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'phone_number' => 'required|string|max:20',
-            'otp' => 'required|string|size:6'
+            'otp' => 'required|string|size:6',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid OTP format'
+                'message' => 'Invalid OTP format',
             ], 422);
         }
 
@@ -339,10 +349,10 @@ class CustomerController extends Controller
             $expiresAt = session('login_otp_expires_at');
 
             // Check if OTP exists in session
-            if (!$sessionOtp || !$sessionPhone) {
+            if (! $sessionOtp || ! $sessionPhone) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No OTP was requested. Please click "Get OTP" first.'
+                    'message' => 'No OTP was requested. Please click "Get OTP" first.',
                 ], 400);
             }
 
@@ -350,9 +360,10 @@ class CustomerController extends Controller
             if (now()->timestamp > $expiresAt) {
                 // Clear expired OTP
                 session()->forget(['login_otp', 'login_phone', 'login_otp_expires_at']);
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'OTP has expired. Please request a new OTP.'
+                    'message' => 'OTP has expired. Please request a new OTP.',
                 ], 400);
             }
 
@@ -360,7 +371,7 @@ class CustomerController extends Controller
             if ($sessionPhone !== $request->phone_number) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Phone number mismatch. Please request a new OTP.'
+                    'message' => 'Phone number mismatch. Please request a new OTP.',
                 ], 400);
             }
 
@@ -368,17 +379,17 @@ class CustomerController extends Controller
             if ((string) $sessionOtp !== $request->otp) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid OTP. Please try again.'
+                    'message' => 'Invalid OTP. Please try again.',
                 ], 400);
             }
 
             // OTP verified - find customer and log them in
             $customer = Customer::where('phone_number', $request->phone_number)->first();
 
-            if (!$customer) {
+            if (! $customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Phone number not found.'
+                    'message' => 'Phone number not found.',
                 ], 404);
             }
 
@@ -387,30 +398,31 @@ class CustomerController extends Controller
 
             // Authenticate customer using Laravel's auth system
             auth()->guard('customer')->login($customer);
-            
+
             // Restore any saved KYC verification state so resuming an in-progress
             // KYC does not require re-verifying documents after a logout.
-            \App\Support\KycVerificationState::restore($customer);
-            
+            KycVerificationState::restore($customer);
+
             // Also keep session data for compatibility
-            session(['customer_id' => $customer->id, 'customer_name' => $customer->first_name . ' ' . $customer->last_name]);
+            session(['customer_id' => $customer->id, 'customer_name' => $customer->first_name.' '.$customer->last_name]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'OTP verified successfully! Redirecting to dashboard...',
                 'redirect' => route('customer.dashboard'),
                 'customer' => [
-                    'name' => $customer->first_name . ' ' . $customer->last_name,
+                    'name' => $customer->first_name.' '.$customer->last_name,
                     'email' => $customer->email,
-                    'phone' => $customer->phone_number
-                ]
+                    'phone' => $customer->phone_number,
+                ],
             ], 200);
 
         } catch (\Exception $e) {
-            \Log::error('verifyOtp error: ' . $e->getMessage());
+            \Log::error('verifyOtp error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Verification failed. Please try again.'
+                'message' => 'Verification failed. Please try again.',
             ], 500);
         }
     }
@@ -468,7 +480,7 @@ class CustomerController extends Controller
                 'registration_otp_expires_at',
                 'registration_email_verified',
             ]);
-            Log::error('Registration OTP email error for ' . $email . ': ' . $e->getMessage());
+            Log::error('Registration OTP email error for '.$email.': '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -502,7 +514,7 @@ class CustomerController extends Controller
             $sessionEmail = session('registration_email');
             $expiresAt = session('registration_otp_expires_at');
 
-            if (!$sessionOtp || !$sessionEmail || !$expiresAt) {
+            if (! $sessionOtp || ! $sessionEmail || ! $expiresAt) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No OTP was requested. Please click "Get OTP" first.',
@@ -523,14 +535,14 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            if (!hash_equals($sessionEmail, $email)) {
+            if (! hash_equals($sessionEmail, $email)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Email address mismatch. Please request a new OTP.',
                 ], 400);
             }
 
-            if (!hash_equals((string) $sessionOtp, (string) $request->otp)) {
+            if (! hash_equals((string) $sessionOtp, (string) $request->otp)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid OTP. Please try again.',
@@ -545,7 +557,7 @@ class CustomerController extends Controller
                 'message' => 'Email address verified successfully! You can now complete your registration.',
             ], 200);
         } catch (\Throwable $e) {
-            Log::error('verifyRegistrationOtp error: ' . $e->getMessage());
+            Log::error('verifyRegistrationOtp error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -557,7 +569,7 @@ class CustomerController extends Controller
     public function dashboard()
     {
         // Check if customer is logged in using auth guard
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -566,7 +578,7 @@ class CustomerController extends Controller
 
         // Restore any saved KYC verification state (session may have been
         // cleared by a logout / login or session expiry).
-        \App\Support\KycVerificationState::restore($customer);
+        KycVerificationState::restore($customer);
 
         // Get shipment counts by status for this customer
         $statusCounts = ShipperInfo::where('customer_id', $customerId)
@@ -632,7 +644,7 @@ class CustomerController extends Controller
         // Financials: total value of products shipped and total shipped cost
         $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
         $totalShippedValue = ShipmentInvoice::whereIn('shipper_id', $shipperIds)->sum('invoice_amount');
-        $totalShippedCost = ShipmentInvoiceItem::whereIn('invoice_id', function($q) use ($shipperIds) {
+        $totalShippedCost = ShipmentInvoiceItem::whereIn('invoice_id', function ($q) use ($shipperIds) {
             $q->select('id')->from('shipment_invoice')->whereIn('shipper_id', $shipperIds);
         })->sum('amount');
 
@@ -651,7 +663,7 @@ class CustomerController extends Controller
         // application the wizard would start empty and previously uploaded
         // documents like the signature would disappear. Rebuild the wizard
         // state from the stored KYC record in that case.
-        if (!$kycDraft) {
+        if (! $kycDraft) {
             // Use the latest submitted KYC record for resume data. The signature
             // belongs to the submitted merchant agreement and must remain
             // available after logout/login, including after an approval/rejection.
@@ -727,7 +739,7 @@ class CustomerController extends Controller
             ->latest('id')
             ->first(['signature_document', 'signature']);
         $persistedSignature = $persistedKyc?->signature_document ?: $persistedKyc?->signature;
-        if (!$persistedSignature) {
+        if (! $persistedSignature) {
             $persistedSignature = CsbForm::where('customer_id', $customerId)
                 ->latest('id')
                 ->value('signature_document');
@@ -754,7 +766,7 @@ class CustomerController extends Controller
 
     public function dashboardChartData(Request $request)
     {
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized']);
         }
 
@@ -833,31 +845,30 @@ class CustomerController extends Controller
         // Logout customer using auth guard
         $customer = auth()->guard('customer')->user();
 
-        \App\Support\SystemLogger::log(
+        SystemLogger::log(
             'customer.logout',
-            'Customer logged out: ' . ($customer->email ?? 'unknown'),
+            'Customer logged out: '.($customer->email ?? 'unknown'),
             'customer'
         );
 
         auth()->guard('customer')->logout();
-        
+
         // Clear customer session
         session()->forget(['customer_id', 'customer_name']);
-        
+
         // Invalidate the session
         $request->session()->invalidate();
-        
+
         // Regenerate CSRF token
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->with('success', 'You have been logged out successfully.');
     }
-    
-        
+
     public function companies()
     {
         // Check if customer is logged in using auth guard
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -870,7 +881,7 @@ class CustomerController extends Controller
     public function exporterCustomers()
     {
         $exporter = auth()->guard('customer')->user();
-        if (!$exporter) {
+        if (! $exporter) {
             return redirect()->route('login');
         }
 
@@ -895,7 +906,7 @@ class CustomerController extends Controller
     public function storeExporterCustomer(Request $request)
     {
         $exporter = auth()->guard('customer')->user();
-        if (!$exporter) {
+        if (! $exporter) {
             return redirect()->route('login');
         }
 
@@ -964,15 +975,16 @@ class CustomerController extends Controller
                     ];
                     $kycType = $request->input('kyc_type');
                     $rule = $patterns[$kycType] ?? null;
-                    if ($value && $rule && !preg_match($rule[0], (string) $value)) {
+                    if ($value && $rule && ! preg_match($rule[0], (string) $value)) {
                         $fail($rule[1]);
+
                         return;
                     }
 
                     if (
                         $value
                         && $kycType === 'Aadhar Card'
-                        && \App\Models\ExporterCustomer::query()
+                        && ExporterCustomer::query()
                             ->where('exporter_id', $exporter->id)
                             ->where('kyc_type', 'Aadhar Card')
                             ->where('kyc_number', (string) $value)
@@ -997,7 +1009,7 @@ class CustomerController extends Controller
             'billing_contact' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'billing_email' => [Rule::requiredIf($isCsbV), 'nullable', 'email:rfc', 'max:255'],
             'merchant_agreement' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf', 'max:10240'],
-            'terms_accepted' => [Rule::excludeIf(!$isCsbV), 'required', 'accepted'],
+            'terms_accepted' => [Rule::excludeIf(! $isCsbV), 'required', 'accepted'],
         ], [
             'business_category_id.required' => 'Please select a customer type.',
             'business_category_id.exists' => 'The selected customer type is invalid or inactive.',
@@ -1030,9 +1042,9 @@ class CustomerController extends Controller
 
         // An Aadhaar number entered on this page must be Cashfree-verified first,
         // mirroring the verification required in the KYC flow.
-        if (($validated['kyc_type'] ?? null) === 'Aadhar Card' && !empty($validated['kyc_number'])) {
+        if (($validated['kyc_type'] ?? null) === 'Aadhar Card' && ! empty($validated['kyc_number'])) {
             if (
-                !session('kyc_aadhar_cashfree_verified')
+                ! session('kyc_aadhar_cashfree_verified')
                 || session('kyc_aadhar_number') !== $validated['kyc_number']
             ) {
                 throw ValidationException::withMessages([
@@ -1041,7 +1053,7 @@ class CustomerController extends Controller
             }
         }
 
-        if ($isCsbV && !empty($validated['lut_bond_year'])) {
+        if ($isCsbV && ! empty($validated['lut_bond_year'])) {
             [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
             $startYear = (int) $startYear;
             $endYear = (intdiv($startYear, 100) * 100) + (int) $endYearSuffix;
@@ -1063,20 +1075,20 @@ class CustomerController extends Controller
         }
 
         if ($isCsbV) {
-            $uploadDirectory = public_path('uploads/exporter_customer_csb_documents/' . $exporter->id);
-            if (!is_dir($uploadDirectory)) {
+            $uploadDirectory = public_path('uploads/exporter_customer_csb_documents/'.$exporter->id);
+            if (! is_dir($uploadDirectory)) {
                 mkdir($uploadDirectory, 0755, true);
             }
 
             foreach (['ad_code_document', 'iec_document', 'lut_document', 'merchant_agreement'] as $documentField) {
-                if (!$request->hasFile($documentField)) {
+                if (! $request->hasFile($documentField)) {
                     continue;
                 }
 
                 $file = $request->file($documentField);
-                $filename = Str::uuid() . '_' . $documentField . '.' . $file->extension();
+                $filename = Str::uuid().'_'.$documentField.'.'.$file->extension();
                 $file->move($uploadDirectory, $filename);
-                $validated[$documentField] = 'uploads/exporter_customer_csb_documents/' . $exporter->id . '/' . $filename;
+                $validated[$documentField] = 'uploads/exporter_customer_csb_documents/'.$exporter->id.'/'.$filename;
             }
         } else {
             $validated = collect($validated)->except([
@@ -1104,20 +1116,20 @@ class CustomerController extends Controller
         return redirect()->route('customer.exporter-customers')
             ->with('success', 'Customer saved successfully.');
     }
-    
+
     public function createShipment()
     {
         // Check if customer is logged in using auth guard
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
         $customer = auth()->guard('customer')->user();
         $csbForm = $customer->csbForm;
         // Only enabled services (status = 1) are offered to the customer.
-        $courierServices = \App\Models\CourierService::where('status', 1)->get();
-        $zones = \App\Models\Zone::orderBy('zone_name')->get();
-        $destinations = \App\Models\Destination::where('is_active', true)->orderBy('name')->get();
+        $courierServices = CourierService::where('status', 1)->get();
+        $zones = Zone::orderBy('zone_name')->get();
+        $destinations = Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
         $canManageSavedCustomers = $this->canManageSavedCustomers($customer);
         $exporterCustomers = $canManageSavedCustomers
@@ -1157,41 +1169,41 @@ class CustomerController extends Controller
     {
         $destinationId = $request->query('destination_id');
 
-        if (!$destinationId || !ctype_digit((string) $destinationId)) {
+        if (! $destinationId || ! ctype_digit((string) $destinationId)) {
             return response()->json([
-                'exists'  => false,
+                'exists' => false,
                 'category' => null,
                 'destination' => null,
-                'zones'   => [],
+                'zones' => [],
             ], 200);
         }
 
-        $destination = \App\Models\Destination::find((int) $destinationId);
+        $destination = Destination::find((int) $destinationId);
 
-        if (!$destination) {
+        if (! $destination) {
             return response()->json([
-                'exists'  => false,
+                'exists' => false,
                 'category' => null,
                 'destination' => null,
-                'zones'   => [],
+                'zones' => [],
             ], 200);
         }
 
-        $zones = \App\Models\Zone::where('destination_id', $destination->id)
+        $zones = Zone::where('destination_id', $destination->id)
             ->orderBy('zone_name')
             ->get();
 
         if ($zones->isEmpty()) {
             return response()->json([
-                'exists'  => false,
+                'exists' => false,
                 'category' => null,
                 'destination' => [
-                    'id'           => $destination->id,
-                    'name'         => $destination->name,
-                    'code'         => $destination->code,
+                    'id' => $destination->id,
+                    'name' => $destination->name,
+                    'code' => $destination->code,
                     'country_code' => $destination->country_code,
                 ],
-                'zones'   => [],
+                'zones' => [],
             ], 200);
         }
 
@@ -1200,15 +1212,15 @@ class CustomerController extends Controller
         $category = $zones->first()->zone_category ?: 'state';
 
         return response()->json([
-            'exists'  => true,
+            'exists' => true,
             'category' => $category,
             'destination' => [
-                'id'           => $destination->id,
-                'name'         => $destination->name,
-                'code'         => $destination->code,
+                'id' => $destination->id,
+                'name' => $destination->name,
+                'code' => $destination->code,
                 'country_code' => $destination->country_code,
             ],
-            'zones'   => $zones->map(function ($z) {
+            'zones' => $zones->map(function ($z) {
                 return [
                     'zone_code' => $z->zone_code,
                     'zone_name' => $z->zone_name,
@@ -1216,11 +1228,11 @@ class CustomerController extends Controller
             })->values(),
         ], 200);
     }
-    
+
     public function csb5Form()
     {
         // Check if customer is logged in using auth guard
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -1238,13 +1250,22 @@ class CustomerController extends Controller
             ->first();
 
         $personalGstVerified = (bool) $personalKyc?->gst_verified
-            && !empty($personalKyc?->gst_number)
-            && !empty($personalKyc?->organization_name);
+            && ! empty($personalKyc?->gst_number)
+            && ! empty($personalKyc?->organization_name);
         // CSB-V may reuse GST only when it was verified in personal KYC.
         // A business KYC GST must not hide the fresh CSB-V verification flow
         // when personal KYC has no GST.
-        $verifiedGstSource = $personalGstVerified ? $personalKyc : null;
-        $csbGstRequired = !$verifiedGstSource;
+        // After a CSB-V submission the customer's single KycDetail record is
+        // stored as kyc_type='business', so fall back to that verified record
+        // when editing the CSB-V form to avoid forcing a redundant re-verification.
+        $businessGstVerified = ! $personalKyc
+            && (bool) $businessKyc?->gst_verified
+            && ! empty($businessKyc?->gst_number)
+            && ! empty($businessKyc?->organization_name);
+        $verifiedGstSource = $personalGstVerified
+            ? $personalKyc
+            : ($businessGstVerified ? $businessKyc : null);
+        $csbGstRequired = ! $verifiedGstSource;
 
         return view('customer.csb5-form', compact(
             'customer',
@@ -1258,22 +1279,22 @@ class CustomerController extends Controller
     {
         try {
             $customer = auth()->guard('customer')->user();
-            if (!$customer) {
+            if (! $customer) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You must be logged in to submit the CSB form.'
+                    'message' => 'You must be logged in to submit the CSB form.',
                 ], 401);
             }
 
             // Restore any saved KYC verification state so resuming after a
             // logout / login does not require re-verifying documents.
-            \App\Support\KycVerificationState::restore($customer);
+            KycVerificationState::restore($customer);
 
             $request->merge([
                 'is_gst' => $request->boolean('is_gst'),
                 'is_lut' => $request->boolean('is_lut'),
             ]);
-            if (!$request->boolean('is_gst') && !$request->boolean('is_lut')) {
+            if (! $request->boolean('is_gst') && ! $request->boolean('is_lut')) {
                 throw ValidationException::withMessages([
                     'tax_type' => 'Select GST, LUT, or both before submitting the CSB-V form.',
                 ]);
@@ -1291,32 +1312,41 @@ class CustomerController extends Controller
                 ->first();
 
             $personalGstVerified = (bool) $existingPersonalKyc?->gst_verified
-                && !empty($existingPersonalKyc?->gst_number)
-                && !empty($existingPersonalKyc?->organization_name);
+                && ! empty($existingPersonalKyc?->gst_number)
+                && ! empty($existingPersonalKyc?->organization_name);
             // The Cashfree GST verification API is only ever called from the
             // explicit "VERIFY GST" button on the CSB-V page. Previously
             // verified values (KYC or this page) are accepted through the
             // session check below, but any changed GSTIN must be verified by
             // clicking VERIFY again.
-            $verifiedGstSource = $personalGstVerified ? $existingPersonalKyc : null;
+            // After a CSB-V submission the customer's single KycDetail record
+            // is stored as kyc_type='business', so fall back to that verified
+            // record when editing to avoid forcing a redundant re-verification.
+            $businessGstVerified = ! $existingPersonalKyc
+                && (bool) $existingBusinessKyc?->gst_verified
+                && ! empty($existingBusinessKyc?->gst_number)
+                && ! empty($existingBusinessKyc?->organization_name);
+            $verifiedGstSource = $personalGstVerified
+                ? $existingPersonalKyc
+                : ($businessGstVerified ? $existingBusinessKyc : null);
             $canReuseVerifiedGst = (bool) $verifiedGstSource;
             $gstRequiredForCsb5 = $isStandaloneCsb5 && $request->boolean('is_gst');
             $canReuseVerifiedPan = (bool) $existingBusinessKyc?->pan_verified
-                && !empty($existingBusinessKyc?->pan_number)
-                && !empty($existingBusinessKyc?->pan_holder_name)
-                && !empty($existingBusinessKyc?->pan_dob)
-                && !empty($existingBusinessKyc?->pan_document);
+                && ! empty($existingBusinessKyc?->pan_number)
+                && ! empty($existingBusinessKyc?->pan_holder_name)
+                && ! empty($existingBusinessKyc?->pan_dob)
+                && ! empty($existingBusinessKyc?->pan_document);
 
             // The standalone CSB-V page collects only export-specific details. Fill its
             // omitted identity fields from the customer's already verified Business KYC.
             $reusedGst = $canReuseVerifiedGst
-                && !$request->filled('gst_certificate_number')
-                && !$request->filled('gst_business_name');
+                && ! $request->filled('gst_certificate_number')
+                && ! $request->filled('gst_business_name');
             $reusedPan = $canReuseVerifiedPan
-                && !$request->filled('pan_number')
-                && !$request->filled('pan_holder_name')
-                && !$request->filled('pan_dob')
-                && !$request->hasFile('pan_document');
+                && ! $request->filled('pan_number')
+                && ! $request->filled('pan_holder_name')
+                && ! $request->filled('pan_dob')
+                && ! $request->hasFile('pan_document');
 
             if ($reusedGst) {
                 $request->merge([
@@ -1344,6 +1374,7 @@ class CustomerController extends Controller
             $storedDraftDocs = is_array($businessDraft?->form_data) ? $businessDraft->form_data : [];
             $storedDraftPath = fn (string $field): ?string => (function () use ($field, $storedDraftDocs) {
                 $path = $storedDraftDocs[$field] ?? null;
+
                 return (is_string($path) && $path !== '' && is_file(public_path($path))) ? $path : null;
             })();
 
@@ -1352,26 +1383,26 @@ class CustomerController extends Controller
             $validated = $request->validate([
                 'is_csb_v' => 'nullable|boolean',
                 'gst_business_name' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 || $gstRequiredForCsb5),
-                    'nullable', 'string', 'max:255'
+                    Rule::requiredIf(! $isStandaloneCsb5 || $gstRequiredForCsb5),
+                    'nullable', 'string', 'max:255',
                 ],
                 'is_gst' => 'required|boolean',
                 'is_lut' => 'required|boolean',
                 'gst_certificate_number' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5 || $gstRequiredForCsb5),
-                    'nullable', 'string', 'size:15'
+                    Rule::requiredIf(! $isStandaloneCsb5 || $gstRequiredForCsb5),
+                    'nullable', 'string', 'size:15',
                 ],
                 'gst_certificate_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
-                        (!$isStandaloneCsb5 || $gstRequiredForCsb5)
-                        && !$existingCsbForm?->gst_certificate_document
-                        && !$existingCsbForm?->gst_document
-                        && !$existingBusinessKyc?->gst_certificate_document
-                        && !$existingPersonalKyc?->gst_certificate_document
-                        && !$request->filled('gst_certificate_document_path')
-                        && !$storedDraftPath('gst_certificate_document')
+                    Rule::requiredIf(
+                        (! $isStandaloneCsb5 || $gstRequiredForCsb5)
+                        && ! $existingCsbForm?->gst_certificate_document
+                        && ! $existingCsbForm?->gst_document
+                        && ! $existingBusinessKyc?->gst_certificate_document
+                        && ! $existingPersonalKyc?->gst_certificate_document
+                        && ! $request->filled('gst_certificate_document_path')
+                        && ! $storedDraftPath('gst_certificate_document')
                     ),
-                    'nullable', 'file', 'mimes:pdf', 'max:5120'
+                    'nullable', 'file', 'mimes:pdf', 'max:5120',
                 ],
                 'gst_certificate_document_path' => ['nullable', 'string'],
                 'gst_document' => ['nullable', 'file', 'mimes:pdf', 'max:5120'],
@@ -1383,57 +1414,57 @@ class CustomerController extends Controller
                 'aadhar_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
                 'aadhar_document_path' => ['nullable', 'string'],
                 'pan_number' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
-                    'nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'
+                    Rule::requiredIf(! $isStandaloneCsb5),
+                    'nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/',
                 ],
                 'pan_holder_name' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
-                    'nullable', 'string', 'max:255'
+                    Rule::requiredIf(! $isStandaloneCsb5),
+                    'nullable', 'string', 'max:255',
                 ],
                 'pan_dob' => [
-                    \Illuminate\Validation\Rule::requiredIf(!$isStandaloneCsb5),
-                    'nullable', 'date', 'before:today'
+                    Rule::requiredIf(! $isStandaloneCsb5),
+                    'nullable', 'date', 'before:today',
                 ],
                 'pan_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
-                        !$isStandaloneCsb5
-                        && !$canReuseVerifiedPan
-                        && !$request->filled('pan_document_path')
-                        && !$storedDraftPath('pan_document')
+                    Rule::requiredIf(
+                        ! $isStandaloneCsb5
+                        && ! $canReuseVerifiedPan
+                        && ! $request->filled('pan_document_path')
+                        && ! $storedDraftPath('pan_document')
                     ),
-                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
+                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120',
                 ],
                 'pan_document_path' => ['nullable', 'string'],
                 'ad_code' => ['required', 'digits:14'],
                 'ad_code_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
-                        !$existingCsbForm?->ad_code_document
-                        && !$request->filled('ad_code_document_path')
-                        && !$storedDraftPath('ad_code_document')
+                    Rule::requiredIf(
+                        ! $existingCsbForm?->ad_code_document
+                        && ! $request->filled('ad_code_document_path')
+                        && ! $storedDraftPath('ad_code_document')
                     ),
-                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
+                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'ad_code_document_path' => ['nullable', 'string'],
                 'iec_number' => ['required', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
                 'iec_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
-                        !$existingCsbForm?->iec_document
-                        && !$request->filled('iec_document_path')
-                        && !$storedDraftPath('iec_document')
+                    Rule::requiredIf(
+                        ! $existingCsbForm?->iec_document
+                        && ! $request->filled('iec_document_path')
+                        && ! $storedDraftPath('iec_document')
                     ),
-                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'
+                    'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'iec_document_path' => ['nullable', 'string'],
                 'bank_account_number' => ['required', 'regex:/^[0-9]{9,18}$/'],
                 'bank_type' => 'required|in:private,government',
                 'lut_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
+                    Rule::requiredIf(
                         $request->boolean('is_lut')
-                        && !$existingCsbForm?->lut_document
-                        && !$request->filled('lut_document_path')
-                        && !$storedDraftPath('lut_document')
+                        && ! $existingCsbForm?->lut_document
+                        && ! $request->filled('lut_document_path')
+                        && ! $storedDraftPath('lut_document')
                     ),
-                    'nullable', 'file', 'mimes:pdf', 'max:5120'
+                    'nullable', 'file', 'mimes:pdf', 'max:5120',
                 ],
                 'lut_document_path' => ['nullable', 'string'],
                 'lut_number' => ['required_if:is_lut,1', 'nullable', 'string', 'max:100'],
@@ -1443,14 +1474,14 @@ class CustomerController extends Controller
                 'billing_contact' => ['required', 'regex:/^[6-9][0-9]{9}$/'],
                 'billing_email' => 'required|email|max:255',
                 'signature_document' => [
-                    \Illuminate\Validation\Rule::requiredIf(
-                        !$isStandaloneCsb5
-                        && !$existingCsbForm?->signature_document
-                        && !$existingBusinessKyc?->signature_document
-                        && !$request->filled('signature_document_path')
-                        && !$storedDraftPath('signature_document')
+                    Rule::requiredIf(
+                        ! $isStandaloneCsb5
+                        && ! $existingCsbForm?->signature_document
+                        && ! $existingBusinessKyc?->signature_document
+                        && ! $request->filled('signature_document_path')
+                        && ! $storedDraftPath('signature_document')
                     ),
-                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'
+                    'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120',
                 ],
                 'signature_document_path' => ['nullable', 'string'],
                 'merchant_agreement' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
@@ -1478,7 +1509,7 @@ class CustomerController extends Controller
             $gstBusinessName = trim((string) ($validated['gst_business_name'] ?? ''));
             $hasGstIdentity = $gstNumber !== null && $gstBusinessName !== '';
 
-            if ($gstRequiredForCsb5 && !$hasGstIdentity) {
+            if ($gstRequiredForCsb5 && ! $hasGstIdentity) {
                 throw ValidationException::withMessages([
                     'gst_certificate_number' => 'GSTIN and registered business name are required when GST is selected.',
                 ]);
@@ -1490,7 +1521,7 @@ class CustomerController extends Controller
             // Name forces the customer to click VERIFY GST again.
             if ($hasGstIdentity && (
                 session('kyc_gst_number') !== $gstNumber
-                || !session('kyc_gst_cashfree_verified')
+                || ! session('kyc_gst_cashfree_verified')
                 || strcasecmp(
                     trim((string) session('kyc_gst_business_name', '')),
                     $gstBusinessName
@@ -1502,7 +1533,7 @@ class CustomerController extends Controller
                 ], 422);
             }
 
-            if (!empty($validated['lut_bond_year'])) {
+            if (! empty($validated['lut_bond_year'])) {
                 [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
                 $startYear = (int) $startYear;
                 $endYear = (intdiv($startYear, 100) * 100) + (int) $endYearSuffix;
@@ -1513,7 +1544,7 @@ class CustomerController extends Controller
                 if ($endYear < $startYear + 1 || $endYear > $startYear + 5) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'The LUT Bond End Year must be within five years after the Start Year.'
+                        'message' => 'The LUT Bond End Year must be within five years after the Start Year.',
                     ], 422);
                 }
 
@@ -1536,35 +1567,35 @@ class CustomerController extends Controller
                 && hash_equals($storedAadhaar, $aadhar)
                 && preg_match('/^[2-9][0-9]{11}$/', $aadhar);
 
-            if ($aadhar !== '' && !$isValidVerifiedAadhaar) {
+            if ($aadhar !== '' && ! $isValidVerifiedAadhaar) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Complete Aadhaar verification or clear the Aadhaar number before submitting the CSB-V form.'
+                    'message' => 'Complete Aadhaar verification or clear the Aadhaar number before submitting the CSB-V form.',
                 ], 422);
             }
 
-            if (!$isAadhaarOptional && !$isValidVerifiedAadhaar) {
+            if (! $isAadhaarOptional && ! $isValidVerifiedAadhaar) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'A verified Aadhaar is required before submitting the CSB-V form.'
+                    'message' => 'A verified Aadhaar is required before submitting the CSB-V form.',
                 ], 422);
             }
 
             $aadhar = $isValidVerifiedAadhaar ? $aadhar : null;
             $aadharVerified = $isValidVerifiedAadhaar;
 
-            if ($aadharVerified && !$isStandaloneCsb5) {
+            if ($aadharVerified && ! $isStandaloneCsb5) {
                 $hasAadhaarFront = $request->hasFile('aadhar_front_document')
                     || $request->hasFile('aadhar_document')
-                    || !empty($existingBusinessKyc?->aadhar_front_document)
-                    || !empty($existingCsbForm?->aadhar_document)
+                    || ! empty($existingBusinessKyc?->aadhar_front_document)
+                    || ! empty($existingCsbForm?->aadhar_document)
                     || (bool) $storedDraftPath('aadhar_front_document');
                 $hasAadhaarBack = $request->hasFile('aadhar_back_document')
-                    || !empty($existingBusinessKyc?->aadhar_back_document)
+                    || ! empty($existingBusinessKyc?->aadhar_back_document)
                     || (bool) $storedDraftPath('aadhar_back_document');
 
-                if (!$hasAadhaarFront || !$hasAadhaarBack) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
+                if (! $hasAadhaarFront || ! $hasAadhaarBack) {
+                    throw ValidationException::withMessages([
                         'aadhar_front_document' => 'Upload both the front and back Aadhaar documents.',
                     ]);
                 }
@@ -1593,16 +1624,16 @@ class CustomerController extends Controller
                 : ($panStoredPath ? public_path($panStoredPath) : null);
             $panDocumentHash = $panRealPath ? hash_file('sha256', $panRealPath) : null;
 
-            if ($hasPanIdentity && !$matchesVerifiedPan && (!session('kyc_pan_cashfree_verified')
+            if ($hasPanIdentity && ! $matchesVerifiedPan && (! session('kyc_pan_cashfree_verified')
                 || session('kyc_pan_number') !== $panNumber
-                || !hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
-                || !hash_equals((string) session('kyc_pan_dob', ''), $panDob)
-                || !$panDocumentHash
-                || !hash_equals(
+                || ! hash_equals((string) session('kyc_pan_holder_name', ''), $panHolderName)
+                || ! hash_equals((string) session('kyc_pan_dob', ''), $panDob)
+                || ! $panDocumentHash
+                || ! hash_equals(
                     (string) session('kyc_pan_document_hash', ''),
                     (string) $panDocumentHash
                 ))) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+                throw ValidationException::withMessages([
                     'pan_number' => 'Verify the submitted PAN number, holder name, date of birth, and selected PAN image through Cashfree before completing Business KYC.',
                 ]);
             }
@@ -1612,13 +1643,13 @@ class CustomerController extends Controller
             }
 
             // Ensure the customer's KYC document folder exists
-            $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
-            $kycDocDir = 'uploads/kyc_documents/' . $customerCode;
+            $customerCode = (string) ($customer->customer_code ?: ('UWC'.str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+            $kycDocDir = 'uploads/kyc_documents/'.$customerCode;
             $kycDocPath = public_path($kycDocDir);
-            if (!file_exists($kycDocPath)) {
+            if (! file_exists($kycDocPath)) {
                 mkdir($kycDocPath, 0755, true);
             }
-            $kycDocBase = $customerCode . '_' . date('Ymd_His');
+            $kycDocBase = $customerCode.'_'.date('Ymd_His');
 
             // Store identity and registration documents selected in steps 1-3.
             // A stored draft file (kept after a page refresh) is moved into its
@@ -1677,9 +1708,9 @@ class CustomerController extends Controller
             $merchantAgreementPath = null;
             if ($request->hasFile('merchant_agreement')) {
                 $file = $request->file('merchant_agreement');
-                $filename = $kycDocBase . '_merchant_agreement.' . $file->getClientOriginalExtension();
+                $filename = $kycDocBase.'_merchant_agreement.'.$file->getClientOriginalExtension();
                 $file->move($kycDocPath, $filename);
-                $merchantAgreementPath = $kycDocDir . '/' . $filename;
+                $merchantAgreementPath = $kycDocDir.'/'.$filename;
             }
 
             // Store the multipart image and persist only its relative path.
@@ -1744,53 +1775,67 @@ class CustomerController extends Controller
                 $csbForm = CsbForm::create($csbData);
             }
 
-            // Create or update a KycDetail record with kyc_type='business'
-            // so the submission appears in the admin KYC Pending list for review.
+            // Update the customer's single KycDetail record with the full CSB5
+            // business KYC information. When the customer already has a KYC
+            // record (business or personal), it is updated in place so no new
+            // kyc_details entry is created. Only a customer with no KYC record
+            // at all gets a new (business) entry for the admin to review.
+            $existingKyc = $existingBusinessKyc ?? $existingPersonalKyc;
+
             $businessKycData = [
                 'customer_id' => $customer->id,
                 'kyc_type' => 'business',
                 'gst_number' => $gstNumber ?? ($verifiedGstSource?->gst_number),
                 'gst_verified' => $hasGstIdentity
                     ? true
-                    : (bool) ($existingBusinessKyc->gst_verified ?? false),
+                    : (bool) ($existingKyc?->gst_verified ?? false),
                 'aadhar_number' => $aadhar,
                 'aadhar_verified' => $aadharVerified,
                 'aadhar_front_document' => $aadharFrontPath
-                    ?? ($existingBusinessKyc->aadhar_front_document ?? null)
+                    ?? ($existingKyc?->aadhar_front_document ?? null)
                     ?? ($existingCsbForm->aadhar_document ?? null),
-                'aadhar_back_document' => $aadharBackPath ?? ($existingBusinessKyc->aadhar_back_document ?? null),
-                'pan_number' => $panNumber ?? ($existingBusinessKyc->pan_number ?? null),
+                'aadhar_back_document' => $aadharBackPath ?? ($existingKyc?->aadhar_back_document ?? null),
+                'pan_number' => $panNumber ?? ($existingKyc?->pan_number ?? null),
                 'pan_holder_name' => ($validated['pan_holder_name'] ?? null)
-                    ?: ($existingBusinessKyc->pan_holder_name ?? null),
+                    ?: ($existingKyc?->pan_holder_name ?? null),
                 'pan_dob' => ($validated['pan_dob'] ?? null)
-                    ?: ($existingBusinessKyc->pan_dob ?? null),
-                'pan_document' => $panDocumentPath ?? ($existingBusinessKyc->pan_document ?? null),
+                    ?: ($existingKyc?->pan_dob ?? null),
+                'pan_document' => $panDocumentPath ?? ($existingKyc?->pan_document ?? null),
                 'pan_verified' => $hasPanIdentity
                     ? true
-                    : (bool) ($existingBusinessKyc->pan_verified ?? false),
+                    : (bool) ($existingKyc?->pan_verified ?? false),
                 'organization_name' => $gstBusinessName !== ''
                     ? $gstBusinessName
-                    : ($existingBusinessKyc->organization_name ?? null),
-                'authorized_signatory' => $customer->first_name . ' ' . $customer->last_name,
+                    : ($existingKyc?->organization_name ?? null),
+                'authorized_signatory' => $customer->first_name.' '.$customer->last_name,
                 'signature_document' => $signaturePath
-                    ?? ($existingBusinessKyc->signature_document ?? null)
+                    ?? ($existingKyc?->signature_document ?? null)
                     ?? ($existingCsbForm->signature_document ?? null),
                 'signature' => $signaturePath
-                    ?? ($existingBusinessKyc->signature_document ?? null)
+                    ?? ($existingKyc?->signature_document ?? null)
                     ?? ($existingCsbForm->signature_document ?? null),
                 'billing_address' => $validated['billing_address'],
                 'billing_contact' => $validated['billing_contact'],
                 'billing_email' => $validated['billing_email'],
-                'merchant_agreement' => $merchantAgreementPath ?? ($existingBusinessKyc->merchant_agreement ?? null),
+                'merchant_agreement' => $merchantAgreementPath ?? ($existingKyc?->merchant_agreement ?? null),
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'terms_accepted' => $validated['terms_accepted'],
                 'terms_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'kyc_status' => 'under_review',
             ];
 
-            if ($existingBusinessKyc) {
-                $existingBusinessKyc->update($businessKycData);
+            // If GST verification returned an address, use it as the Aadhaar address.
+            $gstAddress = session('kyc_gst_address');
+            if ($gstAddress) {
+                $businessKycData['aadhar_address'] = $gstAddress;
+            }
+
+            if ($existingKyc) {
+                // Update the existing record (business or personal) in place with all
+                // the CSB5 information - no new kyc_details entry is added.
+                $existingKyc->update($businessKycData);
             } else {
+                // No KYC record exists yet, so create the single business record.
                 KycDetail::create($businessKycData);
             }
 
@@ -1808,65 +1853,67 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Business KYC (CSB-V) submitted successfully! Your application is now under review.',
-                'redirect' => route('customer.kyc.summary')
+                'redirect' => route('customer.kyc.summary'),
             ], 200);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             $firstError = collect($e->errors())->flatten()->first();
 
             return response()->json([
                 'success' => false,
                 'message' => $firstError ?: 'Please check the Business KYC details and try again.',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
 
-        } catch (\Illuminate\Database\QueryException $e) {
-            \Log::error('CSB form database error: ' . $e->getMessage());
+        } catch (QueryException $e) {
+            \Log::error('CSB form database error: '.$e->getMessage());
             if ($e->getCode() === '23000' && ($identifier = $this->databaseKycIdentifierFromException($e))) {
                 return $this->kycIdentifierConflictResponse($identifier);
             }
 
             return response()->json([
                 'success' => false,
-                'message' => 'CSB form submission failed. Please try again.'
+                'message' => 'CSB form submission failed. Please try again.',
             ], 500);
         } catch (\Throwable $e) {
-            \Log::error('CSB form submission error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            \Log::error('CSB form submission error: '.$e->getMessage()."\n".$e->getTraceAsString());
+
             return response()->json([
                 'success' => false,
-                'message' => 'CSB form submission failed. Please try again.'
+                'message' => 'CSB form submission failed. Please try again.',
             ], 500);
         }
     }
 
     private function finalizeKycDocument(
-        ?\Illuminate\Http\UploadedFile $file,
+        ?UploadedFile $file,
         ?string $storedDraftPathValue,
         Customer $customer,
         string $namePrefix
     ): ?string {
-        $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
-        $targetDir = 'uploads/kyc_documents/' . $customerCode;
+        $customerCode = (string) ($customer->customer_code ?: ('UWC'.str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $targetDir = 'uploads/kyc_documents/'.$customerCode;
         $directory = public_path($targetDir);
-        if (!file_exists($directory)) {
+        if (! file_exists($directory)) {
             mkdir($directory, 0755, true);
         }
-        $base = $customerCode . '_' . date('Ymd_His');
+        $base = $customerCode.'_'.date('Ymd_His');
 
         if ($file) {
-            $filename = $base . '_' . $namePrefix . '.' . $file->getClientOriginalExtension();
+            $filename = $base.'_'.$namePrefix.'.'.$file->getClientOriginalExtension();
             $file->move($directory, $filename);
-            return $targetDir . '/' . $filename;
+
+            return $targetDir.'/'.$filename;
         }
 
         if ($storedDraftPathValue !== null) {
             $source = public_path($storedDraftPathValue);
             if (is_file($source)) {
                 $extension = pathinfo($source, PATHINFO_EXTENSION) ?: 'bin';
-                $filename = $base . '_' . $namePrefix . '.' . $extension;
-                $target = public_path($targetDir . '/' . $filename);
+                $filename = $base.'_'.$namePrefix.'.'.$extension;
+                $target = public_path($targetDir.'/'.$filename);
                 if (rename($source, $target)) {
-                    return $targetDir . '/' . $filename;
+                    return $targetDir.'/'.$filename;
                 }
             }
         }
@@ -1876,13 +1923,13 @@ class CustomerController extends Controller
 
     private function deleteKycDraftDirectory(Customer $customer): void
     {
-        $customerCode = (string) ($customer->customer_code ?: ('UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
-        $directory = public_path('uploads/kyc_documents/' . $customerCode);
-        if (!is_dir($directory)) {
+        $customerCode = (string) ($customer->customer_code ?: ('UWC'.str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT)));
+        $directory = public_path('uploads/kyc_documents/'.$customerCode);
+        if (! is_dir($directory)) {
             return;
         }
 
-        $files = glob($directory . '/*_draft.*');
+        $files = glob($directory.'/*_draft.*');
         if (is_array($files)) {
             foreach ($files as $file) {
                 if (is_file($file)) {
@@ -1891,7 +1938,7 @@ class CustomerController extends Controller
             }
         }
 
-        if (is_dir($directory) && empty(glob($directory . '/*'))) {
+        if (is_dir($directory) && empty(glob($directory.'/*'))) {
             @rmdir($directory);
         }
     }
@@ -1925,7 +1972,7 @@ class CustomerController extends Controller
         }
 
         foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
-            $date = \DateTimeImmutable::createFromFormat('!' . $format, $dob);
+            $date = \DateTimeImmutable::createFromFormat('!'.$format, $dob);
             $errors = \DateTimeImmutable::getLastErrors();
             if ($date && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
                 return $date->format('Y-m-d');
@@ -1974,7 +2021,7 @@ class CustomerController extends Controller
         return null;
     }
 
-    private function databaseKycIdentifierFromException(\Illuminate\Database\QueryException $exception): ?string
+    private function databaseKycIdentifierFromException(QueryException $exception): ?string
     {
         $message = strtolower($exception->getMessage());
 
@@ -2015,19 +2062,19 @@ class CustomerController extends Controller
             'password_confirmation' => 'required|string|min:6',
             'aadhar_number' => 'nullable|string|max:20',
             'business_category' => 'required|integer',
-            'termsCheck' => 'required|accepted'
+            'termsCheck' => 'required|accepted',
         ], [
             'password.confirmed' => 'Password and confirm password must match.',
             'password_confirmation.required' => 'Please confirm your password.',
             'business_category.required' => 'Please select a User Type.',
-            'business_category.integer' => 'The selected User Type is invalid.'
+            'business_category.integer' => 'The selected User Type is invalid.',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -2036,7 +2083,7 @@ class CustomerController extends Controller
         $emailVerified = session('registration_email_verified', false);
         $verifiedEmail = session('registration_email');
 
-        if (!$emailVerified || !$verifiedEmail || !hash_equals($verifiedEmail, $email)) {
+        if (! $emailVerified || ! $verifiedEmail || ! hash_equals($verifiedEmail, $email)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please verify your email address via OTP before registering.',
@@ -2055,24 +2102,24 @@ class CustomerController extends Controller
                 'business_category_id' => $request->filled('business_category') ? (int) $request->business_category : null,
                 'is_terms_accepted' => $request->has('termsCheck'),
                 'email_verified' => false,
-                'aadhar_verified' => false
+                'aadhar_verified' => false,
             ]);
 
             try {
                 Mail::send('emails.registration-notification', ['customer' => $customer], function ($mail) use ($customer) {
                     $mail->to(config('mail.support_address'))
-                        ->replyTo($customer->email, trim($customer->first_name . ' ' . $customer->last_name))
-                        ->subject('New Customer Registration - ' . $customer->customer_code);
+                        ->replyTo($customer->email, trim($customer->first_name.' '.$customer->last_name))
+                        ->subject('New Customer Registration - '.$customer->customer_code);
                 });
 
                 Mail::send('emails.registration-confirmation', ['customer' => $customer], function ($mail) use ($customer) {
-                    $mail->to($customer->email, trim($customer->first_name . ' ' . $customer->last_name))
+                    $mail->to($customer->email, trim($customer->first_name.' '.$customer->last_name))
                         ->replyTo(config('mail.support_address'), config('mail.from.name'))
                         ->subject('Welcome to United Worldwide Couriers');
                 });
             } catch (\Throwable $mailException) {
                 report($mailException);
-                Log::error('Registration email error for customer ' . $customer->id . ': ' . $mailException->getMessage());
+                Log::error('Registration email error for customer '.$customer->id.': '.$mailException->getMessage());
             }
 
             // Clear registration OTP session data after successful registration.
@@ -2083,9 +2130,9 @@ class CustomerController extends Controller
                 'registration_email_verified',
             ]);
 
-            \App\Support\SystemLogger::log(
+            SystemLogger::log(
                 'customer.register',
-                'New customer registered: ' . ($customer->email ?? ''),
+                'New customer registered: '.($customer->email ?? ''),
                 'customer',
                 null,
                 ['customer_id' => $customer->id]
@@ -2094,15 +2141,16 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Registration successful! A confirmation email has been sent to your email address.',
-                'redirect' => route('login')
+                'redirect' => route('login'),
             ], 200);
 
         } catch (\Throwable $e) {
-            \Log::error('Registration store error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            \Log::error('Registration store error: '.$e->getMessage()."\n".$e->getTraceAsString());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Registration failed. Please try again.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -2117,7 +2165,7 @@ class CustomerController extends Controller
         try {
             // Shipment creation always requires an authenticated customer.
             $customer = auth()->guard('customer')->user();
-            if (!$customer) {
+            if (! $customer) {
                 if ($request->ajax() || $request->wantsJson()) {
                     return response()->json([
                         'success' => false,
@@ -2129,7 +2177,7 @@ class CustomerController extends Controller
             }
 
             // Block shipment creation if the admin has disabled it for this customer.
-            if (!$customer->can_create_shipment) {
+            if (! $customer->can_create_shipment) {
                 $message = 'You do not have the right to create shipments. Please contact United Courier Worldwide.';
                 if ($request->ajax() || $request->wantsJson()) {
                     return response()->json([
@@ -2137,6 +2185,7 @@ class CustomerController extends Controller
                         'message' => $message,
                     ], 403);
                 }
+
                 return redirect()->back()
                     ->withInput()
                     ->with('error', $message);
@@ -2224,7 +2273,6 @@ class CustomerController extends Controller
                 'invoice_currency' => 'required|string|max:20',
                 'reference_number' => 'nullable|string|max:100',
 
-
                 // invoice items
                 'items.*.box_no' => 'nullable|integer',
                 'items.*.description' => 'nullable|string|max:500',
@@ -2242,13 +2290,13 @@ class CustomerController extends Controller
             // Never trust a client-submitted saved-customer ID or its accompanying
             // shipper fields. Verify account ownership and category access, then use
             // the saved record as the authoritative source before shipment validation.
-            if (!empty($validatedData['selected_exporter_customer_id'])) {
+            if (! empty($validatedData['selected_exporter_customer_id'])) {
                 $selectedExporterCustomer = $this->canManageSavedCustomers($customer)
                     ? ExporterCustomer::where('exporter_id', $customer->id)
                         ->find($validatedData['selected_exporter_customer_id'])
                     : null;
 
-                if (!$selectedExporterCustomer) {
+                if (! $selectedExporterCustomer) {
                     throw ValidationException::withMessages([
                         'selected_exporter_customer_id' => 'The selected customer is invalid or does not belong to your account.',
                     ]);
@@ -2268,38 +2316,39 @@ class CustomerController extends Controller
             //   PAN Card           -> ^[A-Z]{5}[0-9]{4}[A-Z]{1}$
             //   Passport Number    -> ^[A-Z][0-9]{7}$
             // ------------------------------------------------------------------
-            $kycType   = $validatedData['shipper_kyc_type']   ?? null;
+            $kycType = $validatedData['shipper_kyc_type'] ?? null;
             $kycNumber = $validatedData['shipper_kyc_number'] ?? null;
 
             if ($kycType && $kycNumber !== null && $kycNumber !== '') {
                 $kycPatterns = [
-                    'GST (Normal)'     => '/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
-                    'Aadhar Card'      => '/^[2-9]{1}[0-9]{11}$/',
-                    'PAN Card'          => '/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
-                    'Passport Number'  => '/^[A-Z][0-9]{7}$/',
+                    'GST (Normal)' => '/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/',
+                    'Aadhar Card' => '/^[2-9]{1}[0-9]{11}$/',
+                    'PAN Card' => '/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/',
+                    'Passport Number' => '/^[A-Z][0-9]{7}$/',
                 ];
 
                 $kycHints = [
-                    'GST (Normal)'     => 'GSTIN must be 15 characters in the format 2 digits, 5 letters, 4 digits, 1 letter, 1 alphanumeric, Z, 1 alphanumeric (e.g. 27ABCDE1234F1Z5).',
-                    'Aadhar Card'      => 'Aadhaar number must be 12 digits and the first digit must be between 2 and 9.',
-                    'PAN Card'          => 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).',
-                    'Passport Number'  => 'Passport number must be 1 letter followed by 7 digits (e.g. A1234567).',
+                    'GST (Normal)' => 'GSTIN must be 15 characters in the format 2 digits, 5 letters, 4 digits, 1 letter, 1 alphanumeric, Z, 1 alphanumeric (e.g. 27ABCDE1234F1Z5).',
+                    'Aadhar Card' => 'Aadhaar number must be 12 digits and the first digit must be between 2 and 9.',
+                    'PAN Card' => 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).',
+                    'Passport Number' => 'Passport number must be 1 letter followed by 7 digits (e.g. A1234567).',
                 ];
 
-                if (isset($kycPatterns[$kycType]) && !preg_match($kycPatterns[$kycType], $kycNumber)) {
-                    $kycMessage = 'The KYC Number entered is not valid for the selected KYC Type (' . $kycType . '). ' . ($kycHints[$kycType] ?? '');
-                    if (!$request->expectsJson()) {
+                if (isset($kycPatterns[$kycType]) && ! preg_match($kycPatterns[$kycType], $kycNumber)) {
+                    $kycMessage = 'The KYC Number entered is not valid for the selected KYC Type ('.$kycType.'). '.($kycHints[$kycType] ?? '');
+                    if (! $request->expectsJson()) {
                         return back()
                             ->withErrors(['shipper_kyc_number' => $kycMessage])
                             ->withInput()
                             ->with('error', $kycMessage);
                     }
+
                     return response()->json([
                         'success' => false,
                         'message' => $kycMessage,
                         'errors' => [
-                            'shipper_kyc_number' => [$kycMessage]
-                        ]
+                            'shipper_kyc_number' => [$kycMessage],
+                        ],
                     ], 422);
                 }
             }
@@ -2312,21 +2361,22 @@ class CustomerController extends Controller
             // working with the human-readable name as before.
             // ------------------------------------------------------------------
             $destInput = $validatedData['delivery_destination'] ?? null;
-            $destName  = is_numeric($destInput)
-                ? optional(\App\Models\Destination::find((int) $destInput))->name
+            $destName = is_numeric($destInput)
+                ? optional(Destination::find((int) $destInput))->name
                 : $destInput;
 
-            if (!$destName) {
-                if (!$request->expectsJson()) {
+            if (! $destName) {
+                if (! $request->expectsJson()) {
                     return back()
                         ->withErrors(['delivery_destination' => 'The selected destination is invalid.'])
                         ->withInput()
                         ->with('error', 'The selected destination is invalid.');
                 }
+
                 return response()->json([
                     'success' => false,
                     'message' => 'The selected destination is invalid.',
-                    'errors'  => ['delivery_destination' => ['The selected destination is invalid.']],
+                    'errors' => ['delivery_destination' => ['The selected destination is invalid.']],
                 ], 422);
             }
             $validatedData['delivery_destination'] = $destName;
@@ -2335,10 +2385,10 @@ class CustomerController extends Controller
             if ($validatedData['origin_type'] === 'CSB V') {
                 $customer = auth()->guard('customer')->user();
                 if ($customer->csb_status === 1) {
-                    if (!$request->expectsJson()) {
+                    if (! $request->expectsJson()) {
                         return back()
                             ->withErrors([
-                                'origin_type' => 'CSB V requires CSB V onboarding. Your current status is CSB-IV only.'
+                                'origin_type' => 'CSB V requires CSB V onboarding. Your current status is CSB-IV only.',
                             ])
                             ->withInput()
                             ->with('error', 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.');
@@ -2348,8 +2398,8 @@ class CustomerController extends Controller
                         'success' => false,
                         'message' => 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.',
                         'errors' => [
-                            'origin_type' => ['CSB V requires CSB V onboarding. Your current status is CSB-IV only.']
-                        ]
+                            'origin_type' => ['CSB V requires CSB V onboarding. Your current status is CSB-IV only.'],
+                        ],
                     ], 422);
                 }
             }
@@ -2361,7 +2411,7 @@ class CustomerController extends Controller
                 $hasGst = (bool) ($customerCsbForm?->is_gst);
                 $hasLut = (bool) ($customerCsbForm?->is_lut);
 
-                if (!$hasGst && !$hasLut) {
+                if (! $hasGst && ! $hasLut) {
                     throw ValidationException::withMessages([
                         'csb_tax_type' => 'GST or LUT information is not available in your CSB profile.',
                     ]);
@@ -2369,11 +2419,11 @@ class CustomerController extends Controller
 
                 // A single available option is authoritative; only use the submitted
                 // radio selection when both GST and LUT are enabled in the profile.
-                $selectedTaxType = $hasGst && !$hasLut
+                $selectedTaxType = $hasGst && ! $hasLut
                     ? 'gst'
-                    : (!$hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
+                    : (! $hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
 
-                if ($hasGst && $hasLut && !in_array($selectedTaxType, ['gst', 'lut'], true)) {
+                if ($hasGst && $hasLut && ! in_array($selectedTaxType, ['gst', 'lut'], true)) {
                     throw ValidationException::withMessages([
                         'csb_tax_type' => 'Please select GST or LUT for this shipment.',
                     ]);
@@ -2397,27 +2447,28 @@ class CustomerController extends Controller
             $calculatedTotal = 0;
             if (is_array($items)) {
                 foreach ($items as $item) {
-                    $calculatedTotal += (float)($item['amount'] ?? 0);
+                    $calculatedTotal += (float) ($item['amount'] ?? 0);
                 }
             }
             $maxAllowedTotal = ($validatedData['origin_type'] === 'CSB V') ? 1000000 : 25000;
             if ($calculatedTotal > $maxAllowedTotal) {
                 $originLabel = ($validatedData['origin_type'] === 'CSB V') ? 'CSB V' : 'CSB IV';
-                $message = 'The total invoice amount is ₹' . number_format($calculatedTotal, 2) .
-                    ', which exceeds the maximum allowed limit of ₹' . number_format($maxAllowedTotal, 2) .
-                    ' for ' . $originLabel . '. Please reduce the invoice total and try again.';
-                if (!$request->expectsJson()) {
+                $message = 'The total invoice amount is ₹'.number_format($calculatedTotal, 2).
+                    ', which exceeds the maximum allowed limit of ₹'.number_format($maxAllowedTotal, 2).
+                    ' for '.$originLabel.'. Please reduce the invoice total and try again.';
+                if (! $request->expectsJson()) {
                     return back()
                         ->withErrors(['invoice_amount' => $message])
                         ->withInput()
                         ->with('error', $message);
                 }
+
                 return response()->json([
                     'success' => false,
                     'message' => $message,
                     'errors' => [
-                        'invoice_amount' => [$message]
-                    ]
+                        'invoice_amount' => [$message],
+                    ],
                 ], 422);
             }
 
@@ -2428,26 +2479,27 @@ class CustomerController extends Controller
                 $totalWeight = 0;
                 if (is_array($packages)) {
                     foreach ($packages as $pkg) {
-                        $totalWeight += (float)($pkg['chargeable_weight'] ?? 0);
+                        $totalWeight += (float) ($pkg['chargeable_weight'] ?? 0);
                     }
                 }
                 $maxWeight = 68;
                 if ($totalWeight > $maxWeight) {
-                    $weightMessage = 'The total package weight is ' . number_format($totalWeight, 2) .
-                        ' kg, which exceeds the maximum allowed limit of ' . $maxWeight .
+                    $weightMessage = 'The total package weight is '.number_format($totalWeight, 2).
+                        ' kg, which exceeds the maximum allowed limit of '.$maxWeight.
                         ' kg for CSB IV. Please reduce the weight and try again.';
-                    if (!$request->expectsJson()) {
+                    if (! $request->expectsJson()) {
                         return back()
                             ->withErrors(['packages' => $weightMessage])
                             ->withInput()
                             ->with('error', $weightMessage);
                     }
+
                     return response()->json([
                         'success' => false,
                         'message' => $weightMessage,
                         'errors' => [
-                            'packages' => [$weightMessage]
-                        ]
+                            'packages' => [$weightMessage],
+                        ],
                     ], 422);
                 }
             }
@@ -2469,45 +2521,46 @@ class CustomerController extends Controller
             $hasOversizePackage = false;
             if (is_array($packagesForValidation)) {
                 foreach ($packagesForValidation as $idx => $pkg) {
-                    $actualWt = (float)($pkg['actual_weight_kg'] ?? 0);
-                    $length = (float)($pkg['length_cm'] ?? 0);
-                    $width = (float)($pkg['width_cm'] ?? 0);
-                    $volWt = (float)($pkg['volumetric_weight'] ?? 0);
+                    $actualWt = (float) ($pkg['actual_weight_kg'] ?? 0);
+                    $length = (float) ($pkg['length_cm'] ?? 0);
+                    $width = (float) ($pkg['width_cm'] ?? 0);
+                    $volWt = (float) ($pkg['volumetric_weight'] ?? 0);
 
                     $pkgErrors = [];
                     if ($actualWt > $pkgMaxActualWeight) {
-                        $pkgErrors[] = 'Actual weight ' . number_format($actualWt, 2) .
-                            ' kg exceeds max ' . $pkgMaxActualWeight . ' kg.';
+                        $pkgErrors[] = 'Actual weight '.number_format($actualWt, 2).
+                            ' kg exceeds max '.$pkgMaxActualWeight.' kg.';
                     }
                     if ($length > $pkgMaxLength) {
-                        $pkgErrors[] = 'Length ' . number_format($length, 2) .
-                            ' cm exceeds max ' . $pkgMaxLength . ' cm.';
+                        $pkgErrors[] = 'Length '.number_format($length, 2).
+                            ' cm exceeds max '.$pkgMaxLength.' cm.';
                     }
                     if ($width > $pkgMaxWidth) {
-                        $pkgErrors[] = 'Width ' . number_format($width, 2) .
-                            ' cm exceeds max ' . $pkgMaxWidth . ' cm.';
+                        $pkgErrors[] = 'Width '.number_format($width, 2).
+                            ' cm exceeds max '.$pkgMaxWidth.' cm.';
                     }
                     if ($volWt > $pkgMaxVolumetricWeight) {
-                        $pkgErrors[] = 'Volumetric weight ' . number_format($volWt, 2) .
-                            ' kg exceeds the maximum allowed ' . $pkgMaxVolumetricWeight . ' kg.';
+                        $pkgErrors[] = 'Volumetric weight '.number_format($volWt, 2).
+                            ' kg exceeds the maximum allowed '.$pkgMaxVolumetricWeight.' kg.';
                     }
 
-                    if (!empty($pkgErrors)) {
+                    if (! empty($pkgErrors)) {
                         $boxNum = $idx + 1;
-                        $pkgMessage = 'Box #' . $boxNum . ': ' . implode(' ', $pkgErrors) .
+                        $pkgMessage = 'Box #'.$boxNum.': '.implode(' ', $pkgErrors).
                             ' Please correct the values and try again.';
-                        if (!$request->expectsJson()) {
+                        if (! $request->expectsJson()) {
                             return back()
                                 ->withErrors(['packages' => $pkgMessage])
                                 ->withInput()
                                 ->with('error', $pkgMessage);
                         }
+
                         return response()->json([
                             'success' => false,
                             'message' => $pkgMessage,
                             'errors' => [
-                                'packages' => [$pkgMessage]
-                            ]
+                                'packages' => [$pkgMessage],
+                            ],
                         ], 422);
                     }
 
@@ -2520,7 +2573,7 @@ class CustomerController extends Controller
 
             // Determine the final oversize charge:
             // Use the frontend-confirmed value if present, otherwise compute from packages.
-            $oversizeCharge = (float)($validatedData['oversize_charge'] ?? 0);
+            $oversizeCharge = (float) ($validatedData['oversize_charge'] ?? 0);
             if ($hasOversizePackage && $oversizeCharge <= 0) {
                 $oversizeCharge = $oversizeChargeAmount;
             }
@@ -2533,14 +2586,14 @@ class CustomerController extends Controller
                 $courierService = CourierService::find($serviceId);
                 if ($courierService) {
                     $validatedData['shipping_method'] = $courierService->method;
-                    \Log::info('storeShipment: Resolved shipping_method from service_id #' . $serviceId . ' → "' . $courierService->method . '"');
+                    \Log::info('storeShipment: Resolved shipping_method from service_id #'.$serviceId.' → "'.$courierService->method.'"');
                 }
             }
 
             // Ensure we have a service_id (courier_services.id) to persist on the
             // shipper_info row. Prefer the value sent by the frontend; otherwise
             // resolve it from the (possibly just-resolved) shipping_method.
-            if (!$serviceId && !empty($validatedData['shipping_method'])) {
+            if (! $serviceId && ! empty($validatedData['shipping_method'])) {
                 $resolvedService = CourierService::whereRaw('LOWER(method) = ?', [strtolower($validatedData['shipping_method'])])->first();
                 if ($resolvedService) {
                     $serviceId = $resolvedService->id;
@@ -2550,13 +2603,13 @@ class CustomerController extends Controller
             // Resolve the selected rate from server-owned records. A customer rate
             // takes precedence over the shared default rate (customer_id = 0).
             $courierRate = null;
-            if (!empty($validatedData['service_rate_id'])) {
+            if (! empty($validatedData['service_rate_id'])) {
                 $courierRate = CourierRate::whereKey((int) $validatedData['service_rate_id'])
                     ->whereIn('customer_id', [$customer->id, 0])
                     ->with('service')
                     ->first();
 
-                if (!$courierRate) {
+                if (! $courierRate) {
                     throw ValidationException::withMessages([
                         'service_rate_id' => 'The selected courier rate is invalid or unavailable for your account.',
                     ]);
@@ -2582,21 +2635,22 @@ class CustomerController extends Controller
             // "Some Very Long State Name" is not). Block shipment creation
             // here so the user is informed BEFORE the shipment is saved.
             // ------------------------------------------------------------
-            $shipperStateForWordCount = trim((string)($validatedData['shipper_state'] ?? ''));
+            $shipperStateForWordCount = trim((string) ($validatedData['shipper_state'] ?? ''));
             if ($shipperStateForWordCount !== '' && str_word_count($shipperStateForWordCount) > 2) {
-                $wordCountMessage = 'Shipper state must not exceed 2 words. The provided state "' . $shipperStateForWordCount . '" contains ' . str_word_count($shipperStateForWordCount) . ' words. Please enter a shorter state name and try again.';
-                if (!$request->expectsJson()) {
+                $wordCountMessage = 'Shipper state must not exceed 2 words. The provided state "'.$shipperStateForWordCount.'" contains '.str_word_count($shipperStateForWordCount).' words. Please enter a shorter state name and try again.';
+                if (! $request->expectsJson()) {
                     return back()
                         ->withErrors(['shipper_state' => $wordCountMessage])
                         ->withInput()
                         ->with('error', $wordCountMessage);
                 }
+
                 return response()->json([
                     'success' => false,
                     'message' => $wordCountMessage,
                     'errors' => [
-                        'shipper_state' => [$wordCountMessage]
-                    ]
+                        'shipper_state' => [$wordCountMessage],
+                    ],
                 ], 422);
             }
 
@@ -2611,21 +2665,22 @@ class CustomerController extends Controller
             // ============================================================
             $resolvedShippingMethod = $validatedData['shipping_method'] ?? '';
             if ($this->isOverseasLogisticMethod($resolvedShippingMethod)) {
-                $shipperStateInput = trim((string)($validatedData['shipper_state'] ?? ''));
+                $shipperStateInput = trim((string) ($validatedData['shipper_state'] ?? ''));
                 if (strlen($shipperStateInput) > 2) {
-                    $stateMessage = 'Shipper state must be a 2-letter code (e.g. "GJ", "MH") for Overseas shipments. The provided state "' . $shipperStateInput . '" is too long. Please enter a 2-letter state code and try again.';
-                    if (!$request->expectsJson()) {
+                    $stateMessage = 'Shipper state must be a 2-letter code (e.g. "GJ", "MH") for Overseas shipments. The provided state "'.$shipperStateInput.'" is too long. Please enter a 2-letter state code and try again.';
+                    if (! $request->expectsJson()) {
                         return back()
                             ->withErrors(['shipper_state' => $stateMessage])
                             ->withInput()
                             ->with('error', $stateMessage);
                     }
+
                     return response()->json([
                         'success' => false,
                         'message' => $stateMessage,
                         'errors' => [
-                            'shipper_state' => [$stateMessage]
-                        ]
+                            'shipper_state' => [$stateMessage],
+                        ],
                     ], 422);
                 }
             }
@@ -2638,12 +2693,12 @@ class CustomerController extends Controller
             // otherwise compute from packages (defense in depth).
             // ============================================================
             $handlingChargeAmount = 5000;
-            $handlingCharge = (float)($validatedData['handling_charge'] ?? 0);
+            $handlingCharge = (float) ($validatedData['handling_charge'] ?? 0);
             if (strcasecmp(($validatedData['shipping_method'] ?? ''), 'UNITED GROUND PREMIUM') === 0 && $handlingCharge <= 0) {
                 $hasHandlingPackage = false;
-                if (!empty($validatedData['packages']) && is_array($validatedData['packages'])) {
+                if (! empty($validatedData['packages']) && is_array($validatedData['packages'])) {
                     foreach ($validatedData['packages'] as $pkg) {
-                        $actualWt = (float)($pkg['actual_weight_kg'] ?? 0);
+                        $actualWt = (float) ($pkg['actual_weight_kg'] ?? 0);
                         if ($actualWt > 22) {
                             $hasHandlingPackage = true;
                             break;
@@ -2671,7 +2726,7 @@ class CustomerController extends Controller
                 $validatedData['packages'] ?? [],
                 fn ($package) => is_array($package)
             ));
-            $packageRowsForPricing = !empty($packageRowsForPricing)
+            $packageRowsForPricing = ! empty($packageRowsForPricing)
                 ? $packageRowsForPricing
                 : [[]];
             $basePrice = 0.0;
@@ -2685,7 +2740,7 @@ class CustomerController extends Controller
             };
 
             $findBoxRate = function (int $customerId, float $weight) use ($courierRate) {
-                if (!$courierRate) {
+                if (! $courierRate) {
                     return null;
                 }
 
@@ -2716,7 +2771,7 @@ class CustomerController extends Controller
                     ?: $findBoxRate(0, $chargeableWeight)
                     ?: $courierRate;
 
-                if (!$boxRate) {
+                if (! $boxRate) {
                     continue;
                 }
 
@@ -2727,14 +2782,14 @@ class CustomerController extends Controller
 
                 // Each box carries its own surcharges from its own matched rate.
                 $boxSurchargeIds = $parseSurchargeIds($boxRate->surcharge_id);
-                $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+                $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
 
                 $basePrice += $boxBase;
                 $fuelPrice += $boxFuel;
                 $surchargeTotal += $boxSurcharge;
 
-                if (!empty($boxSurchargeIds)) {
-                    foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                if (! empty($boxSurchargeIds)) {
+                    foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
                         $surchargeList[$s->id] = [
                             'id' => $s->id,
                             'name' => $s->name,
@@ -2781,7 +2836,7 @@ class CustomerController extends Controller
                 'fuel_price' => $fuelPrice,
                 'gst_percentage' => $gstPct,
                 'gst_amount' => $gstAmt,
-                'surcharge' => !empty($surchargeData) ? $surchargeData : null,
+                'surcharge' => ! empty($surchargeData) ? $surchargeData : null,
                 'surcharge_total' => $surchargeTotal,
                 'total_base_price' => $basePrice,
                 'total_fuel_price' => $fuelPrice,
@@ -2817,9 +2872,9 @@ class CustomerController extends Controller
             foreach ($packageRows as $packageData) {
                 $hasPackageValue = collect($packageData)->filter(function ($value) {
                     return $value !== null && $value !== '';
-                })->isNotEmpty() || !empty($packageShippingMethod);
+                })->isNotEmpty() || ! empty($packageShippingMethod);
 
-                if (!$hasPackageValue) {
+                if (! $hasPackageValue) {
                     continue;
                 }
 
@@ -2995,7 +3050,7 @@ class CustomerController extends Controller
             DB::commit();
             $transactionStarted = false;
 
-            if (!$request->expectsJson()) {
+            if (! $request->expectsJson()) {
                 return back()->with('success', 'Shipment created successfully!');
             }
 
@@ -3013,16 +3068,16 @@ class CustomerController extends Controller
                     'oversize_charge' => (float) $oversizeCharge,
                     'handling_charge' => (float) $handlingCharge,
                     'adomantra' => $adomantraResponse,
-                ]
+                ],
             ], 200);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             if ($transactionStarted) {
                 DB::rollBack();
                 $transactionStarted = false;
             }
 
-            if (!$request->expectsJson()) {
+            if (! $request->expectsJson()) {
                 return back()
                     ->withErrors($e->validator)
                     ->withInput()
@@ -3032,7 +3087,7 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
 
         } catch (\RuntimeException $e) {
@@ -3049,7 +3104,7 @@ class CustomerController extends Controller
 
             $message = 'The shipment could not be submitted to the carrier. No shipment was saved. Please try again.';
 
-            if (!$request->expectsJson()) {
+            if (! $request->expectsJson()) {
                 return back()
                     ->withInput()
                     ->with('error', $message);
@@ -3074,7 +3129,7 @@ class CustomerController extends Controller
 
             $message = 'Failed to create shipment. Please try again.';
 
-            if (!$request->expectsJson()) {
+            if (! $request->expectsJson()) {
                 return back()
                     ->withInput()
                     ->with('error', $message);
@@ -3116,11 +3171,11 @@ class CustomerController extends Controller
         $miscellaneous = $oversizeCharge + $handlingCharge;
         $invoiceAmount = (float) ($data['invoice_amount'] ?? 0);
         $destination = (string) ($data['delivery_destination'] ?? '');
-        $destinationRecord = \App\Models\Destination::where('name', $destination)->first();
+        $destinationRecord = Destination::where('name', $destination)->first();
         $countryCode = strtoupper((string) ($destinationRecord?->country_code ?? ''));
         $csbType = strtoupper((string) ($data['origin_type'] ?? 'CSB IV')) === 'CSB V' ? 'CSB 5' : 'CSB 4';
-        $customerName = trim((string) ($customer->first_name . ' ' . $customer->last_name));
-        $accountCode = (string) ($customer->customer_code ?: 'UWC' . str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT));
+        $customerName = trim((string) ($customer->first_name.' '.$customer->last_name));
+        $accountCode = (string) ($customer->customer_code ?: 'UWC'.str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT));
 
         $productDetails = array_map(function (array $item): array {
             return [
@@ -3262,7 +3317,7 @@ class CustomerController extends Controller
         $clientSecret = env('UPS_CLIENT_SECRET');
         $tokenUrl = 'https://onlinetools.ups.com/security/v1/oauth/token';
 
-        if (!$clientId || !$clientSecret) {
+        if (! $clientId || ! $clientSecret) {
             throw new \Exception('UPS client credentials not configured. Set UPS_CLIENT_ID and UPS_CLIENT_SECRET in .env');
         }
 
@@ -3270,25 +3325,24 @@ class CustomerController extends Controller
             ->asForm()
             ->post($tokenUrl, ['grant_type' => 'client_credentials']);
 
-        if (!$response->successful()) {
-            \Log::error('UPS token error: ' . $response->body());
+        if (! $response->successful()) {
+            \Log::error('UPS token error: '.$response->body());
             throw new \Exception('Unable to retrieve UPS access token');
         }
 
         $data = $response->json();
 
         if (empty($data['access_token'])) {
-            \Log::error('UPS token missing access_token: ' . $response->body());
+            \Log::error('UPS token missing access_token: '.$response->body());
             throw new \Exception('UPS access token not found in response');
         }
 
-        $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 3600;
+        $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : 3600;
         $ttl = max(60, $expiresIn - 60);
         Cache::put($cacheKey, $data['access_token'], $ttl);
 
         return $data['access_token'];
     }
-
 
     // new ups rate made by "Anil Sir"
     private function normalizeSurchargeIds($value): array
@@ -3306,170 +3360,172 @@ class CustomerController extends Controller
             if (is_array($decoded)) {
                 return array_values(array_filter(array_map('intval', $decoded)));
             }
+
             // Plain comma-separated string like "1,2".
             return array_values(array_filter(array_map('intval', explode(',', $value))));
         }
+
         return [];
     }
 
     public function getUpsRate(Request $request)
     {
-            //try {
-            // 1. Get logged-in customer
-            $customer = auth()->guard('customer')->user();
-            if (!$customer) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You must be logged in to view rates.'
-                ], 401);
+        // try {
+        // 1. Get logged-in customer
+        $customer = auth()->guard('customer')->user();
+        if (! $customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must be logged in to view rates.',
+            ], 401);
+        }
+
+        // 2. Get all inputs
+        // $serviceId = $request->service_id;
+        $totalWeight = floatval($request->total_weight ?? 0);
+        $consigneeState = $request->consignee_state;
+        $consigneeZipCode = $request->consignee_zip_code;
+        $deliveryDestination = $request->delivery_destination;
+        $packageWeights = $request->package_weights;
+        // $isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
+        $isMultiPackage = is_array($packageWeights) ? count($packageWeights) : 1;
+
+        // 3. Weight validation
+        if ($totalWeight <= 0) {
+            return response()->json([
+                'success' => true,
+                'customer_exists' => false,
+                'customer_name' => $customer->first_name.' '.$customer->last_name,
+                'all_rates' => [],
+                'message' => 'Please enter Actual Weight greater than 0 to view rates.',
+            ]);
+        }
+
+        // 4. Resolve destination and its zone.
+        // The frontend normally sends the destination name, but API/bulk
+        // callers may send the numeric destinations.id instead.
+        $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
+        $destination = null;
+        if (ctype_digit(trim((string) $deliveryDestination))) {
+            $destination = Destination::find((int) $deliveryDestination);
+        } elseif (! empty($deliveryDestination)) {
+            $destinationValue = trim((string) $deliveryDestination);
+            $destination = Destination::where(function ($query) use ($destinationValue) {
+                $query->whereRaw('UPPER(name) = ?', [strtoupper($destinationValue)])
+                    ->orWhereRaw('UPPER(code) = ?', [strtoupper($destinationValue)]);
+            })->first();
+        }
+
+        // Limit state/emirate matching to the selected destination whenever
+        // possible. This prevents values such as "Dubai" from resolving to
+        // an unrelated country's zone. Match both stored codes and names
+        // because the UAE dropdown submits full emirate names.
+        $zone = null;
+        if (! empty($consigneeState)) {
+            $stateValue = trim((string) $consigneeState);
+            $stateAliases = [$stateValue];
+            $uaeEmirateCodes = [
+                'ABU DHABI' => 'AZ',
+                'AJMAN' => 'AJ',
+                'DUBAI' => 'DU',
+                'FUJAIRAH' => 'FU',
+                'RAS AL KHAIMAH' => 'RK',
+                'SHARJAH' => 'SH',
+                'UMM AL QUWAIN' => 'UQ',
+            ];
+            if ($destinationCountry === 'UAE' && isset($uaeEmirateCodes[strtoupper($stateValue)])) {
+                $stateAliases[] = $uaeEmirateCodes[strtoupper($stateValue)];
             }
 
-            // 2. Get all inputs
-            //$serviceId = $request->service_id;
-            $totalWeight = floatval($request->total_weight ?? 0);
-            $consigneeState = $request->consignee_state;
-            $consigneeZipCode = $request->consignee_zip_code;
-            $deliveryDestination = $request->delivery_destination;
-            $packageWeights = $request->package_weights;
-           //$isMultiPackage = is_array($packageWeights) && count($packageWeights) > 1;
-            $isMultiPackage = is_array($packageWeights) ? count($packageWeights) :1;
-			
-            // 3. Weight validation
-            if ($totalWeight <= 0) {
-                return response()->json([
-                    'success' => true,
-                    'customer_exists' => false,
-                    'customer_name' => $customer->first_name . ' ' . $customer->last_name,
-                    'all_rates' => [],
-                    'message' => 'Please enter Actual Weight greater than 0 to view rates.'
-                ]);
+            $zoneQuery = Zone::query();
+            if ($destination) {
+                $zoneQuery->where('destination_id', $destination->id);
             }
-
-            // 4. Resolve destination and its zone.
-            // The frontend normally sends the destination name, but API/bulk
-            // callers may send the numeric destinations.id instead.
-            $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
-            $destination = null;
-            if (ctype_digit(trim((string) $deliveryDestination))) {
-                $destination = \App\Models\Destination::find((int) $deliveryDestination);
-            } elseif (!empty($deliveryDestination)) {
-                $destinationValue = trim((string) $deliveryDestination);
-                $destination = \App\Models\Destination::where(function ($query) use ($destinationValue) {
-                    $query->whereRaw('UPPER(name) = ?', [strtoupper($destinationValue)])
-                        ->orWhereRaw('UPPER(code) = ?', [strtoupper($destinationValue)]);
-                })->first();
-            }
-
-            // Limit state/emirate matching to the selected destination whenever
-            // possible. This prevents values such as "Dubai" from resolving to
-            // an unrelated country's zone. Match both stored codes and names
-            // because the UAE dropdown submits full emirate names.
-            $zone = null;
-            if (!empty($consigneeState)) {
-                $stateValue = trim((string) $consigneeState);
-                $stateAliases = [$stateValue];
-                $uaeEmirateCodes = [
-                    'ABU DHABI' => 'AZ',
-                    'AJMAN' => 'AJ',
-                    'DUBAI' => 'DU',
-                    'FUJAIRAH' => 'FU',
-                    'RAS AL KHAIMAH' => 'RK',
-                    'SHARJAH' => 'SH',
-                    'UMM AL QUWAIN' => 'UQ',
-                ];
-                if ($destinationCountry === 'UAE' && isset($uaeEmirateCodes[strtoupper($stateValue)])) {
-                    $stateAliases[] = $uaeEmirateCodes[strtoupper($stateValue)];
+            $zone = $zoneQuery->where(function ($query) use ($stateAliases) {
+                foreach ($stateAliases as $alias) {
+                    $query->orWhereRaw('UPPER(zone_code) = ?', [strtoupper($alias)])
+                        ->orWhereRaw('UPPER(zone_name) = ?', [strtoupper($alias)]);
                 }
+            })->first();
+        }
 
-                $zoneQuery = \App\Models\Zone::query();
+        if (empty($zone) && ! empty($consigneeZipCode)) {
+            // Normalise the postcode (uppercase, trim spaces) for matching.
+            $zipNorm = strtoupper(preg_replace('/\s+/', '', trim($consigneeZipCode)));
+            if ($zipNorm !== '') {
+                // Try an exact match first, scoped to the selected destination.
+                $exactZipQuery = Zone::query();
                 if ($destination) {
-                    $zoneQuery->where('destination_id', $destination->id);
+                    $exactZipQuery->where('destination_id', $destination->id);
                 }
-                $zone = $zoneQuery->where(function ($query) use ($stateAliases) {
-                    foreach ($stateAliases as $alias) {
-                        $query->orWhereRaw('UPPER(zone_code) = ?', [strtoupper($alias)])
-                            ->orWhereRaw('UPPER(zone_name) = ?', [strtoupper($alias)]);
-                    }
-                })->first();
-            }
+                $zone = $exactZipQuery
+                    ->whereRaw("UPPER(REPLACE(zone_code, ' ', '')) = ?", [$zipNorm])
+                    ->first();
 
-            if (empty($zone) && !empty($consigneeZipCode)) {
-                // Normalise the postcode (uppercase, trim spaces) for matching.
-                $zipNorm = strtoupper(preg_replace('/\s+/', '', trim($consigneeZipCode)));
-                if ($zipNorm !== '') {
-                    // Try an exact match first, scoped to the selected destination.
-                    $exactZipQuery = \App\Models\Zone::query();
+                if (empty($zone)) {
+                    // Find the longest stored outward/FSA code that prefixes
+                    // the full postcode, e.g. SW1 for SW1A1AA or M5H for M5H2N2.
+                    $prefixZipQuery = Zone::where('zone_category', 'zipcode');
                     if ($destination) {
-                        $exactZipQuery->where('destination_id', $destination->id);
+                        $prefixZipQuery->where('destination_id', $destination->id);
                     }
-                    $zone = $exactZipQuery
-                        ->whereRaw("UPPER(REPLACE(zone_code, ' ', '')) = ?", [$zipNorm])
+                    $zone = $prefixZipQuery
+                        ->whereRaw("? LIKE CONCAT(UPPER(REPLACE(zone_code, ' ', '')), '%')", [$zipNorm])
+                        ->orderByRaw("LENGTH(REPLACE(zone_code, ' ', '')) DESC")
                         ->first();
-
-                    if (empty($zone)) {
-                        // Find the longest stored outward/FSA code that prefixes
-                        // the full postcode, e.g. SW1 for SW1A1AA or M5H for M5H2N2.
-                        $prefixZipQuery = \App\Models\Zone::where('zone_category', 'zipcode');
-                        if ($destination) {
-                            $prefixZipQuery->where('destination_id', $destination->id);
-                        }
-                        $zone = $prefixZipQuery
-                            ->whereRaw("? LIKE CONCAT(UPPER(REPLACE(zone_code, ' ', '')), '%')", [$zipNorm])
-                            ->orderByRaw("LENGTH(REPLACE(zone_code, ' ', '')) DESC")
-                            ->first();
-                    }
                 }
             }
+        }
 
-            $zoneNumber = $zone?->zone_number_testing;
-            $zoneName = $zone?->zone_name;
-            $zoneCode = $zone?->zone_code;
+        $zoneNumber = $zone?->zone_number_testing;
+        $zoneName = $zone?->zone_name;
+        $zoneCode = $zone?->zone_code;
 
-            // 5. Get services
-            /*$serviceRows = \DB::select(
-				 "SELECT * FROM courier_services WHERE country = ? LIMIT 1",
-                [$destinationCountry]
-            );*/
-            // Only enabled services (status = 1) show rates to customers.
-            $services = CourierService::where('country', $destinationCountry)->where('status', 1)->get();
-            
-            if(empty($services)){
-            	return response()->json([
-                    'success' => false,
-                    'message' => 'Service not available.'
-                ], 404); 
-            }
-            
-            //print_r($services); exit;   
-            // 6. Process rates - SINGLE LOOP
-            $allRates = [];
-            $customerRatesExist = false;
-            $singleServiceModel = null;
-                
-            foreach ($services as $key=>$service) {
-                
-                // ========== SPECIAL CASE: US Multi-package with United Ground Premium ==========
-                if ($destinationCountry === 'US' && strtolower($service->method)=='united ground premium') {
-                        // echo 'A';
-                    // Box-wise calculation
-                    $boxBreakdown = [];
-                    $combinedBase = 0;
-                    $combinedFuel = 0;
-                    $combinedGst = 0;
-                    $combinedSurcharge = 0;
-                    $surchargeList = [];
-                    $firstMatchedRate = null;
-                    $allBoxesMatched = true;
-					
-                    foreach ($packageWeights as $index => $pkgWt) {
-                      $pkgWt = floatval($pkgWt);
-                      
-                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
-					//echo "<br>";
+        // 5. Get services
+        /*$serviceRows = \DB::select(
+             "SELECT * FROM courier_services WHERE country = ? LIMIT 1",
+            [$destinationCountry]
+        );*/
+        // Only enabled services (status = 1) show rates to customers.
+        $services = CourierService::where('country', $destinationCountry)->where('status', 1)->get();
 
-                        // Try customer rates first
-                        $boxRate = \DB::select(
-                            "SELECT cr.*, cs.country, cs.service_code, cs.method
+        if (empty($services)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Service not available.',
+            ], 404);
+        }
+
+        // print_r($services); exit;
+        // 6. Process rates - SINGLE LOOP
+        $allRates = [];
+        $customerRatesExist = false;
+        $singleServiceModel = null;
+
+        foreach ($services as $key => $service) {
+
+            // ========== SPECIAL CASE: US Multi-package with United Ground Premium ==========
+            if ($destinationCountry === 'US' && strtolower($service->method) == 'united ground premium') {
+                // echo 'A';
+                // Box-wise calculation
+                $boxBreakdown = [];
+                $combinedBase = 0;
+                $combinedFuel = 0;
+                $combinedGst = 0;
+                $combinedSurcharge = 0;
+                $surchargeList = [];
+                $firstMatchedRate = null;
+                $allBoxesMatched = true;
+
+                foreach ($packageWeights as $index => $pkgWt) {
+                    $pkgWt = floatval($pkgWt);
+
+                    // echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+                    // echo "<br>";
+
+                    // Try customer rates first
+                    $boxRate = \DB::select(
+                        'SELECT cr.*, cs.country, cs.service_code, cs.method
                             FROM courier_rates cr
                             INNER JOIN courier_services cs ON cr.service_id = cs.id
                             WHERE cr.customer_id = ?
@@ -3478,14 +3534,14 @@ class CustomerController extends Controller
                             AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
                             AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
                             ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1",
-                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                        );
+                            LIMIT 1',
+                        [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    );
 
-                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
-                        if (empty($boxRate)) {
-                            $boxRate = \DB::select(
-                                "SELECT cr.*, cs.country, cs.service_code, cs.method
+                    // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                    if (empty($boxRate)) {
+                        $boxRate = \DB::select(
+                            'SELECT cr.*, cs.country, cs.service_code, cs.method
                                 FROM courier_rates cr
                                 INNER JOIN courier_services cs ON cr.service_id = cs.id
                                 WHERE cr.customer_id = 0
@@ -3494,121 +3550,122 @@ class CustomerController extends Controller
                                 AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
                                 AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
                                 ORDER BY cr.zone_no DESC, cr.wt_range_start
-                                LIMIT 1",
-                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                            );
+                                LIMIT 1',
+                            [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                        );
+                    }
+
+                    // print_r($boxRate);
+                    // exit;
+
+                    if (! empty($boxRate)) {
+                        $boxRate = $boxRate[0];
+                        if ($firstMatchedRate === null) {
+                            $firstMatchedRate = $boxRate;
                         }
 
-                        // print_r($boxRate);
-                        // exit;
-                        
-                        if(!empty($boxRate)){
-                        	$boxRate = $boxRate[0];
-                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
+                        // Calculate per-box amounts. Base, fuel and surcharge are
+                        // box-specific; GST is applied once on the combined total.
+                        $base = floatval($boxRate->price);
+                        $fuel = floatval($boxRate->fuel_charge) > 0
+                            ? floatval($boxRate->fuel_charge)
+                            : ($base * floatval($boxRate->fuel_percentage) / 100);
 
-	                        // Calculate per-box amounts. Base, fuel and surcharge are
-	                        // box-specific; GST is applied once on the combined total.
-	                        $base = floatval($boxRate->price);
-	                        $fuel = floatval($boxRate->fuel_charge) > 0 
-	                            ? floatval($boxRate->fuel_charge) 
-	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-
-	                        // Each box carries its own surcharges from its own matched rate.
-	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-	                        if (!empty($boxSurchargeIds)) {
-	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-	                                $surchargeList[$s->id] = [
-	                                    'name' => $s->name,
-	                                    'code' => $s->code,
-	                                    'price' => (float) $s->price,
-	                                ];
-	                            }
-	                        }
-
-	                        $boxBreakdown[] = [
-	                            'box' => $index + 1,
-	                            'weight' => $pkgWt,
-	                            'base' => $base,
-	                            'fuel' => $fuel,
-	                            'surcharge' => $boxSurcharge,
-	                            'total' => $base + $fuel + $boxSurcharge,
-	                        ];
-
-	                        $combinedBase += $base;
-	                        $combinedFuel += $fuel;
-	                        $combinedSurcharge += $boxSurcharge;
-	                        
+                        // Each box carries its own surcharges from its own matched rate.
+                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+                        if (! empty($boxSurchargeIds)) {
+                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                                $surchargeList[$s->id] = [
+                                    'name' => $s->name,
+                                    'code' => $s->code,
+                                    'price' => (float) $s->price,
+                                ];
+                            }
                         }
-                        /*else{
-                        	
-                        	return response()->json([
-			                    'success' => false,
-			                    'message' => 'Service rate not available. Please contact to support.'
-			                ], 404);
-                        }*/ 
-                        
-                    }//end foreach loop
 
-                    // GST is applied once on the combined total
-                    // (total base + total fuel + total surcharge).
-                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
-                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
-                    $combinedGst = $fixedGst > 0
-                        ? $fixedGst
-                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
+                        $boxBreakdown[] = [
+                            'box' => $index + 1,
+                            'weight' => $pkgWt,
+                            'base' => $base,
+                            'fuel' => $fuel,
+                            'surcharge' => $boxSurcharge,
+                            'total' => $base + $fuel + $boxSurcharge,
+                        ];
 
-                   
-                    $allRates[] = [
-                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
-                        'service_id' => $service->id,
-                        'method' => $service->method,
-                        'method_display' => $service->method . ' ' . $service->tat,
-                        'network' => $service->network,
-                        'method_code' => $service->method_code,
-                        'tat' => $service->tat,
-                        'delivery_days' => $service->tat,
-                        'scode' => $service->scode,
-                        'consigneeState' => $consigneeState,
-                        'zone_no' => $zoneNumber,
-                        // i want to print zone name
-                        'zone_name' => $zoneName ?? null,
-                        'pkg_wt' => $pkgWt,
-                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
-                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
-                        'price' => $combinedBase,
-                        'fuel_charge' => $combinedFuel,
-                        'fuel_percentage' => 0,
-                        'gst_percentage' => $gstPctForTotal,
-                        'gst_amount' => $combinedGst,
-                        'surcharge_total' => $combinedSurcharge,
-                        'surcharges' => array_values($surchargeList),
-                        'total_base_price' => $combinedBase,
-                        'total_fuel_price' => $combinedFuel,
-                        'total_surcharge' => $combinedSurcharge,
-                        'is_multi_package' => true,
-                        'box_breakdown' => $boxBreakdown,
-                    ];
-                
-                }//end if
-                
-                if ($destinationCountry === 'US' && $isMultiPackage<=1 && strtolower($service->method)!='united ground premium') {
-				    // Box-wise calculation
-				    $boxBreakdown = [];
-				    $combinedBase = 0;
-				    $combinedFuel = 0;
-				    $combinedGst = 0;
-				    $combinedSurcharge = 0;
-				    $surchargeList = [];
-				    $firstMatchedRate = null;
-				    $allBoxesMatched = true;
+                        $combinedBase += $base;
+                        $combinedFuel += $fuel;
+                        $combinedSurcharge += $boxSurcharge;
 
-				    foreach ($packageWeights as $index => $pkgWt) {
-				        $pkgWt = floatval($pkgWt) ?: 1;
+                    }
+                    /*else{
 
-				        // Try customer rates first
-				        $boxRate = \DB::select(
-				            "SELECT cr.*, cs.country, cs.service_code, cs.method
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Service rate not available. Please contact to support.'
+                        ], 404);
+                    }*/
+
+                }// end foreach loop
+
+                // GST is applied once on the combined total
+                // (total base + total fuel + total surcharge).
+                $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                $combinedGst = $fixedGst > 0
+                    ? $fixedGst
+                    : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
+
+                $allRates[] = [
+                    'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
+                    'service_id' => $service->id,
+                    'method' => $service->method,
+                    'method_display' => $service->method.' '.$service->tat,
+                    'network' => $service->network,
+                    'method_code' => $service->method_code,
+                    'tat' => $service->tat,
+                    'delivery_days' => $service->tat,
+                    'scode' => $service->scode,
+                    'consigneeState' => $consigneeState,
+                    'zone_no' => $zoneNumber,
+                    // i want to print zone name
+                    'zone_name' => $zoneName ?? null,
+                    'pkg_wt' => $pkgWt,
+                    // 'wt_range_start' => $firstMatchedRate->wt_range_start,
+                    // 'wt_range_end' => $firstMatchedRate->wt_range_end,
+                    'price' => $combinedBase,
+                    'fuel_charge' => $combinedFuel,
+                    'fuel_percentage' => 0,
+                    'gst_percentage' => $gstPctForTotal,
+                    'gst_amount' => $combinedGst,
+                    'surcharge_total' => $combinedSurcharge,
+                    'surcharges' => array_values($surchargeList),
+                    'total_base_price' => $combinedBase,
+                    'total_fuel_price' => $combinedFuel,
+                    'total_surcharge' => $combinedSurcharge,
+                    'is_multi_package' => true,
+                    'box_breakdown' => $boxBreakdown,
+                ];
+
+            }// end if
+
+            if ($destinationCountry === 'US' && $isMultiPackage <= 1 && strtolower($service->method) != 'united ground premium') {
+                // Box-wise calculation
+                $boxBreakdown = [];
+                $combinedBase = 0;
+                $combinedFuel = 0;
+                $combinedGst = 0;
+                $combinedSurcharge = 0;
+                $surchargeList = [];
+                $firstMatchedRate = null;
+                $allBoxesMatched = true;
+
+                foreach ($packageWeights as $index => $pkgWt) {
+                    $pkgWt = floatval($pkgWt) ?: 1;
+
+                    // Try customer rates first
+                    $boxRate = \DB::select(
+                        'SELECT cr.*, cs.country, cs.service_code, cs.method
 				            FROM courier_rates cr
 				            INNER JOIN courier_services cs ON cr.service_id = cs.id
 				            WHERE cr.customer_id = ?
@@ -3617,14 +3674,14 @@ class CustomerController extends Controller
 				            AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
 				            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
 				            ORDER BY cr.zone_no DESC, cr.wt_range_start
-				            LIMIT 1",
-				            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
-				        );
+				            LIMIT 1',
+                        [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    );
 
-				        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
-				        if (empty($boxRate)) {
-				            $boxRate = \DB::select(
-				                "SELECT cr.*, cs.country, cs.service_code, cs.method
+                    // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                    if (empty($boxRate)) {
+                        $boxRate = \DB::select(
+                            'SELECT cr.*, cs.country, cs.service_code, cs.method
 				                FROM courier_rates cr
 				                INNER JOIN courier_services cs ON cr.service_id = cs.id
 				                WHERE cr.customer_id = 0
@@ -3633,475 +3690,476 @@ class CustomerController extends Controller
 				                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
 				                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
 				                ORDER BY cr.zone_no DESC, cr.wt_range_start
-				                LIMIT 1",
-				                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
-				            );
-				        }
-
-				        // If no customer rate, try default
-				        
-						if(!empty($boxRate)){
-							$boxRate = $boxRate[0];
-							if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
-				        
-				            // Calculate per-box amounts. Base, fuel and surcharge are
-				            // box-specific; GST is applied once on the combined total.
-				            $base = floatval($boxRate->price);
-				            $fuel = floatval($boxRate->fuel_charge) > 0 
-				                ? floatval($boxRate->fuel_charge) 
-				                : ($base * floatval($boxRate->fuel_percentage) / 100);
-
-				            // Each box carries its own surcharges from its own matched rate.
-				            $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-				            $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-				            if (!empty($boxSurchargeIds)) {
-				                foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-				                    $surchargeList[$s->id] = [
-				                        'name' => $s->name,
-				                        'code' => $s->code,
-				                        'price' => (float) $s->price,
-				                    ];
-				                }
-				            }
-
-				            $boxBreakdown[] = [
-				                'box' => $index + 1,
-				                'weight' => $pkgWt,
-				                'base' => $base,
-				                'fuel' => $fuel,
-				                'surcharge' => $boxSurcharge,
-				                'total' => $base + $fuel + $boxSurcharge,
-				            ];
-
-				            $combinedBase += $base;
-				            $combinedFuel += $fuel;
-				            $combinedSurcharge += $boxSurcharge;
-				            
-						}
-						/*else{
-							
-							return response()->json([
-				                'success' => false,
-				                'message' => 'Service rate not available. Please contact to support.'
-				            ], 404);
-						}*/
-				        
-				    }
-
-				    // GST is applied once on the combined total
-				    // (total base + total fuel + total surcharge).
-				    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
-				    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
-				    $combinedGst = $fixedGst > 0
-				        ? $fixedGst
-				        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
-
-				    $allRates[] = [
-				        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
-				        'service_id' => $service->id,
-				        'method' => $service->method,
-				        'method_display' => $service->method . ' ' . $service->tat,
-				        'network' => $service->network,
-				        'method_code' => $service->method_code,
-				        'tat' => $service->tat,
-				        'delivery_days' => $service->tat,
-				        'scode' => $service->scode,
-				        'consigneeState' => $consigneeState,
-				        'zone_no' => $zoneNumber,
-				        'pkg_wt' => $pkgWt,
-				        //'wt_range_start' => $firstMatchedRate->wt_range_start,
-				        //'wt_range_end' => $firstMatchedRate->wt_range_end,
-				        'price' => $combinedBase,
-				        'fuel_charge' => $combinedFuel,
-				        'fuel_percentage' => 0,
-				        'gst_percentage' => $gstPctForTotal,
-				        'gst_amount' => $combinedGst,
-				        'surcharge_total' => $combinedSurcharge,
-				        'surcharges' => array_values($surchargeList),
-				        'total_base_price' => $combinedBase,
-				        'total_fuel_price' => $combinedFuel,
-				        'total_surcharge' => $combinedSurcharge,
-				        'is_multi_package' => true,
-				        'box_breakdown' => $boxBreakdown,
-				    ];
-
-				}//end if
-
-				if ($destinationCountry === 'UK'){
-					$boxBreakdown = [];
-                    $combinedBase = 0;
-                    $combinedFuel = 0;
-                    $combinedGst = 0;
-                    $combinedSurcharge = 0;
-                    $surchargeList = [];
-                    $firstMatchedRate = null;
-                    $allBoxesMatched = true;
-					
-                    foreach ($packageWeights as $index => $pkgWt) {
-                      $pkgWt = floatval($pkgWt);
-                      
-                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
-					//echo "<br>";
-
-                        // Try customer rates first
-                        $boxRate = \DB::select(
-                            "SELECT cr.*, cs.country, cs.service_code, cs.method
-                            FROM courier_rates cr
-                            INNER JOIN courier_services cs ON cr.service_id = cs.id
-                            WHERE cr.customer_id = ?
-                            AND cr.service_id = ?
-                            AND cs.country = ?
-                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                            ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1",
-                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+				                LIMIT 1',
+                            [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
                         );
-
-                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
-                        if (empty($boxRate)) {
-                            $boxRate = \DB::select(
-                                "SELECT cr.*, cs.country, cs.service_code, cs.method
-                                FROM courier_rates cr
-                                INNER JOIN courier_services cs ON cr.service_id = cs.id
-                                WHERE cr.customer_id = 0
-                                AND cr.service_id = ?
-                                AND cs.country = ?
-                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                                ORDER BY cr.zone_no DESC, cr.wt_range_start
-                                LIMIT 1",
-                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                            );
-                        }
-
-                        //print_r($boxRate);
-                        
-                        if(!empty($boxRate)){
-                        	$boxRate = $boxRate[0];
-                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
-
-	                        // Calculate per-box amounts. Base, fuel and surcharge are
-	                        // box-specific; GST is applied once on the combined total.
-	                        $base = floatval($boxRate->price);
-	                        $fuel = floatval($boxRate->fuel_charge) > 0 
-	                            ? floatval($boxRate->fuel_charge) 
-	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-
-	                        // Each box carries its own surcharges from its own matched rate.
-	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-	                        if (!empty($boxSurchargeIds)) {
-	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-	                                $surchargeList[$s->id] = [
-	                                    'name' => $s->name,
-	                                    'code' => $s->code,
-	                                    'price' => (float) $s->price,
-	                                ];
-	                            }
-	                        }
-
-	                        $boxBreakdown[] = [
-	                            'box' => $index + 1,
-	                            'weight' => $pkgWt,
-	                            'base' => $base,
-	                            'fuel' => $fuel,
-	                            'surcharge' => $boxSurcharge,
-	                            'total' => $base + $fuel + $boxSurcharge,
-	                        ];
-
-	                        $combinedBase += $base;
-	                        $combinedFuel += $fuel;
-	                        $combinedSurcharge += $boxSurcharge;
-	                        
-                        }
-                        /*else{
-                        	
-                        	return response()->json([
-			                    'success' => false,
-			                    'message' => 'Service rate not available. Please contact to support.'
-			                ], 404);
-                        }*/ 
-                        
-                    }//end foreach loop
-
-                    // GST is applied once on the combined total
-                    // (total base + total fuel + total surcharge).
-                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
-                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
-                    $combinedGst = $fixedGst > 0
-                        ? $fixedGst
-                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
-
-                   
-                    $allRates[] = [
-                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
-                        'service_id' => $service->id,
-                        'method' => $service->method,
-                        'method_display' => $service->method . ' ' . $service->tat,
-                        'network' => $service->network,
-                        'method_code' => $service->method_code,
-                        'tat' => $service->tat,
-                        'delivery_days' => $service->tat,
-                        'scode' => $service->scode,
-                        'consigneeState' => $consigneeState,
-                        'zone_no' => $zoneNumber,
-                        'pkg_wt' => $pkgWt,
-                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
-                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
-                        'price' => $combinedBase,
-                        'fuel_charge' => $combinedFuel,
-                        'fuel_percentage' => 0,
-                        'gst_percentage' => $gstPctForTotal,
-                        'gst_amount' => $combinedGst,
-                        'surcharge_total' => $combinedSurcharge,
-                        'surcharges' => array_values($surchargeList),
-                        'total_base_price' => $combinedBase,
-                        'total_fuel_price' => $combinedFuel,
-                        'total_surcharge' => $combinedSurcharge,
-                        'is_multi_package' => true,
-                        'box_breakdown' => $boxBreakdown,
-                    ];
-				}
-				
-				// Australia uses the same box-wise rate calculation as Canada
-				// (both are zipcode-category destinations with zone_no-based
-				// rates). The query below is fully parameterized by
-				// $destinationCountry, so adding 'AUS' here makes the
-				// ARAMEX GPX ALL IN service rates resolve correctly.
-				if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE') {
-					$boxBreakdown = [];
-                    $combinedBase = 0;
-                    $combinedFuel = 0;
-                    $combinedGst = 0;
-                    $combinedSurcharge = 0;
-                    $surchargeList = [];
-                    $firstMatchedRate = null;
-                    $allBoxesMatched = true;
-					
-                    foreach ($packageWeights as $index => $pkgWt) {
-                      $pkgWt = floatval($pkgWt);
-                      
-                    //echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
-					//echo "<br>";
-
-                        // Try customer rates first
-                        $boxRate = \DB::select(
-                            "SELECT cr.*, cs.country, cs.service_code, cs.method
-                            FROM courier_rates cr
-                            INNER JOIN courier_services cs ON cr.service_id = cs.id
-                            WHERE cr.customer_id = ?
-                            AND cr.service_id = ?
-                            AND cs.country = ?
-                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                            ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1",
-                            [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                        );
-
-                        // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
-                        if (empty($boxRate)) {
-                            $boxRate = \DB::select(
-                                "SELECT cr.*, cs.country, cs.service_code, cs.method
-                                FROM courier_rates cr
-                                INNER JOIN courier_services cs ON cr.service_id = cs.id
-                                WHERE cr.customer_id = 0
-                                AND cr.service_id = ?
-                                AND cs.country = ?
-                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                                ORDER BY cr.zone_no DESC, cr.wt_range_start
-                                LIMIT 1",
-                                [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                            );
-                        }
-
-                        //print_r($boxRate);
-                        
-                        if(!empty($boxRate)){
-                        	$boxRate = $boxRate[0];
-                        	if ($firstMatchedRate === null) { $firstMatchedRate = $boxRate; }
-
-	                        // Calculate per-box amounts. Base, fuel and surcharge are
-	                        // box-specific; GST is applied once on the combined total.
-	                        $base = floatval($boxRate->price);
-	                        $fuel = floatval($boxRate->fuel_charge) > 0 
-	                            ? floatval($boxRate->fuel_charge) 
-	                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-
-	                        // Each box carries its own surcharges from its own matched rate.
-	                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-	                        $boxSurcharge = (float) \App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-	                        if (!empty($boxSurchargeIds)) {
-	                            foreach (\App\Models\SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-	                                $surchargeList[$s->id] = [
-	                                    'name' => $s->name,
-	                                    'code' => $s->code,
-	                                    'price' => (float) $s->price,
-	                                ];
-	                            }
-	                        }
-
-	                        $boxBreakdown[] = [
-	                            'box' => $index + 1,
-	                            'weight' => $pkgWt,
-	                            'base' => $base,
-	                            'fuel' => $fuel,
-	                            'surcharge' => $boxSurcharge,
-	                            'total' => $base + $fuel + $boxSurcharge,
-	                        ];
-
-	                        $combinedBase += $base;
-	                        $combinedFuel += $fuel;
-	                        $combinedSurcharge += $boxSurcharge;
-	                        
-                        }
-                        /*else{
-                        	
-                        	return response()->json([
-			                    'success' => false,
-			                    'message' => 'Service rate not available. Please contact to support.'
-			                ], 404);
-                        }*/ 
-                        
-                    }//end foreach loop
-
-                    // GST is applied once on the combined total
-                    // (total base + total fuel + total surcharge).
-                    $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
-                    $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
-                    $combinedGst = $fixedGst > 0
-                        ? $fixedGst
-                        : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
-
-                   
-                    $allRates[] = [
-                        'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
-                        'service_id' => $service->id,
-                        'method' => $service->method,
-                        'method_display' => $service->method . ' ' . $service->tat,
-                        'network' => $service->network,
-                        'method_code' => $service->method_code,
-                        'tat' => $service->tat,
-                        'delivery_days' => $service->tat,
-                        'scode' => $service->scode,
-                        'consigneeState' => $consigneeState,
-                        'zone_no' => $zoneNumber,
-                        'pkg_wt' => $pkgWt,
-                        //'wt_range_start' => $firstMatchedRate->wt_range_start,
-                        //'wt_range_end' => $firstMatchedRate->wt_range_end,
-                        'price' => $combinedBase,
-                        'fuel_charge' => $combinedFuel,
-                        'fuel_percentage' => 0,
-                        'gst_percentage' => $gstPctForTotal,
-                        'gst_amount' => $combinedGst,
-                        'surcharge_total' => $combinedSurcharge,
-                        'surcharges' => array_values($surchargeList),
-                        'total_base_price' => $combinedBase,
-                        'total_fuel_price' => $combinedFuel,
-                        'total_surcharge' => $combinedSurcharge,
-                        'is_multi_package' => true,
-                        'box_breakdown' => $boxBreakdown,
-                    ];
-				}
-                
-                
-                
-                // ========== STANDARD RATE FETCHING (For all other cases) ==========
-                // Skip if multi-package US and NOT United Ground Premium
-               
-                // print_r($isMultiPackage);
-             
-            }//end foreach
-
-
-            //print_r($allRates);
-            //exit;
-
-            // Filter out rate cards whose total price (base + fuel + gst) is 0.
-            // When no rate row matches the weight/zone the combined amounts stay
-            // 0 and the card would otherwise show "₹0.00" — hide those from the
-            // customer-facing rate list.
-            $allRates = array_values(array_filter($allRates, function ($r) {
-                $base = floatval($r['price'] ?? 0);
-                $fuel = floatval($r['fuel_charge'] ?? 0);
-                $gst  = floatval($r['gst_amount'] ?? 0);
-                return ($base + $fuel + $gst) > 0;
-            }));
-
-            // Attach consistent selected-zone metadata to every card. Several
-            // calculation branches previously omitted zone_code, which caused
-            // the frontend to render labels such as "Remote (undefined)".
-            $allRates = array_map(function ($rate) use ($zoneNumber, $zoneName, $zoneCode) {
-                $rate['zone_no'] = $rate['zone_no'] ?? $zoneNumber;
-                $rate['zone_name'] = $zoneName;
-                $rate['zone_code'] = $zoneCode;
-                return $rate;
-            }, $allRates);
-
-            // Attach surcharge breakdown to every rate card. Multi-package cards
-            // already carry per-box surcharge totals (each box's own matched rate
-            // contributes its own surcharges, and its GST is already included in
-            // gst_amount). Single-rate cards fall back to the surcharges attached
-            // to the selected rate (surcharge_id) and add GST on that portion.
-            $allRates = array_map(function ($rate) {
-                $surcharges = $rate['surcharges'] ?? collect();
-                $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
-                $cr = !empty($rate['rate_id']) ? CourierRate::find((int) $rate['rate_id']) : null;
-                if ($cr && $surchargeTotal <= 0) {
-                    $surchargeTotal = $cr->surcharge_amount;
-                    $surcharges = $cr->surchargeModels()->map(function ($s) {
-                        return [
-                            'name' => $s->name,
-                            'code' => $s->code,
-                            'price' => (float) $s->price,
-                        ];
-                    })->values();
-                    // Add GST on the surcharge portion when GST is
-                    // percentage-based (a fixed gst_amount already covers
-                    // the whole total).
-                    if ($surchargeTotal > 0 && (float) $cr->gst_amount <= 0 && (float) $cr->gst_percentage > 0) {
-                        $rate['gst_amount'] = ((float) ($rate['gst_amount'] ?? 0))
-                            + ($surchargeTotal * (float) $cr->gst_percentage / 100);
                     }
+
+                    // If no customer rate, try default
+
+                    if (! empty($boxRate)) {
+                        $boxRate = $boxRate[0];
+                        if ($firstMatchedRate === null) {
+                            $firstMatchedRate = $boxRate;
+                        }
+
+                        // Calculate per-box amounts. Base, fuel and surcharge are
+                        // box-specific; GST is applied once on the combined total.
+                        $base = floatval($boxRate->price);
+                        $fuel = floatval($boxRate->fuel_charge) > 0
+                            ? floatval($boxRate->fuel_charge)
+                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+
+                        // Each box carries its own surcharges from its own matched rate.
+                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+                        if (! empty($boxSurchargeIds)) {
+                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                                $surchargeList[$s->id] = [
+                                    'name' => $s->name,
+                                    'code' => $s->code,
+                                    'price' => (float) $s->price,
+                                ];
+                            }
+                        }
+
+                        $boxBreakdown[] = [
+                            'box' => $index + 1,
+                            'weight' => $pkgWt,
+                            'base' => $base,
+                            'fuel' => $fuel,
+                            'surcharge' => $boxSurcharge,
+                            'total' => $base + $fuel + $boxSurcharge,
+                        ];
+
+                        $combinedBase += $base;
+                        $combinedFuel += $fuel;
+                        $combinedSurcharge += $boxSurcharge;
+
+                    }
+                    /*else{
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Service rate not available. Please contact to support.'
+                        ], 404);
+                    }*/
+
                 }
-                $rate['surcharges'] = $surcharges;
-                $rate['surcharge_total'] = round($surchargeTotal, 2);
-                return $rate;
-            }, $allRates);
 
-            // 7. Build response
-            $response = [
-                'success' => true,
-                
-                'customer_name' => $customer->first_name . ' ' . $customer->last_name,
-                'selected_zone' => $zone ? [
-                    'zone_id' => $zone->id,
-                    'zone_number' => $zone->zone_number_testing,
-                    'zone_name' => $zone->zone_name,
-                    'zone_code' => $zone->zone_code,
-                    'state' => $consigneeState,
-                ] : [
-                    'state' => $consigneeState,
-                    'message' => 'No zone found for the selected state'
-                ],
-                'all_rates' => $allRates,
-            ];
+                // GST is applied once on the combined total
+                // (total base + total fuel + total surcharge).
+                $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                $combinedGst = $fixedGst > 0
+                    ? $fixedGst
+                    : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
 
+                $allRates[] = [
+                    'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
+                    'service_id' => $service->id,
+                    'method' => $service->method,
+                    'method_display' => $service->method.' '.$service->tat,
+                    'network' => $service->network,
+                    'method_code' => $service->method_code,
+                    'tat' => $service->tat,
+                    'delivery_days' => $service->tat,
+                    'scode' => $service->scode,
+                    'consigneeState' => $consigneeState,
+                    'zone_no' => $zoneNumber,
+                    'pkg_wt' => $pkgWt,
+                    // 'wt_range_start' => $firstMatchedRate->wt_range_start,
+                    // 'wt_range_end' => $firstMatchedRate->wt_range_end,
+                    'price' => $combinedBase,
+                    'fuel_charge' => $combinedFuel,
+                    'fuel_percentage' => 0,
+                    'gst_percentage' => $gstPctForTotal,
+                    'gst_amount' => $combinedGst,
+                    'surcharge_total' => $combinedSurcharge,
+                    'surcharges' => array_values($surchargeList),
+                    'total_base_price' => $combinedBase,
+                    'total_fuel_price' => $combinedFuel,
+                    'total_surcharge' => $combinedSurcharge,
+                    'is_multi_package' => true,
+                    'box_breakdown' => $boxBreakdown,
+                ];
 
-            return response()->json($response);
+            }// end if
 
-       /* } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Server error: ' . $e->getMessage()
-            ], 500);
-        }*/
-    
+            if ($destinationCountry === 'UK') {
+                $boxBreakdown = [];
+                $combinedBase = 0;
+                $combinedFuel = 0;
+                $combinedGst = 0;
+                $combinedSurcharge = 0;
+                $surchargeList = [];
+                $firstMatchedRate = null;
+                $allBoxesMatched = true;
+
+                foreach ($packageWeights as $index => $pkgWt) {
+                    $pkgWt = floatval($pkgWt);
+
+                    // echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+                    // echo "<br>";
+
+                    // Try customer rates first
+                    $boxRate = \DB::select(
+                        'SELECT cr.*, cs.country, cs.service_code, cs.method
+                            FROM courier_rates cr
+                            INNER JOIN courier_services cs ON cr.service_id = cs.id
+                            WHERE cr.customer_id = ?
+                            AND cr.service_id = ?
+                            AND cs.country = ?
+                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                            ORDER BY cr.zone_no DESC, cr.wt_range_start
+                            LIMIT 1',
+                        [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    );
+
+                    // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                    if (empty($boxRate)) {
+                        $boxRate = \DB::select(
+                            'SELECT cr.*, cs.country, cs.service_code, cs.method
+                                FROM courier_rates cr
+                                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                                WHERE cr.customer_id = 0
+                                AND cr.service_id = ?
+                                AND cs.country = ?
+                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                                LIMIT 1',
+                            [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                        );
+                    }
+
+                    // print_r($boxRate);
+
+                    if (! empty($boxRate)) {
+                        $boxRate = $boxRate[0];
+                        if ($firstMatchedRate === null) {
+                            $firstMatchedRate = $boxRate;
+                        }
+
+                        // Calculate per-box amounts. Base, fuel and surcharge are
+                        // box-specific; GST is applied once on the combined total.
+                        $base = floatval($boxRate->price);
+                        $fuel = floatval($boxRate->fuel_charge) > 0
+                            ? floatval($boxRate->fuel_charge)
+                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+
+                        // Each box carries its own surcharges from its own matched rate.
+                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+                        if (! empty($boxSurchargeIds)) {
+                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                                $surchargeList[$s->id] = [
+                                    'name' => $s->name,
+                                    'code' => $s->code,
+                                    'price' => (float) $s->price,
+                                ];
+                            }
+                        }
+
+                        $boxBreakdown[] = [
+                            'box' => $index + 1,
+                            'weight' => $pkgWt,
+                            'base' => $base,
+                            'fuel' => $fuel,
+                            'surcharge' => $boxSurcharge,
+                            'total' => $base + $fuel + $boxSurcharge,
+                        ];
+
+                        $combinedBase += $base;
+                        $combinedFuel += $fuel;
+                        $combinedSurcharge += $boxSurcharge;
+
+                    }
+                    /*else{
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Service rate not available. Please contact to support.'
+                        ], 404);
+                    }*/
+
+                }// end foreach loop
+
+                // GST is applied once on the combined total
+                // (total base + total fuel + total surcharge).
+                $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                $combinedGst = $fixedGst > 0
+                    ? $fixedGst
+                    : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
+
+                $allRates[] = [
+                    'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
+                    'service_id' => $service->id,
+                    'method' => $service->method,
+                    'method_display' => $service->method.' '.$service->tat,
+                    'network' => $service->network,
+                    'method_code' => $service->method_code,
+                    'tat' => $service->tat,
+                    'delivery_days' => $service->tat,
+                    'scode' => $service->scode,
+                    'consigneeState' => $consigneeState,
+                    'zone_no' => $zoneNumber,
+                    'pkg_wt' => $pkgWt,
+                    // 'wt_range_start' => $firstMatchedRate->wt_range_start,
+                    // 'wt_range_end' => $firstMatchedRate->wt_range_end,
+                    'price' => $combinedBase,
+                    'fuel_charge' => $combinedFuel,
+                    'fuel_percentage' => 0,
+                    'gst_percentage' => $gstPctForTotal,
+                    'gst_amount' => $combinedGst,
+                    'surcharge_total' => $combinedSurcharge,
+                    'surcharges' => array_values($surchargeList),
+                    'total_base_price' => $combinedBase,
+                    'total_fuel_price' => $combinedFuel,
+                    'total_surcharge' => $combinedSurcharge,
+                    'is_multi_package' => true,
+                    'box_breakdown' => $boxBreakdown,
+                ];
+            }
+
+            // Australia uses the same box-wise rate calculation as Canada
+            // (both are zipcode-category destinations with zone_no-based
+            // rates). The query below is fully parameterized by
+            // $destinationCountry, so adding 'AUS' here makes the
+            // ARAMEX GPX ALL IN service rates resolve correctly.
+            if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE') {
+                $boxBreakdown = [];
+                $combinedBase = 0;
+                $combinedFuel = 0;
+                $combinedGst = 0;
+                $combinedSurcharge = 0;
+                $surchargeList = [];
+                $firstMatchedRate = null;
+                $allBoxesMatched = true;
+
+                foreach ($packageWeights as $index => $pkgWt) {
+                    $pkgWt = floatval($pkgWt);
+
+                    // echo $customer->id."".$service->id."".$destinationCountry."".$zoneNumber."".$pkgWt."".$pkgWt;
+                    // echo "<br>";
+
+                    // Try customer rates first
+                    $boxRate = \DB::select(
+                        'SELECT cr.*, cs.country, cs.service_code, cs.method
+                            FROM courier_rates cr
+                            INNER JOIN courier_services cs ON cr.service_id = cs.id
+                            WHERE cr.customer_id = ?
+                            AND cr.service_id = ?
+                            AND cs.country = ?
+                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                            ORDER BY cr.zone_no DESC, cr.wt_range_start
+                            LIMIT 1',
+                        [$customer->id, $service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    );
+
+                    // Fallback to default rates (customer_id = 0) when no customer-specific rate exists
+                    if (empty($boxRate)) {
+                        $boxRate = \DB::select(
+                            'SELECT cr.*, cs.country, cs.service_code, cs.method
+                                FROM courier_rates cr
+                                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                                WHERE cr.customer_id = 0
+                                AND cr.service_id = ?
+                                AND cs.country = ?
+                                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                                LIMIT 1',
+                            [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                        );
+                    }
+
+                    // print_r($boxRate);
+
+                    if (! empty($boxRate)) {
+                        $boxRate = $boxRate[0];
+                        if ($firstMatchedRate === null) {
+                            $firstMatchedRate = $boxRate;
+                        }
+
+                        // Calculate per-box amounts. Base, fuel and surcharge are
+                        // box-specific; GST is applied once on the combined total.
+                        $base = floatval($boxRate->price);
+                        $fuel = floatval($boxRate->fuel_charge) > 0
+                            ? floatval($boxRate->fuel_charge)
+                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+
+                        // Each box carries its own surcharges from its own matched rate.
+                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
+                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
+                        if (! empty($boxSurchargeIds)) {
+                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
+                                $surchargeList[$s->id] = [
+                                    'name' => $s->name,
+                                    'code' => $s->code,
+                                    'price' => (float) $s->price,
+                                ];
+                            }
+                        }
+
+                        $boxBreakdown[] = [
+                            'box' => $index + 1,
+                            'weight' => $pkgWt,
+                            'base' => $base,
+                            'fuel' => $fuel,
+                            'surcharge' => $boxSurcharge,
+                            'total' => $base + $fuel + $boxSurcharge,
+                        ];
+
+                        $combinedBase += $base;
+                        $combinedFuel += $fuel;
+                        $combinedSurcharge += $boxSurcharge;
+
+                    }
+                    /*else{
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Service rate not available. Please contact to support.'
+                        ], 404);
+                    }*/
+
+                }// end foreach loop
+
+                // GST is applied once on the combined total
+                // (total base + total fuel + total surcharge).
+                $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
+                $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
+                $combinedGst = $fixedGst > 0
+                    ? $fixedGst
+                    : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
+
+                $allRates[] = [
+                    'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
+                    'service_id' => $service->id,
+                    'method' => $service->method,
+                    'method_display' => $service->method.' '.$service->tat,
+                    'network' => $service->network,
+                    'method_code' => $service->method_code,
+                    'tat' => $service->tat,
+                    'delivery_days' => $service->tat,
+                    'scode' => $service->scode,
+                    'consigneeState' => $consigneeState,
+                    'zone_no' => $zoneNumber,
+                    'pkg_wt' => $pkgWt,
+                    // 'wt_range_start' => $firstMatchedRate->wt_range_start,
+                    // 'wt_range_end' => $firstMatchedRate->wt_range_end,
+                    'price' => $combinedBase,
+                    'fuel_charge' => $combinedFuel,
+                    'fuel_percentage' => 0,
+                    'gst_percentage' => $gstPctForTotal,
+                    'gst_amount' => $combinedGst,
+                    'surcharge_total' => $combinedSurcharge,
+                    'surcharges' => array_values($surchargeList),
+                    'total_base_price' => $combinedBase,
+                    'total_fuel_price' => $combinedFuel,
+                    'total_surcharge' => $combinedSurcharge,
+                    'is_multi_package' => true,
+                    'box_breakdown' => $boxBreakdown,
+                ];
+            }
+
+            // ========== STANDARD RATE FETCHING (For all other cases) ==========
+            // Skip if multi-package US and NOT United Ground Premium
+
+            // print_r($isMultiPackage);
+
+        }// end foreach
+
+        // print_r($allRates);
+        // exit;
+
+        // Filter out rate cards whose total price (base + fuel + gst) is 0.
+        // When no rate row matches the weight/zone the combined amounts stay
+        // 0 and the card would otherwise show "₹0.00" — hide those from the
+        // customer-facing rate list.
+        $allRates = array_values(array_filter($allRates, function ($r) {
+            $base = floatval($r['price'] ?? 0);
+            $fuel = floatval($r['fuel_charge'] ?? 0);
+            $gst = floatval($r['gst_amount'] ?? 0);
+
+            return ($base + $fuel + $gst) > 0;
+        }));
+
+        // Attach consistent selected-zone metadata to every card. Several
+        // calculation branches previously omitted zone_code, which caused
+        // the frontend to render labels such as "Remote (undefined)".
+        $allRates = array_map(function ($rate) use ($zoneNumber, $zoneName, $zoneCode) {
+            $rate['zone_no'] = $rate['zone_no'] ?? $zoneNumber;
+            $rate['zone_name'] = $zoneName;
+            $rate['zone_code'] = $zoneCode;
+
+            return $rate;
+        }, $allRates);
+
+        // Attach surcharge breakdown to every rate card. Multi-package cards
+        // already carry per-box surcharge totals (each box's own matched rate
+        // contributes its own surcharges, and its GST is already included in
+        // gst_amount). Single-rate cards fall back to the surcharges attached
+        // to the selected rate (surcharge_id) and add GST on that portion.
+        $allRates = array_map(function ($rate) {
+            $surcharges = $rate['surcharges'] ?? collect();
+            $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
+            $cr = ! empty($rate['rate_id']) ? CourierRate::find((int) $rate['rate_id']) : null;
+            if ($cr && $surchargeTotal <= 0) {
+                $surchargeTotal = $cr->surcharge_amount;
+                $surcharges = $cr->surchargeModels()->map(function ($s) {
+                    return [
+                        'name' => $s->name,
+                        'code' => $s->code,
+                        'price' => (float) $s->price,
+                    ];
+                })->values();
+                // Add GST on the surcharge portion when GST is
+                // percentage-based (a fixed gst_amount already covers
+                // the whole total).
+                if ($surchargeTotal > 0 && (float) $cr->gst_amount <= 0 && (float) $cr->gst_percentage > 0) {
+                    $rate['gst_amount'] = ((float) ($rate['gst_amount'] ?? 0))
+                        + ($surchargeTotal * (float) $cr->gst_percentage / 100);
+                }
+            }
+            $rate['surcharges'] = $surcharges;
+            $rate['surcharge_total'] = round($surchargeTotal, 2);
+
+            return $rate;
+        }, $allRates);
+
+        // 7. Build response
+        $response = [
+            'success' => true,
+
+            'customer_name' => $customer->first_name.' '.$customer->last_name,
+            'selected_zone' => $zone ? [
+                'zone_id' => $zone->id,
+                'zone_number' => $zone->zone_number_testing,
+                'zone_name' => $zone->zone_name,
+                'zone_code' => $zone->zone_code,
+                'state' => $consigneeState,
+            ] : [
+                'state' => $consigneeState,
+                'message' => 'No zone found for the selected state',
+            ],
+            'all_rates' => $allRates,
+        ];
+
+        return response()->json($response);
+
+        /* } catch (\Exception $e) {
+             return response()->json([
+                 'success' => false,
+                 'message' => 'Server error: ' . $e->getMessage()
+             ], 500);
+         }*/
+
     }
-
-
 
     // public function getUpsRate(Request $request)
     // {
@@ -4488,19 +4546,19 @@ class CustomerController extends Controller
             ->asForm()
             ->post($tokenUrl, ['grant_type' => 'client_credentials']);
 
-        if (!$response->successful()) {
-            \Log::error('UPS Ship token error: ' . $response->body());
+        if (! $response->successful()) {
+            \Log::error('UPS Ship token error: '.$response->body());
             throw new \Exception('Unable to retrieve UPS Ship access token');
         }
 
         $data = $response->json();
 
         if (empty($data['access_token'])) {
-            \Log::error('UPS Ship token missing access_token: ' . $response->body());
+            \Log::error('UPS Ship token missing access_token: '.$response->body());
             throw new \Exception('UPS Ship access token not found in response');
         }
 
-        $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 3600;
+        $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : 3600;
         $ttl = max(60, $expiresIn - 60);
         Cache::put($cacheKey, $data['access_token'], $ttl);
 
@@ -4518,7 +4576,7 @@ class CustomerController extends Controller
 
             // Log payload for debugging
             try {
-                \Log::info('UPS Ship payload: ' . substr(json_encode($payload), 0, 2000));
+                \Log::info('UPS Ship payload: '.substr(json_encode($payload), 0, 2000));
             } catch (\Exception $e) {
                 // ignore logging errors
             }
@@ -4529,7 +4587,7 @@ class CustomerController extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to obtain UPS Ship access token: ' . $e->getMessage()
+                    'message' => 'Failed to obtain UPS Ship access token: '.$e->getMessage(),
                 ], 500);
             }
 
@@ -4541,8 +4599,8 @@ class CustomerController extends Controller
                 CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
                     'Accept: application/json',
-                    'Authorization: Bearer ' . $token,
-                    'transId: ' . uniqid('ship_', true),
+                    'Authorization: Bearer '.$token,
+                    'transId: '.uniqid('ship_', true),
                     'transactionSrc: unitedcourier',
                 ],
                 CURLOPT_TIMEOUT => 60,
@@ -4555,19 +4613,20 @@ class CustomerController extends Controller
             curl_close($ch);
 
             if ($curlError) {
-                \Log::error('UPS Ship cURL error: ' . $curlError);
+                \Log::error('UPS Ship cURL error: '.$curlError);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'UPS Ship API connection error',
-                    'curl_error' => $curlError
+                    'curl_error' => $curlError,
                 ], 500);
             }
 
             $decoded = json_decode($response, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                \Log::warning('UPS Ship returned non-JSON response. HTTP: ' . $httpCode . ' Body: ' . $response);
+                \Log::warning('UPS Ship returned non-JSON response. HTTP: '.$httpCode.' Body: '.$response);
             } else {
-                \Log::info('UPS Ship response HTTP: ' . $httpCode . ' Body: ' . substr($response, 0, 2000));
+                \Log::info('UPS Ship response HTTP: '.$httpCode.' Body: '.substr($response, 0, 2000));
             }
 
             if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['ShipmentResponse'])) {
@@ -4575,7 +4634,7 @@ class CustomerController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'shipmentResponse' => $shipmentResponse
+                    'shipmentResponse' => $shipmentResponse,
                 ]);
             }
 
@@ -4592,13 +4651,13 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => $errorMessage,
-                'rawResponse' => $decoded
+                'rawResponse' => $decoded,
             ], $httpCode ?: 500);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Server error: ' . $e->getMessage()
+                'message' => 'Server error: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -4610,36 +4669,35 @@ class CustomerController extends Controller
     private function buildUpsShipPayload($validatedData, $service)
     {
         // Shipper & ShipFrom — hardcoded (same as JS buildShipPayload)
-        $shipperName = "SANDEEP KAPUR";
-        $shipperAttentionName = "United";
-        $shipperCompanyDisplayableName = "UWC";
-        $shipperPhone = "6466741258";
-
+        $shipperName = 'SANDEEP KAPUR';
+        $shipperAttentionName = 'United';
+        $shipperCompanyDisplayableName = 'UWC';
+        $shipperPhone = '6466741258';
 
         // Shipper number based on service weight column:
         // - Services with weight "OZS" or "OZS/LBS" (Saver): X19700
         // - Services with weight "LBS" (2nd Day Air / Ground): 1255AK
         $serviceWeight = $service->weight ?? 'LBS';
         $isSaver = str_contains($serviceWeight, 'OZS');
-        $shipperNumber = $isSaver ? "X19700" : "1255AK";
+        $shipperNumber = $isSaver ? 'X19700' : '1255AK';
 
-        $shipperAddressLine = "218 WEST 37 STREET 6TH FLOOR";
-        $shipperCity = "NEW YORK";
-        $shipperState = "NY";
-        $shipperPostal = "10018";
-        $shipperCountry = "US";
+        $shipperAddressLine = '218 WEST 37 STREET 6TH FLOOR';
+        $shipperCity = 'NEW YORK';
+        $shipperState = 'NY';
+        $shipperPostal = '10018';
+        $shipperCountry = 'US';
 
         // Consignee (ShipTo) — from form data
         $consigneeName = $validatedData['consignee_name'];
         $consigneePhone = $validatedData['consignee_phone_number'];
         $consigneeAddressLines = [];
-        if (!empty($validatedData['consignee_address_line1'])) {
+        if (! empty($validatedData['consignee_address_line1'])) {
             $consigneeAddressLines[] = $validatedData['consignee_address_line1'];
         }
-        if (!empty($validatedData['consignee_address_line2'])) {
+        if (! empty($validatedData['consignee_address_line2'])) {
             $consigneeAddressLines[] = $validatedData['consignee_address_line2'];
         }
-        if (!empty($validatedData['consignee_address_line3'])) {
+        if (! empty($validatedData['consignee_address_line3'])) {
             $consigneeAddressLines[] = $validatedData['consignee_address_line3'];
         }
         $consigneeCity = $validatedData['consignee_city'];
@@ -4656,7 +4714,6 @@ class CustomerController extends Controller
         // - "OZS" → always OZS, service code from scode
         // - "OZS/LBS" → dynamic: convert KG→LBS, <1 LBS → OZS + code 92, ≥1 LBS → LBS + code 93
         $weightUnit = 'LBS';
-
 
         if ($serviceWeight === 'OZS') {
             $serviceCode = $service->scode;
@@ -4691,7 +4748,7 @@ class CustomerController extends Controller
         $packageRows = $validatedData['packages'] ?? [];
         foreach ($packageRows as $pkgData) {
             $weightKg = $pkgData['actual_weight_kg'] ?? null;
-            if (!$weightKg || $weightKg <= 0) {
+            if (! $weightKg || $weightKg <= 0) {
                 continue;
             }
 
@@ -4709,8 +4766,8 @@ class CustomerController extends Controller
                 'ReferenceNumber' => [
                     [
                         'Code' => '9S',
-                        'Value' => 'ORDER12345'
-                    ]
+                        'Value' => 'ORDER12345',
+                    ],
                 ],
 
                 'PackageWeight' => [
@@ -4741,7 +4798,7 @@ class CustomerController extends Controller
 
             $packages[] = $pkg;
         }
-        
+
         // Fallback: single default package if no valid packages
         if (empty($packages)) {
             // Fallback: ~5KG converted to appropriate weight unit
@@ -4750,9 +4807,9 @@ class CustomerController extends Controller
                 'Description' => 'Documents',
                 'ReferenceNumber' => [
                     [
-                        "Code" => "9S",
-                        "Value" => "ORDER12345"
-                    ]
+                        'Code' => '9S',
+                        'Value' => 'ORDER12345',
+                    ],
                 ],
                 'Packaging' => ['Code' => '02'],
                 'PackageWeight' => [
@@ -4774,8 +4831,8 @@ class CustomerController extends Controller
                 'Request' => [
                     'RequestOption' => 'validate',
                     'TransactionReference' => [
-                        'CustomerContext' => 'ORDER-12345'
-                    ]
+                        'CustomerContext' => 'ORDER-12345',
+                    ],
                 ],
                 'Shipment' => [
                     'Shipper' => [
@@ -4809,7 +4866,7 @@ class CustomerController extends Controller
                         'AttentionName' => $consigneeName,
                         'Phone' => ['Number' => $consigneePhone],
                         'Address' => [
-                            'AddressLine' => !empty($consigneeAddressLines) ? $consigneeAddressLines : ['Receiver Address'],
+                            'AddressLine' => ! empty($consigneeAddressLines) ? $consigneeAddressLines : ['Receiver Address'],
                             'City' => $consigneeCity,
                             'StateProvinceCode' => $consigneeState,
                             'PostalCode' => $consigneePostal,
@@ -4828,7 +4885,7 @@ class CustomerController extends Controller
                         'Code' => $serviceCode,
                         'Description' => $serviceDescription,
                     ],
-                    
+
                     'Package' => $packages,
                 ],
                 'LabelSpecification' => [
@@ -4852,7 +4909,7 @@ class CustomerController extends Controller
     {
         try {
             // Log payload for debugging
-            \Log::info('UPS Ship payload (internal): ' . substr(json_encode($payload), 0, 2000));
+            \Log::info('UPS Ship payload (internal): '.substr(json_encode($payload), 0, 2000));
 
             // Obtain cached UPS OAuth token
             try {
@@ -4860,7 +4917,7 @@ class CustomerController extends Controller
             } catch (\Exception $e) {
                 return [
                     'success' => false,
-                    'message' => 'Failed to obtain UPS Ship access token: ' . $e->getMessage(),
+                    'message' => 'Failed to obtain UPS Ship access token: '.$e->getMessage(),
                 ];
             }
 
@@ -4872,8 +4929,8 @@ class CustomerController extends Controller
                 CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
                     'Accept: application/json',
-                    'Authorization: Bearer ' . $token,
-                    'transId: ' . uniqid('ship_', true),
+                    'Authorization: Bearer '.$token,
+                    'transId: '.uniqid('ship_', true),
                     'transactionSrc: unitedcourier',
                 ],
                 CURLOPT_TIMEOUT => 60,
@@ -4886,16 +4943,18 @@ class CustomerController extends Controller
             curl_close($ch);
 
             if ($curlError) {
-                \Log::error('UPS Ship cURL error (internal): ' . $curlError);
+                \Log::error('UPS Ship cURL error (internal): '.$curlError);
+
                 return [
                     'success' => false,
-                    'message' => 'UPS Ship API connection error: ' . $curlError,
+                    'message' => 'UPS Ship API connection error: '.$curlError,
                 ];
             }
 
             $decoded = json_decode($response, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                \Log::warning('UPS Ship returned non-JSON response. HTTP: ' . $httpCode . ' Body: ' . $response);
+                \Log::warning('UPS Ship returned non-JSON response. HTTP: '.$httpCode.' Body: '.$response);
+
                 return [
                     'success' => false,
                     'message' => 'UPS Ship returned non-JSON response',
@@ -4903,7 +4962,7 @@ class CustomerController extends Controller
                 ];
             }
 
-            \Log::info('UPS Ship response HTTP: ' . $httpCode . ' Body: ' . substr($response, 0, 2000));
+            \Log::info('UPS Ship response HTTP: '.$httpCode.' Body: '.substr($response, 0, 2000));
 
             if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['ShipmentResponse'])) {
                 return [
@@ -4931,7 +4990,7 @@ class CustomerController extends Controller
         } catch (\Exception $e) {
             return [
                 'success' => false,
-                'message' => 'Server error: ' . $e->getMessage(),
+                'message' => 'Server error: '.$e->getMessage(),
             ];
         }
     }
@@ -4949,6 +5008,7 @@ class CustomerController extends Controller
             'Russia' => 'RU',
             'Srilanka' => 'LK',
         ];
+
         return $map[$dest] ?? 'US';
     }
 
@@ -4984,7 +5044,7 @@ class CustomerController extends Controller
      */
 
     // created by anil sir
-    
+
     // public function viewAllShipments(Request $request)
     // {
     //     if (!auth()->guard('customer')->check()) {
@@ -5072,12 +5132,10 @@ class CustomerController extends Controller
     //     );
     // }
 
-
-
     // created by chirag
     public function viewAllShipments(Request $request)
     {
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -5089,17 +5147,17 @@ class CustomerController extends Controller
                 $q->where('customer_id', $customerId)
                     ->when($request->filled('shipper_name'), function ($q) use ($request) {
                         $q->where(function ($nameQuery) use ($request) {
-                            $nameQuery->where('company_name', 'like', '%' . $request->shipper_name . '%')
-                                ->orWhere('contact_person', 'like', '%' . $request->shipper_name . '%');
+                            $nameQuery->where('company_name', 'like', '%'.$request->shipper_name.'%')
+                                ->orWhere('contact_person', 'like', '%'.$request->shipper_name.'%');
                         });
                     })
                     ->when($request->filled('awb_number'), function ($q) use ($request) {
-                        $q->where('awb_number', 'like', '%' . $request->awb_number . '%');
+                        $q->where('awb_number', 'like', '%'.$request->awb_number.'%');
                     });
             })
             ->when($request->filled('customer_name'), function ($q) use ($request) {
                 $q->whereHas('shipperInfo.consigneeInfo', function ($consigneeQuery) use ($request) {
-                    $consigneeQuery->where('consignee_name', 'like', '%' . $request->customer_name . '%');
+                    $consigneeQuery->where('consignee_name', 'like', '%'.$request->customer_name.'%');
                 });
             })
             ->when($request->filled('date_from'), function ($q) use ($request) {
@@ -5168,7 +5226,7 @@ class CustomerController extends Controller
         unset($statusCounts['confirm_pickup']);
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
-        $shipmentDetails = $invoices->getCollection()->mapWithKeys(function($invoice) {
+        $shipmentDetails = $invoices->getCollection()->mapWithKeys(function ($invoice) {
             $shipper = $invoice->shipperInfo;
             $consignee = $shipper ? $shipper->consigneeInfo : null;
             $tracking = $shipper ? $shipper->shipmentTracking : null;
@@ -5188,6 +5246,7 @@ class CustomerController extends Controller
             $hasLabel = false;
             $labelFormat = null;
             $graphicImage = null;
+
             return [
                 $invoice->id => [
                     'shipper_id' => $shipper ? $shipper->id : null,
@@ -5203,28 +5262,28 @@ class CustomerController extends Controller
                         ? $shipper->serviceRate->service->service_code
                         : null,
                     'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
-                    'ship_from' => $shipper ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India') : null,
-                    'ship_to' => $consignee ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? '')) : null,
+                    'ship_from' => $shipper ? trim(($shipper->city ?? '').', '.($shipper->state ?? '').' - '.($shipper->pincode ?? '').', India') : null,
+                    'ship_to' => $consignee ? trim(($consignee->city ?? '').', '.($consignee->state ?? '').' - '.($consignee->zip_code ?? '').', '.($consignee->delivery_destination ?? '')) : null,
                     'shipper' => $shipper ? [
                         'company' => $shipper->company_name,
                         'contact' => $shipper->contact_person,
                         'phone' => $shipper->phone_number,
                         'email' => $shipper->email,
-                        'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
-                        'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                        'address' => trim(($shipper->address_line1 ?? '').' '.($shipper->address_line2 ?? '').' '.($shipper->address_line3 ?? '')),
+                        'city_state_pin' => trim(($shipper->city ?? '').', '.($shipper->state ?? '').' - '.($shipper->pincode ?? '')),
                     ] : null,
                     'consignee' => $consignee ? [
                         'name' => $consignee->consignee_name,
                         'contact' => $consignee->contact_person,
                         'phone' => $consignee->phone_number,
                         'email' => $consignee->email,
-                        'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
-                        'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                        'address' => trim(($consignee->address_line1 ?? '').' '.($consignee->address_line2 ?? '').' '.($consignee->address_line3 ?? '')),
+                        'city_state_zip' => trim(($consignee->city ?? '').', '.($consignee->state ?? '').' - '.($consignee->zip_code ?? '')),
                     ] : null,
                     'destination' => $consignee ? $consignee->delivery_destination : null,
                     'origin_type' => $consignee ? $consignee->origin_type : null,
                     'shipping_method' => $shipper ? $shipper->shipping_method : null,
-                    'packages' => $packages->map(function($pkg, $idx) {
+                    'packages' => $packages->map(function ($pkg, $idx) {
                         return [
                             'index' => $idx + 1,
                             'weight' => $pkg->actual_weight_kg,
@@ -5235,7 +5294,7 @@ class CustomerController extends Controller
                             'chargeable' => $pkg->chargeable_weight,
                         ];
                     })->values()->toArray(),
-                    'items' => $items->map(function($item) {
+                    'items' => $items->map(function ($item) {
                         $qty = $item->qty ?? 0;
                         $rate = $item->unit_rate ?? 0;
                         $igstPct = $item->igst_percentage ?? 0;
@@ -5243,6 +5302,7 @@ class CustomerController extends Controller
                         $baseAmount = $qty * $rate;
                         // Use stored amount if available, otherwise calculate
                         $amount = $item->amount ?? ($baseAmount + $igstAmt);
+
                         return [
                             'box_no' => $item->box_no,
                             'description' => $item->description,
@@ -5265,15 +5325,15 @@ class CustomerController extends Controller
                         'total' => (float) $displayAmount,
                     ] : null,
                     'charges' => $tracking ? [
-                        'transport' => $tracking->transportation_charges_currency . ' ' . ($tracking->transportation_charges_amount ?? '-'),
-                        'service_options' => $tracking->service_options_charges_currency . ' ' . ($tracking->service_options_charges_amount ?? '-'),
-                        'total' => $tracking->total_charges_currency . ' ' . ($tracking->total_charges_amount ?? '-'),
-                        'billing_weight' => ($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'),
+                        'transport' => $tracking->transportation_charges_currency.' '.($tracking->transportation_charges_amount ?? '-'),
+                        'service_options' => $tracking->service_options_charges_currency.' '.($tracking->service_options_charges_amount ?? '-'),
+                        'total' => $tracking->total_charges_currency.' '.($tracking->total_charges_amount ?? '-'),
+                        'billing_weight' => ($tracking->billing_weight_uom ?? '').' '.($tracking->billing_weight ?? '-'),
                     ] : null,
                     'has_label' => $hasLabel,
                     'label_format' => $labelFormat,
                     'graphic_image' => $graphicImage,
-                ]
+                ],
             ];
         });
         DB::listen(function ($query) {
@@ -5283,6 +5343,7 @@ class CustomerController extends Controller
                 'time_ms' => $query->time,
             ]);
         });
+
         return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts'));
     }
 
@@ -5295,7 +5356,7 @@ class CustomerController extends Controller
      */
     public function getShipmentLabel($invoiceId)
     {
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
@@ -5308,7 +5369,7 @@ class CustomerController extends Controller
             ->with('shipperInfo.shipmentTracking')
             ->first();
 
-        if (!$invoice || !$invoice->shipperInfo || !$invoice->shipperInfo->shipmentTracking) {
+        if (! $invoice || ! $invoice->shipperInfo || ! $invoice->shipperInfo->shipmentTracking) {
             return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
         }
 
@@ -5327,7 +5388,7 @@ class CustomerController extends Controller
             $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
         }
 
-        if (!$graphicImage) {
+        if (! $graphicImage) {
             return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
         }
 
@@ -5348,7 +5409,7 @@ class CustomerController extends Controller
     public function transactionHistory()
     {
         // Check if customer is logged in
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -5368,8 +5429,9 @@ class CustomerController extends Controller
             if ($inv->status === 'cancelled') {
                 return true;
             }
+
             // Paid if shipper status exists and is not 'draft'
-            return ($inv->shipperInfo && $inv->shipperInfo->status && $inv->shipperInfo->status !== 'draft');
+            return $inv->shipperInfo && $inv->shipperInfo->status && $inv->shipperInfo->status !== 'draft';
         })->values();
 
         // Compute payment summary
@@ -5419,7 +5481,7 @@ class CustomerController extends Controller
     public function walletHistory()
     {
         // Check if customer is logged in
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -5470,7 +5532,7 @@ class CustomerController extends Controller
     public function myProfile()
     {
         // Check if customer is logged in
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return redirect()->route('login');
         }
 
@@ -5492,11 +5554,11 @@ class CustomerController extends Controller
         // Mask the Aadhar number for display (show only last 4 digits)
         $maskedAadhar = null;
         $aadharSource = null;
-        if (!empty($customer->aadhar_number)) {
-            $maskedAadhar = 'XXXX-XXXX-' . substr($customer->aadhar_number, -4);
+        if (! empty($customer->aadhar_number)) {
+            $maskedAadhar = 'XXXX-XXXX-'.substr($customer->aadhar_number, -4);
             $aadharSource = 'customer';
-        } elseif ($kyc && !empty($kyc->aadhar_number)) {
-            $maskedAadhar = 'XXXX-XXXX-' . substr($kyc->aadhar_number, -4);
+        } elseif ($kyc && ! empty($kyc->aadhar_number)) {
+            $maskedAadhar = 'XXXX-XXXX-'.substr($kyc->aadhar_number, -4);
             $aadharSource = 'kyc';
         }
 
@@ -5512,11 +5574,11 @@ class CustomerController extends Controller
         // Mask the PAN number for display (show only last 4 characters)
         $maskedPan = null;
         $panSource = null;
-        if (!empty($customer->pan_number)) {
-            $maskedPan = 'XXXXXX' . substr($customer->pan_number, -4);
+        if (! empty($customer->pan_number)) {
+            $maskedPan = 'XXXXXX'.substr($customer->pan_number, -4);
             $panSource = 'customer';
-        } elseif ($kyc && !empty($kyc->pan_number)) {
-            $maskedPan = 'XXXXXX' . substr($kyc->pan_number, -4);
+        } elseif ($kyc && ! empty($kyc->pan_number)) {
+            $maskedPan = 'XXXXXX'.substr($kyc->pan_number, -4);
             $panSource = 'kyc';
         }
 
@@ -5526,10 +5588,10 @@ class CustomerController extends Controller
         // Determine KYC status label & badge class
         $kycStatus = $kyc->kyc_status ?? 'pending';
         $kycStatusMap = [
-            'pending'       => ['label' => 'Pending', 'class' => 'bg-warning'],
-            'under_review'  => ['label' => 'Under Review', 'class' => 'bg-info'],
-            'approved'      => ['label' => 'Approved', 'class' => 'bg-success'],
-            'rejected'      => ['label' => 'Rejected', 'class' => 'bg-danger'],
+            'pending' => ['label' => 'Pending', 'class' => 'bg-warning'],
+            'under_review' => ['label' => 'Under Review', 'class' => 'bg-info'],
+            'approved' => ['label' => 'Approved', 'class' => 'bg-success'],
+            'rejected' => ['label' => 'Rejected', 'class' => 'bg-danger'],
         ];
         $kycStatusInfo = $kycStatusMap[$kycStatus] ?? ['label' => ucfirst($kycStatus), 'class' => 'bg-secondary'];
 
@@ -5568,10 +5630,10 @@ class CustomerController extends Controller
     {
         try {
             // Check if customer is logged in
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated.'
+                    'message' => 'Unauthenticated.',
                 ], 401);
             }
 
@@ -5593,10 +5655,10 @@ class CustomerController extends Controller
                 ->where('customer_id', $customerId)
                 ->first();
 
-            if (!$shipper) {
+            if (! $shipper) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Shipment not found or does not belong to you.'
+                    'message' => 'Shipment not found or does not belong to you.',
                 ], 403);
             }
 
@@ -5604,10 +5666,10 @@ class CustomerController extends Controller
                 ->where('shipper_id', $shipper->id)
                 ->first();
 
-            if (!$invoice) {
+            if (! $invoice) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invoice not found for this shipment.'
+                    'message' => 'Invoice not found for this shipment.',
                 ], 404);
             }
 
@@ -5620,7 +5682,7 @@ class CustomerController extends Controller
             if ($amount <= 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'A valid shipment charge could not be calculated.'
+                    'message' => 'A valid shipment charge could not be calculated.',
                 ], 422);
             }
 
@@ -5628,17 +5690,17 @@ class CustomerController extends Controller
             if ($shipper->status === 'ready') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This shipment has already been paid for.'
+                    'message' => 'This shipment has already been paid for.',
                 ]);
             }
 
             // Find the customer's wallet
             $wallet = Wallet::where('customer_id', $customerId)->first();
 
-            if (!$wallet) {
+            if (! $wallet) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Wallet not found. Please contact support.'
+                    'message' => 'Wallet not found. Please contact support.',
                 ]);
             }
 
@@ -5646,7 +5708,7 @@ class CustomerController extends Controller
             if ($wallet->balance < $amount) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Insufficient wallet balance. Your current balance is ₹' . number_format($wallet->balance, 2)
+                    'message' => 'Insufficient wallet balance. Your current balance is ₹'.number_format($wallet->balance, 2),
                 ]);
             }
 
@@ -5659,13 +5721,13 @@ class CustomerController extends Controller
 
                 // Log the wallet debit (shipment charge)
                 WalletTransaction::create([
-                    'customer_id'   => $customerId,
-                    'type'          => 'debit',
-                    'reason'        => 'shipment_charge',
-                    'amount'        => $amount,
+                    'customer_id' => $customerId,
+                    'type' => 'debit',
+                    'reason' => 'shipment_charge',
+                    'amount' => $amount,
                     'balance_after' => $wallet->balance,
-                    'reference'     => $shipper->awb_number,
-                    'description'   => 'Payment of ₹' . number_format($amount, 2) . ' for shipment ' . ($shipper->awb_number ?: '#' . $shipper->id),
+                    'reference' => $shipper->awb_number,
+                    'description' => 'Payment of ₹'.number_format($amount, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id),
                 ]);
             });
 
@@ -5686,7 +5748,7 @@ class CustomerController extends Controller
                 $shipper->awb_number,
                 'ready',
                 'draft',
-                'Payment confirmed. Amount ₹' . number_format($amount, 2) . ' deducted from wallet.',
+                'Payment confirmed. Amount ₹'.number_format($amount, 2).' deducted from wallet.',
                 $customerId,
                 'customer'
             );
@@ -5697,18 +5759,18 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Payment successful! Shipment status updated to Ready.',
-                'new_balance' => (float) $wallet->balance
+                'new_balance' => (float) $wallet->balance,
             ]);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all())
+                'message' => 'Invalid input: '.implode(', ', $e->validator->errors()->all()),
             ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error processing payment: ' . $e->getMessage()
+                'message' => 'Error processing payment: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -5720,10 +5782,10 @@ class CustomerController extends Controller
     {
         try {
             // Check if customer is logged in
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated.'
+                    'message' => 'Unauthenticated.',
                 ], 401);
             }
 
@@ -5738,10 +5800,10 @@ class CustomerController extends Controller
                 ->where('customer_id', $customerId)
                 ->first();
 
-            if (!$shipper) {
+            if (! $shipper) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Shipment not found or does not belong to you.'
+                    'message' => 'Shipment not found or does not belong to you.',
                 ], 403);
             }
 
@@ -5749,7 +5811,7 @@ class CustomerController extends Controller
             if ($invoice->status === 'cancelled') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This shipment is already cancelled.'
+                    'message' => 'This shipment is already cancelled.',
                 ], 400);
             }
 
@@ -5762,7 +5824,7 @@ class CustomerController extends Controller
                 : round((float) $invoice->total_amount, 2);
 
             // Update status to cancelled and refund wallet when a charge exists.
-            DB::transaction(function () use ($invoice, $shipper, $wasPaid, $previousStatus, $customerId, &$refundAmount) {
+            DB::transaction(function () use ($invoice, $shipper, $previousStatus, $customerId, &$refundAmount) {
                 $invoice->update(['status' => 'cancelled']);
                 $shipper->update(['status' => 'cancelled']);
 
@@ -5783,7 +5845,7 @@ class CustomerController extends Controller
                     $shipper->awb_number,
                     'cancelled',
                     $previousStatus,
-                    $refundAmount > 0 ? 'Shipment cancelled. Refund ₹' . number_format($refundAmount, 2) . ' to wallet.' : 'Shipment cancelled.',
+                    $refundAmount > 0 ? 'Shipment cancelled. Refund ₹'.number_format($refundAmount, 2).' to wallet.' : 'Shipment cancelled.',
                     $customerId,
                     'customer'
                 );
@@ -5803,7 +5865,7 @@ class CustomerController extends Controller
 
             $message = 'Shipment cancelled successfully.';
             if ($refundAmount > 0) {
-                $message = 'Shipment cancelled successfully. ₹' . number_format($refundAmount, 2) . ' has been refunded to your wallet.';
+                $message = 'Shipment cancelled successfully. ₹'.number_format($refundAmount, 2).' has been refunded to your wallet.';
             }
 
             return response()->json([
@@ -5816,7 +5878,7 @@ class CustomerController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error cancelling shipment: ' . $e->getMessage()
+                'message' => 'Error cancelling shipment: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -5826,7 +5888,7 @@ class CustomerController extends Controller
      */
     public function markPacked(Request $request)
     {
-        if (!auth()->guard('customer')->check()) {
+        if (! auth()->guard('customer')->check()) {
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
@@ -5846,7 +5908,7 @@ class CustomerController extends Controller
         $customerId = (int) auth()->guard('customer')->id();
         $validated = $validator->validated();
 
-        if (!ShipperInfo::whereKey($validated['shipper_id'])->where('customer_id', $customerId)->exists()) {
+        if (! ShipperInfo::whereKey($validated['shipper_id'])->where('customer_id', $customerId)->exists()) {
             return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
         }
 
@@ -5910,7 +5972,7 @@ class CustomerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to save the custom label. The shipment remains ready. Reference: ' . $errorReference,
+                'message' => 'Unable to save the custom label. The shipment remains ready. Reference: '.$errorReference,
                 'error_reference' => $errorReference,
             ], 500);
         }
@@ -5927,20 +5989,20 @@ class CustomerController extends Controller
     /** @return array{0: string, 1: string} */
     private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
     {
-        $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-' . $shipper->id;
+        $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-'.$shipper->id;
         $timestamp = now('Asia/Kolkata')->format('Ymd-His');
-        $filename = $name . '-' . $timestamp .'.pdf';
+        $filename = $name.'-'.$timestamp.'.pdf';
         $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
         $publicDirectory = public_path('uploads/custom_labels');
-        $publicPath = $publicDirectory . DIRECTORY_SEPARATOR . $filename;
+        $publicPath = $publicDirectory.DIRECTORY_SEPARATOR.$filename;
 
-        if (!is_dir($publicDirectory)
-            && !mkdir($publicDirectory, 0775, true)
-            && !is_dir($publicDirectory)) {
+        if (! is_dir($publicDirectory)
+            && ! mkdir($publicDirectory, 0775, true)
+            && ! is_dir($publicDirectory)) {
             throw new \RuntimeException('Unable to create the public custom label directory.');
         }
 
-        if (!is_writable($publicDirectory)) {
+        if (! is_writable($publicDirectory)) {
             throw new \RuntimeException('The public custom label directory is not writable.');
         }
 
@@ -5951,7 +6013,7 @@ class CustomerController extends Controller
         try {
             $pdfBytes = Pdf::loadHTML($document)->output();
 
-            if (!is_string($pdfBytes) || $pdfBytes === '') {
+            if (! is_string($pdfBytes) || $pdfBytes === '') {
                 throw new \RuntimeException('The custom label PDF was not generated correctly.');
             }
 
@@ -5973,7 +6035,7 @@ class CustomerController extends Controller
                 $bytesWritten += $written;
             }
 
-            if (!fflush($destination)) {
+            if (! fflush($destination)) {
                 throw new \RuntimeException('Unable to flush the custom label PDF to the public directory.');
             }
 
@@ -5982,19 +6044,19 @@ class CustomerController extends Controller
             clearstatcache(true, $publicPath);
             $storedBytes = is_file($publicPath) ? filesize($publicPath) : false;
 
-            if (!is_readable($publicPath) || $storedBytes !== $expectedBytes) {
+            if (! is_readable($publicPath) || $storedBytes !== $expectedBytes) {
                 throw new \RuntimeException('The custom label PDF was not stored correctly in the public directory.');
             }
 
             $stored = true;
 
-            return [$publicPath, asset('uploads/custom_labels/' . $filename)];
+            return [$publicPath, asset('uploads/custom_labels/'.$filename)];
         } finally {
             if (is_resource($destination)) {
                 fclose($destination);
             }
 
-            if ($publicFileCreated && !$stored && is_file($publicPath)) {
+            if ($publicFileCreated && ! $stored && is_file($publicPath)) {
                 @unlink($publicPath);
             }
         }
@@ -6004,16 +6066,16 @@ class CustomerController extends Controller
     {
         $awbNumber = htmlspecialchars((string) ($shipper->awb_number ?: $shipper->id), ENT_QUOTES, 'UTF-8');
 
-        return '<!DOCTYPE html>' . PHP_EOL
-            . '<html lang="en"><head><meta charset="UTF-8">'
-            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            . '<title>Shipping Label ' . $awbNumber . '</title>'
-            . '<style>html,body{margin:0;padding:0;background:#fff;color:#000}'
-            . 'body{font-family:Arial,sans-serif}.custom-label-document{box-sizing:border-box;width:100%}'
-            . '@media print{@page{margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>'
-            . '</head><body><main class="custom-label-document">'
-            . $labelHtml
-            . '</main></body></html>';
+        return '<!DOCTYPE html>'.PHP_EOL
+            .'<html lang="en"><head><meta charset="UTF-8">'
+            .'<meta name="viewport" content="width=device-width, initial-scale=1">'
+            .'<title>Shipping Label '.$awbNumber.'</title>'
+            .'<style>html,body{margin:0;padding:0;background:#fff;color:#000}'
+            .'body{font-family:Arial,sans-serif}.custom-label-document{box-sizing:border-box;width:100%}'
+            .'@media print{@page{margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>'
+            .'</head><body><main class="custom-label-document">'
+            .$labelHtml
+            .'</main></body></html>';
     }
 
     private function deleteCustomLabelFile(?string $path): void
@@ -6025,12 +6087,12 @@ class CustomerController extends Controller
         $directory = realpath(public_path('uploads/custom_labels'));
         $file = realpath($path);
 
-        if ($directory === false || $file === false || !is_file($file)) {
+        if ($directory === false || $file === false || ! is_file($file)) {
             return;
         }
 
-        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-        if (!str_starts_with($file, $directoryPrefix)) {
+        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        if (! str_starts_with($file, $directoryPrefix)) {
             Log::warning('Refused to remove a file outside the public custom label directory.', [
                 'public_file_path' => $path,
             ]);
@@ -6038,7 +6100,7 @@ class CustomerController extends Controller
             return;
         }
 
-        if (!@unlink($file)) {
+        if (! @unlink($file)) {
             Log::warning('Unable to remove a custom label file.', [
                 'public_file_path' => $file,
             ]);
@@ -6105,7 +6167,7 @@ class CustomerController extends Controller
     public function manifestShipment(Request $request)
     {
         try {
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
@@ -6116,7 +6178,7 @@ class CustomerController extends Controller
                 ->where('customer_id', $customerId)
                 ->first();
 
-            if (!$shipper) {
+            if (! $shipper) {
                 return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
             }
 
@@ -6133,15 +6195,15 @@ class CustomerController extends Controller
             // with a fallback to the legacy string-matching methods.
             $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
 
-            \Log::info('manifestShipment: Shipper #' . $shipperId . ' → shipping_method="' . $shippingMethod . '" → network="' . $network . '" → api_provider="' . $apiProvider . '"');
+            \Log::info('manifestShipment: Shipper #'.$shipperId.' → shipping_method="'.$shippingMethod.'" → network="'.$network.'" → api_provider="'.$apiProvider.'"');
 
             // Route to appropriate API based on the resolved provider.
             if ($apiProvider === 'shipuniversal') {
                 $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
-                if (!$shipUniversalResult['success']) {
+                if (! $shipUniversalResult['success']) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'ShipUniversal API Failed: ' . ($shipUniversalResult['message'] ?? 'Unknown error'),
+                        'message' => 'ShipUniversal API Failed: '.($shipUniversalResult['message'] ?? 'Unknown error'),
                         'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
                         'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                     ], 500);
@@ -6170,10 +6232,11 @@ class CustomerController extends Controller
                         false
                     );
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store ShipUniversal manifest: ' . $e->getMessage());
+                    \Log::error('Failed to store ShipUniversal manifest: '.$e->getMessage());
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'Failed to store tracking data: ' . $e->getMessage(),
+                        'message' => 'Failed to store tracking data: '.$e->getMessage(),
                     ], 500);
                 }
 
@@ -6210,16 +6273,17 @@ class CustomerController extends Controller
                     'network' => 'Primus',
                     'request_payload' => $primusResult['payload'] ?? null,
                 ]);
-            // Priority 0: Overseas Logistic for UNITED CANADA DDP /
-            //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+                // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+                //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
             } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                 // Call Overseas Logistic API
                 $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
-                if (!$overseasResult['success']) {
+                if (! $overseasResult['success']) {
                     $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown error');
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'Overseas Logistic API Failed: ' . $overseasMsg,
+                        'message' => 'Overseas Logistic API Failed: '.$overseasMsg,
                         'overseas_response' => $overseasResult['data'] ?? null,
                         'request_payload' => $overseasResult['request_payload'] ?? null,
                     ], 500);
@@ -6271,15 +6335,16 @@ class CustomerController extends Controller
                         $shipper->awb_number,
                         'manifested',
                         'packed',
-                        'Shipment manifested via Overseas Logistic. Tracking: ' . ($trackingNumber ?? 'N/A'),
+                        'Shipment manifested via Overseas Logistic. Tracking: '.($trackingNumber ?? 'N/A'),
                         $customerId,
                         'customer'
                     );
 
-                    \Log::info('Shipment manifested via Overseas Logistic: ' . ($trackingNumber ?? 'N/A'));
+                    \Log::info('Shipment manifested via Overseas Logistic: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking for Overseas Logistic manifest: ' . $e->getMessage());
-                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                    \Log::error('Failed to store shipment tracking for Overseas Logistic manifest: '.$e->getMessage());
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
                 return response()->json([
@@ -6296,10 +6361,10 @@ class CustomerController extends Controller
                 // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
-                if (!$postShippingResult['success']) {
+                if (! $postShippingResult['success']) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'PostShipping API Failed: ' . ($postShippingResult['message'] ?? 'Unknown error'),
+                        'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
                         'postshipping_response' => $postShippingResult['data'] ?? null,
                         'request_payload' => $postShippingResult['request_payload'] ?? null,
                     ], 500);
@@ -6311,10 +6376,10 @@ class CustomerController extends Controller
                 $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
-                if (!$postShippingResult['success']) {
+                if (! $postShippingResult['success']) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'PostShipping API Failed: ' . ($postShippingResult['message'] ?? 'Unknown error'),
+                        'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
                         'postshipping_response' => $postShippingResult['data'] ?? null,
                         'request_payload' => $postShippingResult['request_payload'] ?? null,
                     ], 500);
@@ -6360,12 +6425,12 @@ class CustomerController extends Controller
                         'status' => 'manifested',
                     ]);
 
-                    \Log::info('Shipment manifested via PostShipping: ' . ($trackingNumber ?? 'N/A'));
+                    \Log::info('Shipment manifested via PostShipping: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking for PostShipping manifest: ' . $e->getMessage());
-                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                    \Log::error('Failed to store shipment tracking for PostShipping manifest: '.$e->getMessage());
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
-                
 
                 return response()->json([
                     'success' => true,
@@ -6380,27 +6445,29 @@ class CustomerController extends Controller
             } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                 // Call Flying Tigers API (UNITED ECO POST)
                 $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
-                if (!$flyingTigersResult['success']) {
+                if (! $flyingTigersResult['success']) {
                     // Check if this is an address error → return fallback info for dropdown option
-                    if (!empty($flyingTigersResult['is_address_error'])) {
+                    if (! empty($flyingTigersResult['is_address_error'])) {
                         $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
+
                         return response()->json([
-                            'success'          => false,
-                            'message'          => 'The address provided appears to be incorrect or incomplete for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                            'success' => false,
+                            'message' => 'The address provided appears to be incorrect or incomplete for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
                             'is_address_error' => true,
-                            'shipper_id'       => $shipperId,
-                            'classic_rate'     => $fallbackInfo['classic_rate'] ?? null,
-                            'paid_amount'      => $fallbackInfo['paid_amount'] ?? null,
-                            'difference'       => $fallbackInfo['difference'] ?? null,
-                            'wallet_action'    => $fallbackInfo['wallet_action'] ?? 'none',
-                            'wallet_amount'    => $fallbackInfo['wallet_amount'] ?? 0,
-                            'wallet_balance'   => $fallbackInfo['wallet_balance'] ?? 0,
-                            'total_weight'     => $fallbackInfo['total_weight'] ?? 0,
+                            'shipper_id' => $shipperId,
+                            'classic_rate' => $fallbackInfo['classic_rate'] ?? null,
+                            'paid_amount' => $fallbackInfo['paid_amount'] ?? null,
+                            'difference' => $fallbackInfo['difference'] ?? null,
+                            'wallet_action' => $fallbackInfo['wallet_action'] ?? 'none',
+                            'wallet_amount' => $fallbackInfo['wallet_amount'] ?? 0,
+                            'wallet_balance' => $fallbackInfo['wallet_balance'] ?? 0,
+                            'total_weight' => $fallbackInfo['total_weight'] ?? 0,
                         ], 422);
                     }
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'Flying Tigers API Failed: ' . ($flyingTigersResult['message'] ?? 'Unknown error'),
+                        'message' => 'Flying Tigers API Failed: '.($flyingTigersResult['message'] ?? 'Unknown error'),
                         'flyingtigers_response' => $flyingTigersResult['data'] ?? null,
                     ], 500);
                 }
@@ -6445,10 +6512,11 @@ class CustomerController extends Controller
                         'status' => 'manifested',
                     ]);
 
-                    \Log::info('Shipment manifested via Flying Tigers: ' . ($trackingNumber ?? 'N/A'));
+                    \Log::info('Shipment manifested via Flying Tigers: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking for Flying Tigers manifest: ' . $e->getMessage());
-                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                    \Log::error('Failed to store shipment tracking for Flying Tigers manifest: '.$e->getMessage());
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
                 return response()->json([
@@ -6463,10 +6531,10 @@ class CustomerController extends Controller
             } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                 // Call Ship Global API
                 $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
-                if (!$shipGlobalResult['success']) {
+                if (! $shipGlobalResult['success']) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Ship Global API Failed: ' . ($shipGlobalResult['message'] ?? 'Unknown error'),
+                        'message' => 'Ship Global API Failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
                         'ship_global_response' => $shipGlobalResult['data'] ?? null,
                     ], 500);
                 }
@@ -6476,9 +6544,9 @@ class CustomerController extends Controller
                 $trackingNumber = null;
                 // Ship Global returns tracking/reference number in various possible formats
                 // Priority: waybill_number > tracking_number > awb_number > order_number
-                if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+                if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
                     $trackingNumber = $apiResponse['data']['waybill_number'];
-                } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+                } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
                     $trackingNumber = $apiResponse['waybill_number'];
                 } elseif (isset($apiResponse['tracking_number'])) {
                     $trackingNumber = $apiResponse['tracking_number'];
@@ -6534,10 +6602,11 @@ class CustomerController extends Controller
                         'status' => 'manifested',
                     ]);
 
-                    \Log::info('Shipment manifested via Ship Global: ' . ($trackingNumber ?? 'N/A'));
+                    \Log::info('Shipment manifested via Ship Global: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking for Ship Global manifest: ' . $e->getMessage());
-                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                    \Log::error('Failed to store shipment tracking for Ship Global manifest: '.$e->getMessage());
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
                 return response()->json([
@@ -6552,19 +6621,20 @@ class CustomerController extends Controller
             } else {
                 // Default: Call UPS Ship API
                 $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
-                if (!$payloadResult['success']) {
+                if (! $payloadResult['success']) {
                     return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
                 }
                 $upsPayload = $payloadResult['payload'];
 
                 $upsResult = $this->callUpsShipApiInternal($upsPayload);
 
-                if (!$upsResult['success']) {
+                if (! $upsResult['success']) {
                     $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'UPS Shipment Failed: ' . $errorMessage,
-                        'rawResponse' => $upsResult['rawResponse'] ?? null
+                        'message' => 'UPS Shipment Failed: '.$errorMessage,
+                        'rawResponse' => $upsResult['rawResponse'] ?? null,
                     ], 500);
                 }
 
@@ -6621,15 +6691,16 @@ class CustomerController extends Controller
                         $shipper->awb_number,
                         'manifested',
                         'packed',
-                        'Shipment manifested via UPS. Tracking: ' . ($trackingNumber ?? 'N/A'),
+                        'Shipment manifested via UPS. Tracking: '.($trackingNumber ?? 'N/A'),
                         $customerId,
                         'customer'
                     );
 
-                    \Log::info('Shipment manifested via UPS: ' . ($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+                    \Log::info('Shipment manifested via UPS: '.($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to store shipment tracking for manifest: ' . $e->getMessage());
-                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: ' . $e->getMessage()], 500);
+                    \Log::error('Failed to store shipment tracking for manifest: '.$e->getMessage());
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
                 return response()->json([
@@ -6641,7 +6712,7 @@ class CustomerController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
         }
     }
 
@@ -6651,14 +6722,14 @@ class CustomerController extends Controller
     public function bulkManifestShipments(Request $request)
     {
         try {
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
             $customerId = auth()->guard('customer')->id();
             $shipperIds = $request->input('shipper_ids', []);
 
-            if (empty($shipperIds) || !is_array($shipperIds)) {
+            if (empty($shipperIds) || ! is_array($shipperIds)) {
                 return response()->json(['success' => false, 'message' => 'No shipments selected.'], 400);
             }
 
@@ -6674,13 +6745,15 @@ class CustomerController extends Controller
                         ->where('customer_id', $customerId)
                         ->first();
 
-                    if (!$shipper) {
+                    if (! $shipper) {
                         $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Shipment not found'];
+
                         continue;
                     }
 
                     if ($shipper->status !== 'packed') {
                         $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Not in Packed status'];
+
                         continue;
                     }
 
@@ -6693,17 +6766,18 @@ class CustomerController extends Controller
                     // with a fallback to the legacy string-matching methods.
                     $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
 
-                    \Log::info('bulkManifest: Shipper #' . $shipperId . ' → network="' . $network . '" → api_provider="' . $apiProvider . '"');
+                    \Log::info('bulkManifest: Shipper #'.$shipperId.' → network="'.$network.'" → api_provider="'.$apiProvider.'"');
 
                     if ($apiProvider === 'shipuniversal') {
                         $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
-                        if (!$shipUniversalResult['success']) {
+                        if (! $shipUniversalResult['success']) {
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'ShipUniversal API error: ' . ($shipUniversalResult['message'] ?? 'Unknown'),
+                                'message' => 'ShipUniversal API error: '.($shipUniversalResult['message'] ?? 'Unknown'),
                                 'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                                 'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
                             ];
+
                             continue;
                         }
 
@@ -6718,6 +6792,7 @@ class CustomerController extends Controller
                                 'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                                 'shipuniversal_response' => $apiResponse,
                             ];
+
                             continue;
                         }
 
@@ -6738,7 +6813,7 @@ class CustomerController extends Controller
                             'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via ShipUniversal.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via ShipUniversal.');
                     } elseif ($apiProvider === 'primus') {
                         $primusResult = app(PrimusShipmentService::class)->manifest(
                             $shipper,
@@ -6752,6 +6827,7 @@ class CustomerController extends Controller
                                 'message' => 'Primus API error: '.($primusResult['message'] ?? 'Unknown'),
                                 'request_payload' => $primusResult['payload'] ?? null,
                             ];
+
                             continue;
                         }
 
@@ -6764,20 +6840,21 @@ class CustomerController extends Controller
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Primus.');
-                    // Priority 0: Overseas Logistic for UNITED CANADA DDP /
-                    //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+                        // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+                        //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
                     } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
                         // Call Overseas Logistic API
                         $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
 
-                        if (!$overseasResult['success']) {
+                        if (! $overseasResult['success']) {
                             $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown');
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'Overseas Logistic API error: ' . $overseasMsg,
+                                'message' => 'Overseas Logistic API error: '.$overseasMsg,
                                 'request_payload' => $overseasResult['request_payload'] ?? null,
                                 'overseas_response' => $overseasResult['data'] ?? null,
                             ];
+
                             continue;
                         }
 
@@ -6827,22 +6904,23 @@ class CustomerController extends Controller
                             'request_payload' => $overseasResult['request_payload'] ?? null,
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Overseas Logistic.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Overseas Logistic.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Overseas Logistic (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Overseas Logistic (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
                         // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                         // Call PostShipping API
                         $postShippingResult = $this->callPostShippingApiFromDb($shipper);
 
-                        if (!$postShippingResult['success']) {
+                        if (! $postShippingResult['success']) {
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'PostShipping API error: ' . ($postShippingResult['message'] ?? 'Unknown'),
+                                'message' => 'PostShipping API error: '.($postShippingResult['message'] ?? 'Unknown'),
                                 'request_payload' => $postShippingResult['request_payload'] ?? null,
                                 'postshipping_response' => $postShippingResult['data'] ?? null,
                             ];
+
                             continue;
                         }
 
@@ -6892,37 +6970,39 @@ class CustomerController extends Controller
                             'request_payload' => $postShippingResult['request_payload'] ?? null,
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via PostShipping.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via PostShipping.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via PostShipping (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via PostShipping (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                         // Call Flying Tigers API (UNITED ECO POST)
                         $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
 
-                        if (!$flyingTigersResult['success']) {
+                        if (! $flyingTigersResult['success']) {
                             // Check if this is an address error → return fallback info for dropdown option
-                            if (!empty($flyingTigersResult['is_address_error'])) {
+                            if (! empty($flyingTigersResult['is_address_error'])) {
                                 $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
                                 $results['address_errors'][] = [
-                                    'shipper_id'       => $shipperId,
-                                    'message'           => 'Address is incorrect for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                                    'shipper_id' => $shipperId,
+                                    'message' => 'Address is incorrect for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
                                     'is_address_error' => true,
-                                    'classic_rate'      => $fallbackInfo['classic_rate'] ?? null,
-                                    'paid_amount'       => $fallbackInfo['paid_amount'] ?? null,
-                                    'difference'        => $fallbackInfo['difference'] ?? null,
-                                    'wallet_action'    => $fallbackInfo['wallet_action'] ?? 'none',
-                                    'wallet_amount'    => $fallbackInfo['wallet_amount'] ?? 0,
-                                    'wallet_balance'   => $fallbackInfo['wallet_balance'] ?? 0,
-                                    'total_weight'     => $fallbackInfo['total_weight'] ?? 0,
+                                    'classic_rate' => $fallbackInfo['classic_rate'] ?? null,
+                                    'paid_amount' => $fallbackInfo['paid_amount'] ?? null,
+                                    'difference' => $fallbackInfo['difference'] ?? null,
+                                    'wallet_action' => $fallbackInfo['wallet_action'] ?? 'none',
+                                    'wallet_amount' => $fallbackInfo['wallet_amount'] ?? 0,
+                                    'wallet_balance' => $fallbackInfo['wallet_balance'] ?? 0,
+                                    'total_weight' => $fallbackInfo['total_weight'] ?? 0,
                                 ];
-                                \Log::info('Bulk manifest: shipment ' . $shipperId . ' address error — awaiting customer decision for UNITED CLASSIC fallback.');
+                                \Log::info('Bulk manifest: shipment '.$shipperId.' address error — awaiting customer decision for UNITED CLASSIC fallback.');
+
                                 continue;
                             }
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'Flying Tigers API error: ' . ($flyingTigersResult['message'] ?? 'Unknown'),
+                                'message' => 'Flying Tigers API error: '.($flyingTigersResult['message'] ?? 'Unknown'),
                             ];
+
                             continue;
                         }
 
@@ -6971,19 +7051,20 @@ class CustomerController extends Controller
                             'network' => 'Flying Tigers',
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Flying Tigers.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Flying Tigers.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Flying Tigers (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Flying Tigers (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
                         $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
 
-                        if (!$shipGlobalResult['success']) {
+                        if (! $shipGlobalResult['success']) {
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'Ship Global API error: ' . ($shipGlobalResult['message'] ?? 'Unknown'),
+                                'message' => 'Ship Global API error: '.($shipGlobalResult['message'] ?? 'Unknown'),
                             ];
+
                             continue;
                         }
 
@@ -6991,9 +7072,9 @@ class CustomerController extends Controller
                         $trackingNumber = null;
                         // Ship Global returns tracking/reference number in various possible formats
                         // Priority: waybill_number > tracking_number > awb_number > order_number
-                        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+                        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
                             $trackingNumber = $apiResponse['data']['waybill_number'];
-                        } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+                        } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
                             $trackingNumber = $apiResponse['waybill_number'];
                         } elseif (isset($apiResponse['tracking_number'])) {
                             $trackingNumber = $apiResponse['tracking_number'];
@@ -7054,26 +7135,28 @@ class CustomerController extends Controller
                             'network' => 'Ship Global',
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via Ship Global.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Ship Global.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } else {
                         // Default: Call UPS Ship API
                         $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
-                        if (!$payloadResult['success']) {
+                        if (! $payloadResult['success']) {
                             $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
+
                             continue;
                         }
                         $upsPayload = $payloadResult['payload'];
 
                         $upsResult = $this->callUpsShipApiInternal($upsPayload);
 
-                        if (!$upsResult['success']) {
+                        if (! $upsResult['success']) {
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'UPS API error: ' . ($upsResult['message'] ?? 'Unknown'),
+                                'message' => 'UPS API error: '.($upsResult['message'] ?? 'Unknown'),
                             ];
+
                             continue;
                         }
 
@@ -7127,24 +7210,24 @@ class CustomerController extends Controller
                             'network' => 'UPS',
                         ];
 
-                        \Log::info('Bulk manifest: shipment ' . $shipperId . ' manifested via UPS.');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via UPS.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via UPS (bulk). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via UPS (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
                     }
 
                 } catch (\Exception $e) {
                     $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $e->getMessage()];
-                    \Log::error('Bulk manifest error for shipper ' . $shipperId . ': ' . $e->getMessage());
+                    \Log::error('Bulk manifest error for shipper '.$shipperId.': '.$e->getMessage());
                 }
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Bulk manifest completed. ' . count($results['success']) . ' succeeded, ' . count($results['failed']) . ' failed out of ' . $results['total'] . ' shipments.',
+                'message' => 'Bulk manifest completed. '.count($results['success']).' succeeded, '.count($results['failed']).' failed out of '.$results['total'].' shipments.',
                 'results' => $results,
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
         }
     }
 
@@ -7156,8 +7239,9 @@ class CustomerController extends Controller
     {
         // Get consignee info
         $consignee = $shipper->consigneeInfo;
-        if (!$consignee) {
-            \Log::warning('buildUpsShipPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+        if (! $consignee) {
+            \Log::warning('buildUpsShipPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
         }
 
@@ -7166,17 +7250,17 @@ class CustomerController extends Controller
         $shippingMethod = $shipper->shipping_method;
         $fallbackSource = null;
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             // Fallback 1: Check create_shipment table (same column populated at storeShipment line 729)
             $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
             if ($createShipmentMethod) {
                 $shippingMethod = $createShipmentMethod;
                 $fallbackSource = 'create_shipment';
-                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from create_shipment for shipper #' . $shipper->id . ' → "' . $shippingMethod . '"');
+                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from create_shipment for shipper #'.$shipper->id.' → "'.$shippingMethod.'"');
             }
         }
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             // Fallback 2: Check package_dimension table (populated from package_shipping_method field)
             $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
                 ->whereNotNull('shipping_method')
@@ -7184,11 +7268,11 @@ class CustomerController extends Controller
             if ($pkgMethod) {
                 $shippingMethod = $pkgMethod;
                 $fallbackSource = 'package_dimension';
-                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from package_dimension for shipper #' . $shipper->id . ' → "' . $shippingMethod . '"');
+                \Log::info('buildUpsShipPayloadFromDb: Resolved shipping_method from package_dimension for shipper #'.$shipper->id.' → "'.$shippingMethod.'"');
             }
         }
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             // Last resort: use the first available CourierService as default.
             // The <select name="shipping_method"> in create-shipment.blade.php line 235
             // is permanently hidden (display:none), so older shipments have no
@@ -7197,27 +7281,28 @@ class CustomerController extends Controller
             if ($defaultService) {
                 $shippingMethod = $defaultService->method;
                 $fallbackSource = 'default_first_service';
-                \Log::warning('buildUpsShipPayloadFromDb: ALL sources null for shipper #' . $shipper->id . ' — defaulting to first CourierService: "' . $shippingMethod . '"');
+                \Log::warning('buildUpsShipPayloadFromDb: ALL sources null for shipper #'.$shipper->id.' — defaulting to first CourierService: "'.$shippingMethod.'"');
             }
         }
 
-        if (!$shippingMethod) {
-            \Log::warning('buildUpsShipPayloadFromDb: shipping_method is null/empty for shipper #' . $shipper->id . ' (checked shipper_info, create_shipment, package_dimension, default)');
+        if (! $shippingMethod) {
+            \Log::warning('buildUpsShipPayloadFromDb: shipping_method is null/empty for shipper #'.$shipper->id.' (checked shipper_info, create_shipment, package_dimension, default)');
+
             return ['success' => false, 'message' => 'Shipping method is not set for this shipment. Please edit the shipment and select a shipping method.'];
         }
 
         // If we resolved from a fallback, persist it back to shipper_info so future calls work directly.
-        if ($fallbackSource && !$shipper->shipping_method) {
+        if ($fallbackSource && ! $shipper->shipping_method) {
             $shipper->shipping_method = $shippingMethod;
             $shipper->save();
-            \Log::info('buildUpsShipPayloadFromDb: Persisted shipping_method to shipper_info #' . $shipper->id . ' → "' . $shippingMethod . '"');
+            \Log::info('buildUpsShipPayloadFromDb: Persisted shipping_method to shipper_info #'.$shipper->id.' → "'.$shippingMethod.'"');
         }
 
         // Multi-tier CourierService lookup
         $service = $this->findCourierService($shippingMethod, $shipper->id);
 
-        if (!$service) {
-            return ['success' => false, 'message' => 'No matching courier service found for shipping method: "' . $shippingMethod . '".'];
+        if (! $service) {
+            return ['success' => false, 'message' => 'No matching courier service found for shipping method: "'.$shippingMethod.'".'];
         }
 
         // Build a $validatedData array from DB records matching the format
@@ -7246,6 +7331,7 @@ class CustomerController extends Controller
         ];
 
         $upsPayload = $this->buildUpsShipPayload($validatedData, $service);
+
         return ['success' => true, 'payload' => $upsPayload];
     }
 
@@ -7259,14 +7345,16 @@ class CustomerController extends Controller
         // Tier 1: Exact match
         $service = CourierService::where('method', $shippingMethod)->first();
         if ($service) {
-            \Log::info('findCourierService: Exact match "' . $shippingMethod . '" for shipper #' . $shipperId);
+            \Log::info('findCourierService: Exact match "'.$shippingMethod.'" for shipper #'.$shipperId);
+
             return $service;
         }
 
         // Tier 2: Case-insensitive exact match
         $service = CourierService::whereRaw('LOWER(method) = ?', [strtolower($shippingMethod)])->first();
         if ($service) {
-            \Log::info('findCourierService: Case-insensitive match "' . $shippingMethod . '" → "' . $service->method . '" for shipper #' . $shipperId);
+            \Log::info('findCourierService: Case-insensitive match "'.$shippingMethod.'" → "'.$service->method.'" for shipper #'.$shipperId);
+
             return $service;
         }
 
@@ -7276,7 +7364,8 @@ class CustomerController extends Controller
         foreach ($allServices as $svc) {
             $svcUpper = strtoupper($svc->method);
             if (str_contains($svcUpper, $methodUpper) || str_contains($methodUpper, $svcUpper)) {
-                \Log::info('findCourierService: str_contains match "' . $shippingMethod . '" → "' . $svc->method . '" for shipper #' . $shipperId);
+                \Log::info('findCourierService: str_contains match "'.$shippingMethod.'" → "'.$svc->method.'" for shipper #'.$shipperId);
+
                 return $svc;
             }
         }
@@ -7285,14 +7374,20 @@ class CustomerController extends Controller
         // Handles cases like "United Ground Premium" ↔ "UNITED GRD PREMIUM"
         // by checking if short words (2-3 chars) are abbreviations of longer words.
         $formWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $methodUpper));
-        $formWords = array_values(array_filter($formWords, function($w) { return strlen($w) > 0; }));
+        $formWords = array_values(array_filter($formWords, function ($w) {
+            return strlen($w) > 0;
+        }));
 
         foreach ($allServices as $svc) {
             $svcUpper = strtoupper($svc->method);
             $svcWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $svcUpper));
-            $svcWords = array_values(array_filter($svcWords, function($w) { return strlen($w) > 0; }));
+            $svcWords = array_values(array_filter($svcWords, function ($w) {
+                return strlen($w) > 0;
+            }));
 
-            if (empty($formWords) || empty($svcWords)) continue;
+            if (empty($formWords) || empty($svcWords)) {
+                continue;
+            }
 
             $matchedCount = 0;
             $unmatchedLongWords = 0;
@@ -7306,7 +7401,7 @@ class CustomerController extends Controller
                     // Abbreviation check: if one word is short (2-3 chars) and the
                     // other is longer, check if short word's chars appear in order.
                     $shorter = strlen($fw) <= strlen($sw) ? $fw : $sw;
-                    $longer  = strlen($fw) >  strlen($sw) ? $fw : $sw;
+                    $longer = strlen($fw) > strlen($sw) ? $fw : $sw;
                     if (strlen($shorter) >= 2 && strlen($shorter) <= 3 && strlen($longer) >= 4) {
                         if ($this->isAbbreviationOf($shorter, $longer)) {
                             $found = true;
@@ -7324,7 +7419,8 @@ class CustomerController extends Controller
             // Match if all long words matched and at least 50% of total words matched
             $totalWords = count($formWords);
             if ($unmatchedLongWords === 0 && $matchedCount > 0 && ($matchedCount / $totalWords) >= 0.5) {
-                \Log::info('findCourierService: Word-by-word match "' . $shippingMethod . '" → "' . $svc->method . '" (matched ' . $matchedCount . '/' . $totalWords . ' words) for shipper #' . $shipperId);
+                \Log::info('findCourierService: Word-by-word match "'.$shippingMethod.'" → "'.$svc->method.'" (matched '.$matchedCount.'/'.$totalWords.' words) for shipper #'.$shipperId);
+
                 return $svc;
             }
         }
@@ -7335,14 +7431,15 @@ class CustomerController extends Controller
             $svcUpper = strtoupper($svc->method);
             $collapsedSvc = preg_replace('/[^A-Za-z0-9]/', '', $svcUpper);
             if (str_contains($collapsedForm, $collapsedSvc) || str_contains($collapsedSvc, $collapsedForm)) {
-                \Log::info('findCourierService: Collapsed-string match "' . $shippingMethod . '" → "' . $svc->method . '" for shipper #' . $shipperId);
+                \Log::info('findCourierService: Collapsed-string match "'.$shippingMethod.'" → "'.$svc->method.'" for shipper #'.$shipperId);
+
                 return $svc;
             }
         }
 
         // No match found — log all available methods for diagnostics
         $availableMethods = CourierService::pluck('method')->toArray();
-        \Log::warning('findCourierService: No match for "' . $shippingMethod . '" (shipper #' . $shipperId . '). Available methods: ' . implode(', ', $availableMethods));
+        \Log::warning('findCourierService: No match for "'.$shippingMethod.'" (shipper #'.$shipperId.'). Available methods: '.implode(', ', $availableMethods));
 
         return null;
     }
@@ -7357,7 +7454,9 @@ class CustomerController extends Controller
     {
         $shortLen = strlen($short);
         $longLen = strlen($long);
-        if ($shortLen > $longLen) return false;
+        if ($shortLen > $longLen) {
+            return false;
+        }
 
         $si = 0;
         for ($li = 0; $li < $longLen && $si < $shortLen; $li++) {
@@ -7365,6 +7464,7 @@ class CustomerController extends Controller
                 $si++;
             }
         }
+
         return $si === $shortLen;
     }
 
@@ -7373,21 +7473,21 @@ class CustomerController extends Controller
      * Tries: shipper_info.shipping_method → create_shipment.shipping_method →
      *        package_dimension.shipping_method → first CourierService as default.
      *
-     * @param ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return string
      */
     private function resolveShippingMethod($shipper)
     {
         $shippingMethod = $shipper->shipping_method;
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
             if ($createShipmentMethod) {
                 $shippingMethod = $createShipmentMethod;
             }
         }
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
                 ->whereNotNull('shipping_method')
                 ->value('shipping_method');
@@ -7396,7 +7496,7 @@ class CustomerController extends Controller
             }
         }
 
-        if (!$shippingMethod) {
+        if (! $shippingMethod) {
             $defaultService = CourierService::orderBy('id', 'asc')->first();
             if ($defaultService) {
                 $shippingMethod = $defaultService->method;
@@ -7412,7 +7512,7 @@ class CustomerController extends Controller
      * 1. Generate Bearer token from customers.php
      * 2. Create order via addOrder.php using the Bearer token
      *
-     * @param ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array
      */
     private function callShipGlobalApiFromDb($shipper)
@@ -7426,7 +7526,7 @@ class CustomerController extends Controller
                 'password' => 'mSN7KbhrZ0uvb229YWO',
             ]);
 
-            if (!$tokenResponse->successful()) {
+            if (! $tokenResponse->successful()) {
                 $tokenError = $tokenResponse->json();
                 $errorMessage = 'Ship Global token generation failed.';
                 if (is_array($tokenError)) {
@@ -7436,7 +7536,8 @@ class CustomerController extends Controller
                         $errorMessage = $tokenError['message'];
                     }
                 }
-                \Log::error('Ship Global token generation failed: ' . $errorMessage . ' | Status: ' . $tokenResponse->status());
+                \Log::error('Ship Global token generation failed: '.$errorMessage.' | Status: '.$tokenResponse->status());
+
                 return [
                     'success' => false,
                     'message' => $errorMessage,
@@ -7457,8 +7558,9 @@ class CustomerController extends Controller
                 $bearerToken = $tokenData['data']['access_token'];
             }
 
-            if (!$bearerToken) {
-                \Log::error('Ship Global: No token found in response. Response: ' . json_encode($tokenData));
+            if (! $bearerToken) {
+                \Log::error('Ship Global: No token found in response. Response: '.json_encode($tokenData));
+
                 return [
                     'success' => false,
                     'message' => 'No bearer token found in Ship Global authentication response.',
@@ -7472,31 +7574,31 @@ class CustomerController extends Controller
             $packages = $shipper->packageDimensions;
             $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
 
-            if (!$consignee) {
+            if (! $consignee) {
                 return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
             }
 
             // Get package dimensions (use first package)
             $firstPackage = $packages->first();
-            $packageWeightKg = $firstPackage ? (float)$firstPackage->actual_weight_kg * 1000 : 0.5;
-            $packageLength = $firstPackage ? (float)$firstPackage->length_cm : 10;
-            $packageBreadth = $firstPackage ? (float)$firstPackage->width_cm : 10;
-            $packageHeight = $firstPackage ? (float)$firstPackage->height_cm : 10;
+            $packageWeightKg = $firstPackage ? (float) $firstPackage->actual_weight_kg * 1000 : 0.5;
+            $packageLength = $firstPackage ? (float) $firstPackage->length_cm : 10;
+            $packageBreadth = $firstPackage ? (float) $firstPackage->width_cm : 10;
+            $packageHeight = $firstPackage ? (float) $firstPackage->height_cm : 10;
 
             // Get consignee country code from delivery_destination
             $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
 
             // Build shipper address string
             $shipperAddress = trim(
-                ($shipper->address_line1 ?? '') . ' ' .
-                ($shipper->address_line2 ?? '') . ' ' .
+                ($shipper->address_line1 ?? '').' '.
+                ($shipper->address_line2 ?? '').' '.
                 ($shipper->address_line3 ?? '')
             );
 
             // Build consignee address string
             $consigneeAddress = trim(
-                ($consignee->address_line1 ?? '') . ' ' .
-                ($consignee->address_line2 ?? '') . ' ' .
+                ($consignee->address_line1 ?? '').' '.
+                ($consignee->address_line2 ?? '').' '.
                 ($consignee->address_line3 ?? '')
             );
 
@@ -7504,13 +7606,13 @@ class CustomerController extends Controller
             // Ship Global requires both firstname and lastname to be non-empty
             $shipperNameParts = preg_split('/\s+/', trim($shipper->contact_person ?? $shipper->company_name ?? 'Shipper'), 2);
             $sellerFirstname = $shipperNameParts[0] ?? 'Shipper';
-            $sellerLastname = !empty($shipperNameParts[1]) ? $shipperNameParts[1] : $sellerFirstname;
+            $sellerLastname = ! empty($shipperNameParts[1]) ? $shipperNameParts[1] : $sellerFirstname;
 
             // Split consignee name into first/last
             // Ship Global requires both firstname and lastname to be non-empty
             $consigneeNameParts = preg_split('/\s+/', trim($consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee'), 2);
             $consigneeFirstname = $consigneeNameParts[0] ?? 'Consignee';
-            $consigneeLastname = !empty($consigneeNameParts[1]) ? $consigneeNameParts[1] : $consigneeFirstname;
+            $consigneeLastname = ! empty($consigneeNameParts[1]) ? $consigneeNameParts[1] : $consigneeFirstname;
 
             // Get invoice details
             $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
@@ -7522,7 +7624,7 @@ class CustomerController extends Controller
             $customer = Customer::find($shipper->customer_id);
             $csb5Status = 0;
             if ($customer && $customer->csb_status) {
-                $csb5Status = (int)$customer->csb_status;
+                $csb5Status = (int) $customer->csb_status;
             }
 
             // Get the courier service code for the shipping method
@@ -7538,10 +7640,10 @@ class CustomerController extends Controller
                     $vendorOrderItems[] = [
                         'vendor_order_item_name' => $item->description ?? '',
                         'vendor_order_item_sku' => $item->hs_code ?? $item->hts_code ?? '',
-                        'vendor_order_item_quantity' => (int)$item->qty,
-                        'vendor_order_item_unit_price' => (float)$item->unit_rate,
+                        'vendor_order_item_quantity' => (int) $item->qty,
+                        'vendor_order_item_unit_price' => (float) $item->unit_rate,
                         'vendor_order_item_hsn' => $item->hs_code ?? '',
-                        'vendor_order_item_tax_rate' => (float)$item->igst_percentage,
+                        'vendor_order_item_tax_rate' => (float) $item->igst_percentage,
                     ];
                 }
             }
@@ -7552,7 +7654,7 @@ class CustomerController extends Controller
                     'vendor_order_item_name' => 'General Merchandise',
                     'vendor_order_item_sku' => '',
                     'vendor_order_item_quantity' => 1,
-                    'vendor_order_item_unit_price' => (float)($invoice ? $invoice->invoice_amount : 0),
+                    'vendor_order_item_unit_price' => (float) ($invoice ? $invoice->invoice_amount : 0),
                     'vendor_order_item_hsn' => '',
                     'vendor_order_item_tax_rate' => 0,
                 ];
@@ -7564,10 +7666,10 @@ class CustomerController extends Controller
                 'invoice_date' => $invoiceDate,
                 'order_reference' => $orderReference,
                 'service' => $serviceCode,
-                'package_weight' => (float)$packageWeightKg,
-                'package_length' => (float)$packageLength,
-                'package_breadth' => (float)$packageBreadth,
-                'package_height' => (float)$packageHeight,
+                'package_weight' => (float) $packageWeightKg,
+                'package_length' => (float) $packageLength,
+                'package_breadth' => (float) $packageBreadth,
+                'package_height' => (float) $packageHeight,
                 'currency_code' => $currencyCode,
                 'csb5_status' => $csb5Status,
                 'seller_nickname' => 'UnitedW',
@@ -7595,7 +7697,7 @@ class CustomerController extends Controller
                 'customer_shipping_state' => $consignee->state ?? '',
                 'vendor_order_items' => $vendorOrderItems,
                 // i want abw number in tracking field but ship global api is not accepting it so i am leaving it blank for now
-                'tracking' => $shipper->awb_number ?? ''
+                'tracking' => $shipper->awb_number ?? '',
                 // 'mailClass' => '',
                 // 'deliveryConfirmation' => '',
                 // 'retry' => false,
@@ -7604,12 +7706,12 @@ class CustomerController extends Controller
             // print_r($payload);
             // return;
 
-            \Log::info('Ship Global order payload for shipper #' . $shipper->id . ': ' . json_encode($payload));
+            \Log::info('Ship Global order payload for shipper #'.$shipper->id.': '.json_encode($payload));
 
             // Step 2: Call the addOrder.php API with Bearer token
             $orderResponse = Http::withHeaders([
                 'Content-Type' => 'application/json',
-                'Authorization' => 'Bearer ' . $bearerToken,
+                'Authorization' => 'Bearer '.$bearerToken,
             ])->post('https://labels.shipglobal.in/api/v1/addOrder.php', $payload);
 
             $apiResponse = $orderResponse->json();
@@ -7625,13 +7727,14 @@ class CustomerController extends Controller
             }
 
             if ($orderResponse->successful() && $orderNumber) {
-                \Log::info('Ship Global order created for shipper #' . $shipper->id . '. Order#: ' . $orderNumber . '. Response: ' . json_encode($apiResponse));
+                \Log::info('Ship Global order created for shipper #'.$shipper->id.'. Order#: '.$orderNumber.'. Response: '.json_encode($apiResponse));
+
                 return [
                     'success' => true,
-                    'message' => 'Ship Global order created successfully. Order#: ' . $orderNumber,
+                    'message' => 'Ship Global order created successfully. Order#: '.$orderNumber,
                     'data' => $apiResponse,
                 ];
-            } elseif ($orderResponse->successful() && !$orderNumber) {
+            } elseif ($orderResponse->successful() && ! $orderNumber) {
                 // HTTP 200 but no order_number — could be a validation/business error in the body
                 $errorMessage = 'Ship Global API returned no order number.';
                 if (is_array($apiResponse)) {
@@ -7640,11 +7743,12 @@ class CustomerController extends Controller
                     } elseif (isset($apiResponse['message'])) {
                         $errorMessage = $apiResponse['message'];
                     }
-                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
-                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
                     }
                 }
-                \Log::error('Ship Global order creation: HTTP 200 but no order_number. Response: ' . json_encode($apiResponse));
+                \Log::error('Ship Global order creation: HTTP 200 but no order_number. Response: '.json_encode($apiResponse));
+
                 return [
                     'success' => false,
                     'message' => $errorMessage,
@@ -7662,11 +7766,12 @@ class CustomerController extends Controller
                         $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
                     }
                     // Append validation details if available (Ship Global returns field-level errors in "details")
-                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
-                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
                     }
                 }
-                \Log::error('Ship Global order creation failed: ' . $errorMessage . ' | Status: ' . $orderResponse->status() . ' | Response: ' . json_encode($apiResponse));
+                \Log::error('Ship Global order creation failed: '.$errorMessage.' | Status: '.$orderResponse->status().' | Response: '.json_encode($apiResponse));
+
                 return [
                     'success' => false,
                     'message' => $errorMessage,
@@ -7675,10 +7780,11 @@ class CustomerController extends Controller
                 ];
             }
         } catch (\Exception $e) {
-            \Log::error('Ship Global API call failed: ' . $e->getMessage());
+            \Log::error('Ship Global API call failed: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'Ship Global API call failed: ' . $e->getMessage(),
+                'message' => 'Ship Global API call failed: '.$e->getMessage(),
             ];
         }
     }
@@ -7687,7 +7793,7 @@ class CustomerController extends Controller
      * Determine if a shipping method should be routed to the PostShipping API.
      * Triggered for DDP variants of UNITED AIR PREMIUM and UNITED PRIOR POST.
      *
-     * @param string|null $shippingMethod
+     * @param  string|null  $shippingMethod
      * @return bool
      */
     private function isPostShippingMethod($shippingMethod)
@@ -7710,7 +7816,7 @@ class CustomerController extends Controller
      * Canada services (CANADA-DDP, CANADA-ECOM) are only shown when the
      * delivery destination is Canada, and are hidden for all other destinations.
      *
-     * @param \App\Models\CourierService|string|null $service
+     * @param  CourierService|string|null  $service
      * @return bool
      */
     private function isCanadaService($service)
@@ -7751,8 +7857,8 @@ class CustomerController extends Controller
      * Anything that is not recognised as UK, Canada or Australia is treated
      * as "US".
      *
-     * @param string|null $destination
-     * @return string  "UK" | "CA" | "AUS" | "UAE" | "NZ" | "SG" | "MY" | "US"
+     * @param  string|null  $destination
+     * @return string "UK" | "CA" | "AUS" | "UAE" | "NZ" | "SG" | "MY" | "US"
      */
     public function resolveDestinationCountry($destination)
     {
@@ -7764,7 +7870,7 @@ class CustomerController extends Controller
         // Resolve numeric dropdown/API values through the destination record so
         // country selection never depends on a display-name fallback.
         if (ctype_digit($destinationValue)) {
-            $destinationRecord = \App\Models\Destination::find((int) $destinationValue);
+            $destinationRecord = Destination::find((int) $destinationValue);
             if ($destinationRecord) {
                 $destinationValue = $destinationRecord->country_code
                     ?: $destinationRecord->code
@@ -7825,7 +7931,6 @@ class CustomerController extends Controller
             return 'UAE';
         }
 
-
         // i want to add newzealand as well so i am adding it here
         // New Zealand detection — covers "New Zealand", "NZ", "NZL",
         // and any string containing "New Zealand". Returns "NZ" to match the
@@ -7869,7 +7974,7 @@ class CustomerController extends Controller
             || $destUpper === 'DEU'
             || str_contains($destUpper, 'GERMANY')
         );
-        if($isGermany){
+        if ($isGermany) {
             return 'DE';
         }
 
@@ -7885,11 +7990,11 @@ class CustomerController extends Controller
      *   3. 0-5 Kg (single parcel)                                  → DPDUKEPND
      *   4. 5-30 Kg (single parcel)                                 → DPD112
      *
-     * @param string $shippingMethod
-     * @param \App\Models\CourierService|null $courierService
-     * @param float $totalWeight  Total shipment weight in Kg
-     * @param int $noOfItems       Number of parcels
-     * @param \App\Models\ConsigneeInfo|null $consignee
+     * @param  string  $shippingMethod
+     * @param  CourierService|null  $courierService
+     * @param  float  $totalWeight  Total shipment weight in Kg
+     * @param  int  $noOfItems  Number of parcels
+     * @param  ConsigneeInfo|null  $consignee
      * @return string
      */
     private function getPostShippingServiceTypeName($shippingMethod, $courierService, $totalWeight = 0, $noOfItems = 1, $consignee = null)
@@ -7897,22 +8002,26 @@ class CustomerController extends Controller
         // Priority 1: Offshore deliveries → DPD111 (DPD OFFSHORE- TWO DAY)
         if ($this->isPostShippingOffshoreDestination($consignee)) {
             \Log::info('getPostShippingServiceTypeName: Offshore destination → DPD111');
+
             return 'DPD111';
         }
 
         // Priority 2: Multiple parcels → MDPD112 (Multi DPD UK MAINLAND- NEXT DAY)
         if ((int) $noOfItems > 1) {
-            \Log::info('getPostShippingServiceTypeName: Multiple parcels (' . $noOfItems . ') → MDPD112');
+            \Log::info('getPostShippingServiceTypeName: Multiple parcels ('.$noOfItems.') → MDPD112');
+
             return 'MDPD112';
         }
 
         // Priority 3 & 4: Weight-based for single parcel
         if ($totalWeight <= 5) {
-            \Log::info('getPostShippingServiceTypeName: Weight ' . $totalWeight . 'kg (≤5) → DPDUKEPND');
+            \Log::info('getPostShippingServiceTypeName: Weight '.$totalWeight.'kg (≤5) → DPDUKEPND');
+
             return 'DPDUKEPND'; // DPD UK Mainland Express PAK
         }
 
-        \Log::info('getPostShippingServiceTypeName: Weight ' . $totalWeight . 'kg (>5) → DPD112');
+        \Log::info('getPostShippingServiceTypeName: Weight '.$totalWeight.'kg (>5) → DPD112');
+
         return 'DPD112'; // DPD UK Mainland Next Day
     }
 
@@ -7924,7 +8033,7 @@ class CustomerController extends Controller
      *   - DPD111 (Offshore - Two Day)        → "7"
      *   - DPDUKEPND / DPD112 / MDPD112       → "1" (Next Day mainland)
      *
-     * @param string $serviceTypeName
+     * @param  string  $serviceTypeName
      * @return string
      */
     private function getPostShippingNetworkCode($serviceTypeName)
@@ -7945,12 +8054,12 @@ class CustomerController extends Controller
      * Offshore = Northern Ireland (BT postcodes) + Scottish Highlands & Islands
      * (IV, HS, KA, KW, PA, PH, ZE postcodes) + Isle of Man (IM) + Channel Islands (JE, GY).
      *
-     * @param \App\Models\ConsigneeInfo|null $consignee
+     * @param  ConsigneeInfo|null  $consignee
      * @return bool
      */
     private function isPostShippingOffshoreDestination($consignee)
     {
-        if (!$consignee) {
+        if (! $consignee) {
             return false;
         }
 
@@ -7992,13 +8101,14 @@ class CustomerController extends Controller
      * Return the ThirdPartyToken for PostShipping.
      * A single fixed token is used for all UNITED AIR PREMIUM DDP shipments.
      *
-     * @param float $totalWeight  Total shipment weight in Kg (kept for signature compatibility)
+     * @param  float  $totalWeight  Total shipment weight in Kg (kept for signature compatibility)
      * @return string
      */
     private function getPostShippingThirdPartyToken($totalWeight)
     {
         $token = config('services.postshipping.third_party_token');
         \Log::info('getPostShippingThirdPartyToken: Using fixed token for UNITED AIR PREMIUM DDP');
+
         return $token;
     }
 
@@ -8006,20 +8116,22 @@ class CustomerController extends Controller
      * Build the PostShipping API payload from database records.
      * Payload structure mirrors the documented https://api.postshipping.com/api2/shipments format.
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
      */
     private function buildPostShippingPayloadFromDb($shipper)
     {
         $consignee = $shipper->consigneeInfo;
-        if (!$consignee) {
-            \Log::warning('buildPostShippingPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+        if (! $consignee) {
+            \Log::warning('buildPostShippingPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
         }
 
         $packages = $shipper->packageDimensions;
         if ($packages->isEmpty()) {
-            \Log::warning('buildPostShippingPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            \Log::warning('buildPostShippingPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
         }
 
@@ -8074,7 +8186,7 @@ class CustomerController extends Controller
         if ($invoice) {
             $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
             $firstItem = $invoiceItems->first();
-            if ($firstItem && !empty($firstItem->description)) {
+            if ($firstItem && ! empty($firstItem->description)) {
                 $goodsDescription = $firstItem->description;
             }
         }
@@ -8124,43 +8236,43 @@ class CustomerController extends Controller
                         $itemValue = $customValue;
                     }
                     $pieces[] = [
-                        'HarmonisedCode'        => (string) ($item->hs_code ?? $item->hts_code ?? ''),
-                        'GoodsDescription'      => $item->description ?? $goodsDescription,
-                        'Content'               => $item->description ?? $goodsDescription,
-                        'Quantity'              => $itemQty,
-                        'Weight'                => $pkgWeight,
+                        'HarmonisedCode' => (string) ($item->hs_code ?? $item->hts_code ?? ''),
+                        'GoodsDescription' => $item->description ?? $goodsDescription,
+                        'Content' => $item->description ?? $goodsDescription,
+                        'Quantity' => $itemQty,
+                        'Weight' => $pkgWeight,
                         'ManufactureCountryCode' => 'IN',
-                        'OriginCountryCode'     => 'IN',
-                        'CurrencyCode'          => $currencyCode,
-                        'CustomsValue'          => $itemValue,
+                        'OriginCountryCode' => 'IN',
+                        'CurrencyCode' => $currencyCode,
+                        'CustomsValue' => $itemValue,
                     ];
                 }
             } else {
                 // Fallback single piece when no invoice items exist
                 $pieces[] = [
-                    'HarmonisedCode'        => '',
-                    'GoodsDescription'      => $goodsDescription,
-                    'Content'               => $goodsDescription,
-                    'Quantity'              => 1,
-                    'Weight'                => $pkgWeight,
+                    'HarmonisedCode' => '',
+                    'GoodsDescription' => $goodsDescription,
+                    'Content' => $goodsDescription,
+                    'Quantity' => 1,
+                    'Weight' => $pkgWeight,
                     'ManufactureCountryCode' => 'IN',
-                    'OriginCountryCode'     => 'IN',
-                    'CurrencyCode'          => $currencyCode,
-                    'CustomsValue'          => $customValue,
+                    'OriginCountryCode' => 'IN',
+                    'CurrencyCode' => $currencyCode,
+                    'CustomsValue' => $customValue,
                 ];
             }
 
             $shipmentResponseItems[] = [
-                'ItemNoOfPcs'            => 1,
-                'ItemCubicL'             => $pkgL,
-                'ItemCubicW'             => $pkgW,
-                'ItemCubicH'             => $pkgH,
-                'ItemWeight'             => $pkgWeight,
-                'ItemDescription'        => $goodsDescription,
-                'ItemCustomValue'        => $customValue,
+                'ItemNoOfPcs' => 1,
+                'ItemCubicL' => $pkgL,
+                'ItemCubicW' => $pkgW,
+                'ItemCubicH' => $pkgH,
+                'ItemWeight' => $pkgWeight,
+                'ItemDescription' => $goodsDescription,
+                'ItemCustomValue' => $customValue,
                 'ItemCustomCurrencyCode' => $currencyCode,
-                'Notes'                  => 'Commercial shipment',
-                'Pieces'                 => $pieces,
+                'Notes' => 'Commercial shipment',
+                'Pieces' => $pieces,
             ];
         }
 
@@ -8187,80 +8299,80 @@ class CustomerController extends Controller
                 // 'SenderKycType'              => $shipper->kyc_type ?? 'Passport',
                 // 'SenderKycNumber'            => $shipper->kyc_number ?? '',
                 // 'SenderReceivingCountryTaxID' => '',
-                'SenderName' => "Ved",
-                'SenderCompanyName' => "United Worldwide Couriers Pvt Ltd",
-                'SenderCountryCode' => "IN",
-                'SenderAdd1' => "BUILDING NO 1 BYPASS ROAD",
-                'SenderAdd2' => "MAHIPALPUR",
-                'SenderAdd3' => "",
-                'SenderAddCity' => "NEW DELHI",
-                'SenderAddState' => "DELHI",
-                'SenderAddPostcode' => "110037",
-                'SenderPhone' => "01146122222",
-                'SenderEmail' => "abc@abc.com",
-                'SenderFax' => "",
-                'SenderKycType' => "Passport",
-                'SenderKycNumber' => "P00001",
-                'SenderReceivingCountryTaxID' => ""
+                'SenderName' => 'Ved',
+                'SenderCompanyName' => 'United Worldwide Couriers Pvt Ltd',
+                'SenderCountryCode' => 'IN',
+                'SenderAdd1' => 'BUILDING NO 1 BYPASS ROAD',
+                'SenderAdd2' => 'MAHIPALPUR',
+                'SenderAdd3' => '',
+                'SenderAddCity' => 'NEW DELHI',
+                'SenderAddState' => 'DELHI',
+                'SenderAddPostcode' => '110037',
+                'SenderPhone' => '01146122222',
+                'SenderEmail' => 'abc@abc.com',
+                'SenderFax' => '',
+                'SenderKycType' => 'Passport',
+                'SenderKycNumber' => 'P00001',
+                'SenderReceivingCountryTaxID' => '',
             ],
             'ReceiverDetails' => [
-                'ReceiverName'          => $consignee->consignee_name ?? ($consignee->contact_person ?? 'Consignee'),
-                'ReceiverCompanyName'   => $consignee->consignee_name ?? ($consignee->contact_person ?? ''),
+                'ReceiverName' => $consignee->consignee_name ?? ($consignee->contact_person ?? 'Consignee'),
+                'ReceiverCompanyName' => $consignee->consignee_name ?? ($consignee->contact_person ?? ''),
                 // 'ReceiverCountryCode'   => $consigneeCountryCode,
-                'ReceiverCountryCode'   => "GB",
-                'ReceiverAdd1'          => $consignee->address_line1 ?? '',
-                'ReceiverAdd2'          => $consignee->address_line2 ?? '',
-                'ReceiverAdd3'          => $consignee->address_line3 ?? '',
-                'ReceiverAddCity'       => $consignee->city ?? '',
-                'ReceiverAddState'      => $consignee->state ?? '',
-                'ReceiverAddPostcode'   => $consignee->zip_code ?? '',
-                'ReceiverMobile'        => $consignee->phone_number ?? '',
-                'ReceiverPhone'         => $consignee->phone_number ?? '',
-                'ReceiverEmail'         => $consignee->email ?? 'abc@abc.com',
+                'ReceiverCountryCode' => 'GB',
+                'ReceiverAdd1' => $consignee->address_line1 ?? '',
+                'ReceiverAdd2' => $consignee->address_line2 ?? '',
+                'ReceiverAdd3' => $consignee->address_line3 ?? '',
+                'ReceiverAddCity' => $consignee->city ?? '',
+                'ReceiverAddState' => $consignee->state ?? '',
+                'ReceiverAddPostcode' => $consignee->zip_code ?? '',
+                'ReceiverMobile' => $consignee->phone_number ?? '',
+                'ReceiverPhone' => $consignee->phone_number ?? '',
+                'ReceiverEmail' => $consignee->email ?? 'abc@abc.com',
                 'ReceiverAddResidential' => 'N',
-                'ReceiverFax'           => '',
-                'ReceiverKycType'       => 'Passport',
-                'ReceiverKycNumber'     => '',
+                'ReceiverFax' => '',
+                'ReceiverKycType' => 'Passport',
+                'ReceiverKycNumber' => '',
             ],
             'PackageDetails' => [
-                'GoodsDescription'      => $goodsDescription,
-                'CustomValue'           => (float) $customValue,
-                'CustomCurrencyCode'    => $currencyCode,
-                'InsuranceValue'        => 0.00,
+                'GoodsDescription' => $goodsDescription,
+                'CustomValue' => (float) $customValue,
+                'CustomCurrencyCode' => $currencyCode,
+                'InsuranceValue' => 0.00,
                 'InsuranceCurrencyCode' => $currencyCode,
-                'ShipmentTerm'          => '',
+                'ShipmentTerm' => '',
                 'GoodsOriginCountryCode' => 'IN',
-                'Weight'                => (float) $totalWeight,
-                'WeightMeasurement'     => 'KG',
-                'NoOfItems'             => (int) $noOfItems,
-                'CubicL'                => (float) $cubicL,
-                'CubicW'                => (float) $cubicW,
-                'CubicH'                => (float) $cubicH,
-                'CubicWeight'           => 0,
-                'ServiceTypeName'       => $serviceTypeName,
-                'NetworkCode'           => $this->getPostShippingNetworkCode($serviceTypeName),
-                'BookPickUP'            => false,
-                'SenderRef1'            => $shipper->awb_number ?? ('TEST-SHIPMENT-' . $shipper->id),
-                'BusinessType'          => 'B2B',
-                'ShipmentResponseItem'  => $shipmentResponseItems,
-                'CODAmount'             => 0,
-                'CODCurrencyCode'       => $currencyCode,
-                'DeadWeight'            => (float) $totalWeight,
-                'ReasonExport'          => 'Sale',
-                'OrderNumber'           => $orderNumber,
-                'Incoterms'             => $incoterms,
+                'Weight' => (float) $totalWeight,
+                'WeightMeasurement' => 'KG',
+                'NoOfItems' => (int) $noOfItems,
+                'CubicL' => (float) $cubicL,
+                'CubicW' => (float) $cubicW,
+                'CubicH' => (float) $cubicH,
+                'CubicWeight' => 0,
+                'ServiceTypeName' => $serviceTypeName,
+                'NetworkCode' => $this->getPostShippingNetworkCode($serviceTypeName),
+                'BookPickUP' => false,
+                'SenderRef1' => $shipper->awb_number ?? ('TEST-SHIPMENT-'.$shipper->id),
+                'BusinessType' => 'B2B',
+                'ShipmentResponseItem' => $shipmentResponseItems,
+                'CODAmount' => 0,
+                'CODCurrencyCode' => $currencyCode,
+                'DeadWeight' => (float) $totalWeight,
+                'ReasonExport' => 'Sale',
+                'OrderNumber' => $orderNumber,
+                'Incoterms' => $incoterms,
             ],
             'PickupDetails' => [
-                'ReadyTime'             => $readyTime,
-                'CloseTime'             => $closeTime,
-                'SpecialInstructions'   => 'Call before pickup',
-                'Address1'              => $shipper->address_line1 ?? '',
-                'Address2'              => $shipper->address_line2 ?? '',
-                'Address3'              => $shipper->address_line3 ?? '',
-                'AddressCity'           => strtoupper($shipper->city ?? 'NEW DELHI'),
-                'AddressState'          => strtoupper($shipper->state ?? 'DELHI'),
-                'AddressPostalCode'     => $shipper->pincode ?? '110037',
-                'AddressCountryCode'    => 'IN',
+                'ReadyTime' => $readyTime,
+                'CloseTime' => $closeTime,
+                'SpecialInstructions' => 'Call before pickup',
+                'Address1' => $shipper->address_line1 ?? '',
+                'Address2' => $shipper->address_line2 ?? '',
+                'Address3' => $shipper->address_line3 ?? '',
+                'AddressCity' => strtoupper($shipper->city ?? 'NEW DELHI'),
+                'AddressState' => strtoupper($shipper->state ?? 'DELHI'),
+                'AddressPostalCode' => $shipper->pincode ?? '110037',
+                'AddressCountryCode' => 'IN',
             ],
         ];
 
@@ -8268,8 +8380,8 @@ class CustomerController extends Controller
         // The fixed ThirdPartyToken is also returned so the caller can
         // send it as the API-Key request header.
         return [
-            'success'           => true,
-            'payload'           => [$shipmentObject],
+            'success' => true,
+            'payload' => [$shipmentObject],
             'third_party_token' => $thirdPartyToken,
         ];
     }
@@ -8278,14 +8390,14 @@ class CustomerController extends Controller
      * Call the PostShipping API to create a shipment.
      * Endpoint: https://api.postshipping.com/api2/shipments
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'message' => string, 'data' => array|null]
      */
     private function callPostShippingApiFromDb($shipper)
     {
         try {
             $payloadResult = $this->buildPostShippingPayloadFromDb($shipper);
-            if (!$payloadResult['success']) {
+            if (! $payloadResult['success']) {
                 return [
                     'success' => false,
                     'message' => $payloadResult['message'] ?? 'Failed to build PostShipping payload.',
@@ -8298,17 +8410,17 @@ class CustomerController extends Controller
             $apiToken = config('services.postshipping.api_token');
             $baseUrl = rtrim(config('services.postshipping.base_url'), '/');
             $endpoint = config('services.postshipping.endpoint', '/api2/shipments');
-            $url = $baseUrl . $endpoint;
+            $url = $baseUrl.$endpoint;
             $timeout = (int) config('services.postshipping.timeout', 60);
 
-            \Log::info('PostShipping payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+            \Log::info('PostShipping payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
 
             $headers = [
                 'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-                'Connection'   => 'keep-alive',
+                'Accept' => 'application/json',
+                'Connection' => 'keep-alive',
             ];
-            if (!empty($apiToken)) {
+            if (! empty($apiToken)) {
                 $headers['token'] = $apiToken;
             }
 
@@ -8319,7 +8431,7 @@ class CustomerController extends Controller
 
             $apiResponse = $response->json();
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorMessage = 'PostShipping API returned error.';
                 if (is_array($apiResponse)) {
                     if (isset($apiResponse['error'])) {
@@ -8329,21 +8441,22 @@ class CustomerController extends Controller
                     } elseif (isset($apiResponse['errors'])) {
                         $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
                     }
-                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
-                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
                     }
                 }
-                \Log::error('PostShipping API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                \Log::error('PostShipping API failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
                 return [
-                    'success'         => false,
-                    'message'         => $errorMessage,
-                    'data'            => $apiResponse,
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
                     'request_payload' => $payload,
-                    'status_code'     => $response->status(),
+                    'status_code' => $response->status(),
                 ];
             }
 
-            \Log::info('PostShipping response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
+            \Log::info('PostShipping response for shipper #'.$shipper->id.': '.substr($response->body(), 0, 2000));
 
             // The DPD/PostShipping API may return HTTP 200 but still reject the
             // shipment by embedding an error inside the "ErrMessage" field of
@@ -8351,27 +8464,29 @@ class CustomerController extends Controller
             // Detect this so the caller treats it as a failure instead of success.
             $errMessage = $this->extractPostShippingErrorMessage($apiResponse);
             if ($errMessage !== null) {
-                \Log::error('PostShipping API rejected shipment (ErrMessage): ' . $errMessage . ' | Body: ' . $response->body());
+                \Log::error('PostShipping API rejected shipment (ErrMessage): '.$errMessage.' | Body: '.$response->body());
+
                 return [
-                    'success'         => false,
-                    'message'         => 'PostShipping API rejected shipment: ' . $errMessage,
-                    'data'            => $apiResponse,
+                    'success' => false,
+                    'message' => 'PostShipping API rejected shipment: '.$errMessage,
+                    'data' => $apiResponse,
                     'request_payload' => $payload,
-                    'status_code'     => $response->status(),
+                    'status_code' => $response->status(),
                 ];
             }
 
             return [
-                'success'         => true,
-                'message'          => 'PostShipping shipment created successfully.',
-                'data'             => $apiResponse,
-                'request_payload'  => $payload,
+                'success' => true,
+                'message' => 'PostShipping shipment created successfully.',
+                'data' => $apiResponse,
+                'request_payload' => $payload,
             ];
         } catch (\Exception $e) {
-            \Log::error('PostShipping API call failed: ' . $e->getMessage());
+            \Log::error('PostShipping API call failed: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'PostShipping API call failed: ' . $e->getMessage(),
+                'message' => 'PostShipping API call failed: '.$e->getMessage(),
             ];
         }
     }
@@ -8390,12 +8505,12 @@ class CustomerController extends Controller
      *   - Single object: {ErrMessage: "..."}
      *   - Nested under a "data" / "shipments" key
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractPostShippingErrorMessage($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -8410,7 +8525,7 @@ class CustomerController extends Controller
                 break;
             }
         }
-        if (!$hasStringKeys) {
+        if (! $hasStringKeys) {
             $containers[] = $apiResponse;
         }
 
@@ -8428,10 +8543,10 @@ class CustomerController extends Controller
 
         foreach ($containers as $container) {
             foreach ($container as $item) {
-                if (!is_array($item)) {
+                if (! is_array($item)) {
                     continue;
                 }
-                if (!empty($item['ErrMessage']) && is_string($item['ErrMessage'])) {
+                if (! empty($item['ErrMessage']) && is_string($item['ErrMessage'])) {
                     $msg = trim($item['ErrMessage']);
                     if ($msg !== '') {
                         return $msg;
@@ -8451,12 +8566,12 @@ class CustomerController extends Controller
      * We also keep fallbacks for other possible shapes (top-level, nested under
      * "data", or wrapped under "Shipments") for resilience.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractPostShippingTrackingNumber($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -8474,7 +8589,7 @@ class CustomerController extends Controller
         // (documented format: [{ ShipmentNumber, LabelURL, ... }])
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($candidateKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -8482,7 +8597,7 @@ class CustomerController extends Controller
 
         // Case B: Check top-level keys (single shipment object returned directly)
         foreach ($candidateKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -8493,14 +8608,14 @@ class CustomerController extends Controller
             // data is a list of shipments
             if (isset($data[0]) && is_array($data[0])) {
                 foreach ($candidateKeys as $key) {
-                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                         return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                     }
                 }
             }
             // data is a single shipment object
             foreach ($candidateKeys as $key) {
-                if (isset($data[$key]) && !empty($data[$key])) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
                     return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                 }
             }
@@ -8514,7 +8629,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($candidateKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -8532,12 +8647,12 @@ class CustomerController extends Controller
      * The documented response format is an array of shipment objects, each
      * containing a LabelURL field with the shipping label download link.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractPostShippingLabelUrl($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -8546,7 +8661,7 @@ class CustomerController extends Controller
         // Case A: The response itself is a list of shipment objects
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($labelKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -8554,7 +8669,7 @@ class CustomerController extends Controller
 
         // Case B: Check top-level keys
         foreach ($labelKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -8564,13 +8679,13 @@ class CustomerController extends Controller
         if (is_array($data)) {
             if (isset($data[0]) && is_array($data[0])) {
                 foreach ($labelKeys as $key) {
-                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                         return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                     }
                 }
             }
             foreach ($labelKeys as $key) {
-                if (isset($data[$key]) && !empty($data[$key])) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
                     return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                 }
             }
@@ -8584,7 +8699,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($labelKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -8609,7 +8724,7 @@ class CustomerController extends Controller
      * Determine if a shipping method should be routed to the Flying Tigers API.
      * Triggered for UNITED ECO POST shipments.
      *
-     * @param string|null $shippingMethod
+     * @param  string|null  $shippingMethod
      * @return bool
      */
     private function isFlyingTigersMethod($shippingMethod)
@@ -8633,7 +8748,7 @@ class CustomerController extends Controller
      * Both variants use the same Overseas Logistic endpoint and payload; the
      * Service field inside ServiceDetails differentiates the exact service.
      *
-     * @param string|null $shippingMethod
+     * @param  string|null  $shippingMethod
      * @return bool
      */
     private function isCanadaOverseasMethod($shippingMethod)
@@ -8666,7 +8781,7 @@ class CustomerController extends Controller
      * courier_services.service_code) differentiates the exact service, and
      * ReceiverCountry is set to "AU" via getOverseasCountryCode().
      *
-     * @param string|null $shippingMethod
+     * @param  string|null  $shippingMethod
      * @return bool
      */
     private function isAustraliaOverseasMethod($shippingMethod)
@@ -8698,7 +8813,7 @@ class CustomerController extends Controller
      * Centralises the Overseas-routing decision so both manifestShipment()
      * and bulkManifestShipments() stay in sync.
      *
-     * @param string|null $shippingMethod
+     * @param  string|null  $shippingMethod
      * @return bool
      */
     private function isOverseasLogisticMethod($shippingMethod)
@@ -8722,12 +8837,12 @@ class CustomerController extends Controller
      * routing per-service from the courier_services table instead of
      * editing controller code.
      *
-     * @param string|null $shippingMethod
-     * @param \App\Models\ShipperInfo $shipper
-     * @param \App\Models\CourierService|null $courierService  Optional
-     *        pre-resolved service to avoid a redundant lookup.
-     * @return string  One of: shipuniversal, primus, overseas, postshipping,
-     *                 flyingtigers, shipglobal, ups.
+     * @param  string|null  $shippingMethod
+     * @param  ShipperInfo  $shipper
+     * @param  CourierService|null  $courierService  Optional
+     *                                               pre-resolved service to avoid a redundant lookup.
+     * @return string One of: shipuniversal, primus, overseas, postshipping,
+     *                flyingtigers, shipglobal, ups.
      */
     private function resolveApiProvider($shippingMethod, $shipper, $courierService = null)
     {
@@ -8736,13 +8851,13 @@ class CustomerController extends Controller
 
         // Reuse a pre-resolved service when the caller already has one;
         // otherwise look it up now.
-        if (!$courierService) {
+        if (! $courierService) {
             $courierService = $this->findCourierService($shippingMethod, $shipper->id);
         }
 
         if ($courierService) {
             $provider = strtolower(trim($courierService->api_provider ?? ''));
-            if (!empty($provider)) {
+            if (! empty($provider)) {
                 return $provider;
             }
 
@@ -8834,8 +8949,8 @@ class CustomerController extends Controller
             'manifested',
             'packed',
             'Shipment manifested via ShipUniversal'
-                . ($isBulk ? ' (bulk)' : '')
-                . '. Tracking: ' . ($trackingNumber ?? 'N/A'),
+                .($isBulk ? ' (bulk)' : '')
+                .'. Tracking: '.($trackingNumber ?? 'N/A'),
             $customerId,
             'customer'
         );
@@ -8870,7 +8985,7 @@ class CustomerController extends Controller
                     'grant_type' => $grantType,
                 ]);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $responseData = $response->json();
                 $message = $this->extractShipUniversalErrorMessage(
                     $responseData,
@@ -8879,7 +8994,7 @@ class CustomerController extends Controller
 
                 \Log::error(
                     'ShipUniversal token generation failed. Status: '
-                    . $response->status() . ' | Body: ' . $response->body()
+                    .$response->status().' | Body: '.$response->body()
                 );
 
                 return ['success' => false, 'message' => $message];
@@ -8894,13 +9009,14 @@ class CustomerController extends Controller
             // Some token endpoints return a plain token instead of JSON.
             if (empty($token)) {
                 $rawToken = trim($response->body(), " \t\n\r\0\x0B\"");
-                if ($rawToken !== '' && !str_starts_with($rawToken, '{') && !str_starts_with($rawToken, '[')) {
+                if ($rawToken !== '' && ! str_starts_with($rawToken, '{') && ! str_starts_with($rawToken, '[')) {
                     $token = $rawToken;
                 }
             }
 
-            if (!is_scalar($token) || trim((string) $token) === '') {
+            if (! is_scalar($token) || trim((string) $token) === '') {
                 \Log::error('ShipUniversal token response did not contain a token.');
+
                 return [
                     'success' => false,
                     'message' => 'No bearer token found in ShipUniversal authentication response.',
@@ -8909,10 +9025,11 @@ class CustomerController extends Controller
 
             return ['success' => true, 'token' => trim((string) $token)];
         } catch (\Exception $e) {
-            \Log::error('ShipUniversal token generation exception: ' . $e->getMessage());
+            \Log::error('ShipUniversal token generation exception: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'ShipUniversal token generation failed: ' . $e->getMessage(),
+                'message' => 'ShipUniversal token generation failed: '.$e->getMessage(),
             ];
         }
     }
@@ -8920,13 +9037,13 @@ class CustomerController extends Controller
     /**
      * Build the ShipUniversal shipment-create payload from stored shipment data.
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
      */
     private function buildShipUniversalPayloadFromDb($shipper)
     {
         $consignee = $shipper->consigneeInfo;
-        if (!$consignee) {
+        if (! $consignee) {
             return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
         }
 
@@ -8942,10 +9059,10 @@ class CustomerController extends Controller
         $csbInformation = $shipper->csbInformation;
 
         $shippingMethod = $this->resolveShippingMethod($shipper);
-        $courierService = !empty($shipper->service_id)
+        $courierService = ! empty($shipper->service_id)
             ? CourierService::find($shipper->service_id)
             : null;
-        if (!$courierService) {
+        if (! $courierService) {
             $courierService = $this->findCourierService($shippingMethod, $shipper->id);
         }
 
@@ -9024,11 +9141,11 @@ class CustomerController extends Controller
         });
 
         $invoiceDate = $invoice && $invoice->invoice_date
-            ? $invoice->invoice_date->format('Y-m-d') . 'T00:00:00Z'
-            : now()->format('Y-m-d') . 'T00:00:00Z';
+            ? $invoice->invoice_date->format('Y-m-d').'T00:00:00Z'
+            : now()->format('Y-m-d').'T00:00:00Z';
         $referenceNumber = trim((string) ($invoice->reference_number ?? ''));
         if ($referenceNumber === '') {
-            $referenceNumber = (string) ($shipper->awb_number ?? ('SU-' . $shipper->id));
+            $referenceNumber = (string) ($shipper->awb_number ?? ('SU-'.$shipper->id));
         }
 
         $senderAddressLine1 = trim((string) ($shipper->address_line1 ?? ''));
@@ -9123,12 +9240,12 @@ class CustomerController extends Controller
     {
         try {
             $tokenResult = $this->getShipUniversalToken();
-            if (!$tokenResult['success']) {
+            if (! $tokenResult['success']) {
                 return $tokenResult;
             }
 
             $payloadResult = $this->buildShipUniversalPayloadFromDb($shipper);
-            if (!$payloadResult['success']) {
+            if (! $payloadResult['success']) {
                 return $payloadResult;
             }
 
@@ -9145,7 +9262,7 @@ class CustomerController extends Controller
             }
 
             \Log::info(
-                'ShipUniversal shipment request for shipper #' . $shipper->id,
+                'ShipUniversal shipment request for shipper #'.$shipper->id,
                 ['service' => $payload['ServiceDetails']['Service'] ?? null]
             );
 
@@ -9156,18 +9273,18 @@ class CustomerController extends Controller
                 ->post($shipmentUrl, $payload);
 
             $apiResponse = $response->json();
-            if (!is_array($apiResponse)) {
+            if (! is_array($apiResponse)) {
                 $apiResponse = ['raw_body' => $response->body()];
             }
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $message = $this->extractShipUniversalErrorMessage(
                     $apiResponse,
                     'ShipUniversal shipment creation failed.'
                 );
                 \Log::error(
                     'ShipUniversal shipment creation failed. Status: '
-                    . $response->status() . ' | Body: ' . $response->body()
+                    .$response->status().' | Body: '.$response->body()
                 );
 
                 return [
@@ -9199,10 +9316,11 @@ class CustomerController extends Controller
                 'request_payload' => $payload,
             ];
         } catch (\Exception $e) {
-            \Log::error('ShipUniversal API call failed: ' . $e->getMessage());
+            \Log::error('ShipUniversal API call failed: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'ShipUniversal API call failed: ' . $e->getMessage(),
+                'message' => 'ShipUniversal API call failed: '.$e->getMessage(),
             ];
         }
     }
@@ -9212,7 +9330,7 @@ class CustomerController extends Controller
      */
     private function findShipUniversalResponseValue($value, array $keys)
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             return null;
         }
 
@@ -9354,10 +9472,10 @@ class CustomerController extends Controller
     private function getOverseasLogisticToken()
     {
         try {
-            $tokenUrl   = config('services.overseas.token_url');
-            $clientId   = config('services.overseas.username');
-            $clientSec  = config('services.overseas.password');
-            $timeout    = (int) config('services.overseas.timeout', 60);
+            $tokenUrl = config('services.overseas.token_url');
+            $clientId = config('services.overseas.username');
+            $clientSec = config('services.overseas.password');
+            $timeout = (int) config('services.overseas.timeout', 60);
 
             if (empty($tokenUrl) || empty($clientId) || empty($clientSec)) {
                 return [
@@ -9373,12 +9491,12 @@ class CustomerController extends Controller
                 ])
                 ->timeout($timeout)
                 ->post($tokenUrl, [
-                    'grant_type'    => 'client_credentials',
-                    'client_id'     => $clientId,
+                    'grant_type' => 'client_credentials',
+                    'client_id' => $clientId,
                     'client_secret' => $clientSec,
                 ]);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorBody = $response->json() ?: $response->body();
                 $errorMessage = 'Overseas Logistic token generation failed.';
                 if (is_array($errorBody)) {
@@ -9390,7 +9508,8 @@ class CustomerController extends Controller
                         $errorMessage = $this->overseasValueToString($errorBody['message']);
                     }
                 }
-                \Log::error('Overseas Logistic token generation failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                \Log::error('Overseas Logistic token generation failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
                 return [
                     'success' => false,
                     'message' => $errorMessage,
@@ -9414,8 +9533,9 @@ class CustomerController extends Controller
                 $bearerToken = $tokenData['Token'];
             }
 
-            if (!$bearerToken) {
-                \Log::error('Overseas Logistic: No token found in response. Response: ' . json_encode($tokenData));
+            if (! $bearerToken) {
+                \Log::error('Overseas Logistic: No token found in response. Response: '.json_encode($tokenData));
+
                 return [
                     'success' => false,
                     'message' => 'No bearer token found in Overseas Logistic authentication response.',
@@ -9423,15 +9543,17 @@ class CustomerController extends Controller
             }
 
             \Log::info('Overseas Logistic token generated successfully.');
+
             return [
                 'success' => true,
-                'token'   => $bearerToken,
+                'token' => $bearerToken,
             ];
         } catch (\Exception $e) {
-            \Log::error('Overseas Logistic token generation exception: ' . $e->getMessage());
+            \Log::error('Overseas Logistic token generation exception: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'Overseas Logistic token generation failed: ' . $e->getMessage(),
+                'message' => 'Overseas Logistic token generation failed: '.$e->getMessage(),
             ];
         }
     }
@@ -9440,49 +9562,47 @@ class CustomerController extends Controller
      * Build the Overseas Logistic shipment-create payload from database records.
      * Payload structure mirrors the documented /api/shipment/create format.
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
      */
     private function buildOverseasLogisticPayloadFromDb($shipper)
     {
-        
+
         $consignee = $shipper->consigneeInfo;
-        if (!$consignee) {
-            \Log::warning('buildOverseasLogisticPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+        if (! $consignee) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
         }
 
         $packages = $shipper->packageDimensions;
         if ($packages->isEmpty()) {
-            \Log::warning('buildOverseasLogisticPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
         }
 
         $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
-    
-        
-        if($shipper->kyc_type == "GST (Normal)"){
-            $kycType_data = "GSTIN (Normal)";
-        }
-        elseif($shipper->kyc_type == "Aadhar Card"){
-            $kycType_data = "Aadhaar Number";
-        }
-        elseif($shipper->kyc_type == "PAN Card"){
-            $kycType_data = "PAN Number";
-        }
-        else{
+
+        if ($shipper->kyc_type == 'GST (Normal)') {
+            $kycType_data = 'GSTIN (Normal)';
+        } elseif ($shipper->kyc_type == 'Aadhar Card') {
+            $kycType_data = 'Aadhaar Number';
+        } elseif ($shipper->kyc_type == 'PAN Card') {
+            $kycType_data = 'PAN Number';
+        } else {
             $kycType_data = $shipper->kyc_type ?? '';
         }
-        
+
         // ---- Sender ----
-        $senderName      = $shipper->company_name ?? $shipper->contact_person ?? 'Shipper';
-        $senderContact   = $shipper->contact_person ?? $shipper->company_name ?? 'Shipper';
-        $senderAddress1  = $shipper->address_line1 ?? '';
-        $senderAddress2  = $shipper->address_line2 ?? '';
-        $senderAddress3  = $shipper->address_line3 ?? '';
-        $senderPincode   = (string) ($shipper->pincode ?? '');
-        $senderCity      = $shipper->city ?? '';
-        $senderState     = $shipper->state ?? '';
+        $senderName = $shipper->company_name ?? $shipper->contact_person ?? 'Shipper';
+        $senderContact = $shipper->contact_person ?? $shipper->company_name ?? 'Shipper';
+        $senderAddress1 = $shipper->address_line1 ?? '';
+        $senderAddress2 = $shipper->address_line2 ?? '';
+        $senderAddress3 = $shipper->address_line3 ?? '';
+        $senderPincode = (string) ($shipper->pincode ?? '');
+        $senderCity = $shipper->city ?? '';
+        $senderState = $shipper->state ?? '';
 
         // ---- Validation: shipper state must not exceed 2 characters ----
         // The Overseas Logistic API expects a 2-letter state code (e.g. "GJ",
@@ -9493,19 +9613,20 @@ class CustomerController extends Controller
         // E-Commerce and ARAMEX GPX / Australia).
         $senderStateTrimmed = trim((string) $senderState);
         if (strlen($senderStateTrimmed) > 2) {
-            \Log::warning('buildOverseasLogisticPayloadFromDb: Shipper state exceeds 2 characters for shipper #' . $shipper->id . ' | state="' . $senderStateTrimmed . '"');
+            \Log::warning('buildOverseasLogisticPayloadFromDb: Shipper state exceeds 2 characters for shipper #'.$shipper->id.' | state="'.$senderStateTrimmed.'"');
+
             return [
                 'success' => false,
-                'message' => 'Shipper state must be a 2-letter code (e.g. "GJ", "MH"). The provided state "' . $senderStateTrimmed . '" is too long. Please update the shipper state to a 2-letter code and try again.',
+                'message' => 'Shipper state must be a 2-letter code (e.g. "GJ", "MH"). The provided state "'.$senderStateTrimmed.'" is too long. Please update the shipper state to a 2-letter code and try again.',
             ];
         }
 
         $senderTelephone = (string) ($shipper->phone_number ?? '');
-        $senderEmail     = $shipper->email ?? '';
+        $senderEmail = $shipper->email ?? '';
         // $kycType         = $shipper->kyc_type ?? 'GSTIN (Normal)';
-        $kycType         = $kycType_data;
-        $kycNo           = (string) ($shipper->kyc_number ?? '');
-        
+        $kycType = $kycType_data;
+        $kycNo = (string) ($shipper->kyc_number ?? '');
+
         // ---- Receiver ----
         // $receiverType      = $consignee->origin_type ? ucfirst(strtolower($consignee->origin_type)) : 'Business';
         // if($consignee->origin_type == "CSB IV") {
@@ -9513,17 +9634,17 @@ class CustomerController extends Controller
         // } else if($consignee->origin_type == "CSB V") {
         //     $receiverType = "Business";
         // }
-        $receiverName      = $consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee';
-        $receiverContact   = $consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee';
-        $receiverAddress1  = $consignee->address_line1 ?? '';
-        $receiverAddress2  = $consignee->address_line2 ?? '';
-        $receiverAddress3  = $consignee->address_line3 ?? '';
-        $receiverZipcode   = (string) ($consignee->zip_code ?? '');
-        $receiverCity      = $consignee->city ?? '';
-        $receiverState     = $consignee->state ?? '';
-        $receiverCountry   = $this->getOverseasCountryCode($consignee->delivery_destination ?? '', 'CA');
+        $receiverName = $consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee';
+        $receiverContact = $consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee';
+        $receiverAddress1 = $consignee->address_line1 ?? '';
+        $receiverAddress2 = $consignee->address_line2 ?? '';
+        $receiverAddress3 = $consignee->address_line3 ?? '';
+        $receiverZipcode = (string) ($consignee->zip_code ?? '');
+        $receiverCity = $consignee->city ?? '';
+        $receiverState = $consignee->state ?? '';
+        $receiverCountry = $this->getOverseasCountryCode($consignee->delivery_destination ?? '', 'CA');
         $receiverTelephone = (string) ($consignee->phone_number ?? '');
-        $receiverEmail     = $consignee->email ?? '';
+        $receiverEmail = $consignee->email ?? '';
 
         // ---- Service details ----
         // Resolve the courier service to get the Service code (e.g. CANADA_YVR_SELF).
@@ -9537,7 +9658,7 @@ class CustomerController extends Controller
         $courierService = null;
 
         // 1) Preferred path: resolve directly from shipper_info.service_id.
-        if (!empty($shipper->service_id)) {
+        if (! empty($shipper->service_id)) {
             $serviceById = CourierService::find($shipper->service_id);
             if ($serviceById && $this->isOverseasLogisticMethod($serviceById->method)) {
                 $courierService = $serviceById;
@@ -9549,27 +9670,27 @@ class CustomerController extends Controller
 
         // 2) Fallback: legacy fuzzy match (for older rows where service_id is NULL
         //    or points at a non-overseas service).
-        if (!$courierService) {
+        if (! $courierService) {
             $courierService = $this->findCourierService($shippingMethod, $shipper->id);
         }
 
-        $serviceCode    = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
+        $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
         if (empty($serviceCode)) {
             // Fallback to a sensible default if the service code is missing.
             $serviceCode = 'CANADA_YVR_SELF';
         }
 
         // GoodsType: NDox (documents) vs NDox (non-documents). Default to NDox.
-        $goodsType   = 'NDox';
+        $goodsType = 'NDox';
         $packageType = 'PACKAGE';
 
         // ---- Package details ----
         $packageDetail = [];
         foreach ($packages as $pkg) {
             $packageDetail[] = [
-                'Length'       => (float) ($pkg->length_cm ?? 0),
-                'Width'        => (float) ($pkg->width_cm ?? 0),
-                'Height'       => (float) ($pkg->height_cm ?? 0),
+                'Length' => (float) ($pkg->length_cm ?? 0),
+                'Width' => (float) ($pkg->width_cm ?? 0),
+                'Height' => (float) ($pkg->height_cm ?? 0),
                 'ActualWeight' => (float) ($pkg->actual_weight_kg ?? 0),
             ];
         }
@@ -9580,15 +9701,15 @@ class CustomerController extends Controller
             $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
             foreach ($invoiceItems as $item) {
                 $productDetails[] = [
-                    'BoxNo'         => (string) ($item->box_no ?? 1),
-                    'Description'   => $item->description ?? '',
-                    'HSNCode'       => (string) ($item->hs_code ?? ''),
-                    'HTSCode'       => (string) ($item->hts_code ?? ''),
-                    'UnitType'      => $item->unit_type ?? 'PCS',
-                    'Qty'           => (int) $item->qty,
-                    'UnitRate'      => (float) $item->unit_rate,
+                    'BoxNo' => (string) ($item->box_no ?? 1),
+                    'Description' => $item->description ?? '',
+                    'HSNCode' => (string) ($item->hs_code ?? ''),
+                    'HTSCode' => (string) ($item->hts_code ?? ''),
+                    'UnitType' => $item->unit_type ?? 'PCS',
+                    'Qty' => (int) $item->qty,
+                    'UnitRate' => (float) $item->unit_rate,
                     'ShipPieceIGST' => (float) ($item->igst_percentage ?? 0),
-                    'PieceWt'       => (float) ($item->amount > 0 && $item->qty > 0 ? round($item->amount / $item->qty, 3) : 0),
+                    'PieceWt' => (float) ($item->amount > 0 && $item->qty > 0 ? round($item->amount / $item->qty, 3) : 0),
                 ];
             }
         }
@@ -9596,27 +9717,27 @@ class CustomerController extends Controller
         // Fallback product detail when no invoice items exist.
         if (empty($productDetails)) {
             $productDetails[] = [
-                'BoxNo'         => '1',
-                'Description'   => 'General Merchandise',
-                'HSNCode'       => '',
-                'HTSCode'       => '',
-                'UnitType'      => 'PCS',
-                'Qty'           => 1,
-                'UnitRate'      => (float) ($invoice ? $invoice->invoice_amount : 0),
+                'BoxNo' => '1',
+                'Description' => 'General Merchandise',
+                'HSNCode' => '',
+                'HTSCode' => '',
+                'UnitType' => 'PCS',
+                'Qty' => 1,
+                'UnitRate' => (float) ($invoice ? $invoice->invoice_amount : 0),
                 'ShipPieceIGST' => 0.00,
-                'PieceWt'       => 0.3,
+                'PieceWt' => 0.3,
             ];
         }
 
         // Invoice / export details.
-        $invoiceNo       = $invoice ? ($invoice->invoice_number ?? '') : '';
-        $invoiceDate      = $invoice && $invoice->invoice_date
-            ? $invoice->invoice_date->format('Y-m-d') . 'T00:00:00Z'
-            : now()->format('Y-m-d') . 'T00:00:00Z';
-        $invoiceCurrency  = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
-        $termsOfSale      = $invoice ? ($invoice->incoterms ?? 'FOB') : 'FOB';
-        $customerRefNo    = $invoice ? ($invoice->reference_number ?? '') : '';
-        $transactionId    = $shipper->awb_number ?? ('TXN-' . $shipper->id);
+        $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? $invoice->invoice_date->format('Y-m-d').'T00:00:00Z'
+            : now()->format('Y-m-d').'T00:00:00Z';
+        $invoiceCurrency = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+        $termsOfSale = $invoice ? ($invoice->incoterms ?? 'FOB') : 'FOB';
+        $customerRefNo = $invoice ? ($invoice->reference_number ?? '') : '';
+        $transactionId = $shipper->awb_number ?? ('TXN-'.$shipper->id);
 
         // DutyTax: DDP for UNITED CANADA DDP, DDU otherwise (E-Commerce).
         $methodUpper = strtoupper(trim($shippingMethod));
@@ -9636,72 +9757,71 @@ class CustomerController extends Controller
         //     print_r($csbType);
         // }
 
-        if($consignee->origin_type == 'CSB IV'){
-            
+        if ($consignee->origin_type == 'CSB IV') {
+
             $csbType = 'CSB 4';
-        }
-        else if ($consignee->origin_type == 'CSB V'){
-            
+        } elseif ($consignee->origin_type == 'CSB V') {
+
             $csbType = 'CSB 5';
         }
 
         $payload = [
             'AccountCode' => config('services.overseas.account_code', 'PR-U02'),
             'Sender' => [
-                'SenderName'           => $senderName,
+                'SenderName' => $senderName,
                 'SenderContactPerson' => $senderContact,
-                'SenderAddressLine1'   => $senderAddress1,
-                'SenderAddressLine2'   => $senderAddress2,
-                'SenderAddressLine3'   => $senderAddress3,
-                'SenderPincode'        => $senderPincode,
-                'SenderCity'           => $senderCity,
-                'SenderState'          => $senderState,
-                'SenderTelephone'      => $senderTelephone,
-                'SenderEmailId'        => $senderEmail,
-                'KYCType'              => $kycType,
-                'KYCNo'                => $kycNo,
+                'SenderAddressLine1' => $senderAddress1,
+                'SenderAddressLine2' => $senderAddress2,
+                'SenderAddressLine3' => $senderAddress3,
+                'SenderPincode' => $senderPincode,
+                'SenderCity' => $senderCity,
+                'SenderState' => $senderState,
+                'SenderTelephone' => $senderTelephone,
+                'SenderEmailId' => $senderEmail,
+                'KYCType' => $kycType,
+                'KYCNo' => $kycNo,
             ],
             'Receiver' => [
-                'ReceiverType'          => "Business",
-                'ReceiverName'          => $receiverName,
+                'ReceiverType' => 'Business',
+                'ReceiverName' => $receiverName,
                 'ReceiverContactPerson' => $receiverContact,
-                'ReceiverAddressLine1'  => $receiverAddress1,
-                'ReceiverAddressLine2'  => $receiverAddress2,
-                'ReceiverAddressLine3'  => $receiverAddress3,
-                'ReceiverZipcode'       => $receiverZipcode,
-                'ReceiverCity'          => $receiverCity,
-                'ReceiverState'         => $receiverState,
-                'ReceiverCountry'       => $receiverCountry,
-                'ReceiverTelephone'     => $receiverTelephone,
-                'ReceiverEmailid'       => $receiverEmail,
-                'VatId'                 => '',
+                'ReceiverAddressLine1' => $receiverAddress1,
+                'ReceiverAddressLine2' => $receiverAddress2,
+                'ReceiverAddressLine3' => $receiverAddress3,
+                'ReceiverZipcode' => $receiverZipcode,
+                'ReceiverCity' => $receiverCity,
+                'ReceiverState' => $receiverState,
+                'ReceiverCountry' => $receiverCountry,
+                'ReceiverTelephone' => $receiverTelephone,
+                'ReceiverEmailid' => $receiverEmail,
+                'VatId' => '',
             ],
             'ServiceDetails' => [
-                'Service'     => $serviceCode,
-                'GoodsType'   => $goodsType,
+                'Service' => $serviceCode,
+                'GoodsType' => $goodsType,
                 'PackageType' => $packageType,
             ],
             'PackageDetails' => [
                 'PackageDetail' => $packageDetail,
             ],
             'AdditionalDetails' => [
-                'ProductDetails'       => $productDetails,
-                'InvoiceCurrency'      => $invoiceCurrency,
-                'InvoiceNo'            => $invoiceNo,
-                'InvoiceDate'          => $invoiceDate,
-                'TermsOfSale'          => $termsOfSale,
-                'ReasonForExport'      => 'GIFT',
-                'FreightCharge'        => 0,
-                'InsuranceCharge'      => 0,
-                'CSB_Type'             => $csbType,
-                'CustomerRefNo'        => $customerRefNo,
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => $invoiceCurrency,
+                'InvoiceNo' => $invoiceNo,
+                'InvoiceDate' => $invoiceDate,
+                'TermsOfSale' => $termsOfSale,
+                'ReasonForExport' => 'GIFT',
+                'FreightCharge' => 0,
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => $customerRefNo,
                 'DeliveryConfirmation' => 'No',
-                'DutyTax'              => $dutyTax,
-                'DutiesAccountNo'      => '',
-                'TransactionId'        => $transactionId,
-                'ShipperImage'         => '',
-                'ShipperKYC'           => '',
-                'FileName'             => '',
+                'DutyTax' => $dutyTax,
+                'DutiesAccountNo' => '',
+                'TransactionId' => $transactionId,
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
             ],
         ];
 
@@ -9713,7 +9833,7 @@ class CustomerController extends Controller
      * for use in log messages and error responses. Prevents
      * "Array to string conversion" errors when API error fields are arrays.
      *
-     * @param mixed $value
+     * @param  mixed  $value
      * @return string
      */
     private function overseasValueToString($value)
@@ -9732,6 +9852,7 @@ class CustomerController extends Controller
         }
         // Arrays / objects -> JSON string (never triggers array-to-string).
         $json = json_encode($value);
+
         return ($json === false) ? '' : $json;
     }
 
@@ -9741,7 +9862,7 @@ class CustomerController extends Controller
      * 1. Generate Bearer token from /token
      * 2. Create shipment via /api/shipment/create using the Bearer token
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'message' => string, 'data' => array|null, 'request_payload' => array|null]
      */
     private function callOverseasLogisticApiFromDb($shipper)
@@ -9749,7 +9870,7 @@ class CustomerController extends Controller
         try {
             // Step 1: Generate Bearer token.
             $tokenResult = $this->getOverseasLogisticToken();
-            if (!$tokenResult['success']) {
+            if (! $tokenResult['success']) {
                 return [
                     'success' => false,
                     'message' => $tokenResult['message'] ?? 'Overseas Logistic token generation failed.',
@@ -9759,7 +9880,7 @@ class CustomerController extends Controller
 
             // Step 2: Build the shipment payload.
             $payloadResult = $this->buildOverseasLogisticPayloadFromDb($shipper);
-            if (!$payloadResult['success']) {
+            if (! $payloadResult['success']) {
                 return [
                     'success' => false,
                     'message' => $payloadResult['message'] ?? 'Failed to build Overseas Logistic payload.',
@@ -9768,22 +9889,22 @@ class CustomerController extends Controller
             $payload = $payloadResult['payload'];
 
             $shipmentUrl = config('services.overseas.shipment_url');
-            $timeout     = (int) config('services.overseas.timeout', 60);
+            $timeout = (int) config('services.overseas.timeout', 60);
 
-            \Log::info('Overseas Logistic shipment payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+            \Log::info('Overseas Logistic shipment payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
 
             // Step 3: Call the shipment/create API with the Bearer token.
             $response = Http::withHeaders([
-                'Content-Type'  => 'application/json',
-                'Accept'        => 'application/json',
-                'Authorization' => 'Bearer ' . $bearerToken,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer '.$bearerToken,
             ])
                 ->timeout($timeout)
                 ->post($shipmentUrl, $payload);
 
             $apiResponse = $response->json();
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorMessage = 'Overseas Logistic API returned error.';
                 if (is_array($apiResponse)) {
                     if (isset($apiResponse['error'])) {
@@ -9793,23 +9914,24 @@ class CustomerController extends Controller
                     } elseif (isset($apiResponse['errors'])) {
                         $errorMessage = $this->overseasValueToString($apiResponse['errors']);
                     }
-                    if (isset($apiResponse['details']) && !empty($apiResponse['details'])) {
+                    if (isset($apiResponse['details']) && ! empty($apiResponse['details'])) {
                         $details = $apiResponse['details'];
                         if (is_array($details)) {
                             $flat = array_map([$this, 'overseasValueToString'], $details);
-                            $errorMessage .= ' — ' . implode('; ', $flat);
+                            $errorMessage .= ' — '.implode('; ', $flat);
                         } else {
-                            $errorMessage .= ' — ' . $this->overseasValueToString($details);
+                            $errorMessage .= ' — '.$this->overseasValueToString($details);
                         }
                     }
                 }
-                \Log::error('Overseas Logistic shipment creation failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                \Log::error('Overseas Logistic shipment creation failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
                 return [
-                    'success'         => false,
-                    'message'         => $errorMessage,
-                    'data'            => $apiResponse,
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
                     'request_payload' => $payload,
-                    'status_code'     => $response->status(),
+                    'status_code' => $response->status(),
                 ];
             }
 
@@ -9829,28 +9951,31 @@ class CustomerController extends Controller
                         ?? $apiResponse['message'] ?? $apiResponse['Message']
                         ?? 'Overseas Logistic API returned an error status.';
                     $errorMessage = $this->overseasValueToString($rawError);
-                    \Log::error('Overseas Logistic API returned error in body for shipper #' . $shipper->id . ': ' . $errorMessage . ' | Body: ' . $response->body());
+                    \Log::error('Overseas Logistic API returned error in body for shipper #'.$shipper->id.': '.$errorMessage.' | Body: '.$response->body());
+
                     return [
-                        'success'         => false,
-                        'message'         => $errorMessage,
-                        'data'            => $apiResponse,
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'data' => $apiResponse,
                         'request_payload' => $payload,
                     ];
                 }
             }
 
-            \Log::info('Overseas Logistic shipment created for shipper #' . $shipper->id . '. Response: ' . substr($response->body(), 0, 2000));
+            \Log::info('Overseas Logistic shipment created for shipper #'.$shipper->id.'. Response: '.substr($response->body(), 0, 2000));
+
             return [
-                'success'         => true,
-                'message'         => 'Overseas Logistic shipment created successfully.',
-                'data'            => $apiResponse,
+                'success' => true,
+                'message' => 'Overseas Logistic shipment created successfully.',
+                'data' => $apiResponse,
                 'request_payload' => $payload,
             ];
         } catch (\Exception $e) {
-            \Log::error('Overseas Logistic API call failed: ' . $e->getMessage());
+            \Log::error('Overseas Logistic API call failed: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'Overseas Logistic API call failed: ' . $e->getMessage(),
+                'message' => 'Overseas Logistic API call failed: '.$e->getMessage(),
             ];
         }
     }
@@ -9858,12 +9983,12 @@ class CustomerController extends Controller
     /**
      * Extract a tracking/AWB number from an Overseas Logistic API response.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractOverseasTrackingNumber($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -9882,7 +10007,7 @@ class CustomerController extends Controller
         // Case A: The response itself is a list of shipment objects.
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($allKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -9890,7 +10015,7 @@ class CustomerController extends Controller
 
         // Case B: Check top-level keys.
         foreach ($allKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -9901,13 +10026,13 @@ class CustomerController extends Controller
             if (is_array($data)) {
                 if (isset($data[0]) && is_array($data[0])) {
                     foreach ($allKeys as $key) {
-                        if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                             return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                         }
                     }
                 }
                 foreach ($allKeys as $key) {
-                    if (isset($data[$key]) && !empty($data[$key])) {
+                    if (isset($data[$key]) && ! empty($data[$key])) {
                         return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                     }
                 }
@@ -9922,7 +10047,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($candidateKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -9937,12 +10062,12 @@ class CustomerController extends Controller
     /**
      * Extract a label URL (or base64 label) from an Overseas Logistic API response.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractOverseasLabelUrl($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -9962,7 +10087,7 @@ class CustomerController extends Controller
                 foreach (['Airwaybill', 'airwaybill', 'AirwayBill', 'Label', 'label'] as $awbKey) {
                     if (isset($data[$awbKey]) && is_array($data[$awbKey])) {
                         foreach ($priorityKeys as $key) {
-                            if (isset($data[$awbKey][$key]) && !empty($data[$awbKey][$key])) {
+                            if (isset($data[$awbKey][$key]) && ! empty($data[$awbKey][$key])) {
                                 return is_string($data[$awbKey][$key]) ? $data[$awbKey][$key] : (string) $data[$awbKey][$key];
                             }
                         }
@@ -9974,7 +10099,7 @@ class CustomerController extends Controller
         // Case A: List of shipment objects.
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($allKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -9982,7 +10107,7 @@ class CustomerController extends Controller
 
         // Case B: Top-level keys.
         foreach ($allKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -9993,13 +10118,13 @@ class CustomerController extends Controller
             if (is_array($data)) {
                 if (isset($data[0]) && is_array($data[0])) {
                     foreach ($allKeys as $key) {
-                        if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                        if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                             return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                         }
                     }
                 }
                 foreach ($allKeys as $key) {
-                    if (isset($data[$key]) && !empty($data[$key])) {
+                    if (isset($data[$key]) && ! empty($data[$key])) {
                         return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                     }
                 }
@@ -10014,7 +10139,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($labelKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -10030,8 +10155,8 @@ class CustomerController extends Controller
      * Normalize a delivery-destination string into an ISO country code for the
      * Overseas Logistic API. Defaults to the provided fallback (CA for Canada).
      *
-     * @param string|null $destination
-     * @param string $fallback
+     * @param  string|null  $destination
+     * @param  string  $fallback
      * @return string
      */
     private function getOverseasCountryCode($destination, $fallback = 'CA')
@@ -10095,20 +10220,22 @@ class CustomerController extends Controller
      * Build the Flying Tigers API payload from database records.
      * Payload structure mirrors the documented CustomerBookingAPI format.
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
      */
     private function buildFlyingTigersPayloadFromDb($shipper)
     {
         $consignee = $shipper->consigneeInfo;
-        if (!$consignee) {
-            \Log::warning('buildFlyingTigersPayloadFromDb: No consignee found for shipper #' . $shipper->id);
+        if (! $consignee) {
+            \Log::warning('buildFlyingTigersPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
         }
 
         $packages = $shipper->packageDimensions;
         if ($packages->isEmpty()) {
-            \Log::warning('buildFlyingTigersPayloadFromDb: No packages found for shipper #' . $shipper->id);
+            \Log::warning('buildFlyingTigersPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
             return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
         }
 
@@ -10126,7 +10253,7 @@ class CustomerController extends Controller
         // Reference number: prefer invoice reference, else AWB number
         $refNo = $invoice ? ($invoice->reference_number ?? '') : '';
         if (empty($refNo)) {
-            $refNo = $shipper->awb_number ?? ('FT-' . $shipper->id);
+            $refNo = $shipper->awb_number ?? ('FT-'.$shipper->id);
         }
 
         // Consignee name: prefer consignee_name, else contact_person
@@ -10141,16 +10268,16 @@ class CustomerController extends Controller
         // Consignee address (combine line1 + line2 + line3 if line1 is short)
         $consigneeAddress1 = trim($consignee->address_line1 ?? '');
         if (empty($consigneeAddress1)) {
-            $consigneeAddress1 = trim(($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? ''));
+            $consigneeAddress1 = trim(($consignee->address_line2 ?? '').' '.($consignee->address_line3 ?? ''));
         }
 
         // Invoice number & date for packet details
         $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
         if (empty($invoiceNo)) {
-            $invoiceNo = $shipper->awb_number ?? ('INV-' . $shipper->id);
+            $invoiceNo = $shipper->awb_number ?? ('INV-'.$shipper->id);
         }
         $invoiceDate = $invoice && $invoice->invoice_date
-            ? \Carbon\Carbon::parse($invoice->invoice_date)->format('d-M-Y')
+            ? Carbon::parse($invoice->invoice_date)->format('d-M-Y')
             : now()->format('d-M-Y');
 
         // Build addPacketDetailList — one entry per package, with boxInvoiceDetails from invoice items.
@@ -10198,55 +10325,54 @@ class CustomerController extends Controller
                     }
                     $boxInvoiceDetails[] = [
                         'ProductName' => (string) ($item->description ?? 'General Merchandise'),
-                        'UnitPrice'   => number_format($itemUnitPrice, 2, '.', ''),
-                        'Quantity'    => (string) (int) $itemQty,
+                        'UnitPrice' => number_format($itemUnitPrice, 2, '.', ''),
+                        'Quantity' => (string) (int) $itemQty,
                     ];
                 }
             } else {
                 // Fallback single item when no invoice items exist
                 $boxInvoiceDetails[] = [
                     'ProductName' => 'General Merchandise',
-                    'UnitPrice'   => '5.00',
-                    'Quantity'    => '1',
+                    'UnitPrice' => '5.00',
+                    'Quantity' => '1',
                 ];
             }
 
             $addPacketDetailList[] = [
-                'BoxWeight'         => number_format($pkgWeight, 3, '.', ''),
-                'BoxLength'         => number_format($pkgL, 2, '.', ''),
-                'BoxWidth'          => number_format($pkgW, 2, '.', ''),
-                'BoxHeight'         => number_format($pkgH, 2, '.', ''),
-                'InvoiceNo'         => (string) $invoiceNo,
-                'InvoiceDate'       => (string) $invoiceDate,
+                'BoxWeight' => number_format($pkgWeight, 3, '.', ''),
+                'BoxLength' => number_format($pkgL, 2, '.', ''),
+                'BoxWidth' => number_format($pkgW, 2, '.', ''),
+                'BoxHeight' => number_format($pkgH, 2, '.', ''),
+                'InvoiceNo' => (string) $invoiceNo,
+                'InvoiceDate' => (string) $invoiceDate,
                 'boxInvoiceDetails' => $boxInvoiceDetails,
             ];
         }
 
-        
         $payload = [
-            'shipmentType'      => 'Forward',
+            'shipmentType' => 'Forward',
             // 'consigneeCountry'  => (string) ($consignee->delivery_destination ?? $consigneeCountryCode ?? 'US'),
-            'consigneeCountry'  => (string) ('US'),
-            'RefNo'             => (string) $refNo,
-            'BookingDate'       => (string) $bookingDate,
-            'Consignee'         => (string) $consigneeName,
-            'ConsigneePhoneNo'  => (string) $consigneePhone,
+            'consigneeCountry' => (string) ('US'),
+            'RefNo' => (string) $refNo,
+            'BookingDate' => (string) $bookingDate,
+            'Consignee' => (string) $consigneeName,
+            'ConsigneePhoneNo' => (string) $consigneePhone,
             'ConsigneeAddress1' => (string) $consigneeAddress1,
-            'ConsigneePinCode'  => (string) ($consignee->zip_code ?? ''),
-            'ConsigneeState'    => (string) ($consignee->state ?? ''),
-            'ConsigneeCity'     => (string) ($consignee->city ?? ''),
-            'BusinessType'      => 'B2C',
-            'Vendor'            => 'USPS Work',
-            'Service'           => 'Uniuni',
-            'PickupPoint'       => '2',
+            'ConsigneePinCode' => (string) ($consignee->zip_code ?? ''),
+            'ConsigneeState' => (string) ($consignee->state ?? ''),
+            'ConsigneeCity' => (string) ($consignee->city ?? ''),
+            'BusinessType' => 'B2C',
+            'Vendor' => 'USPS Work',
+            'Service' => 'Uniuni',
+            'PickupPoint' => '2',
             'addPacketDetailList' => $addPacketDetailList,
-            'PackageType'       => 'NONDOC',
-            'currencyCode'      => (string) $currencyCode,
+            'PackageType' => 'NONDOC',
+            'currencyCode' => (string) $currencyCode,
         ];
-        
+
         // print_r($payload); // Debugging line to inspect the payload structure
         // die;
-        
+
         return [
             'success' => true,
             'payload' => $payload,
@@ -10257,14 +10383,14 @@ class CustomerController extends Controller
      * Call the Flying Tigers API to create a shipment.
      * Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
      *
-     * @param \App\Models\ShipperInfo $shipper
+     * @param  ShipperInfo  $shipper
      * @return array ['success' => bool, 'message' => string, 'data' => array|null]
      */
     private function callFlyingTigersApiFromDb($shipper)
     {
         try {
             $payloadResult = $this->buildFlyingTigersPayloadFromDb($shipper);
-            if (!$payloadResult['success']) {
+            if (! $payloadResult['success']) {
                 return [
                     'success' => false,
                     'message' => $payloadResult['message'] ?? 'Failed to build Flying Tigers payload.',
@@ -10278,17 +10404,17 @@ class CustomerController extends Controller
             $authToken = config('services.flyingtigers.auth_token');
             $baseUrl = rtrim(config('services.flyingtigers.base_url'), '/');
             $endpoint = config('services.flyingtigers.endpoint', '/api/Shipment/CustomerBookingAPI');
-            $url = $baseUrl . $endpoint;
+            $url = $baseUrl.$endpoint;
             $timeout = (int) config('services.flyingtigers.timeout', 60);
 
-            \Log::info('Flying Tigers payload for shipper #' . $shipper->id . ': ' . substr(json_encode($payload), 0, 2000));
+            \Log::info('Flying Tigers payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
 
             $headers = [
                 'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-                'ClientCode'   => $clientCode,
-                'UserCode'     => $userCode,
-                'AuthToken'    => $authToken,
+                'Accept' => 'application/json',
+                'ClientCode' => $clientCode,
+                'UserCode' => $userCode,
+                'AuthToken' => $authToken,
             ];
 
             $response = Http::withHeaders($headers)
@@ -10298,7 +10424,7 @@ class CustomerController extends Controller
 
             $apiResponse = $response->json();
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorMessage = 'Flying Tigers API returned error.';
                 if (is_array($apiResponse)) {
                     if (isset($apiResponse['error'])) {
@@ -10308,34 +10434,35 @@ class CustomerController extends Controller
                     } elseif (isset($apiResponse['errors'])) {
                         $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
                     }
-                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && !empty($apiResponse['details'])) {
-                        $errorMessage .= ' — ' . implode('; ', $apiResponse['details']);
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
                     }
                 }
-                \Log::error('Flying Tigers API failed: ' . $errorMessage . ' | Status: ' . $response->status() . ' | Body: ' . $response->body());
+                \Log::error('Flying Tigers API failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
 
                 // Check if this is an address-related error (for auto-fallback to UNITED CLASSIC)
                 $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
 
                 return [
-                    'success'          => false,
-                    'message'          => $errorMessage,
-                    'data'             => $apiResponse,
-                    'status_code'      => $response->status(),
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'status_code' => $response->status(),
                     'is_address_error' => $isAddressError,
                 ];
             }
 
-            \Log::info('Flying Tigers response for shipper #' . $shipper->id . ': ' . substr($response->body(), 0, 2000));
+            \Log::info('Flying Tigers response for shipper #'.$shipper->id.': '.substr($response->body(), 0, 2000));
 
             // Some APIs return 200 OK but with an error in the body — check for address error
             $isAddressError = $this->isFlyingTigersAddressError(null, $apiResponse, $response->body());
             if ($isAddressError) {
-                \Log::warning('Flying Tigers API returned address error in success response for shipper #' . $shipper->id . ': ' . $response->body());
+                \Log::warning('Flying Tigers API returned address error in success response for shipper #'.$shipper->id.': '.$response->body());
+
                 return [
-                    'success'          => false,
-                    'message'          => 'Cannot create order: Provided address appears to be incorrect or incomplete.',
-                    'data'             => $apiResponse,
+                    'success' => false,
+                    'message' => 'Cannot create order: Provided address appears to be incorrect or incomplete.',
+                    'data' => $apiResponse,
                     'is_address_error' => true,
                 ];
             }
@@ -10346,15 +10473,15 @@ class CustomerController extends Controller
                 $responseStatus = $apiResponse['status'] ?? null;
                 if ($responseStatus !== null && strtoupper((string) $responseStatus) === 'ERROR') {
                     $errorMessage = $apiResponse['message'] ?? 'Flying Tigers API returned an error status.';
-                    \Log::error('Flying Tigers API returned ERROR in body for shipper #' . $shipper->id . ': ' . $errorMessage . ' | Body: ' . $response->body());
+                    \Log::error('Flying Tigers API returned ERROR in body for shipper #'.$shipper->id.': '.$errorMessage.' | Body: '.$response->body());
 
                     // Check if this is also an address error (for fallback to UNITED CLASSIC)
                     $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
 
                     return [
-                        'success'          => false,
-                        'message'          => $errorMessage,
-                        'data'             => $apiResponse,
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'data' => $apiResponse,
                         'is_address_error' => $isAddressError,
                     ];
                 }
@@ -10363,13 +10490,14 @@ class CustomerController extends Controller
             return [
                 'success' => true,
                 'message' => 'Flying Tigers shipment created successfully.',
-                'data'     => $apiResponse,
+                'data' => $apiResponse,
             ];
         } catch (\Exception $e) {
-            \Log::error('Flying Tigers API call failed: ' . $e->getMessage());
+            \Log::error('Flying Tigers API call failed: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'message' => 'Flying Tigers API call failed: ' . $e->getMessage(),
+                'message' => 'Flying Tigers API call failed: '.$e->getMessage(),
             ];
         }
     }
@@ -10377,12 +10505,12 @@ class CustomerController extends Controller
     /**
      * Extract a tracking/reference number from a Flying Tigers API response.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractFlyingTigersTrackingNumber($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -10397,7 +10525,7 @@ class CustomerController extends Controller
         // Case A: The response itself is a list of shipment objects
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($candidateKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -10405,7 +10533,7 @@ class CustomerController extends Controller
 
         // Case B: Check top-level keys
         foreach ($candidateKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -10415,13 +10543,13 @@ class CustomerController extends Controller
         if (is_array($data)) {
             if (isset($data[0]) && is_array($data[0])) {
                 foreach ($candidateKeys as $key) {
-                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                         return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                     }
                 }
             }
             foreach ($candidateKeys as $key) {
-                if (isset($data[$key]) && !empty($data[$key])) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
                     return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                 }
             }
@@ -10435,7 +10563,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($candidateKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -10450,12 +10578,12 @@ class CustomerController extends Controller
     /**
      * Extract the LabelURL from a Flying Tigers API response.
      *
-     * @param mixed $apiResponse
+     * @param  mixed  $apiResponse
      * @return string|null
      */
     private function extractFlyingTigersLabelUrl($apiResponse)
     {
-        if (!is_array($apiResponse)) {
+        if (! is_array($apiResponse)) {
             return null;
         }
 
@@ -10464,7 +10592,7 @@ class CustomerController extends Controller
         // Case A: The response itself is a list of shipment objects
         if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
             foreach ($labelKeys as $key) {
-                if (isset($apiResponse[0][$key]) && !empty($apiResponse[0][$key])) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
                     return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
                 }
             }
@@ -10472,7 +10600,7 @@ class CustomerController extends Controller
 
         // Case B: Check top-level keys
         foreach ($labelKeys as $key) {
-            if (isset($apiResponse[$key]) && !empty($apiResponse[$key])) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
                 return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
             }
         }
@@ -10482,13 +10610,13 @@ class CustomerController extends Controller
         if (is_array($data)) {
             if (isset($data[0]) && is_array($data[0])) {
                 foreach ($labelKeys as $key) {
-                    if (isset($data[0][$key]) && !empty($data[0][$key])) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
                         return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
                     }
                 }
             }
             foreach ($labelKeys as $key) {
-                if (isset($data[$key]) && !empty($data[$key])) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
                     return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
                 }
             }
@@ -10502,7 +10630,7 @@ class CustomerController extends Controller
                     $first = isset($wrap[0]) ? $wrap[0] : $wrap;
                     if (is_array($first)) {
                         foreach ($labelKeys as $key) {
-                            if (isset($first[$key]) && !empty($first[$key])) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
                         }
@@ -10518,9 +10646,9 @@ class CustomerController extends Controller
      * Check if a Flying Tigers API response/error indicates an address-related error.
      * Used to trigger auto-fallback to UNITED CLASSIC (Ship Global).
      *
-     * @param string|null $errorMessage
-     * @param mixed $apiResponse
-     * @param string|null $rawBody
+     * @param  string|null  $errorMessage
+     * @param  mixed  $apiResponse
+     * @param  string|null  $rawBody
      * @return bool
      */
     private function isFlyingTigersAddressError($errorMessage, $apiResponse, $rawBody = null)
@@ -10538,14 +10666,14 @@ class CustomerController extends Controller
 
         // Combine all text sources to search
         $searchText = '';
-        if (!empty($errorMessage)) {
-            $searchText .= ' ' . strtolower((string) $errorMessage);
+        if (! empty($errorMessage)) {
+            $searchText .= ' '.strtolower((string) $errorMessage);
         }
         if (is_array($apiResponse)) {
-            $searchText .= ' ' . strtolower(json_encode($apiResponse));
+            $searchText .= ' '.strtolower(json_encode($apiResponse));
         }
-        if (!empty($rawBody)) {
-            $searchText .= ' ' . strtolower((string) $rawBody);
+        if (! empty($rawBody)) {
+            $searchText .= ' '.strtolower((string) $rawBody);
         }
 
         if (empty(trim($searchText))) {
@@ -10566,20 +10694,21 @@ class CustomerController extends Controller
      * Does NOT modify any data — only calculates the rate, paid amount, difference,
      * and wallet impact so the frontend can present a dropdown option to the customer.
      *
-     * @param \App\Models\ShipperInfo $shipper
-     * @param int $customerId
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
      * @return array
      */
     private function getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId)
     {
         // 1. Find the UNITED CLASSIC courier service
-        $classicService = \App\Models\CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
-        if (!$classicService) {
+        $classicService = CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (! $classicService) {
             \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+
             return [
-                'success'          => false,
-                'message'           => 'Address is incorrect for UNITED ECO POST. Could not find UNITED CLASSIC service for fallback. Please contact support.',
-                'is_address_error'  => true,
+                'success' => false,
+                'message' => 'Address is incorrect for UNITED ECO POST. Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error' => true,
             ];
         }
 
@@ -10595,10 +10724,10 @@ class CustomerController extends Controller
         $consigneeState = $consignee ? ($consignee->state ?? '') : '';
 
         // 4. Calculate the UNITED CLASSIC rate
-        $classicRate = app(\App\Http\Controllers\BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicRate = app(BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
         $classicTotal = floatval($classicRate['total'] ?? 0);
 
-        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
 
         // 5. Get the amount already paid (from invoice)
         $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
@@ -10625,17 +10754,17 @@ class CustomerController extends Controller
         }
 
         return [
-            'success'           => true,
-            'is_address_error'  => true,
-            'shipper_id'        => $shipper->id,
-            'classic_service'   => $classicService->method,
-            'classic_rate'      => $classicTotal,
-            'paid_amount'       => $paidAmount,
-            'difference'        => $difference,
-            'wallet_action'     => $walletAction,
-            'wallet_amount'     => $walletAmount,
-            'wallet_balance'    => $walletBalance,
-            'total_weight'      => $totalWeight,
+            'success' => true,
+            'is_address_error' => true,
+            'shipper_id' => $shipper->id,
+            'classic_service' => $classicService->method,
+            'classic_rate' => $classicTotal,
+            'paid_amount' => $paidAmount,
+            'difference' => $difference,
+            'wallet_action' => $walletAction,
+            'wallet_amount' => $walletAmount,
+            'wallet_balance' => $walletBalance,
+            'total_weight' => $totalWeight,
         ];
     }
 
@@ -10645,20 +10774,21 @@ class CustomerController extends Controller
      * Performs: update shipping method, call Ship Global API, store tracking,
      * wallet deduction/refund, update invoice.
      *
-     * @param \App\Models\ShipperInfo $shipper
-     * @param int $customerId
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
      * @return array
      */
     private function executeShipGlobalFallback($shipper, $customerId)
     {
         // 1. Find the UNITED CLASSIC courier service
-        $classicService = \App\Models\CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
-        if (!$classicService) {
+        $classicService = CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (! $classicService) {
             \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+
             return [
-                'success'          => false,
-                'message'           => 'Could not find UNITED CLASSIC service for fallback. Please contact support.',
-                'is_address_error'  => true,
+                'success' => false,
+                'message' => 'Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error' => true,
             ];
         }
 
@@ -10674,10 +10804,10 @@ class CustomerController extends Controller
         $consigneeState = $consignee ? ($consignee->state ?? '') : '';
 
         // 4. Calculate the UNITED CLASSIC rate
-        $classicRate = app(\App\Http\Controllers\BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicRate = app(BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
         $classicTotal = floatval($classicRate['total'] ?? 0);
 
-        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: ' . $classicTotal . ' for shipper #' . $shipper->id);
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
 
         // 5. Get the amount already paid (from invoice)
         $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
@@ -10695,23 +10825,24 @@ class CustomerController extends Controller
 
         // 8. Call Ship Global API to create the shipment
         $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
-        if (!$shipGlobalResult['success']) {
-            \Log::error('Flying Tigers address fallback: Ship Global API failed: ' . ($shipGlobalResult['message'] ?? 'Unknown'));
+        if (! $shipGlobalResult['success']) {
+            \Log::error('Flying Tigers address fallback: Ship Global API failed: '.($shipGlobalResult['message'] ?? 'Unknown'));
+
             return [
-                'success'          => false,
-                'message'           => 'Fallback to UNITED CLASSIC failed: ' . ($shipGlobalResult['message'] ?? 'Unknown error'),
-                'is_address_error'  => true,
-                'classic_rate'       => $classicTotal,
-                'paid_amount'        => $paidAmount,
+                'success' => false,
+                'message' => 'Fallback to UNITED CLASSIC failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
+                'is_address_error' => true,
+                'classic_rate' => $classicTotal,
+                'paid_amount' => $paidAmount,
             ];
         }
 
         // 9. Extract tracking number from Ship Global response
         $apiResponse = $shipGlobalResult['data'] ?? [];
         $trackingNumber = null;
-        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && !empty($apiResponse['data']['waybill_number'])) {
+        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
             $trackingNumber = $apiResponse['data']['waybill_number'];
-        } elseif (isset($apiResponse['waybill_number']) && !empty($apiResponse['waybill_number'])) {
+        } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
             $trackingNumber = $apiResponse['waybill_number'];
         } elseif (isset($apiResponse['tracking_number'])) {
             $trackingNumber = $apiResponse['tracking_number'];
@@ -10737,18 +10868,18 @@ class CustomerController extends Controller
             ShipmentTracking::updateOrCreate(
                 ['shipper_id' => $shipper->id],
                 [
-                    'customer_id'                    => $customerId,
-                    'create_shipment_id'             => $createShipment ? $createShipment->id : null,
-                    'response_status_code'           => '1',
-                    'response_status_description'    => 'Ship Global shipment created (fallback from Flying Tigers address error)',
+                    'customer_id' => $customerId,
+                    'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                    'response_status_code' => '1',
+                    'response_status_description' => 'Ship Global shipment created (fallback from Flying Tigers address error)',
                     'shipment_identification_number' => $trackingNumber,
-                    'total_charges_currency'         => 'INR',
-                    'total_charges_amount'           => $classicTotal,
-                    'billing_weight_uom'             => 'KGS',
-                    'billing_weight'                 => $totalWeight,
-                    'package_results'                 => null,
-                    'raw_response'                    => $apiResponse,
-                    'status'                         => 'created',
+                    'total_charges_currency' => 'INR',
+                    'total_charges_amount' => $classicTotal,
+                    'billing_weight_uom' => 'KGS',
+                    'billing_weight' => $totalWeight,
+                    'package_results' => null,
+                    'raw_response' => $apiResponse,
+                    'status' => 'created',
                 ]
             );
 
@@ -10758,24 +10889,25 @@ class CustomerController extends Controller
 
             // Create tracking record for manifested status
             Tracking::create([
-                'awb_number'  => $shipper->awb_number,
-                'shipper_id'   => $shipper->id,
-                'shipping_id'  => $createShipment ? $createShipment->id : null,
-                'uwc_id'       => $shipper->awb_number,
-                'title'        => Tracking::getTitleForStatus('manifested'),
-                'status'       => 'manifested',
+                'awb_number' => $shipper->awb_number,
+                'shipper_id' => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus('manifested'),
+                'status' => 'manifested',
             ]);
 
             // Log the manifested status change (Ship Global fallback from Flying Tigers address error)
-            ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (UNITED CLASSIC fallback from Flying Tigers address error). Tracking: ' . ($trackingNumber ?? 'N/A'), $customerId, 'customer');
+            ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (UNITED CLASSIC fallback from Flying Tigers address error). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
         } catch (\Exception $e) {
-            \Log::error('Flying Tigers address fallback: Failed to store tracking data: ' . $e->getMessage());
+            \Log::error('Flying Tigers address fallback: Failed to store tracking data: '.$e->getMessage());
+
             return [
-                'success'          => false,
-                'message'           => 'Fallback to UNITED CLASSIC succeeded but failed to store tracking: ' . $e->getMessage(),
-                'is_address_error'  => true,
-                'classic_rate'       => $classicTotal,
-                'paid_amount'        => $paidAmount,
+                'success' => false,
+                'message' => 'Fallback to UNITED CLASSIC succeeded but failed to store tracking: '.$e->getMessage(),
+                'is_address_error' => true,
+                'classic_rate' => $classicTotal,
+                'paid_amount' => $paidAmount,
             ];
         }
 
@@ -10793,7 +10925,7 @@ class CustomerController extends Controller
                 $walletAction = 'deducted';
                 $walletAmount = $difference;
                 $newBalance = (float) $wallet->balance;
-                \Log::info('Flying Tigers address fallback: Deducted ₹' . $difference . ' from wallet (CLASSIC rate ₹' . $classicTotal . ' > paid ₹' . $paidAmount . ')');
+                \Log::info('Flying Tigers address fallback: Deducted ₹'.$difference.' from wallet (CLASSIC rate ₹'.$classicTotal.' > paid ₹'.$paidAmount.')');
             } elseif ($difference < -0.01) {
                 // UNITED CLASSIC is cheaper → refund difference to wallet
                 $refundAmount = abs($difference);
@@ -10802,7 +10934,7 @@ class CustomerController extends Controller
                 $walletAction = 'refunded';
                 $walletAmount = $refundAmount;
                 $newBalance = (float) $wallet->balance;
-                \Log::info('Flying Tigers address fallback: Refunded ₹' . $refundAmount . ' to wallet (CLASSIC rate ₹' . $classicTotal . ' < paid ₹' . $paidAmount . ')');
+                \Log::info('Flying Tigers address fallback: Refunded ₹'.$refundAmount.' to wallet (CLASSIC rate ₹'.$classicTotal.' < paid ₹'.$paidAmount.')');
             } else {
                 $newBalance = (float) $wallet->balance;
             }
@@ -10816,23 +10948,23 @@ class CustomerController extends Controller
         // Build the user-facing message
         $message = 'Shipment manifested successfully via UNITED CLASSIC (Ship Global).';
         if ($walletAction === 'deducted') {
-            $message .= ' ₹' . number_format($walletAmount, 2) . ' has been deducted from your wallet (rate difference).';
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been deducted from your wallet (rate difference).';
         } elseif ($walletAction === 'refunded') {
-            $message .= ' ₹' . number_format($walletAmount, 2) . ' has been refunded to your wallet (rate difference).';
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been refunded to your wallet (rate difference).';
         }
 
         return [
-            'success'              => true,
-            'message'              => $message,
-            'tracking_number'      => $trackingNumber,
-            'shipper_id'           => $shipper->id,
-            'network'              => 'Ship Global (Fallback)',
-            'is_address_error'     => true,
-            'classic_rate'         => $classicTotal,
-            'paid_amount'          => $paidAmount,
-            'wallet_action'        => $walletAction,
-            'wallet_amount'        => $walletAmount,
-            'new_balance'          => $newBalance,
+            'success' => true,
+            'message' => $message,
+            'tracking_number' => $trackingNumber,
+            'shipper_id' => $shipper->id,
+            'network' => 'Ship Global (Fallback)',
+            'is_address_error' => true,
+            'classic_rate' => $classicTotal,
+            'paid_amount' => $paidAmount,
+            'wallet_action' => $walletAction,
+            'wallet_amount' => $walletAmount,
+            'new_balance' => $newBalance,
             'ship_global_response' => $apiResponse,
         ];
     }
@@ -10841,13 +10973,12 @@ class CustomerController extends Controller
      * Manifest a shipment via Ship Global (UNITED CLASSIC) fallback.
      * Called when the customer confirms the dropdown option after a Flying Tigers address error.
      *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function manifestWithShipGlobalFallback(Request $request)
     {
         try {
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
@@ -10862,7 +10993,7 @@ class CustomerController extends Controller
                 ->where('customer_id', $customerId)
                 ->first();
 
-            if (!$shipper) {
+            if (! $shipper) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Shipment not found or does not belong to your account.',
@@ -10884,10 +11015,11 @@ class CustomerController extends Controller
                 return response()->json($result, 500);
             }
         } catch (\Exception $e) {
-            \Log::error('Ship Global fallback manifest error: ' . $e->getMessage());
+            \Log::error('Ship Global fallback manifest error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred: ' . $e->getMessage(),
+                'message' => 'An error occurred: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -10896,13 +11028,12 @@ class CustomerController extends Controller
      * Cancel a shipment by shipper_id (called from address error fallback modal "Cancel" option).
      * Sets the shipment status to cancelled and refunds the paid amount to the customer's wallet.
      *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function cancelShipmentByShipperId(Request $request)
     {
         try {
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
@@ -10917,7 +11048,7 @@ class CustomerController extends Controller
                 ->where('customer_id', $customerId)
                 ->first();
 
-            if (!$shipper) {
+            if (! $shipper) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Shipment not found or does not belong to your account.',
@@ -10974,7 +11105,7 @@ class CustomerController extends Controller
                     $shipper->awb_number,
                     'cancelled',
                     $previousStatus,
-                    $wasPaid ? 'Shipment cancelled. Refund ₹' . number_format($invoice->total_amount ?? 0, 2) . ' to wallet.' : 'Shipment cancelled.',
+                    $wasPaid ? 'Shipment cancelled. Refund ₹'.number_format($invoice->total_amount ?? 0, 2).' to wallet.' : 'Shipment cancelled.',
                     $customerId,
                     'customer'
                 );
@@ -10991,13 +11122,13 @@ class CustomerController extends Controller
 
                             // Log the refund transaction
                             WalletTransaction::create([
-                                'customer_id'   => $customerId,
-                                'type'          => 'credit',
-                                'reason'        => 'refund',
-                                'amount'        => $refundAmount,
+                                'customer_id' => $customerId,
+                                'type' => 'credit',
+                                'reason' => 'refund',
+                                'amount' => $refundAmount,
                                 'balance_after' => $wallet->balance,
-                                'reference'     => $shipper->awb_number,
-                                'description'   => 'Refund of ₹' . number_format($refundAmount, 2) . ' for cancelled shipment ' . ($shipper->awb_number ?: '#' . $shipper->id),
+                                'reference' => $shipper->awb_number,
+                                'description' => 'Refund of ₹'.number_format($refundAmount, 2).' for cancelled shipment '.($shipper->awb_number ?: '#'.$shipper->id),
                             ]);
                         }
                     }
@@ -11010,27 +11141,28 @@ class CustomerController extends Controller
 
             $message = 'Shipment cancelled successfully.';
             if ($refundAmount > 0) {
-                $message = 'Shipment cancelled successfully. ₹' . number_format($refundAmount, 2) . ' has been refunded to your wallet.';
+                $message = 'Shipment cancelled successfully. ₹'.number_format($refundAmount, 2).' has been refunded to your wallet.';
             }
 
             return response()->json([
-                'success'       => true,
-                'message'       => $message,
+                'success' => true,
+                'message' => $message,
                 'refund_amount' => $refundAmount,
-                'new_balance'   => $newBalance,
-                'shipper_id'    => $shipperId,
+                'new_balance' => $newBalance,
+                'shipper_id' => $shipperId,
             ]);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
+                'message' => 'Invalid input: '.implode(', ', $e->validator->errors()->all()),
             ], 422);
         } catch (\Exception $e) {
-            \Log::error('Cancel shipment by shipper_id error: ' . $e->getMessage());
+            \Log::error('Cancel shipment by shipper_id error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred: ' . $e->getMessage(),
+                'message' => 'An error occurred: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -11041,7 +11173,7 @@ class CustomerController extends Controller
     public function walletRecharge(Request $request)
     {
         try {
-            if (!auth()->guard('customer')->check()) {
+            if (! auth()->guard('customer')->check()) {
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
@@ -11056,7 +11188,7 @@ class CustomerController extends Controller
 
             $wallet = Wallet::where('customer_id', $customerId)->first();
 
-            if (!$wallet) {
+            if (! $wallet) {
                 return response()->json(['success' => false, 'message' => 'Wallet not found. Please contact support.']);
             }
 
@@ -11077,9 +11209,9 @@ class CustomerController extends Controller
                 'order_amount' => $amount,
                 'order_currency' => 'INR',
                 'customer_details' => [
-                    'customer_id' => 'CUST-' . $customerId,
-                    'customer_name' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')) ?: ('Customer ' . $customerId),
-                    'customer_email' => $customer->email ?? ('customer' . $customerId . '@unitedcourier.local'),
+                    'customer_id' => 'CUST-'.$customerId,
+                    'customer_name' => trim(($customer->first_name ?? '').' '.($customer->last_name ?? '')) ?: ('Customer '.$customerId),
+                    'customer_email' => $customer->email ?? ('customer'.$customerId.'@unitedcourier.local'),
                     'customer_phone' => $this->normalizeCashfreePhone($customer->phone_number ?? '') ?: '+910000000000',
                 ],
                 'order_meta' => [
@@ -11088,12 +11220,13 @@ class CustomerController extends Controller
             ];
 
             $response = $this->cashfreeApi()->post(
-                config('services.cashfree.pg.base_url') . config('services.cashfree.pg.orders_endpoint'),
+                config('services.cashfree.pg.base_url').config('services.cashfree.pg.orders_endpoint'),
                 $payload
             );
 
-            if (!$response->successful()) {
-                \Log::error('Cashfree order creation failed for customer #' . $customerId . ': ' . $response->body());
+            if (! $response->successful()) {
+                \Log::error('Cashfree order creation failed for customer #'.$customerId.': '.$response->body());
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Could not initiate payment. Please try again later.',
@@ -11111,8 +11244,9 @@ class CustomerController extends Controller
                 'response' => $data,
             ]);
 
-            if (!$paymentSessionId) {
-                \Log::error('Cashfree order response missing payment_session_id: ' . $response->body());
+            if (! $paymentSessionId) {
+                \Log::error('Cashfree order response missing payment_session_id: '.$response->body());
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Could not initiate payment. Please try again later.',
@@ -11143,7 +11277,7 @@ class CustomerController extends Controller
                 'amount' => $amount,
                 'balance_after' => $wallet->balance,
                 'reference' => $orderId,
-                'description' => 'Wallet recharge of ₹' . number_format($amount, 2) . ' initiated (Payment ref: ' . $orderId . ')',
+                'description' => 'Wallet recharge of ₹'.number_format($amount, 2).' initiated (Payment ref: '.$orderId.')',
             ]);
 
             return response()->json([
@@ -11153,16 +11287,17 @@ class CustomerController extends Controller
                 'amount' => $amount,
                 'debug_response' => $data,
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid input: ' . implode(', ', $e->validator->errors()->all()),
+                'message' => 'Invalid input: '.implode(', ', $e->validator->errors()->all()),
             ], 422);
         } catch (\Exception $e) {
-            \Log::error('Wallet recharge init error: ' . $e->getMessage());
+            \Log::error('Wallet recharge init error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error processing recharge: ' . $e->getMessage(),
+                'message' => 'Error processing recharge: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -11174,8 +11309,7 @@ class CustomerController extends Controller
      * the Cashfree Order Pay API (GET /pg/orders/{order_id}/payments). Crediting
      * is idempotent — a payment order is credited exactly once.
      *
-     * @param Request $request
-     * @return \Illuminate\Contracts\View\View
+     * @return View
      */
     public function walletRechargeCallback(Request $request)
     {
@@ -11183,7 +11317,7 @@ class CustomerController extends Controller
 
         $order = $orderId !== '' ? PaymentOrder::where('cashfree_order_id', $orderId)->first() : null;
 
-        if (!$order) {
+        if (! $order) {
             session(['wallet_payment_notice' => ['type' => 'error', 'message' => 'Payment order not found.']]);
 
             return $this->walletRechargeResult('error', 'Payment order not found.');
@@ -11205,7 +11339,7 @@ class CustomerController extends Controller
                 'payment_time' => $verified['payment_time'] ?? null,
             ]);
 
-            session(['wallet_payment_notice' => ['type' => 'success', 'message' => 'Wallet recharged successfully! ₹' . number_format((float) $order->order_amount, 2) . ' has been added to your wallet.']]);
+            session(['wallet_payment_notice' => ['type' => 'success', 'message' => 'Wallet recharged successfully! ₹'.number_format((float) $order->order_amount, 2).' has been added to your wallet.']]);
 
             return $this->walletRechargeResult('success', 'Wallet recharged successfully!', $order->order_amount);
         }
@@ -11248,7 +11382,7 @@ class CustomerController extends Controller
      * Loads the Cashfree SDK and starts the checkout with the payment session
      * created by walletRecharge().
      *
-     * @return \Illuminate\Contracts\View\View
+     * @return View
      */
     public function cashfreeCheckout(Request $request)
     {
@@ -11291,11 +11425,11 @@ class CustomerController extends Controller
     {
         $configured = config('services.cashfree.pg.return_url');
 
-        if (!empty($configured)) {
+        if (! empty($configured)) {
             return $configured;
         }
 
-        return url('/customer/wallet-recharge/callback') . '?order_id={order_id}';
+        return url('/customer/wallet-recharge/callback').'?order_id={order_id}';
     }
 
     /**
@@ -11303,7 +11437,7 @@ class CustomerController extends Controller
      */
     private function generateCashfreeOrderId()
     {
-        return 'UWC' . strtoupper(Str::random(14));
+        return 'UWC'.strtoupper(Str::random(14));
     }
 
     /**
@@ -11318,25 +11452,26 @@ class CustomerController extends Controller
         }
 
         if (strlen($digits) === 10) {
-            $digits = '91' . $digits;
+            $digits = '91'.$digits;
         }
 
-        return '+' . $digits;
+        return '+'.$digits;
     }
 
     /**
      * Verify a Cashfree order's payment status server-side.
      *
-     * @param string $orderId
+     * @param  string  $orderId
      * @return array
      */
     private function verifyCashfreeOrder($orderId)
     {
-        $url = config('services.cashfree.pg.base_url') . '/orders/' . urlencode($orderId) . '/payments';
+        $url = config('services.cashfree.pg.base_url').'/orders/'.urlencode($orderId).'/payments';
         $response = $this->cashfreeApi()->get($url);
 
-        if (!$response->successful()) {
-            \Log::error('Cashfree payment verification failed for ' . $orderId . ': ' . $response->body());
+        if (! $response->successful()) {
+            \Log::error('Cashfree payment verification failed for '.$orderId.': '.$response->body());
+
             return ['success' => false, 'status' => 'PENDING'];
         }
 
@@ -11348,7 +11483,7 @@ class CustomerController extends Controller
             'response' => $payments,
         ]);
 
-        if (!is_array($payments) || empty($payments)) {
+        if (! is_array($payments) || empty($payments)) {
             return ['success' => true, 'status' => 'PENDING'];
         }
 
@@ -11375,7 +11510,7 @@ class CustomerController extends Controller
             return response()->json([]);
         }
 
-        $results = \App\Models\HsHtsCode::where('items', 'LIKE', "%{$query}%")
+        $results = HsHtsCode::where('items', 'LIKE', "%{$query}%")
             ->limit(20)
             ->get(['id', 'items', 'hs_code', 'hts_code']);
 
@@ -11391,7 +11526,7 @@ class CustomerController extends Controller
             ? $customer->businessCategory
             : $customer->businessCategory()->first();
 
-        if (!$category) {
+        if (! $category) {
             return false;
         }
 
@@ -11421,8 +11556,8 @@ class CustomerController extends Controller
         $datePart = now()->format('ymd'); // e.g., 260602 for 2026-06-02
 
         // Find the highest serial number for today's date prefix
-        $todayPrefix = $prefix . $datePart;
-        $lastAwb = ShipperInfo::where('awb_number', 'LIKE', $todayPrefix . '%')
+        $todayPrefix = $prefix.$datePart;
+        $lastAwb = ShipperInfo::where('awb_number', 'LIKE', $todayPrefix.'%')
             ->orderBy('awb_number', 'desc')
             ->value('awb_number');
 
@@ -11438,6 +11573,6 @@ class CustomerController extends Controller
         // Pad serial to 5 digits
         $serialPart = str_pad($newSerial, 5, '0', STR_PAD_LEFT);
 
-        return $todayPrefix . $serialPart;
+        return $todayPrefix.$serialPart;
     }
 }

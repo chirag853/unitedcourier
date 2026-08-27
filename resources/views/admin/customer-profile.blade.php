@@ -521,7 +521,8 @@
 
                                 <div class="admin-kyc-view">
                     @php
-                        $isBusinessFlow = strcasecmp(trim((string) $userType), 'Business') === 0;
+                        $isBusinessFlow = strcasecmp(trim((string) $userType), 'Business') === 0
+                            || ($businessKyc && (bool) $businessKyc->is_csb_v);
                         $kyc = $isBusinessFlow ? ($businessKyc ?? $personalKyc) : ($personalKyc ?? $businessKyc);
                         $alt = $isBusinessFlow ? $personalKyc : $businessKyc;
 

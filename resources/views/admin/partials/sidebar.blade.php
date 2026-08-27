@@ -198,9 +198,11 @@
                                 </li>
                                 <li class="submenu submenu-two">
                                     <a href="javascript:void(0);"
-                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') ? 'active' : '' }}">KYC<span
+                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') || request()->is('admin/csb5-form*') ? 'active' : '' }}">KYC<span
                                             class="menu-arrow inside-submenu"></span></a>
                                     <ul>
+                                        <li><a href="{{ url('/admin/csb5-form') }}"
+                                                class="{{ request()->is('admin/csb5-form') ? 'active' : '' }}">CSB5 Forms</a></li>
                                         <li><a href="{{ url('/admin/kyc-pending') }}"
                                                 class="{{ request()->is('admin/kyc-pending') ? 'active' : '' }}">Pending Customer</a></li>
                                         <li><a href="{{ url('/admin/kyc-approved') }}"

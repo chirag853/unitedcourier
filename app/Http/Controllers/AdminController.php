@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Models\Admin;
+use App\Models\CsbForm;
 use App\Models\NetworkOffice;
 use App\Models\ShipmentInvoice;
 use App\Models\Customer;
@@ -1781,7 +1782,13 @@ class AdminController extends Controller
 
     public function csb5Form()
     {
-        return view('admin.csb5-form');
+        $csbForms = CsbForm::with(['customer' => function ($query) {
+                $query->with('businessCategory');
+            }])
+            ->latest()
+            ->get();
+
+        return view('admin.csb5-form', compact('csbForms'));
     }
 
     public function formKyc()
