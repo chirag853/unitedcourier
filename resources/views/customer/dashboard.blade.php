@@ -120,6 +120,374 @@
         color: #ef4444;
     }
 
+    /* ===== KYC Verification Progress (pending / under review / rejected) ===== */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    #kycFormSection {
+        scroll-margin-top: 130px;
+    }
+
+    .kyc-progress-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1a1a1a;
+        letter-spacing: -0.02em;
+        margin: 0 0 4px;
+    }
+
+    .kyc-progress-sub {
+        font-size: 15px;
+        color: #8a94a6;
+        margin: 0 0 20px;
+    }
+
+    .kyc-progress-card {
+        background: #ffffff;
+        border: 1px solid rgba(211, 197, 172, 0.25);
+        border-radius: 24px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 0 3px rgba(0, 0, 0, 0.02);
+        padding: 28px 24px 24px;
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 24px;
+    }
+
+    .kyc-progress-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 6px;
+        background: linear-gradient(to right, #fbbf24, #f9bd22, #fbbf24);
+        opacity: 0.85;
+    }
+
+    .kyc-stepper {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        max-width: 720px;
+        margin: 20px auto 24px;
+    }
+
+    .kyc-stepper-track,
+    .kyc-stepper-track-fill {
+        position: absolute;
+        top: 21px;
+        height: 6px;
+        border-radius: 999px;
+        z-index: 0;
+    }
+
+    .kyc-stepper-track {
+        left: 16.66%;
+        right: 16.66%;
+        background: #eff4ff;
+    }
+
+    .kyc-stepper-track-fill {
+        left: 16.66%;
+        background: linear-gradient(to right, #fbbf24, #d97706);
+        transition: width 0.4s ease;
+    }
+
+    .kyc-step {
+        position: relative;
+        z-index: 1;
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        text-align: center;
+    }
+
+    .kyc-step-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 19px;
+        background: #ffffff;
+        border: 2px solid #e8edf5;
+        color: #9aa4b2;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        transition: all 0.25s ease;
+    }
+
+    .kyc-step-num {
+        font-size: 15px;
+        font-weight: 600;
+        opacity: 0.55;
+    }
+
+    .kyc-step.is-active .kyc-step-icon {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        border-color: #ffffff;
+        color: #4a3200;
+        box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35);
+    }
+
+    .kyc-step.is-done .kyc-step-icon {
+        background: linear-gradient(135deg, #34d399, #10b981);
+        border-color: #ffffff;
+        color: #ffffff;
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+    }
+
+    .kyc-step.is-error .kyc-step-icon {
+        background: linear-gradient(135deg, #f87171, #dc2626);
+        border-color: #ffffff;
+        color: #ffffff;
+        box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+    }
+
+    .kyc-step-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #8a94a6;
+    }
+
+    .kyc-step.is-active .kyc-step-label {
+        color: #b45309;
+        font-weight: 700;
+    }
+
+    .kyc-step.is-done .kyc-step-label {
+        color: #059669;
+        font-weight: 700;
+    }
+
+    .kyc-step.is-error .kyc-step-label {
+        color: #dc2626;
+        font-weight: 700;
+    }
+
+    .kyc-status-banner {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        background: linear-gradient(to right, rgba(239, 244, 255, 0.55), #ffffff);
+        border: 1px solid rgba(251, 191, 36, 0.4);
+        border-radius: 16px;
+        padding: 20px 22px;
+    }
+
+    .kyc-status-banner.review {
+        border-color: rgba(37, 99, 235, 0.25);
+        background: linear-gradient(to right, rgba(239, 246, 255, 0.6), #ffffff);
+    }
+
+    .kyc-status-banner.rejected {
+        border-color: rgba(220, 38, 38, 0.25);
+        background: linear-gradient(to right, rgba(254, 242, 242, 0.6), #ffffff);
+    }
+
+    .kyc-status-banner-icon {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        background: rgba(251, 191, 36, 0.18);
+        color: #b45309;
+    }
+
+    .kyc-status-banner.review .kyc-status-banner-icon {
+        background: rgba(37, 99, 235, 0.12);
+        color: #2563eb;
+    }
+
+    .kyc-status-banner.rejected .kyc-status-banner-icon {
+        background: rgba(220, 38, 38, 0.12);
+        color: #dc2626;
+    }
+
+    .kyc-status-banner-body {
+        flex: 1 1 auto;
+    }
+
+    .kyc-status-banner-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #1a1a1a;
+        margin: 0 0 4px;
+    }
+
+    .kyc-status-banner-text {
+        font-size: 14px;
+        color: #5b6472;
+        line-height: 1.65;
+        margin: 0;
+    }
+
+    .kyc-reject-reason {
+        margin-top: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: #fef2f2;
+        color: #991b1b;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .kyc-status-banner-action {
+        flex-shrink: 0;
+        display: inline-block;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 26px;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+        background: #f59e0b;
+        color: #ffffff;
+        box-shadow: 0 2px 10px rgba(245, 158, 11, 0.4);
+        transition: all 0.2s ease;
+    }
+
+    .kyc-status-banner-action:hover {
+        opacity: 0.92;
+        transform: translateY(-1px);
+        color: #ffffff;
+        text-decoration: none;
+    }
+
+    .kyc-status-banner.review .kyc-status-banner-action {
+        background: #2563eb;
+        box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+    }
+
+    .kyc-status-banner.rejected .kyc-status-banner-action {
+        background: #dc2626;
+        box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35);
+    }
+
+    .kyc-restricted-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 12px;
+        padding: 56px 24px;
+        background: #ffffff;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        border-radius: 24px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        margin-bottom: 24px;
+    }
+
+    .kyc-restricted-icon {
+        width: 112px;
+        height: 112px;
+        border-radius: 34px;
+        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+        border: 1px solid rgba(203, 213, 225, 0.6);
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.03);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 46px;
+        color: #94a3b8;
+        position: relative;
+        margin-bottom: 6px;
+    }
+
+    .kyc-restricted-icon::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 34px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent);
+        pointer-events: none;
+    }
+
+    .kyc-restricted-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1a1a1a;
+        letter-spacing: -0.02em;
+        margin: 0;
+    }
+
+    .kyc-restricted-text {
+        font-size: 15px;
+        color: #64748b;
+        line-height: 1.7;
+        max-width: 480px;
+        margin: 0;
+    }
+
+    .kyc-restricted-link {
+        margin-top: 10px;
+        display: inline-block;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 26px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #475569;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .kyc-restricted-link:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #1e293b;
+        text-decoration: none;
+    }
+
+    @media (min-width: 768px) {
+        .kyc-status-banner {
+            flex-direction: row;
+            align-items: center;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .kyc-progress-card {
+            padding: 22px 14px 18px;
+        }
+
+        .kyc-progress-title {
+            font-size: 20px;
+        }
+
+        .kyc-step-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            font-size: 16px;
+        }
+
+        .kyc-stepper-track,
+        .kyc-stepper-track-fill {
+            top: 18px;
+        }
+
+        .kyc-step-label {
+            font-size: 12px;
+        }
+
+        .kyc-status-banner-action {
+            width: 100%;
+            text-align: center;
+        }
+    }
+
     .chart-filter-btn:hover {
         background: #f0f0f0;
     }
@@ -452,42 +820,91 @@
                 @if(auth()->guard('customer')->check())
 
                 @if($kycExists && $kycRecord && $kycRecord->kyc_status != 'approved')
-                <!-- KYC Progress Bar -->
-                <div class="kyc-progress-container mb-4">
-                    <h5 class="mb-3">KYC Verification Progress</h5>
-                    <div class="progress" style="height: 30px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated {{ $kycRecord->kyc_status == 'pending' ? 'bg-warning' : ($kycRecord->kyc_status == 'under_review' ? 'bg-info' : 'bg-danger') }}"
-                            role="progressbar"
-                            style="width: {{ $kycRecord->kyc_status == 'pending' ? '33' : ($kycRecord->kyc_status == 'under_review' ? '66' : '100') }}%">
-                            {{ ucwords(str_replace('_', ' ', $kycRecord->kyc_status)) }}
+                @php
+                    $kycStatus = $kycRecord->kyc_status;
+                    $kycIsPending = $kycStatus === 'pending';
+                    $kycIsReview = $kycStatus === 'under_review';
+                    $kycIsRejected = $kycStatus === 'rejected';
+                    $kycRejectReason = trim((string) data_get($kycDraft?->form_data, 'reject_remark', ''));
+                @endphp
+                <!-- KYC Verification Progress -->
+                <h5 class="kyc-progress-title">KYC Verification Progress</h5>
+                <p class="kyc-progress-sub">Track the status of your account approval.</p>
+
+                <div class="kyc-progress-card">
+                    <!-- Stepper -->
+                    <div class="kyc-stepper">
+                        <div class="kyc-stepper-track"></div>
+                        <div class="kyc-stepper-track-fill" style="width: {{ $kycIsPending ? '35%' : ($kycIsReview ? '50%' : '0%') }}"></div>
+
+                        <!-- Step 1: Pending -->
+                        <div class="kyc-step {{ $kycIsReview ? 'is-done' : ($kycIsRejected ? 'is-error' : 'is-active') }}">
+                            <div class="kyc-step-icon">
+                                @if($kycIsReview)
+                                <i class="fas fa-check"></i>
+                                @elseif($kycIsRejected)
+                                <i class="fas fa-exclamation"></i>
+                                @else
+                                <i class="fas fa-hourglass-half"></i>
+                                @endif
+                            </div>
+                            <span class="kyc-step-label">Pending</span>
+                        </div>
+
+                        <!-- Step 2: Under Review -->
+                        <div class="kyc-step {{ $kycIsReview ? 'is-active' : '' }}">
+                            <div class="kyc-step-icon">
+                                @if($kycIsReview)
+                                <i class="fas fa-search"></i>
+                                @else
+                                <span class="kyc-step-num">2</span>
+                                @endif
+                            </div>
+                            <span class="kyc-step-label">Under Review</span>
+                        </div>
+
+                        <!-- Step 3: Approved -->
+                        <div class="kyc-step">
+                            <div class="kyc-step-icon"><span class="kyc-step-num">3</span></div>
+                            <span class="kyc-step-label">Approved</span>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-between mt-2">
-                        <small class="text-muted">Pending</small>
-                        <small class="text-muted">Under Review</small>
-                        <small class="text-muted">Approved</small>
-                    </div>
-                    <div class="mt-3">
-                        @if($kycRecord->kyc_status == 'pending')
-                        <p class="mb-0 text-warning"><i class="fas fa-clock"></i> Your KYC application is pending.
-                            Please complete the verification process.</p>
-                        @elseif($kycRecord->kyc_status == 'under_review')
-                        <p class="mb-0 text-info"><i class="fas fa-hourglass-half"></i> Your KYC application is under
-                            review. We'll notify you once it's approved.</p>
-                        @elseif($kycRecord->kyc_status == 'rejected')
-                        <p class="mb-2 text-danger"><i class="fas fa-exclamation-triangle"></i> Your KYC application was
-                            rejected. Please review and correct the details below, then re-submit your KYC.</p>
-                        @php
-                            $kycRejectReason = trim((string) data_get($kycDraft?->form_data, 'reject_remark', ''));
-                        @endphp
-                        @if($kycRejectReason !== '')
-                        <div class="alert alert-danger py-2 px-3 mb-0" role="alert">
-                            <strong><i class="fas fa-comment-alt me-1"></i> Rejection Reason:</strong>
-                            <span class="ms-1">{{ $kycRejectReason }}</span>
+
+                    <!-- Status Banner -->
+                    @if($kycIsPending)
+                    <div class="kyc-status-banner pending">
+                        <div class="kyc-status-banner-icon"><i class="fas fa-exclamation-circle"></i></div>
+                        <div class="kyc-status-banner-body">
+                            <h4 class="kyc-status-banner-title">Action Required</h4>
+                            <p class="kyc-status-banner-text">Your KYC application is pending. Please complete the verification process to unlock full access.</p>
                         </div>
-                        @endif
-                        @endif
+                        <a href="{{ route('customer.kyc.summary') }}" class="kyc-status-banner-action">View KYC Summary</a>
                     </div>
+                    @elseif($kycIsReview)
+                    <div class="kyc-status-banner review">
+                        <div class="kyc-status-banner-icon"><i class="fas fa-hourglass-half"></i></div>
+                        <div class="kyc-status-banner-body">
+                            <h4 class="kyc-status-banner-title">Application Under Review</h4>
+                            <p class="kyc-status-banner-text">Our verification team is reviewing your KYC application. We'll notify you once it's approved.</p>
+                        </div>
+                        <a href="{{ route('customer.kyc.summary') }}" class="kyc-status-banner-action">View KYC Summary</a>
+                    </div>
+                    @elseif($kycIsRejected)
+                    <div class="kyc-status-banner rejected">
+                        <div class="kyc-status-banner-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="kyc-status-banner-body">
+                            <h4 class="kyc-status-banner-title">KYC Application Rejected</h4>
+                            <p class="kyc-status-banner-text">Your KYC application was rejected. Please review and correct the details below, then re-submit your KYC.</p>
+                            @if($kycRejectReason !== '')
+                            <div class="kyc-reject-reason">
+                                <strong><i class="fas fa-comment-alt me-1"></i> Rejection Reason:</strong>
+                                <span class="ms-1">{{ $kycRejectReason }}</span>
+                            </div>
+                            @endif
+                        </div>
+                        <a href="#kycFormSection" class="kyc-status-banner-action">Re-submit KYC</a>
+                    </div>
+                    @endif
                 </div>
                 @endif
 
@@ -854,7 +1271,7 @@
                     </div>
                 </div>
 
-                <div class="stepper-container">
+                <div class="stepper-container" id="kycFormSection">
                     <h2 class="stepper-title">Finish KYC <span class="gradient-text">in seconds</span></h2>
 
                     <div class="stepper-wrapper">
@@ -4840,13 +5257,14 @@
                     </div>
 
                     @else
-                    <!-- Show message when KYC is not approved -->
-                    <div class="text-center py-5">
-                        <div class="mb-4">
-                            <i class="fas fa-lock fa-3x text-muted"></i>
+                    <!-- Restricted Access State (KYC not approved) -->
+                    <div class="kyc-restricted-panel">
+                        <div class="kyc-restricted-icon">
+                            <i class="fas fa-lock"></i>
                         </div>
-                        <h4 class="text-muted">Dashboard Access Restricted</h4>
-                        <p class="text-muted">Complete your KYC verification to access all dashboard features.</p>
+                        <h4 class="kyc-restricted-title">Dashboard Access Restricted</h4>
+                        <p class="kyc-restricted-text">Complete your KYC verification to access all dashboard features, including live reports and compliance monitoring.</p>
+                        <a href="{{ url('/terms-and-conditions') }}" class="kyc-restricted-link">Learn about our KYC process</a>
                     </div>
                     @endif
 
@@ -5058,7 +5476,7 @@
                                             <span class="text-success"><i
                                                     class="fa-solid fa-check-circle fs-20"></i></span>
                                             @else
-                                            <a href="/customer/csb5-form" class="text-success"
+                                            <a href="{{ url('/customer/csb5-form') }}" class="text-success"
                                                 style="font-weight: 500;">Enable Now <i
                                                     class="fa-solid fa-chevron-right"></i></a>
                                             @endif

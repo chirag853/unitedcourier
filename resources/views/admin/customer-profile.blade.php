@@ -339,6 +339,25 @@
         .admin-kyc-view .glossary-def { flex: 1; color: #1d2f4a; font-size: 14px; line-height: 1.7; }
         .admin-kyc-view .contact-box { background: #eef4fa; border-radius: 60px; padding: 0.7rem 1.6rem; display: inline-block; font-size: 0.95rem; margin: 0.8rem 0; }
         .admin-kyc-view .contact-box a { color: #0b2b5c; font-weight: 500; text-decoration: none; border-bottom: 1px dotted #3a5f89; }
+
+        /* Signed Merchant Agreement preview (KYC Details Preview modal) - same document styling as Step 6 */
+        #kycPreviewModal .document-wrapper { max-width: 100%; margin: 0 auto; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.08); padding: 2rem 2rem; border: 1px solid #eef2f6; }
+        #kycPreviewModal .document-wrapper h1,
+        #kycPreviewModal .document-wrapper h2,
+        #kycPreviewModal .document-wrapper h3,
+        #kycPreviewModal .document-wrapper h4 { font-weight: 600; letter-spacing: -0.02em; margin-top: 1.6em; margin-bottom: 0.5em; color: #1a2e4a; }
+        #kycPreviewModal .document-wrapper h1 { font-size: 1.8rem; margin-top: 0; margin-bottom: 0.3rem; border-bottom: 2px solid #eef2f6; padding-bottom: 0.4rem; }
+        #kycPreviewModal .document-wrapper h2 { font-size: 1.35rem; border-left: 5px solid #1f3a6b; padding: 0.6rem 1rem 0.6rem 1.2rem; background: #f1f5f9; border-radius: 0 40px 40px 0; margin-top: 2rem; }
+        #kycPreviewModal .document-wrapper h3 { font-size: 1.1rem; margin-top: 1.6rem; border-bottom: 1px dashed #dce3ec; padding-bottom: 0.3rem; }
+        #kycPreviewModal .document-wrapper h4 { font-size: 1rem; margin-top: 1.4rem; }
+        #kycPreviewModal .document-wrapper p { margin: 0.8rem 0; color: #334155; font-size: 14px; line-height: 1.7; }
+        #kycPreviewModal .document-wrapper ul,
+        #kycPreviewModal .document-wrapper ol { padding-left: 1.6rem; margin: 0.8rem 0 1rem 0; }
+        #kycPreviewModal .document-wrapper li { margin: 0.35rem 0; color: #334155; font-size: 14px; line-height: 1.7; }
+        #kycPreviewModal .document-wrapper hr { border: 0; border-top: 2px solid #e2eaf2; margin: 2rem 0; }
+        #kycPreviewModal .subhead-company { font-size: 1.15rem; font-weight: 500; color: #1f3a6b; margin-top: -0.1rem; margin-bottom: 1.2rem; display: block; }
+        #kycPreviewModal .underline-title { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; text-decoration-color: #b3c9e0; }
+        #kycPreviewModal .signed-agreement-chevron { transition: transform .2s ease; }
         .admin-kyc-view .small-meta { font-size: 0.9rem; color: #3d5779; background: #f2f6fc; padding: 0.2rem 0.8rem; border-radius: 30px; display: inline-block; }
         @media (max-width: 768px) {
             .admin-kyc-view .stepper-wrapper { flex-direction: column; gap: 15px; }
@@ -495,7 +514,7 @@
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             @if($personalKyc && in_array($personalKyc->kyc_status ?? 'pending', ['pending', 'under_review']))
-                                <form action="{{ route('admin.kyc-pending.approve', $personalKyc->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to APPROVE this KYC? This enables shipment creation and creates the customer wallet.');">
+                                <form action="{{ route('admin.kyc-pending.approve', $personalKyc->id) }}" method="POST" class="d-inline approve-form">
                                     @csrf
                                     <button type="submit" class="action-btn btn-kyc-approve">
                                         <i class="ti ti-circle-check"></i> Approve KYC
@@ -556,6 +575,13 @@
                         $aadharFrontUrl = $docUrl($kyc->aadhar_front_document, $kyc->aadhar_document, $alt?->aadhar_front_document);
                         $aadharBackUrl = $docUrl($kyc->aadhar_back_document, $alt?->aadhar_back_document);
                         $aadharSkipped = !(bool) ($kyc->aadhar_verified) && !$aadharNumber && !$aadharFrontUrl && !$aadharBackUrl;
+
+                        // The signed agreement PDF is generated from the static
+                        // agreement text plus the customer's signature image, so it
+                        // only requires the signature to be present on file.
+                        // Priority: kyc_details.signature_document -> csb_form.signature_document
+                        // -> legacy kyc_details.signature (whichever path exists gets used).
+                        $hasSignedMerchantAgreement = !empty($docUrl($personalKyc?->signature_document, $businessKyc?->signature_document, $personalKyc?->signature));
                     @endphp
 
                     @if(!$kyc)
@@ -909,6 +935,17 @@
 
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
+                                        <label class="form-label-custom">LUT Number</label>
+                                        <div class="input-group-custom">
+                                            <input type="text" class="form-control input-custom"
+                                                value="{{ $kyc->lut_number ?? '—' }}" readonly>
+                                            <i class="ti ti-hash"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
                                         <label class="form-label-custom">LUT Expiry Date</label>
                                         <div class="input-group-custom">
                                             <input type="text" class="form-control input-custom"
@@ -1024,7 +1061,8 @@
                                 <h3 class="kyc-card-title">Uploaded <span class="gradient-text"> Signature</span></h3>
                                 <p class="text-muted mb-4">Authorized signature uploaded during KYC.</p>
 
-                                @php $signatureUrl = $docUrl($kyc->signature_document, $alt?->signature_document); @endphp
+                                {{-- Signature priority: kyc_details.signature_document -> csb_form.signature_document --}}
+                                @php $signatureUrl = $docUrl($personalKyc?->signature_document, $businessKyc?->signature_document); @endphp
                                 <div class="row g-4">
                                     <div class="col-12">
                                         <label class="form-label-custom">Authorized Signature (with Company Stamp)</label>
@@ -1048,8 +1086,15 @@
 
                             <!-- Step 6: Terms & Conditions / Bill -->
                             <div id="step6-content" class="step-content">
-                                <h3 class="kyc-card-title">MERCHANT <span class="gradient-text">AGREEMENT</span></h3>
-                                <p class="text-muted mb-4">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <h3 class="kyc-card-title mb-0">MERCHANT <span class="gradient-text">AGREEMENT</span></h3>
+                                    @if($hasSignedMerchantAgreement)
+                                        <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}">
+                                            <i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)
+                                        </a>
+                                    @endif
+                                </div>
+                                <p class="text-muted mb-4 mt-3">
                                     Merchant Agreement accepted by the customer during KYC.
                                     @if($kyc->terms_accepted ?? ($alt?->terms_accepted ?? false))
                                         <span class="badge-status badge-kyc-approved"><i class="ti ti-circle-check"></i> Accepted</span>
@@ -2218,11 +2263,20 @@
                             'iec_certificate' => ['label' => 'IEC Certificate', 'url' => $docUrl($kyc?->iec_document, $alt?->iec_document)],
                             'ad_code_document' => ['label' => 'AD Code Document', 'url' => $docUrl($kyc?->ad_code_document, $alt?->ad_code_document)],
                             'lut_document' => ['label' => 'LUT Document', 'url' => $docUrl($kyc?->lut_document, $alt?->lut_document)],
-                            'signature' => ['label' => 'Signature', 'url' => $docUrl($kyc?->signature_document, $kyc?->signature, $alt?->signature_document, $alt?->signature)],
+                            'signature' => ['label' => 'Signature', 'url' => $docUrl($personalKyc?->signature_document, $businessKyc?->signature_document, $personalKyc?->signature)],
                             'merchant_agreement' => ['label' => 'Merchant Agreement', 'url' => $docUrl($kyc?->merchant_agreement, $alt?->merchant_agreement)],
                         ];
-                        $hasSignedMerchantAgreement = !empty($previewDocuments['signature']['url'])
-                            && !empty($previewDocuments['merchant_agreement']['url']);
+                        // Signature priority: kyc_details.signature_document -> csb_form.signature_document
+                        // -> legacy kyc_details.signature (whichever path exists gets used).
+                        $previewSignaturePath = $personalKyc?->signature_document
+                            ?: $businessKyc?->signature_document
+                            ?: $personalKyc?->signature;
+                        $previewAgreementPath = $kyc?->merchant_agreement
+                            ?: $alt?->merchant_agreement;
+                        // Show the download action whenever the customer's signature
+                        // is present — the signed merchant agreement PDF is generated
+                        // from the static agreement text plus this signature.
+                        $hasSignedMerchantAgreement = !empty($previewSignaturePath);
                         $selectedTaxTypes = array_filter([
                             data_get($businessKyc, 'is_gst') ? 'GST' : null,
                             data_get($businessKyc, 'is_lut') ? 'LUT' : null,
@@ -2258,8 +2312,21 @@
                         @endforeach
                         @if($hasSignedMerchantAgreement)
                             <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                                <span><i class="ti ti-file-type-pdf me-1 text-danger"></i>Merchant Agreement (Signed) <small class="text-muted">(generated PDF)</small></span>
-                                <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}"><i class="ti ti-download me-1"></i>Download</a>
+                                <a href="javascript:void(0)" class="text-decoration-none signed-agreement-toggle" role="button" aria-expanded="false" aria-controls="signedAgreementPreviewWrap">
+                                    <i class="ti ti-file-type-pdf me-1 text-danger"></i>Merchant Agreement (Signed) <small class="text-muted">(generated PDF with the customer's signature)</small>
+                                    <i class="ti ti-chevron-down signed-agreement-chevron"></i>
+                                </a>
+                                <div class="d-flex gap-2">
+                                    <a href="javascript:void(0)" class="btn btn-sm btn-outline-primary signed-agreement-toggle" role="button"><i class="ti ti-eye"></i> View</a>
+                                    <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}"><i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)</a>
+                                </div>
+                            </div>
+                            <div id="signedAgreementPreviewWrap" class="signed-agreement-preview d-none mt-3 p-3 border rounded-3 bg-white">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                    <h6 class="mb-0"><i class="ti ti-file-description me-1 text-danger"></i>Merchant Agreement (Signed) — Preview</h6>
+                                    <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}"><i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)</a>
+                                </div>
+                                <div id="signedAgreementPreviewContainer"></div>
                             </div>
                         @endif
                     </div>
@@ -2385,6 +2452,8 @@
     <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
     <!-- Theme JS -->
     <script src="{{ asset('assets/js/script.js') }}"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
         var rechargeCustomerId = null;
@@ -2408,6 +2477,39 @@
         documentPreviewElement.addEventListener('hidden.bs.modal', function() {
             documentPreviewFrame.removeAttribute('src');
             documentPreviewTitle.textContent = 'Document Preview';
+        });
+
+        // Merchant Agreement (Signed) preview - shows the exact same agreement as the
+        // Step 6 "Merchant Agreement" section (with the customer's signature below it)
+        // inside the KYC Details Preview modal, plus a PDF download action.
+        var signedAgreementToggles = document.querySelectorAll('.signed-agreement-toggle');
+        var signedAgreementPreviewWrap = document.getElementById('signedAgreementPreviewWrap');
+        var signedAgreementPreviewContainer = document.getElementById('signedAgreementPreviewContainer');
+        var step6DocumentWrapper = document.querySelector('#step6-content .document-wrapper');
+
+        function toggleSignedAgreementPreview() {
+            if (!signedAgreementPreviewWrap || !step6DocumentWrapper) return;
+            var isHidden = signedAgreementPreviewWrap.classList.contains('d-none');
+            if (isHidden) {
+                if (!signedAgreementPreviewContainer.hasChildNodes()) {
+                    signedAgreementPreviewContainer.appendChild(step6DocumentWrapper.cloneNode(true));
+                }
+                signedAgreementPreviewWrap.classList.remove('d-none');
+                signedAgreementPreviewWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                document.querySelectorAll('.signed-agreement-chevron').forEach(function(c) {
+                    c.classList.remove('ti-chevron-down');
+                    c.classList.add('ti-chevron-up');
+                });
+            } else {
+                signedAgreementPreviewWrap.classList.add('d-none');
+                document.querySelectorAll('.signed-agreement-chevron').forEach(function(c) {
+                    c.classList.add('ti-chevron-down');
+                    c.classList.remove('ti-chevron-up');
+                });
+            }
+        }
+        signedAgreementToggles.forEach(function(el) {
+            el.addEventListener('click', toggleSignedAgreementPreview);
         });
 
         function copyText(text) {
@@ -2534,6 +2636,28 @@
             });
         });
 
+        // SweetAlert2 confirmation for Approve KYC (same as kyc-pending page)
+        var approveForm = document.querySelector('.approve-form');
+        if (approveForm) {
+            approveForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: 'Approve KYC?',
+                    text: "Are you sure you want to APPROVE this KYC? This enables shipment creation and creates the customer wallet.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2e7d32',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, Approve',
+                    cancelButtonText: 'Cancel'
+                }).then(function(result) {
+                    if (result.isConfirmed) {
+                        approveForm.submit();
+                    }
+                });
+            });
+        }
+
         // Reject KYC with required remark
         @if($personalKyc && in_array($personalKyc->kyc_status ?? 'pending', ['pending', 'under_review']))
             var rejectKycUrl = '{{ route("admin.kyc-pending.reject", $personalKyc->id) }}';
@@ -2592,7 +2716,10 @@
             var prevBtn = card.querySelector('.stepper-prev');
             var nextBtn = card.querySelector('.stepper-next');
             if (prevBtn) prevBtn.disabled = step <= 1;
-            if (nextBtn) nextBtn.disabled = step >= maxStep;
+            if (nextBtn) {
+                nextBtn.disabled = step >= maxStep;
+                nextBtn.style.display = step >= maxStep ? 'none' : '';
+            }
         }
 
         var kycStepperCard = document.querySelector('.admin-kyc-view');

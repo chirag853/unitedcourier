@@ -652,6 +652,7 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::get('/kyc-personal', [KycController::class, 'personalKyc'])->name('kyc.personal');
     Route::post('/kyc-personal', [KycController::class, 'storePersonalKyc'])->name('kyc.personal.store');
     Route::get('/kyc-summary', [KycController::class, 'kycSummary'])->name('kyc.summary');
+    Route::get('/kyc-agreement/download', [KycController::class, 'downloadSignedAgreement'])->name('kyc.agreement.download');
     Route::post('/create-shipment', [CustomerController::class, 'storeShipment'])->name('create-shipment.store');
     Route::get('/bulk-upload', [BulkUploadController::class, 'bulkUpload'])->name('bulk-upload');
     Route::post('/bulk-upload', [BulkUploadController::class, 'processBulkUpload'])->name('bulk-upload.process');

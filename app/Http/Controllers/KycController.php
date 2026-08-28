@@ -2136,6 +2136,84 @@ class KycController extends Controller
         return view('customer.kyc-summary', compact('customer', 'personalKyc', 'businessKyc', 'userType', 'businessCategory'));
     }
 
+    /**
+     * Download the electronically signed merchant agreement (PDF) for the
+     * currently authenticated customer.
+     */
+    public function downloadSignedAgreement()
+    {
+        $customer = auth()->guard('customer')->user();
+        if (!$customer) {
+            return redirect()->route('login');
+        }
+
+        $uploadsRoot = realpath(public_path('uploads'));
+        if ($uploadsRoot === false) {
+            abort(500, 'Document download is not available.');
+        }
+
+        $signaturePath = $this->resolveKycUploadedFile(
+            $customer->csbForm?->signature_document
+                ?: $customer->kycDetail?->signature_document
+                ?: $customer->kycDetail?->signature,
+            $uploadsRoot
+        );
+        $agreementPath = $this->resolveKycUploadedFile(
+            $customer->csbForm?->merchant_agreement ?: $customer->kycDetail?->merchant_agreement,
+            $uploadsRoot
+        );
+
+        if ($signaturePath === null || $agreementPath === null) {
+            abort(404, 'A signature and accepted merchant agreement are required to generate the signed agreement.');
+        }
+
+        $mimeType = mime_content_type($signaturePath) ?: 'image/png';
+        $signatureDataUri = 'data:' . $mimeType . ';base64,' . base64_encode((string) file_get_contents($signaturePath));
+        $acceptedAt = $customer->csbForm?->merchant_agreement_accepted_at
+            ?: $customer->kycDetail?->merchant_agreement_accepted_at
+            ?: $customer->kycDetail?->terms_accepted_at;
+
+        try {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.signed-merchant-agreement', compact(
+                'customer',
+                'acceptedAt',
+                'signatureDataUri'
+            ))->setPaper('a4');
+        } catch (\Throwable $exception) {
+            \Log::error('Unable to generate signed merchant agreement.', [
+                'customer_id' => $customer->id,
+                'error' => $exception->getMessage(),
+            ]);
+            abort(500, 'Unable to generate the signed merchant agreement.');
+        }
+
+        $customerCode = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($customer->customer_code ?: $customer->id));
+        return $pdf->download($customerCode . '-signed-merchant-agreement.pdf');
+    }
+
+    private function resolveKycUploadedFile($storedPath, string $uploadsRoot): ?string
+    {
+        $path = trim((string) $storedPath);
+        if ($path === '' || filter_var($path, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+        $path = preg_replace('#^(?:(?:public|uploads)/)+#i', '', $path) ?? $path;
+        if ($path === '' || str_contains($path, '..')) {
+            return null;
+        }
+
+        $absolutePath = realpath($uploadsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path));
+        $rootPrefix = rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+        return $absolutePath !== false
+            && is_file($absolutePath)
+            && str_starts_with($absolutePath, $rootPrefix)
+                ? $absolutePath
+                : null;
+    }
+
     private function sendKycSubmissionConfirmation(Customer $customer, KycDetail $kyc): void
     {
         try {

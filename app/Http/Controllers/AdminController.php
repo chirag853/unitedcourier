@@ -5047,19 +5047,20 @@ class AdminController extends Controller
 
     private function downloadSignedMerchantAgreement(Customer $customer, string $uploadsRoot)
     {
+        // Signature priority: kyc_details.signature_document -> csb_form.signature_document
+        // -> legacy kyc_details.signature (whichever path exists gets used).
         $signaturePath = $this->resolveKycUploadedFile(
-            $customer->csbForm?->signature_document
-                ?: $customer->kycDetail?->signature_document
+            $customer->kycDetail?->signature_document
+                ?: $customer->csbForm?->signature_document
                 ?: $customer->kycDetail?->signature,
             $uploadsRoot
         );
-        $agreementPath = $this->resolveKycUploadedFile(
-            $customer->csbForm?->merchant_agreement ?: $customer->kycDetail?->merchant_agreement,
-            $uploadsRoot
-        );
-
-        if ($signaturePath === null || $agreementPath === null) {
-            abort(404, 'A signature and accepted merchant agreement are required to generate the signed agreement.');
+        // The signed merchant agreement PDF is rendered from the static agreement
+        // text plus the customer's signature image, so only the signature is
+        // strictly required. Some older KYC flows (personal kycSubmit) never store
+        // the merchant_agreement upload, but the generated PDF does not need it.
+        if ($signaturePath === null) {
+            abort(404, 'A signature is required to generate the signed agreement.');
         }
 
         $mimeType = mime_content_type($signaturePath) ?: 'image/png';

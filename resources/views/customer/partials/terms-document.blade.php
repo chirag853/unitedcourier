@@ -1010,7 +1010,12 @@
                                         <p class="text-muted small mb-2" style="align-self: flex-end;"><strong>Authorized Signature:</strong></p>
                                         <div id="billSignaturePlaceholder"
                                             style="min-height: 80px; min-width: 220px; max-width: 280px; display: flex; align-items: center; justify-content: center; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; background: #fff;">
-                                            <span class="text-muted small">No signature uploaded yet.</span>
+                                            @if(!empty($signatureDataUri))
+                                                <img src="{{ $signatureDataUri }}" alt="Customer signature"
+                                                    style="max-height: 90px; max-width: 260px; object-fit: contain;">
+                                            @else
+                                                <span class="text-muted small">No signature uploaded yet.</span>
+                                            @endif
                                         </div>
                                         <img id="billSignatureImg" alt="Customer signature"
                                             style="display: none; max-height: 90px; max-width: 280px; object-fit: contain;">

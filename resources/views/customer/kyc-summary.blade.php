@@ -346,6 +346,13 @@
                         $fullPath = asset('uploads/' . ltrim($path, '/'));
                         return '<a href="' . $fullPath . '" target="_blank" class="doc-link"><i class="ti ti-external-link me-1"></i>' . $label . '</a>';
                     };
+
+                    // A signed agreement can only be generated when both the
+                    // customer signature and the accepted merchant agreement exist.
+                    $hasSignedPersonalAgreement = !empty($personalKyc?->signature_document ?: $personalKyc?->signature)
+                        && !empty($personalKyc?->merchant_agreement);
+                    $hasSignedBusinessAgreement = !empty($businessKyc?->signature_document)
+                        && !empty($businessKyc?->merchant_agreement);
                 @endphp
 
                 <!-- Profile Header Card -->
@@ -566,7 +573,14 @@
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-file-upload"></i>Merchant Agreement</span>
-                                        <span class="detail-value">{!! $docLink($personalKyc->merchant_agreement, 'View') !!}</span>
+                                        <span class="detail-value">
+                                            {!! $docLink($personalKyc->merchant_agreement, 'View') !!}
+                                            @if($hasSignedPersonalAgreement)
+                                                <a href="{{ route('customer.kyc.agreement.download') }}" class="btn btn-sm btn-success ms-2">
+                                                    <i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)
+                                                </a>
+                                            @endif
+                                        </span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-checks"></i>Terms Accepted</span>
@@ -695,7 +709,14 @@
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-file-upload"></i>Merchant Agreement</span>
-                                        <span class="detail-value">{!! $docLink($businessKyc->merchant_agreement, 'View') !!}</span>
+                                        <span class="detail-value">
+                                            {!! $docLink($businessKyc->merchant_agreement, 'View') !!}
+                                            @if($hasSignedBusinessAgreement)
+                                                <a href="{{ route('customer.kyc.agreement.download') }}" class="btn btn-sm btn-success ms-2">
+                                                    <i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)
+                                                </a>
+                                            @endif
+                                        </span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-checks"></i>Terms Accepted</span>

@@ -231,25 +231,10 @@
             <div class="col-lg-3 uwd-pp-sidebar-col">
                 <div class="uwd-pp-sticky-nav">
                     <nav id="uwd-pp-nav-list">
-                        <a href="#uwd-col" class="uwd-pp-nav-link uwd-pp-active">{{ $dataCollection->title ?? 'Data Collection' }}</a>
-                        <a href="#uwd-use" class="uwd-pp-nav-link">{{ $dataUsage->title ?? 'Usage of Info' }}</a>
-                        @if($dataSharing)
-                        <a href="#uwd-sha" class="uwd-pp-nav-link">{{ $dataSharing->title ?? 'Data Sharing' }}</a>
-                        @endif
-                        <a href="#uwd-sec" class="uwd-pp-nav-link">{{ $dataSecurity->title ?? 'Security Measures' }}</a>
-                        <a href="#uwd-cok" class="uwd-pp-nav-link">{{ $cookiesPolicy->title ?? 'Cookies Policy' }}</a>
-                        <a href="#uwd-rig" class="uwd-pp-nav-link">{{ $userRights->title ?? 'Your Rights' }}</a>
-                        @if($policyUpdates)
-                        <a href="#uwd-upd" class="uwd-pp-nav-link">{{ $policyUpdates->title ?? 'Policy Updates' }}</a>
-                        @endif
-                        {{-- Dynamically added section nav links --}}
-                        @if($additionalSections->isNotEmpty())
-                            @foreach($additionalSections as $sectionKey => $section)
-                                @if($section && $section->paragraphs)
-                                <a href="#uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-nav-link">{{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</a>
-                                @endif
-                            @endforeach
-                        @endif
+                        @foreach($sections as $sectionKey => $section)
+                            @continue(!$section || (!$section->paragraphs && !$section->list_items))
+                            <a href="#uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-nav-link {{ $loop->first ? 'uwd-pp-active' : '' }}">{{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</a>
+                        @endforeach
                         <a href="#uwd-con" class="uwd-pp-nav-link">Contact Support</a>
                     </nav>
                 </div>
@@ -258,75 +243,51 @@
             <!-- Main Content -->
             <div class="col-lg-9">
                 <div class="uwd-pp-glass-panel">
-                    <span class="uwd-pp-last-updated">Last Updated: {{ $pageMeta->effective_date ?? 'October 2023' }}</span>
-                    
-                    @if($dataCollection)
-                    <section id="uwd-col" class="uwd-pp-section">
-                        <h2><i data-lucide="database"></i> {{ $dataCollection->title ?? 'Information Collection' }}</h2>
-                        <p>{!! $dataCollection->paragraphs ?? 'When you use our worldwide courier services, we collect information that allows us to provide efficient logistics solutions. This includes:' !!}</p>
-                    </section>
-                    @endif
+                    <span class="uwd-pp-last-updated">Last Updated: {{ $pageMeta->effective_date ?? 'October 2025' }}</span>
 
-                    @if($dataUsage)
-                    <section id="uwd-use" class="uwd-pp-section">
-                        <h2><i data-lucide="activity"></i> {{ $dataUsage->title ?? 'How We Use Information' }}</h2>
-                        <p>{!! $dataUsage->paragraphs ?? 'The information we collect is used primarily to fulfill your delivery requests and improve our global network efficiency.' !!}</p>
-                    </section>
-                    @endif
-
-                    @if($dataSecurity)
-                    <section id="uwd-sec" class="uwd-pp-section">
-                        <h2><i data-lucide="shield-check"></i> {{ $dataSecurity->title ?? 'Security & Protection' }}</h2>
-                        <p>{!! $dataSecurity->paragraphs ?? 'We implement enterprise-grade security protocols to safeguard your sensitive data from unauthorized access or disclosure.' !!}</p>
-                    </section>
-                    @endif
-
-                    @if($cookiesPolicy)
-                    <section id="uwd-cok" class="uwd-pp-section">
-                        <h2><i data-lucide="cookie"></i> {{ $cookiesPolicy->title ?? 'Cookies & Tracking' }}</h2>
-                        <p>{!! $cookiesPolicy->paragraphs ?? 'Our digital platforms use "cookies" to recognize your preferences and provide a personalized experience. You can choose to disable cookies through your browser settings, though some website features may not function optimally as a result.' !!}</p>
-                    </section>
-                    @endif
-
-                    @if($userRights)
-                    <section id="uwd-rig" class="uwd-pp-section">
-                        <h2><i data-lucide="user-check"></i> {{ $userRights->title ?? 'Your Legal Rights' }}</h2>
-                        <p>{!! $userRights->paragraphs ?? 'Depending on your jurisdiction (including GDPR or local Indian laws), you have the right to:' !!}</p>
-                    </section>
-                    @endif
-
-                    @if($dataSharing)
-                    <section id="uwd-sha" class="uwd-pp-section">
-                        <h2><i data-lucide="share-2"></i> {{ $dataSharing->title ?? 'Data Sharing' }}</h2>
-                        <p>{!! $dataSharing->paragraphs ?? 'We may share your information with trusted third parties to facilitate our services.' !!}</p>
-                    </section>
-                    @endif
-
-                    @if($policyUpdates)
-                    <section id="uwd-upd" class="uwd-pp-section">
-                        <h2><i data-lucide="refresh-cw"></i> {{ $policyUpdates->title ?? 'Policy Updates' }}</h2>
-                        <p>{!! $policyUpdates->paragraphs ?? 'We may update this privacy policy from time to time.' !!}</p>
-                    </section>
-                    @endif
-
-                    {{-- Dynamically render additional sections added from backend --}}
-                    @if($additionalSections->isNotEmpty())
-                        @foreach($additionalSections as $sectionKey => $section)
-                            @if($section && $section->paragraphs)
-                            <section id="uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-section">
-                                <h2><i data-lucide="file-text"></i> {{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</h2>
-                                <p>{!! $section->paragraphs !!}</p>
-                                @if($section->list_items)
-                                <ul class="uwd-pp-list-group">
-                                    @foreach($section->list_items as $item)
-                                        <li>{{ $item }}</li>
-                                    @endforeach
-                                </ul>
-                                @endif
-                            </section>
+                    @foreach($sections as $sectionKey => $section)
+                        @continue(!$section || (!$section->paragraphs && !$section->list_items))
+                        @php
+                            $sectionIcons = [
+                                'introduction' => 'building-2',
+                                'information_collected' => 'database',
+                                'data_collection' => 'database',
+                                'use_and_purpose' => 'activity',
+                                'data_usage' => 'activity',
+                                'consent' => 'check-circle',
+                                'sharing_of_data' => 'share-2',
+                                'data_sharing' => 'share-2',
+                                'data_security' => 'shield-check',
+                                'retaining_of_data' => 'archive',
+                                'user_responsibilities' => 'user-check',
+                                'user_rights' => 'user-check',
+                                'reach_out_to_us' => 'phone',
+                                'modifications_to_policy' => 'refresh-cw',
+                                'policy_updates' => 'refresh-cw',
+                            ];
+                            $sectionIcon = $sectionIcons[$sectionKey] ?? 'file-text';
+                            // Split paragraphs on a "---" line: part before the list, part after the list
+                            $paragraphParts = preg_split('/\n\s*---\s*\n/', trim((string) $section->paragraphs));
+                            $beforeList = trim($paragraphParts[0] ?? '');
+                            $afterList = trim($paragraphParts[1] ?? '');
+                        @endphp
+                        <section id="uwd-{{ Str::slug($sectionKey) }}" class="uwd-pp-section">
+                            <h2><i data-lucide="{{ $sectionIcon }}"></i> {{ $section->title ?? Str::title(str_replace('_', ' ', $sectionKey)) }}</h2>
+                            @if($beforeList)
+                            <p>{!! nl2br(e($beforeList)) !!}</p>
                             @endif
-                        @endforeach
-                    @endif
+                            @if($section->list_items)
+                            <ul class="uwd-pp-list-group">
+                                @foreach($section->list_items as $item)
+                                    <li>{!! $item !!}</li>
+                                @endforeach
+                            </ul>
+                            @endif
+                            @if($afterList)
+                            <p>{!! nl2br(e($afterList)) !!}</p>
+                            @endif
+                        </section>
+                    @endforeach
 
                     @if($pageMeta)
                     <div class="uwd-pp-footer-cta" id="uwd-con">

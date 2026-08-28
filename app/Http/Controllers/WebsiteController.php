@@ -231,42 +231,26 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
 
     public function privacyPolicy(){
         $pageMeta = PrivacyPolicyPage::bySection('_page_meta')->latest('id')->first();
-        $dataCollection = PrivacyPolicyPage::bySection('data_collection')->latest('id')->first();
-        $dataUsage = PrivacyPolicyPage::bySection('data_usage')->latest('id')->first();
-        $dataSharing = PrivacyPolicyPage::bySection('data_sharing')->latest('id')->first();
-        $dataSecurity = PrivacyPolicyPage::bySection('data_security')->latest('id')->first();
-        $userRights = PrivacyPolicyPage::bySection('user_rights')->latest('id')->first();
-        $cookiesPolicy = PrivacyPolicyPage::bySection('cookies_policy')->latest('id')->first();
-        $policyUpdates = PrivacyPolicyPage::bySection('policy_updates')->latest('id')->first();
 
-        // Fetch ALL additional sections that don't match predefined keys
-        $knownKeys = ['_page_meta', 'data_collection', 'data_usage', 'data_sharing', 'data_security', 'user_rights', 'cookies_policy', 'policy_updates'];
-        $additionalSections = PrivacyPolicyPage::whereNotIn('section_key', $knownKeys)
+        // Fetch ALL content sections (excluding page meta), latest record per section key, ordered by sort_order
+        $sections = PrivacyPolicyPage::where('section_key', '!=', '_page_meta')
             ->ordered()
             ->get()
             ->groupBy('section_key')
             ->map(function ($items) {
                 return $items->last(); // Get the latest record for each section_key
             });
-        
-        return view('privacy-policy', compact(
-            'pageMeta', 'dataCollection', 'dataUsage', 'dataSharing',
-            'dataSecurity', 'userRights', 'cookiesPolicy', 'policyUpdates',
-            'additionalSections'
-        ));
+
+        return view('privacy-policy', compact('pageMeta', 'sections'));
     }
 
     public function refundAndCancellationPolicy(){
         $pageMeta = RefundAndCancellationPolicyPage::bySection('_page_meta')->first();
-        $cancellationPolicy = RefundAndCancellationPolicyPage::bySection('cancellation_policy')->first();
-        $refundEligibility = RefundAndCancellationPolicyPage::bySection('refund_eligibility')->first();
-        $refundProcess = RefundAndCancellationPolicyPage::bySection('refund_process')->first();
-        $nonRefundableItems = RefundAndCancellationPolicyPage::bySection('non_refundable_items')->first();
-        $serviceDelays = RefundAndCancellationPolicyPage::bySection('service_delays')->first();
+        $returnsSection = RefundAndCancellationPolicyPage::bySection('Returns')->first();
+        $cancellationSection = RefundAndCancellationPolicyPage::bySection('Cancellation')->first();
         
         return view('refund-and-cancellation-policy', compact(
-            'pageMeta', 'cancellationPolicy', 'refundEligibility', 'refundProcess', 
-            'nonRefundableItems', 'serviceDelays'
+            'pageMeta', 'returnsSection', 'cancellationSection'
         ));
     }
 
