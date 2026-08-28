@@ -565,7 +565,7 @@
             const height = parseFloat(heightInput.value) || 0;
 
             if (length <= 0 || width <= 0 || height <= 0) {
-                alert('Please enter valid dimensions for all fields.');
+                showAlert('Please enter valid dimensions for all fields.', 'warning');
                 return;
             }
 

@@ -151,7 +151,7 @@ if (businessAadharVerifyBtn) {
         // Aadhaar format: 12 digits, must not start with 0 or 1
         const aadharRegex = /^[2-9][0-9]{11}$/;
         if (!aadharRegex.test(value)) {
-            alert('Please enter a valid 12-digit Aadhaar number. It must not start with 0 or 1.');
+            showAlert('Please enter a valid 12-digit Aadhaar number. It must not start with 0 or 1.', 'warning');
             return;
         }
 
@@ -192,7 +192,7 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
     if (document.getElementById('lutType').checked) {
         const lutFileInput = document.getElementById('lutFileInput');
         if (!lutFileInput || lutFileInput.files.length === 0) {
-            alert('Please upload the LUT document before continuing.');
+            showAlert('Please upload the LUT document before continuing.', 'warning');
             return;
         }
     }
@@ -204,21 +204,21 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
     // Signature document - required
     const businessSignatureFileInput = document.getElementById('businessSignatureFileInput');
     if (!businessSignatureFileInput || businessSignatureFileInput.files.length === 0) {
-        alert('Please upload the authorized signature document before continuing.');
+        showAlert('Please upload the authorized signature document before continuing.', 'warning');
         return;
     }
 
     // Billing address - required
     const billingAddressEl = form.querySelector('textarea[name="billing_address"]');
     if (billingAddressEl && billingAddressEl.value.trim() === '') {
-        alert('Please enter the billing address.');
+        showAlert('Please enter the billing address.', 'warning');
         return;
     }
 
     // Billing contact - required
     const billingContactEl = form.querySelector('input[name="billing_contact"]');
     if (billingContactEl && billingContactEl.value.trim() === '') {
-        alert('Please enter the billing contact number.');
+        showAlert('Please enter the billing contact number.', 'warning');
         return;
     }
 
@@ -228,7 +228,7 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
         const emailValue = billingEmailEl.value.trim();
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (emailValue === '' || !emailRegex.test(emailValue)) {
-            alert('Please enter a valid billing email address.');
+            showAlert('Please enter a valid billing email address.', 'warning');
             return;
         }
     }
@@ -236,14 +236,14 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
     // Merchant agreement - required PDF
     const businessMerchantAgreementFileInput = document.getElementById('businessMerchantAgreementFileInput');
     if (!businessMerchantAgreementFileInput || businessMerchantAgreementFileInput.files.length === 0) {
-        alert('Please upload the signed merchant agreement before continuing.');
+        showAlert('Please upload the signed merchant agreement before continuing.', 'warning');
         return;
     }
 
     // Terms accepted - must be checked
     const businessTermsAccepted = document.getElementById('businessTermsAccepted');
     if (!businessTermsAccepted || !businessTermsAccepted.checked) {
-        alert('Please accept the terms and conditions before continuing.');
+        showAlert('Please accept the terms and conditions before continuing.', 'warning');
         return;
     }
 
@@ -278,9 +278,9 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
                 for (const [key, value] of Object.entries(data.errors)) {
                     errorMessage += `- ${value[0]}\n`;
                 }
-                alert(errorMessage);
+                showAlert(errorMessage, 'error');
             } else {
-                alert(data.message || 'An error occurred. Please try again.');
+                showAlert(data.message || 'An error occurred. Please try again.', 'error');
             }
         }
     })
@@ -289,6 +289,6 @@ document.getElementById('csbvForm').addEventListener('submit', function (e) {
         btn.innerHTML = 'CONTINUE';
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
-        alert('An error occurred. Please try again.');
+        showAlert('An error occurred. Please try again.', 'error');
     });
 });

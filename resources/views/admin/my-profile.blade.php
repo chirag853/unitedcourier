@@ -324,21 +324,21 @@
 
                 if (newPassword && !currentPassword) {
                     e.preventDefault();
-                    alert('Please enter your current password to change the password.');
+                    showAlert('Please enter your current password to change the password.', 'warning');
                     $('#current_password').focus();
                     return false;
                 }
 
                 if (newPassword && newPassword !== confirmPassword) {
                     e.preventDefault();
-                    alert('New password and confirmation password do not match.');
+                    showAlert('New password and confirmation password do not match.', 'warning');
                     $('#new_password_confirmation').focus();
                     return false;
                 }
 
                 if (newPassword && newPassword.length < 6) {
                     e.preventDefault();
-                    alert('New password must be at least 6 characters long.');
+                    showAlert('New password must be at least 6 characters long.', 'warning');
                     $('#new_password').focus();
                     return false;
                 }

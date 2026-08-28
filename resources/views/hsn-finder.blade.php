@@ -1042,7 +1042,7 @@
             // Close modal
             closeCameraModal();
 
-            alert('Photo captured successfully! You can now use it for HSN classification.');
+            showAlert('Photo captured successfully! You can now use it for HSN classification.', 'success');
         }
 
         // Close camera modal

@@ -1250,7 +1250,7 @@
                         }, 500);
                     };
                 } else {
-                    alert('Please allow popups to print the label.');
+                    showAlert('Please allow popups to print the label.', 'warning');
                 }
             }
         }
@@ -1278,13 +1278,14 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        alert(response.message);
-                        // Reload page to reflect changes (shipment moves to Ready to Dispatch tab)
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1000);
+                        showAlert(response.message, 'success', function() {
+                            // Reload page to reflect changes (shipment moves to Ready to Dispatch tab)
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1000);
+                        });
                     } else {
-                        alert(response.message || 'Something went wrong.');
+                        showAlert(response.message || 'Something went wrong.', 'error');
                         $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i> Ready to Dispatch');
                     }
                 },
@@ -1297,7 +1298,7 @@
                             msg = Object.values(xhr.responseJSON.errors).flat().join('\n');
                         }
                     }
-                    alert(msg);
+                    showAlert(msg, 'error');
                     $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i> Ready to Dispatch');
                 }
             });

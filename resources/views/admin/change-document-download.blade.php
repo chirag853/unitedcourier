@@ -308,15 +308,14 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert(data.message);
-                        location.reload();
+                        showAlert(data.message, 'success', function () { location.reload(); });
                     } else {
-                        alert('Error: ' + (data.message || 'Unknown error'));
+                        showAlert('Error: ' + (data.message || 'Unknown error'), 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('An error occurred while deleting the document.');
+                    showAlert('An error occurred while deleting the document.', 'error');
                 });
         }
     }
@@ -339,14 +338,13 @@
                 dataType: 'json',
                 success: function(response) {
                     if (response.success) {
-                        alert(response.message);
-                        location.reload();
+                        showAlert(response.message, 'success', function () { location.reload(); });
                     } else {
-                        alert('Error: ' + (response.message || 'Unknown error'));
+                        showAlert('Error: ' + (response.message || 'Unknown error'), 'error');
                     }
                 },
                 error: function(xhr) {
-                    alert('Error: ' + (xhr.responseJSON?.message || 'An error occurred'));
+                    showAlert('Error: ' + (xhr.responseJSON?.message || 'An error occurred'), 'error');
                 },
                 complete: function() {
                     btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Hero Content');

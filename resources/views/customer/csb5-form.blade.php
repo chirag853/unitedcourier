@@ -757,7 +757,7 @@
                                 console.error('[CSB5] GST verification error:', error);
                                 var message = error && error.message ? error.message : 'GST verification could not be completed.';
                                 setCsbGstVerificationState(false, message, false);
-                                alert(message);
+                                showAlert(message, 'error');
                                 verifyCsbGstBtn.disabled = false;
                                 verifyCsbGstBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> VERIFY GST';
                             }
@@ -765,7 +765,7 @@
 
                         // --- Validation helpers ---
                         function showCsb5ValidationError(message, field) {
-                            alert(message);
+                            showAlert(message, 'warning');
                             if (field) {
                                 if (field.type !== 'file') field.focus();
                                 var container = field.type === 'file' ? field.closest('.doc-item') : field.closest('.input-wrapper');
@@ -893,8 +893,8 @@
                                             Object.keys(data.errors).forEach(function (key) {
                                                 errorMessage += '- ' + data.errors[key][0] + '\n';
                                             });
-                                            alert(errorMessage);
-                                        } else alert(data.message || 'An error occurred. Please try again.');
+                                            showAlert(errorMessage, 'error');
+                                        } else showAlert(data.message || 'An error occurred. Please try again.', 'error');
                                     }
                                 })
                                 .catch(function (error) {
@@ -902,7 +902,7 @@
                                     btn.innerHTML = 'CONTINUE';
                                     btn.style.opacity = '1';
                                     btn.style.pointerEvents = 'auto';
-                                    alert('An error occurred. Please try again.');
+                                    showAlert('An error occurred. Please try again.', 'error');
                                 });
                         });
 

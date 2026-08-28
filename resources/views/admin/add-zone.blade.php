@@ -370,7 +370,7 @@
                 });
                 if (!hasEntry) {
                     e.preventDefault();
-                    alert('Please add at least one zone entry with a zone name.');
+                    showAlert('Please add at least one zone entry with a zone name.', 'warning');
                     return;
                 }
                 $('#submitBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving...');

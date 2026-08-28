@@ -77,7 +77,7 @@ lutBondEndYear.addEventListener('change', syncLutBondYear);
 populateLutBondEndYear(true);
 
 function showCsb5ValidationError(message, field) {
-    alert(message);
+    showAlert(message, 'warning');
     if (field) {
         if (field.type !== 'file') field.focus();
         const container = field.type === 'file' ? field.closest('.doc-item') : field.closest('.input-wrapper');
@@ -207,7 +207,7 @@ verifyCsbGstBtn?.addEventListener('click', async () => {
         console.error('GST verification error:', error);
         const message = error && error.message ? error.message : 'GST verification could not be completed.';
         setCsbGstVerificationState(false, message);
-        alert(message);
+        showAlert(message, 'error');
         verifyCsbGstBtn.disabled = false;
         verifyCsbGstBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> VERIFY GST';
     }
@@ -300,8 +300,8 @@ document.getElementById('csbvForm').addEventListener('submit', function(e) {
             if (data.errors) {
                 let errorMessage = 'Please fix the following errors:\n';
                 for (const [key, value] of Object.entries(data.errors)) errorMessage += `- ${value[0]}\n`;
-                alert(errorMessage);
-            } else alert(data.message || 'An error occurred. Please try again.');
+                showAlert(errorMessage, 'error');
+            } else showAlert(data.message || 'An error occurred. Please try again.', 'error');
         }
     })
     .catch(error => {
@@ -309,6 +309,6 @@ document.getElementById('csbvForm').addEventListener('submit', function(e) {
         btn.innerHTML = 'CONTINUE';
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
-        alert('An error occurred. Please try again.');
+        showAlert('An error occurred. Please try again.', 'error');
     });
 });

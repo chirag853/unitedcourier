@@ -92,7 +92,7 @@
 
         if (!valid && firstInvalid) {
             firstInvalid.focus();
-            alert('Please fill in all required fields before continuing.');
+            showAlert('Please fill in all required fields before continuing.', 'warning');
         }
 
         return valid;
@@ -149,13 +149,13 @@
             var verifiedBadge = document.getElementById('aadharVerifiedBadge');
 
             if (!aadhar || aadhar.length !== 12) {
-                alert('Please enter a valid 12-digit Aadhaar number.');
+                showAlert('Please enter a valid 12-digit Aadhaar number.', 'warning');
                 return;
             }
 
             // Aadhaar must not start with 0 or 1
             if (/^[01]/.test(aadhar)) {
-                alert('Invalid Aadhaar number. Please check and try again.');
+                showAlert('Invalid Aadhaar number. Please check and try again.', 'warning');
                 return;
             }
 
@@ -194,13 +194,13 @@
             var verifiedBadge = document.getElementById('panVerifiedBadge');
 
             if (!pan || pan.length !== 10) {
-                alert('Please enter a valid 10-character PAN number.');
+                showAlert('Please enter a valid 10-character PAN number.', 'warning');
                 return;
             }
 
             // Client-side format check: 5 letters + 4 digits + 1 letter
             if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
-                alert('Invalid PAN format. Expected format: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).');
+                showAlert('Invalid PAN format. Expected format: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).', 'warning');
                 return;
             }
 
@@ -227,14 +227,14 @@
                         verifiedBadge.style.display = 'inline-flex';
                     }
                 } else {
-                    alert(data.message || 'PAN verification failed. Please check the number and try again.');
+                    showAlert(data.message || 'PAN verification failed. Please check the number and try again.', 'error');
                     panVerifyBtn.disabled = false;
                 }
                 panVerifyBtn.innerHTML = originalHTML;
             })
             .catch(function (error) {
                 console.error('PAN verify error:', error);
-                alert('An error occurred during PAN verification. Please try again.');
+                showAlert('An error occurred during PAN verification. Please try again.', 'error');
                 panVerifyBtn.disabled = false;
                 panVerifyBtn.innerHTML = originalHTML;
             });
@@ -320,14 +320,14 @@
             // Validate terms checkbox
             var terms = document.getElementById('termsAccepted');
             if (terms && !terms.checked) {
-                alert('Please accept the terms and conditions to complete your KYC.');
+                showAlert('Please accept the terms and conditions to complete your KYC.', 'warning');
                 return;
             }
 
             // Validate merchant agreement upload
             var agreementInput = document.getElementById('merchantAgreementFileInput');
             if (!agreementInput || agreementInput.files.length === 0) {
-                alert('Please upload the signed merchant agreement.');
+                showAlert('Please upload the signed merchant agreement.', 'warning');
                 return;
             }
 
@@ -368,9 +368,9 @@
                                 errorMessage += '- ' + data.errors[key][0] + '\n';
                             }
                         }
-                        alert(errorMessage);
+                        showAlert(errorMessage, 'error');
                     } else {
-                        alert(data.message || 'An error occurred. Please try again.');
+                        showAlert(data.message || 'An error occurred. Please try again.', 'error');
                     }
                 }
             })
@@ -381,7 +381,7 @@
                     btn.style.opacity = '1';
                     btn.style.pointerEvents = 'auto';
                 }
-                alert('An error occurred while submitting. Please try again.');
+                showAlert('An error occurred while submitting. Please try again.', 'error');
             });
         });
     }

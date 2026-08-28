@@ -700,7 +700,7 @@
         })
         .catch(error => {
             console.error('Error fetching content:', error);
-            alert('Failed to load content data.');
+            showAlert('Failed to load content data.', 'error');
         });
     }
 
@@ -783,16 +783,15 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
-                location.reload();
+                showAlert(data.message, 'success', function () { location.reload(); });
             } else {
                 console.error('Server Error:', data);
-                alert('Error: ' + data.message);
+                showAlert('Error: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Network Error:', error);
-            alert('Network error occurred. Please check your connection and try again.');
+            showAlert('Network error occurred. Please check your connection and try again.', 'error');
         });
 
         // Close modal
@@ -929,12 +928,12 @@
                     previewImg.style.display = 'block';
                 }
             } else {
-                alert('Upload failed: ' + ((data.error && data.error.message) || data.message || 'Unknown error'));
+                showAlert('Upload failed: ' + ((data.error && data.error.message) || data.message || 'Unknown error'), 'error');
             }
         })
         .catch(err => {
             console.error(err);
-            alert('An error occurred while uploading the image.');
+            showAlert('An error occurred while uploading the image.', 'error');
         })
         .finally(() => {
             if (btn) {
@@ -983,15 +982,14 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert(data.message);
-                    location.reload();
+                    showAlert(data.message, 'success', function () { location.reload(); });
                 } else {
-                    alert('Error: ' + (data.message || 'Unknown error'));
+                    showAlert('Error: ' + (data.message || 'Unknown error'), 'error');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while deleting content.');
+                showAlert('An error occurred while deleting content.', 'error');
             });
         }
     }

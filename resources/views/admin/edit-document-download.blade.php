@@ -290,7 +290,7 @@
             const ext = '.' + fileName.split('.').pop();
 
             if (ft && allowedExtensions[ft] && !allowedExtensions[ft].includes(ext)) {
-                alert('Invalid file type! Selected file type is "' + ft.toUpperCase() + '". Allowed extensions: ' + allowedExtensions[ft].join(', '));
+                showAlert('Invalid file type! Selected file type is "' + ft.toUpperCase() + '". Allowed extensions: ' + allowedExtensions[ft].join(', '), 'warning');
                 this.value = '';
                 fileSizeInput.value = '';
                 return;
@@ -315,7 +315,7 @@
 
         const ft = fileTypeSelect.value;
         if (!ft) {
-            alert('Please select a file type.');
+            showAlert('Please select a file type.', 'warning');
             return;
         }
 
@@ -325,7 +325,7 @@
             const fileName = file.name.toLowerCase();
             const ext = '.' + fileName.split('.').pop();
             if (!allowedExtensions[ft].includes(ext)) {
-                alert('File extension "' + ext + '" does not match selected file type "' + ft.toUpperCase() + '". Allowed: ' + allowedExtensions[ft].join(', '));
+                showAlert('File extension "' + ext + '" does not match selected file type "' + ft.toUpperCase() + '". Allowed: ' + allowedExtensions[ft].join(', '), 'warning');
                 return;
             }
         }
@@ -352,21 +352,22 @@
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
                 if (data.success) {
-                    alert(data.message);
-                    if (data.document_id) {
-                        window.location.href = `/admin/edit-document-download/${data.document_id}`;
-                    } else {
-                        window.location.href = '{{ route("admin.change-document-download") }}';
-                    }
+                    showAlert(data.message, 'success', function () {
+                        if (data.document_id) {
+                            window.location.href = `/admin/edit-document-download/${data.document_id}`;
+                        } else {
+                            window.location.href = '{{ route("admin.change-document-download") }}';
+                        }
+                    });
                 } else {
-                    alert('Error: ' + (data.message || 'Unknown error'));
+                    showAlert('Error: ' + (data.message || 'Unknown error'), 'error');
                 }
             })
             .catch(error => {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
                 console.error('Error:', error);
-                alert('An error occurred while saving.');
+                showAlert('An error occurred while saving.', 'error');
             });
     });
     </script>

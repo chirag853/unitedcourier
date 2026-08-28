@@ -339,3 +339,5 @@
         window.setInterval(loadNotifications, 10000);
     });
 </script>
+
+@include('partials.global-alert')

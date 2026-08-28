@@ -1476,13 +1476,13 @@
         .then(function (res) { return res.json(); })
         .then(function (response) {
             if (!response.success || !response.graphic_image) {
-                alert(response.message || 'Label not available for this shipment.');
+                showAlert(response.message || 'Label not available for this shipment.', 'warning');
                 return;
             }
             openLabelFromBase64(response.graphic_image, response.label_format || 'PDF', response.awb_number || invoiceId);
         })
         .catch(function () {
-            alert('Failed to load the label. Please try again.');
+            showAlert('Failed to load the label. Please try again.', 'error');
         });
     }
 

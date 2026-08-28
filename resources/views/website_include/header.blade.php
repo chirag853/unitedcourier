@@ -248,3 +248,5 @@
             </div>
         </div>
     </nav>
+
+@include('partials.global-alert')

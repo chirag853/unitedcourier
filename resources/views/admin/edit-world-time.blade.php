@@ -376,16 +376,15 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert(data.message);
-                    window.location.href = '{{ route("admin.change-world-time") }}';
+                    showAlert(data.message, 'success', function () { window.location.href = '{{ route("admin.change-world-time") }}'; });
                 } else {
                     console.error('Server Error:', data);
-                    alert('Error: ' + data.message);
+                    showAlert('Error: ' + data.message, 'error');
                 }
             })
             .catch(error => {
                 console.error('Network Error:', error);
-                alert('Network error occurred. Please check your connection and try again.');
+                showAlert('Network error occurred. Please check your connection and try again.', 'error');
             });
     });
     </script>

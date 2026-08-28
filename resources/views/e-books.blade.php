@@ -529,7 +529,7 @@ document.querySelectorAll('.reveal').forEach(el => observer3.observe(el));
 <script>
 function openPdfModal(pdfUrl) {
     if (!pdfUrl) {
-        alert('No PDF available for this e-book.');
+        showAlert('No PDF available for this e-book.', 'warning');
         return;
     }
     const iframe = document.getElementById('pdfViewer');

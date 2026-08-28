@@ -3670,7 +3670,7 @@
                     function showKycAlert(title, messageHtml) {
                         const modalEl = document.getElementById('kycAlertModal');
                         if (!modalEl) {
-                            alert(messageHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+                            showAlert(messageHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), 'warning');
                             return;
                         }
                         document.getElementById('kycAlertTitle').textContent = title;

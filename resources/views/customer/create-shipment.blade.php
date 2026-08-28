@@ -10815,7 +10815,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                             confirmButtonColor: '#2563eb'
                         }).then(() => {
                             // window.location.href = @json(route('customer.view-all-shipments'));
-                            alert("hello");
+                            showAlert("hello", 'info');
                         });
                     } else {
                         // Error could be UPS failure or validation error (controller handles both)

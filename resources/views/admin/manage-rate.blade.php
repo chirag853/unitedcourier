@@ -1163,7 +1163,7 @@
             });
             $('#customerExportExcel').on('click', function() {
                 if (selectedCustomerIds.length === 0) {
-                    alert('Please select a customer first to export their rates.');
+                    showAlert('Please select a customer first to export their rates.', 'warning');
                     return;
                 }
                 var params = new URLSearchParams();
@@ -1460,13 +1460,13 @@
                 var price = document.getElementById('addRatePrice').value;
 
                 // Client-side validation
-                if (!serviceId) { alert('Please select a service.'); return; }
+                if (!serviceId) { showAlert('Please select a service.', 'warning'); return; }
                 if (!wtStart || !wtEnd || parseFloat(wtEnd) <= parseFloat(wtStart)) {
-                    alert('Weight End must be greater than Weight Start.');
+                    showAlert('Weight End must be greater than Weight Start.', 'warning');
                     return;
                 }
-                if (zoneSectionVisible && zoneNo === '') { alert('Please select a zone number.'); return; }
-                if (!price || parseFloat(price) < 0) { alert('Please enter a valid price.'); return; }
+                if (zoneSectionVisible && zoneNo === '') { showAlert('Please select a zone number.', 'warning'); return; }
+                if (!price || parseFloat(price) < 0) { showAlert('Please enter a valid price.', 'warning'); return; }
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
@@ -1487,13 +1487,14 @@
                         surcharge_id: $('#addRateSurcharges').val() || [],
                     },
                     success: function(response) {
-                        alert(response.message || 'Rate added successfully.');
-                        // Close modal and reset form
-                        var modal = bootstrap.Modal.getInstance(document.getElementById('addRateModal'));
-                        if (modal) modal.hide();
-                        document.getElementById('addRateForm').reset();
-                        // Reload the page so the new rate appears in the table
-                        location.reload();
+                        showAlert(response.message || 'Rate added successfully.', 'success', function() {
+                            // Close modal and reset form
+                            var modal = bootstrap.Modal.getInstance(document.getElementById('addRateModal'));
+                            if (modal) modal.hide();
+                            document.getElementById('addRateForm').reset();
+                            // Reload the page so the new rate appears in the table
+                            location.reload();
+                        });
                     },
                     error: function(xhr) {
                         var msg = 'Failed to add rate. Please try again.';
@@ -1503,7 +1504,7 @@
                             var errs = xhr.responseJSON.errors;
                             msg = Object.values(errs).flat().join('\n');
                         }
-                        alert(msg);
+                        showAlert(msg, 'error');
                     },
                     complete: function() {
                         submitBtn.disabled = false;
@@ -1620,9 +1621,9 @@
                 var serviceId = document.getElementById('bulkService').value;
                 var zones = getCheckedBulkZones();
                 var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
-                if (!country) { alert('Please select a country first.'); return; }
-                if (!serviceId) { alert('Please select a service.'); return; }
-                if (!withoutZone && !zones.length) { alert('Please select at least one zone.'); return; }
+                if (!country) { showAlert('Please select a country first.', 'warning'); return; }
+                if (!serviceId) { showAlert('Please select a service.', 'warning'); return; }
+                if (!withoutZone && !zones.length) { showAlert('Please select at least one zone.', 'warning'); return; }
 
                 var params = new URLSearchParams();
                 params.append('service_id', serviceId);
@@ -1641,9 +1642,9 @@
                 var zones = getCheckedBulkZones();
                 var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
                 var fileInput = form.querySelector('input[name="rate_file"]');
-                if (!serviceId) { alert('Please select a service.'); return; }
-                if (!withoutZone && !zones.length) { alert('Please select at least one zone to upload.'); return; }
-                if (!fileInput.files || !fileInput.files.length) { alert('Please choose an Excel/CSV file.'); return; }
+                if (!serviceId) { showAlert('Please select a service.', 'warning'); return; }
+                if (!withoutZone && !zones.length) { showAlert('Please select at least one zone to upload.', 'warning'); return; }
+                if (!fileInput.files || !fileInput.files.length) { showAlert('Please choose an Excel/CSV file.', 'warning'); return; }
                 var btn = this;
                 btn.disabled = true;
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading...';
@@ -1679,7 +1680,7 @@
         function saveRate(rateId) {
             var price = $('#rate-input-' + rateId).val();
             if (price === '' || isNaN(price) || parseFloat(price) < 0) {
-                alert('Please enter a valid price.');
+                showAlert('Please enter a valid price.', 'warning');
                 return;
             }
 
@@ -1702,10 +1703,10 @@
                         var msg = xhr.responseJSON && xhr.responseJSON.message
                             ? xhr.responseJSON.message
                             : 'This rate cannot be edited.';
-                        alert(msg);
+                        showAlert(msg, 'error');
                         cancelEdit(rateId);
                     } else {
-                        alert('Failed to update rate. Please try again.');
+                        showAlert('Failed to update rate. Please try again.', 'error');
                     }
                 }
             });
@@ -1730,7 +1731,7 @@
                     $('#noCustomerSelected').hide();
                 },
                 error: function() {
-                    alert('Failed to load customer rates.');
+                    showAlert('Failed to load customer rates.', 'error');
                 }
             });
         }
@@ -1860,7 +1861,7 @@
         function saveCustomerRate(rateId) {
             var price = $('#cust-rate-input-' + rateId).val();
             if (price === '' || isNaN(price) || parseFloat(price) < 0) {
-                alert('Please enter a valid price.');
+                showAlert('Please enter a valid price.', 'warning');
                 return;
             }
 
@@ -1883,10 +1884,10 @@
                         var msg = xhr.responseJSON && xhr.responseJSON.message
                             ? xhr.responseJSON.message
                             : 'This rate cannot be edited.';
-                        alert(msg);
+                        showAlert(msg, 'error');
                         cancelCustomerEdit(rateId);
                     } else {
-                        alert('Failed to update customer rate. Please try again.');
+                        showAlert('Failed to update customer rate. Please try again.', 'error');
                     }
                 }
             });

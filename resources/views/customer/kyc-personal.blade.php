@@ -543,7 +543,7 @@
                                     ['image/jpeg', 'image/png'].indexOf(file.type) === -1 ||
                                     file.size > 5 * 1024 * 1024)) {
                                 input.value = '';
-                                alert('Aadhaar and PAN documents must be JPG, JPEG, or PNG images up to 5 MB.');
+                                showAlert('Aadhaar and PAN documents must be JPG, JPEG, or PNG images up to 5 MB.', 'warning');
                                 return;
                             }
                             var name = file.name;

@@ -507,7 +507,7 @@
             $previewBtn.on('click', function () {
                 var file = $input[0].files[0];
                 if (!file) {
-                    alert('Please select an Excel file first.');
+                    showAlert('Please select an Excel file first.', 'warning');
                     return;
                 }
 
@@ -532,7 +532,7 @@
                             var modal = new bootstrap.Modal(document.getElementById('previewModal'));
                             modal.show();
                         } else {
-                            alert(response.message || 'Failed to generate preview.');
+                            showAlert(response.message || 'Failed to generate preview.', 'error');
                         }
                     },
                     error: function (xhr) {
@@ -541,7 +541,7 @@
                         if (xhr.responseJSON && xhr.responseJSON.message) {
                             msg = xhr.responseJSON.message;
                         }
-                        alert(msg);
+                        showAlert(msg, 'error');
                     }
                 });
             });
@@ -717,7 +717,7 @@
                     });
                 }
                 if (missingCount > 0) {
-                    alert('Please select a rate for all ' + missingCount + ' shipment(s) before confirming.');
+                    showAlert('Please select a rate for all ' + missingCount + ' shipment(s) before confirming.', 'warning');
                     return;
                 }
                 // Populate the hidden field with the selected rate map
