@@ -32,6 +32,7 @@ class Customer extends Authenticatable
         'aadhar_number',
         'business_category_id',
         'is_terms_accepted',
+        'merchant_agreement_accepted_at',
         'email_verified',
         'aadhar_verified',
         'pan_number',
@@ -47,6 +48,7 @@ class Customer extends Authenticatable
 
     protected $casts = [
         'is_terms_accepted' => 'boolean',
+        'merchant_agreement_accepted_at' => 'datetime',
         'email_verified' => 'boolean',
         'aadhar_verified' => 'boolean',
         'pan_verified' => 'boolean',

@@ -654,6 +654,9 @@ class CustomerController extends Controller
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
         $isAadhaarOptional = $this->isCourierOrAggregator($customer);
         $kycType = strtolower($userType) === 'business' ? 'business' : 'personal';
+        // Whether the customer has accepted the Merchant Agreement (welcome modal).
+        // Persisted server-side so the modal does not reappear after refresh.
+        $merchantAgreementAccepted = (bool) $customer->merchant_agreement_accepted_at;
         $kycDraft = KycDraft::where('customer_id', $customerId)
             ->where('kyc_type', $kycType)
             ->first();
@@ -757,11 +760,35 @@ class CustomerController extends Controller
                 'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
                 'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
                 'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-                'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft'
+                'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft',
+                'merchantAgreementAccepted'
             ))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', '0');
+    }
+
+    /**
+     * Persist the customer's acceptance of the Merchant Agreement (welcome modal).
+     * Called from the Accept button in the KYC welcome modal.
+     */
+    public function acceptMerchantAgreement(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $customer = auth()->guard('customer')->user();
+
+        $customer->merchant_agreement_accepted_at = now();
+        $customer->is_terms_accepted = true;
+        $customer->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Merchant agreement accepted.',
+            'accepted_at' => $customer->merchant_agreement_accepted_at?->toISOString(),
+        ]);
     }
 
     public function dashboardChartData(Request $request)
@@ -1372,6 +1399,29 @@ class CustomerController extends Controller
                 ->latest()
                 ->first();
             $storedDraftDocs = is_array($businessDraft?->form_data) ? $businessDraft->form_data : [];
+
+            // When no draft row exists (a rejected submission clears the draft and
+            // its files), the dashboard rebuilds the wizard from the latest CsbForm
+            // / KycDetail records. Consult those persisted document columns as well
+            // so the server-side fallback matches what the customer sees on screen
+            // after a refresh. CsbForm values take precedence, mirroring the merge
+            // order used to build the in-memory fallback draft in dashboard().
+            $storedDraftDocs = array_merge($storedDraftDocs, array_filter([
+                'gst_certificate_document' => $existingCsbForm?->gst_certificate_document
+                    ?: $existingCsbForm?->gst_document
+                    ?: $existingBusinessKyc?->gst_certificate_document
+                    ?: $existingPersonalKyc?->gst_certificate_document,
+                'aadhar_front_document' => $existingCsbForm?->aadhar_document
+                    ?: $existingBusinessKyc?->aadhar_front_document,
+                'aadhar_back_document' => $existingBusinessKyc?->aadhar_back_document,
+                'pan_document' => $existingBusinessKyc?->pan_document,
+                'lut_document' => $existingCsbForm?->lut_document,
+                'iec_document' => $existingCsbForm?->iec_document,
+                'ad_code_document' => $existingCsbForm?->ad_code_document,
+                'signature_document' => $existingCsbForm?->signature_document
+                    ?: $existingBusinessKyc?->signature_document,
+            ], fn ($value) => ! empty($value)));
+
             $storedDraftPath = fn (string $field): ?string => (function () use ($field, $storedDraftDocs) {
                 $path = $storedDraftDocs[$field] ?? null;
 

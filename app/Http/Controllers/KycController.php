@@ -77,14 +77,32 @@ class KycController extends Controller
             }
         }
 
-        // Merge autosaved form fields with the existing draft. Cashfree
-        // verification markers are stored in the same form_data payload and
-        // must survive later step saves, refreshes, and logout/login cycles.
         $draft = KycDraft::firstOrNew([
             'customer_id' => $customer->id,
             'kyc_type' => $validated['kyc_type'],
         ]);
         $existingFormData = is_array($draft->form_data) ? $draft->form_data : [];
+
+        // Merge autosaved form fields with the existing draft. Cashfree
+        // verification markers are stored in the same form_data payload and
+        // must survive later step saves, refreshes, and logout/login cycles.
+        //
+        // Document paths are persisted immediately by the upload endpoint. A
+        // debounced autosave may fire afterwards with an empty string in the
+        // same document field (e.g. gst_certificate_document), so empty/null
+        // document values must never overwrite a stored path.
+        $documentFields = [
+            'gst_certificate_document', 'aadhar_front_document', 'aadhar_back_document',
+            'pan_document', 'signature_document', 'lut_document', 'iec_document',
+            'ad_code_document',
+        ];
+        foreach ($documentFields as $docField) {
+            $incoming = $formData[$docField] ?? null;
+            if (($incoming === null || $incoming === '') && !empty($existingFormData[$docField])) {
+                unset($formData[$docField]);
+            }
+        }
+
         $draft->current_step = (int) $validated['current_step'];
         $draft->form_data = array_merge($existingFormData, $formData);
         $draft->save();

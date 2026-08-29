@@ -1209,7 +1209,8 @@
                                 </p>
 
                                 <div class="text-center mt-3">
-                                    <button type="button" class="btn btn-primary px-5 py-2" data-bs-dismiss="modal"
+                                    <button type="button" id="kycWelcomeAcceptBtn"
+                                        class="btn btn-primary px-5 py-2"
                                         style="min-width:250px;">
                                         Accept
                                     </button>
@@ -3087,11 +3088,59 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     </div>
 
                     <script>
-                    // Only show the welcome popup for a new KYC; resumed drafts open on their saved step.
+                    // The welcome popup is shown until the customer explicitly accepts the
+                    // Merchant Agreement. Acceptance is persisted server-side, so it will not
+                    // reappear after a refresh (even when a KYC draft row exists).
+                    let merchantAgreementAccepted = @json($merchantAgreementAccepted);
+                    const kycAgreementAcceptUrl = @json(route('customer.kyc.agreement.accept'));
                     document.addEventListener('DOMContentLoaded', function() {
-                        const hasSavedKycDraft = @json((bool) $kycDraft);
                         const welcomeModalEl = document.getElementById('kycWelcomeModal');
-                        if (welcomeModalEl && !hasSavedKycDraft) {
+                        const acceptBtn = document.getElementById('kycWelcomeAcceptBtn');
+
+                        // Persist acceptance server-side so the modal does not
+                        // reappear after a refresh.
+                        if (acceptBtn) {
+                            acceptBtn.addEventListener('click', function() {
+                                acceptBtn.disabled = true;
+                                fetch(kycAgreementAcceptUrl, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Accept': 'application/json',
+                                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                            'X-Requested-With': 'XMLHttpRequest'
+                                        }
+                                    })
+                                    .then(response => response.json().catch(() => ({})))
+                                    .then(data => {
+                                        if (data && data.success) {
+                                            merchantAgreementAccepted = true;
+                                        }
+                                        // Keep the KYC flow usable even if the
+                                        // persistence call fails (modal closes).
+                                        kycData.terms_accepted = true;
+                                        if (welcomeModalEl) {
+                                            const modal = bootstrap.Modal.getInstance(welcomeModalEl);
+                                            if (modal) {
+                                                modal.hide();
+                                            }
+                                        }
+                                    })
+                                    .catch(() => {
+                                        kycData.terms_accepted = true;
+                                        if (welcomeModalEl) {
+                                            const modal = bootstrap.Modal.getInstance(welcomeModalEl);
+                                            if (modal) {
+                                                modal.hide();
+                                            }
+                                        }
+                                    })
+                                    .finally(() => {
+                                        acceptBtn.disabled = false;
+                                    });
+                            });
+                        }
+
+                        if (welcomeModalEl && !merchantAgreementAccepted) {
                             const welcomeModal = new bootstrap.Modal(welcomeModalEl, {
                                 backdrop: 'static',
                                 keyboard: false
@@ -4666,7 +4715,16 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             missingItems.push('Business Name (as registered under this GSTIN)');
                             invalidFields.push(businessNameField);
                         }
-                        if (!gstFileInput || !gstFileInput.files || !gstFileInput.files[0]) {
+                        // A previously uploaded GST certificate may already be stored as a
+                        // path on the server (from the draft/upload endpoint or a restored
+                        // CSB form). In that case verification can reuse the stored path
+                        // instead of forcing the customer to upload the PDF again.
+                        const hasStoredGstDoc = kycData.gst_certificate_document &&
+                            typeof kycData.gst_certificate_document === 'string' &&
+                            kycData.gst_certificate_document.trim() !== '';
+                        const hasFreshGstFile = gstFileInput && gstFileInput.files && gstFileInput.files[0];
+
+                        if (!hasFreshGstFile && !hasStoredGstDoc) {
                             missingItems.push('GST Certificate PDF');
                             invalidFields.push(gstFileInput ? gstFileInput.closest('#bizGstCertUploadArea') : null);
                         }
@@ -4682,14 +4740,19 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             );
                             return;
                         }
-                        if (!validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
+                        if (hasFreshGstFile && !validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
                             return;
                         }
 
                         const verifyData = new FormData();
                         verifyData.append('gst_number', gstValue);
                         verifyData.append('business_name', businessName);
-                        verifyData.append('gst_certificate_document', gstFileInput.files[0]);
+                        if (hasFreshGstFile) {
+                            verifyData.append('gst_certificate_document', gstFileInput.files[0]);
+                        } else if (hasStoredGstDoc) {
+                            // The server accepts the already-uploaded document path.
+                            verifyData.append('gst_certificate_document_path', kycData.gst_certificate_document);
+                        }
 
                         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
                         verifyBtn.disabled = true;
@@ -4987,7 +5050,10 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             if (input && input.files && input.files[0]) {
                                 formData.append(fieldName, input.files[0]);
                             } else if (kycData[fieldName] && typeof kycData[fieldName] === 'string'
-                                && kycData[fieldName].startsWith('uploads/')) {
+                                && kycData[fieldName].trim() !== '') {
+                                // The stored document path may be restored from the
+                                // persisted draft/CsbForm even when it does not start
+                                // with "uploads/". Any non-empty string path is sent.
                                 formData.append(fieldName + '_path', kycData[fieldName]);
                             }
                         });

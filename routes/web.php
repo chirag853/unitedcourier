@@ -646,6 +646,7 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::post('/kyc-draft', [KycController::class, 'saveKycDraft'])->name('kyc.draft.save');
     Route::post('/kyc-draft-file', [KycController::class, 'uploadKycDraftFile'])->name('kyc.draft-file');
     Route::post('/kyc-submit', [KycController::class, 'kycSubmit'])->name('kyc.submit');
+    Route::post('/kyc-agreement/accept', [CustomerController::class, 'acceptMerchantAgreement'])->name('kyc.agreement.accept');
     Route::post('/verify-gst', [KycController::class, 'verifyGst'])->name('verify.gst');
     Route::post('/verify-aadhar', [KycController::class, 'verifyAadhar'])->name('verify.aadhar');
     Route::post('/verify-pan', [KycController::class, 'verifyPan'])->name('verify.pan');
