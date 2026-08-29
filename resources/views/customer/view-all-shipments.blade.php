@@ -414,7 +414,7 @@
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
                     <div>
-                        <h4 class="mb-1">View All Shipments</h4>
+                        <!-- <h4 class="mb-1">View All Orders</h4> -->
                     </div>
                     <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
                         <div class="bulk-actions-row">
@@ -468,7 +468,7 @@
                         </div>
 
                         <a href="{{ url('/customer/create-shipment') }}" class="btn btn-primary d-flex align-items-center">
-                            <i class="ti ti-plus me-1"></i> Add New Shipment
+                            <i class="ti ti-plus me-1"></i> Add New Orders
                         </a>
                     </div>
                 </div>
