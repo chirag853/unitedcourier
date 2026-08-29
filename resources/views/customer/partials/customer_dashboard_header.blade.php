@@ -194,14 +194,14 @@
                         <a href="javascript:void(0);"
                             class="topbar-link dropdown-toggle drop-arrow-none position-relative"
                             data-bs-toggle="dropdown" data-bs-offset="0,22" aria-haspopup="false" aria-expanded="false">
-                            <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-18" style="width:38px;height:38px;" alt="user-initial">{{ $customerInitial }}</div>
+                            <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-18" style="width:38px;background: linear-gradient(to right, #2563eb, #9333ea);height:38px;" alt="user-initial">{{ $customerInitial }}</div>
                             <span class="online text-success"><i
                                     class="ti ti-circle-filled d-flex bg-white rounded-circle border border-1 border-white"></i></span>
                         </a>
                         <div class="dropdown-menu dropdown-menu-end dropdown-menu-md p-2">
 
                             <div class="d-flex align-items-center bg-light rounded-3 p-2 mb-2">
-                                <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-16" style="width:42px;height:42px;">{{ $customerInitial }}</div>
+                                <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-16" style="width:38px;background: linear-gradient(to right, #2563eb, #9333ea);height:38px;">{{ $customerInitial }}</div>
                                 <div class="ms-2">
                                     <p class="fw-medium text-dark mb-0">{{ $customerFullName }}</p>
                                     <span class="d-block fs-13">Customer</span>
@@ -219,7 +219,7 @@
 
                             <!-- Item-->
                             <!-- isme achor tag mai help and support ka url dena hai -->
-                            <a href="{{ route('contact-us') }}" class="dropdown-item">
+                            <a href="{{ route('contact-us') }}" target="blank" class="dropdown-item">
                                 <i class="ti ti-help-circle me-1 align-middle"></i>
                                 <span class="align-middle">Help & Support</span>
                             </a>

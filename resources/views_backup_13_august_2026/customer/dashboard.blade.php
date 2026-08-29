@@ -1544,8 +1544,7 @@
                                         legal heirs, executors, administrators, successors, affiliates, and permitted
                                         assigns) <strong>ON THE ONE PART</strong> and UNITED WORLDWIDE COURIERS PVT LTD
                                         , a company registered under the Companies Act, 1956, having its registered
-                                        office at Building no 1, Lower Ground Floor, Khasra No 505, Bypass Road,
-                                        Mahipalpur Extension, Mahipalpur, New Delhi, Delhi 110037, (hereinafter referred
+                                        office at Building A-219, First Floor, Road No. 5 Mahipalpur Extension, New Delhi 110037, (hereinafter referred
                                         to as "United Worldwide Couriers" or "We" or "Our" or "Us", which expression
                                         shall, unless it is repugnant to the subject or context thereof, mean and
                                         include its successors, affiliates and assigns) <strong>ON THE OTHER
