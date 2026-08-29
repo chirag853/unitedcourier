@@ -5025,7 +5025,8 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                         messageDiv.className = 'text-success mx-auto';
                                     }
                                     if (submitBtn) {
-                                        submitBtn.innerHTML = 'Go to Dashboard';
+                                        submitBtn.innerHTML = 'Redirecting to Dashboard...';
+                                        submitBtn.disabled = true;
                                         submitBtn.onclick = function() {
                                             if (data.redirect) {
                                                 window.location.href = data.redirect;
@@ -5034,6 +5035,14 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                             }
                                         };
                                     }
+                                    // Show the Activation Pending screen for 5 seconds, then auto-refresh
+                                    setTimeout(function() {
+                                        if (data.redirect) {
+                                            window.location.href = data.redirect;
+                                        } else {
+                                            location.reload();
+                                        }
+                                    }, 5000);
                                 } else {
                                     const validationErrors = data.errors
                                         ? Object.values(data.errors).flat().join('\n')
@@ -5138,9 +5147,13 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
 
                                     // Update button
                                     if (submitBtn) {
-                                        submitBtn.innerHTML = 'Go to Dashboard';
+                                        submitBtn.innerHTML = 'Redirecting to Dashboard...';
+                                        submitBtn.disabled = true;
                                         submitBtn.onclick = () => location.reload();
                                     }
+
+                                    // Show the Activation Pending screen for 5 seconds, then auto-refresh
+                                    setTimeout(() => location.reload(), 5000);
                                 } else {
                                     // Show error with the actual reason (validation errors or server message)
                                     const validationErrors = data.errors
