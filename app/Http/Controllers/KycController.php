@@ -1206,6 +1206,20 @@ class KycController extends Controller
     }
 
     /**
+     * Generate a globally-unique verification ID for Cashfree Bharat OCR requests.
+     *
+     * Cashfree rejects duplicate verification IDs with a
+     * "verification id already exists" error, so the previously used
+     * 4-digit random number (random_int(1000, 9999), only 9,000 possible
+     * values) was collision-prone across repeated attempts and customers.
+     * A UUID (hyphens removed) guarantees uniqueness per request.
+     */
+    private function generateVerificationId(): string
+    {
+        return str_replace('-', '', (string) Str::uuid());
+    }
+
+    /**
      * Verify an Aadhaar front image through Cashfree Bharat OCR during KYC.
      */
     public function verifyAadhar(Request $request)
@@ -1263,7 +1277,7 @@ class KycController extends Controller
                 ], 422);
             }
             [$frontRealPath, $frontOriginalName] = $frontFile;
-            $verificationId = (string) random_int(1000, 9999);
+            $verificationId = $this->generateVerificationId();
             $fileStream = fopen($frontRealPath, 'r');
             if ($fileStream === false) {
                 throw new \RuntimeException('Unable to read the Aadhaar front image.');
@@ -1458,7 +1472,7 @@ class KycController extends Controller
                 ], 422);
             }
             [$frontRealPath, $frontOriginalName] = $frontFile;
-            $verificationId = (string) random_int(1000, 9999);
+            $verificationId = $this->generateVerificationId();
             $fileStream = fopen($frontRealPath, 'r');
             if ($fileStream === false) {
                 throw new \RuntimeException('Unable to read the Aadhaar front image.');
@@ -1674,7 +1688,7 @@ class KycController extends Controller
                 ], 422);
             }
 
-            $verificationId = (string) random_int(1000, 9999);
+            $verificationId = $this->generateVerificationId();
             try {
                 $cashfreeResponse = Http::acceptJson()
                     ->withHeaders([
