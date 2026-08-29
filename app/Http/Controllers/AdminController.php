@@ -5178,8 +5178,14 @@ class AdminController extends Controller
     public function exportKycExcel(Request $request)
     {
         $status = $request->query('status', 'all');
+        $customerId = $request->query('customer_id');
 
         $query = KycDetail::with(['customer.csbForm', 'customer.businessCategory']);
+
+        // When a specific customer is provided, limit the export to that customer only.
+        if (! empty($customerId)) {
+            $query->where('customer_id', (int) $customerId);
+        }
 
         if ($status === 'pending') {
             $query->whereIn('kyc_status', ['pending', 'under_review']);
@@ -5274,7 +5280,7 @@ class AdminController extends Controller
             )->setAutoSize(true);
         }
 
-        $fileName = 'kyc_records_' . $status . '_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
+        $fileName = 'kyc_records_' . ($customerId ? 'customer_' . (int) $customerId . '_' : '') . $status . '_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
 
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
 

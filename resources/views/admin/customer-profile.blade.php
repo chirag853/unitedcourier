@@ -451,8 +451,8 @@
                         <i class="ti ti-arrow-left"></i> Back
                     </a>
                     <div class="d-flex gap-2 flex-wrap">
-                        <a href="{{ route('admin.kyc-export', ['status' => 'all']) }}" class="action-btn btn-export">
-                            <i class="ti ti-file-export"></i> Export All KYC (Excel)
+                        <a href="{{ route('admin.kyc-export', ['status' => 'all', 'customer_id' => $customer->id]) }}" class="action-btn btn-export">
+                            <i class="ti ti-file-export"></i> Export Customer KYC (Excel)
                         </a>
                         @if($customer->status)
                             <form action="{{ route('admin.customer.toggle-status', $customer->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to DEACTIVATE this account? The customer will not be able to log in.');">
