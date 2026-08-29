@@ -1515,11 +1515,31 @@ class CustomerController extends Controller
                 ]);
             }
 
+            // A previously verified GST (stored on a prior KYC / CSB-V
+            // submission and already verified through Cashfree) can be reused
+            // during re-KYC without forcing the customer to click VERIFY GST
+            // again, as long as the submitted values exactly match that
+            // verified database record. Any change forces a fresh Cashfree
+            // verification through the session check below. This mirrors the
+            // existing $matchesVerifiedPan behaviour for PAN.
+            $matchesVerifiedGst = $hasGstIdentity
+                && $canReuseVerifiedGst
+                && hash_equals(
+                    strtoupper(preg_replace('/\s+/', '', (string) $verifiedGstSource->gst_number)),
+                    $gstNumber
+                )
+                && strcasecmp(
+                    trim((string) $verifiedGstSource->organization_name),
+                    $gstBusinessName
+                ) === 0;
+
             // The submitted GSTIN is accepted only when the exact same values
             // were verified through Cashfree via a VERIFY click (session state
-            // persisted by KycVerificationState). Any changed GSTIN or Business
-            // Name forces the customer to click VERIFY GST again.
-            if ($hasGstIdentity && (
+            // persisted by KycVerificationState), or when they exactly match a
+            // previously verified GST already stored in the database. Any
+            // changed GSTIN or Business Name forces the customer to click
+            // VERIFY GST again.
+            if ($hasGstIdentity && ! $matchesVerifiedGst && (
                 session('kyc_gst_number') !== $gstNumber
                 || ! session('kyc_gst_cashfree_verified')
                 || strcasecmp(

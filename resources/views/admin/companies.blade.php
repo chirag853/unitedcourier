@@ -135,6 +135,75 @@
         .dataTables_wrapper .dataTables_paginate {
             margin-top: 8px;
         }
+        /* ===== Table scroll & alignment fixes ===== */
+        .table-scroll-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .table-scroll-wrap .dataTables_wrapper {
+            padding: 0;
+        }
+        .table-scroll-wrap .dataTables_scroll {
+            width: 100% !important;
+        }
+        .table-scroll-wrap .dataTables_scrollHeadInner,
+        .table-scroll-wrap .dataTables_scrollHeadInner table.dataTable {
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        .table-scroll-wrap .dataTables_scrollBody {
+            overflow: auto !important;
+        }
+        .table-scroll-wrap table.dataTable {
+            width: 100% !important;
+            margin: 0 !important;
+            border-collapse: separate !important;
+            border-spacing: 0;
+        }
+        .table-scroll-wrap table.dataTable thead th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            white-space: nowrap;
+            vertical-align: middle;
+            padding: 12px 14px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .table-scroll-wrap table.dataTable tbody td {
+            vertical-align: middle;
+            padding: 10px 14px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .table-scroll-wrap table.dataTable tbody td.from-to-cell {
+            white-space: normal;
+            min-width: 280px;
+        }
+        .table-scroll-wrap table.dataTable tbody td.consignee-cell {
+            white-space: normal;
+            min-width: 220px;
+        }
+        .table-scroll-wrap table.dataTable tbody tr:nth-child(even) {
+            background-color: #fafbfc;
+        }
+        .table-scroll-wrap table.dataTable tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_length,
+        .table-scroll-wrap .dataTables_wrapper .dataTables_filter {
+            margin-bottom: 0;
+            padding: 12px 16px 4px;
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_info,
+        .table-scroll-wrap .dataTables_wrapper .dataTables_paginate {
+            margin-top: 0;
+            padding: 8px 16px 12px;
+        }
         /* Tab card styles */
         .tab-card {
             border: 1px solid #e5e7eb;
@@ -196,6 +265,41 @@
         .btn-print-label:hover {
             background-color: #155e75;
             color: white;
+        }
+        /* Shipment From/To route display (matches customer view-all-shipments) */
+        .shipment-route-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            transform: translateY(-50%);
+            background: repeating-linear-gradient(
+                90deg,
+                #9ca3af 0 7px,
+                transparent 7px 12px
+            );
+            background-size: 12px 2px;
+            animation: shipment-route-flow .6s linear infinite;
+        }
+        .shipment-route-plane {
+            position: absolute;
+            left: 50%;
+            z-index: 1;
+            padding: 0 4px;
+            line-height: 1;
+            background: #fff;
+            transform: translateX(-50%);
+        }
+        @keyframes shipment-route-flow {
+            to {
+                background-position: 12px 0;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .shipment-route-line {
+                animation: none;
+            }
         }
     </style>
 
@@ -314,20 +418,18 @@
                         <!-- ===== TAB 1: Manifested ===== -->
                         <div class="tab-pane fade show active" id="manifestedPane" role="tabpanel" aria-labelledby="manifested-tab">
                             <div class="card-body">
-                                <div class="table-responsive">
+                                <div class="table-scroll-wrap">
                                     <table id="manifestedTable" class="table table-bordered table-hover">
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
                                                 <th>AWB Number</th>
+                                                <th>From / To</th>
                                                 <th>Customer Name</th>
-                                                <th>Customer Email</th>
                                                 <th>Shipper Company</th>
                                                 <th>Consignee</th>
-                                                <th>Destination</th>
                                                 <th>Invoice No.</th>
                                                 <th>Amount</th>
-                                                <th>Currency</th>
                                                 <th>Status</th>
                                                 <th>Created</th>
                                                 <th>Action</th>
@@ -340,29 +442,57 @@
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
                                                 </td>
+                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
+                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
+                                                    @endphp
+                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
+                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
+                                                        </div>
+                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                            <span class="shipment-route-line" aria-hidden="true"></span>
+                                                            <span class="shipment-route-plane">
+                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                            </span>
+                                                        </div>
+                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <span class="customer-name-link" title="Click to view details">
                                                         {{ $shipment->first_name }} {{ $shipment->last_name }}
                                                     </span>
                                                 </td>
-                                                <td>{{ $shipment->customer_email ?? 'N/A' }}</td>
                                                 <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                                <td>
-                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                                    @if($shipment->consignee_state || $shipment->shipper_state)
-                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                                    @endif
+                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
+                                                    @endphp
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
+                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
+                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
+                                                        @endif
+                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                        @if($shipment->consignee_zip)
+                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                                 <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
                                                 <td>
-                                                    @if($shipment->invoice_amount)
-                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @if($shipment->shipper_total_price)
+                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
                                                     @else
                                                         N/A
                                                     @endif
                                                 </td>
-                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
                                                 <td>
                                                     @if($shipment->status === 'cancelled')
                                                         <span class="status-cancelled">Cancelled</span>
@@ -387,20 +517,18 @@
                         <!-- ===== TAB 2: Assigned for Pickup ===== -->
                         <div class="tab-pane fade" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
                             <div class="card-body">
-                                <div class="table-responsive">
+                                <div class="table-scroll-wrap">
                                     <table id="assignedTable" class="table table-bordered table-hover">
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
                                                 <th>AWB Number</th>
+                                                <th>From / To</th>
                                                 <th>Customer Name</th>
-                                                <th>Customer Email</th>
                                                 <th>Shipper Company</th>
                                                 <th>Consignee</th>
-                                                <th>Destination</th>
                                                 <th>Invoice No.</th>
                                                 <th>Amount</th>
-                                                <th>Currency</th>
                                                 <th>Pickup Type</th>
                                                 <th>Pickup Person</th>
                                                 <th>Created</th>
@@ -414,29 +542,57 @@
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
                                                 </td>
+                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
+                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
+                                                    @endphp
+                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
+                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
+                                                        </div>
+                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                            <span class="shipment-route-line" aria-hidden="true"></span>
+                                                            <span class="shipment-route-plane">
+                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                            </span>
+                                                        </div>
+                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <span class="customer-name-link" title="Click to view details">
                                                         {{ $shipment->first_name }} {{ $shipment->last_name }}
                                                     </span>
                                                 </td>
-                                                <td>{{ $shipment->customer_email ?? 'N/A' }}</td>
                                                 <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                                <td>
-                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                                    @if($shipment->consignee_state || $shipment->shipper_state)
-                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                                    @endif
+                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
+                                                    @endphp
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
+                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
+                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
+                                                        @endif
+                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                        @if($shipment->consignee_zip)
+                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                                 <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
                                                 <td>
-                                                    @if($shipment->invoice_amount)
-                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @if($shipment->shipper_total_price)
+                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
                                                     @else
                                                         N/A
                                                     @endif
                                                 </td>
-                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
                                                 <td>
                                                     @if($shipment->delivery_type)
                                                         <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
@@ -472,19 +628,18 @@
                         <!-- ===== TAB 3: Print Label ===== -->
                         <div class="tab-pane fade" id="printlabelPane" role="tabpanel" aria-labelledby="printlabel-tab">
                             <div class="card-body">
-                                <div class="table-responsive">
+                                <div class="table-scroll-wrap">
                                     <table id="printlabelTable" class="table table-bordered table-hover">
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
                                                 <th>AWB Number</th>
+                                                <th>From / To</th>
                                                 <th>Customer Name</th>
                                                 <th>Shipper Company</th>
                                                 <th>Consignee</th>
-                                                <th>Destination</th>
                                                 <th>Invoice No.</th>
                                                 <th>Amount</th>
-                                                <th>Currency</th>
                                                 <th>Pickup Type</th>
                                                 <th>Status</th>
                                                 <th>Created</th>
@@ -498,28 +653,57 @@
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
                                                 </td>
+                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
+                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
+                                                    @endphp
+                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
+                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
+                                                        </div>
+                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                            <span class="shipment-route-line" aria-hidden="true"></span>
+                                                            <span class="shipment-route-plane">
+                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                            </span>
+                                                        </div>
+                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <span class="customer-name-link" title="Click to view details">
                                                         {{ $shipment->first_name }} {{ $shipment->last_name }}
                                                     </span>
                                                 </td>
                                                 <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                                <td>
-                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                                    @if($shipment->consignee_state || $shipment->shipper_state)
-                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                                    @endif
+                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
+                                                    @endphp
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
+                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
+                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
+                                                        @endif
+                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                        @if($shipment->consignee_zip)
+                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                                 <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
                                                 <td>
-                                                    @if($shipment->invoice_amount)
-                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @if($shipment->shipper_total_price)
+                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
                                                     @else
                                                         N/A
                                                     @endif
                                                 </td>
-                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
                                                 <td>
                                                     @if($shipment->delivery_type)
                                                         <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
@@ -550,19 +734,18 @@
                         <!-- ===== TAB 4: Ready to Dispatch ===== -->
                         <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
                             <div class="card-body">
-                                <div class="table-responsive">
+                                <div class="table-scroll-wrap">
                                     <table id="readytodispatchTable" class="table table-bordered table-hover">
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
                                                 <th>AWB Number</th>
+                                                <th>From / To</th>
                                                 <th>Customer Name</th>
                                                 <th>Shipper Company</th>
                                                 <th>Consignee</th>
-                                                <th>Destination</th>
                                                 <th>Invoice No.</th>
                                                 <th>Amount</th>
-                                                <th>Currency</th>
                                                 <th>Pickup Type</th>
                                                 <th>Status</th>
                                                 <th>Created</th>
@@ -575,28 +758,57 @@
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
                                                 </td>
+                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
+                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
+                                                    @endphp
+                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
+                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
+                                                        </div>
+                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
+                                                            <span class="shipment-route-line" aria-hidden="true"></span>
+                                                            <span class="shipment-route-plane">
+                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
+                                                            </span>
+                                                        </div>
+                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <span class="customer-name-link" title="Click to view details">
                                                         {{ $shipment->first_name }} {{ $shipment->last_name }}
                                                     </span>
                                                 </td>
                                                 <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td>{{ $shipment->consignee_name ?? 'N/A' }}</td>
-                                                <td>
-                                                    {{ $shipment->consignee_city ?? $shipment->shipper_city ?? 'N/A' }}
-                                                    @if($shipment->consignee_state || $shipment->shipper_state)
-                                                        , {{ $shipment->consignee_state ?? $shipment->shipper_state }}
-                                                    @endif
+                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
+                                                    @php
+                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
+                                                    @endphp
+                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
+                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
+                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
+                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
+                                                        @endif
+                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
+                                                        @if($shipment->consignee_zip)
+                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                                 <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
                                                 <td>
-                                                    @if($shipment->invoice_amount)
-                                                        {{ number_format($shipment->invoice_amount, 2) }}
+                                                    @if($shipment->shipper_total_price)
+                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
                                                     @else
                                                         N/A
                                                     @endif
                                                 </td>
-                                                <td>{{ $shipment->invoice_currency ?? 'N/A' }}</td>
                                                 <td>
                                                     @if($shipment->delivery_type)
                                                         <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
@@ -829,6 +1041,9 @@
             $('#manifestedTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
+                scrollX: true,
+                scrollY: '60vh',
+                scrollCollapse: true,
                 language: {
                     emptyTable: "No manifested shipments found",
                     info: "Showing _START_ to _END_ of _TOTAL_ shipments",
@@ -843,6 +1058,9 @@
             $('#assignedTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
+                scrollX: true,
+                scrollY: '60vh',
+                scrollCollapse: true,
                 language: {
                     emptyTable: "No assigned for pickup shipments found",
                     info: "Showing _START_ to _END_ of _TOTAL_ shipments",
@@ -857,6 +1075,9 @@
             $('#printlabelTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
+                scrollX: true,
+                scrollY: '60vh',
+                scrollCollapse: true,
                 language: {
                     emptyTable: "No dispatched shipments available for label printing",
                     info: "Showing _START_ to _END_ of _TOTAL_ shipments",
@@ -871,6 +1092,9 @@
             $('#readytodispatchTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
+                scrollX: true,
+                scrollY: '60vh',
+                scrollCollapse: true,
                 language: {
                     emptyTable: "No shipments ready to dispatch",
                     info: "Showing _START_ to _END_ of _TOTAL_ shipments",

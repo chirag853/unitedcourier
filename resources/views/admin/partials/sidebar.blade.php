@@ -189,11 +189,11 @@
                             <ul>
                                 <li class="submenu submenu-two">
                                     <a href="javascript:void(0);"
-                                        class="{{ request()->is('admin/companies') ? 'active' : '' }}">Shipment<span
+                                        class="{{ request()->is('admin/companies') ? 'active' : '' }}">Orders<span
                                             class="menu-arrow inside-submenu"></span></a>
                                     <ul>
                                         <li><a href="{{ url('/admin/companies') }}"
-                                                class="{{ request()->is('admin/companies') ? 'active' : '' }}">View All Shipments</a></li>
+                                                class="{{ request()->is('admin/companies') ? 'active' : '' }}">View All Order</a></li>
                                     </ul>
                                 </li>
                                 <li class="submenu submenu-two">
@@ -223,7 +223,7 @@
                                         <li><a href="#">Shipment Report</a></li>
                                     </ul>
                                 </li> -->
-                                <li class="submenu submenu-two">
+                                <!-- <li class="submenu submenu-two">
                                     <a href="javascript:void(0);">Manifest<span class="menu-arrow inside-submenu"></span></a>
                                     <ul>
                                         <li><a href="#">Create Manifest</a></li>
@@ -231,11 +231,11 @@
                                         <li><a href="#">Dispatch Manifest</a></li>
                                         <li><a href="#">Manifest Report</a></li>
                                     </ul>
-                                </li>
+                                </li> -->
                                 <li class="submenu submenu-two">
                                     <a href="javascript:void(0);">Account<span class="menu-arrow inside-submenu"></span></a>
                                     <ul>
-                                        <li><a href="#">Wallet Recharge</a></li>
+                                        <!-- <li><a href="#">Wallet Recharge</a></li> -->
                                         <li><a href="#">Account Ledger</a></li>
                                         <li><a href="#">Sale Report</a></li>
                                         <li><a href="#">Payment Report</a></li>

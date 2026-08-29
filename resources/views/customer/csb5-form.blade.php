@@ -140,7 +140,7 @@
                                 </p>
                                 <div class="row g-3 mb-2" id="csbGstSection"
                                 data-gst-required="{{ $csbGstRequired ? '1' : '0' }}"
-                                data-gst-reusable="0"
+                                data-gst-reusable="{{ $verifiedGstSource ? '1' : '0' }}"
                                 data-verify-url="{{ route('customer.verify.gst') }}">
                                 <div class="col-md-6">
                                     <label class="section-label" for="csbGstNumber">GSTIN</label>
@@ -654,7 +654,15 @@
                         var csbGstCertificate = document.getElementById('csbGstCertificate');
                         var csbGstVerificationStatus = document.getElementById('csbGstVerificationStatus');
                         var verifyCsbGstBtn = document.getElementById('verifyCsbGstBtn');
-                        var csbGstVerified = false;
+                        // A previously verified GST (stored in the database from an
+                        // earlier KYC / CSB-V submission) can be reused on re-KYC
+                        // without a fresh Cashfree verification, provided the GSTIN
+                        // and Business Name are not changed by the customer.
+                        var csbGstReusable = (csbGstSection.dataset.gstReusable === '1');
+                        var csbGstVerified = csbGstReusable;
+                        if (csbGstReusable) {
+                            setCsbGstVerificationState(true, 'GST verified previously. Re-verify only if you change the GSTIN or Business Name.', true);
+                        }
 
                         function normalizedGst(value) {
                             return String(value || '').replace(/\s+/g, '').toUpperCase();

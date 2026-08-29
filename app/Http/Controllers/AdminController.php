@@ -811,15 +811,20 @@ class AdminController extends Controller
                     'shipper_info.contact_person as shipper_contact',
                     'shipper_info.city as shipper_city',
                     'shipper_info.state as shipper_state',
+                    'shipper_info.pincode as shipper_pincode',
                     'shipper_info.awb_number',
+                    'shipper_info.total_price as shipper_total_price',
                     'customers.id as customer_id',
                     'customers.first_name',
                     'customers.last_name',
                     'customers.email as customer_email',
                     'customers.phone_number as customer_phone',
                     'consignee_info.consignee_name',
+                    'consignee_info.contact_person as consignee_contact',
                     'consignee_info.city as consignee_city',
                     'consignee_info.state as consignee_state',
+                    'consignee_info.zip_code as consignee_zip',
+                    'consignee_info.delivery_destination as consignee_destination',
                     'admin_user.name as delivery_person_name'
                 )
                 ->orderBy('shipment_invoice.created_at', 'desc')
