@@ -196,8 +196,8 @@
                     {!! $pageMeta->title ?? 'Our <span class="moving-gradient-text">Terms and Conditions</span>' !!}
                 </h1>
                 <p style="max-width: 100%;" class="text-center mb-5 lead">
-                    {!! $pageMeta->paragraphs ?? 'By using our website or services, you agree to follow our terms. Please read them carefully before proceeding.' !!}
-                </p>
+    {!! $pageMeta->paragraphs ?? 'By using our website or services, you agree to follow our terms. Please read them carefully before proceeding.' !!}
+</p>
             </div>
 
         </div>
