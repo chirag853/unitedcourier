@@ -1023,7 +1023,7 @@ class CustomerController extends Controller
             ],
             'csb_type' => ['required', Rule::in(['csb_iv', 'csb_v'])],
             'is_lut' => ['nullable', 'boolean'],
-            'ad_code' => [Rule::requiredIf($isCsbV), 'nullable', 'digits:14'],
+            'ad_code' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
             'ad_code_document' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'iec_number' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[A-Z0-9]{10}$/'],
             'iec_document' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
@@ -1050,7 +1050,7 @@ class CustomerController extends Controller
             'email.unique' => 'A customer with this email address already exists.',
             'kyc_type.required_with' => 'Select a KYC type when entering a KYC number.',
             'kyc_number.required_with' => 'Enter the KYC number for the selected KYC type.',
-            'ad_code.digits' => 'The AD Code must be exactly 14 numeric digits.',
+            'ad_code.regex' => 'The AD Code must be exactly 7 or 14 numeric digits.',
             'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
             'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
             'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
@@ -1485,7 +1485,7 @@ class CustomerController extends Controller
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120',
                 ],
                 'pan_document_path' => ['nullable', 'string'],
-                'ad_code' => ['required', 'digits:14'],
+                'ad_code' => ['required', 'regex:/^(\d{7}|\d{14})$/'],
                 'ad_code_document' => [
                     Rule::requiredIf(
                         ! $existingCsbForm?->ad_code_document
@@ -1540,7 +1540,7 @@ class CustomerController extends Controller
                 'gst_certificate_number.size' => 'The GST Certificate Number must contain exactly 15 characters.',
                 'pan_number.regex' => 'The PAN number must use the valid format ABCDE1234F.',
                 'pan_dob.before' => 'The PAN date of birth must be before today.',
-                'ad_code.digits' => 'The AD Code must be exactly 14 numeric digits.',
+                'ad_code.regex' => 'The AD Code must be exactly 7 or 14 numeric digits.',
                 'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
                 'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
                 'lut_expiry_date.after_or_equal' => 'The LUT Expiry Date cannot be in the past.',

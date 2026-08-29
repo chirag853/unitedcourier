@@ -213,8 +213,8 @@
                                         </div>
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label" for="adCode">AD Code <span class="text-danger">*</span></label>
-                                            <input type="text" id="adCode" name="ad_code" class="form-control @error('ad_code') is-invalid @enderror" value="{{ old('ad_code') }}" inputmode="numeric" maxlength="14" pattern="[0-9]{14}" data-csb-v-required>
-                                            <div class="invalid-feedback">@error('ad_code'){{ $message }}@else Enter exactly 14 numeric digits. @enderror</div>
+                                            <input type="text" id="adCode" name="ad_code" class="form-control @error('ad_code') is-invalid @enderror" value="{{ old('ad_code') }}" inputmode="numeric" maxlength="14" pattern="[0-9]{7}|[0-9]{14}" data-csb-v-required>
+                                            <div class="invalid-feedback">@error('ad_code'){{ $message }}@else Enter exactly 7 or 14 numeric digits. @enderror</div>
                                         </div>
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label" for="iecNumber">IEC Number <span class="text-danger">*</span></label>

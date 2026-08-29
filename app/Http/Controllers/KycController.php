@@ -1208,15 +1208,23 @@ class KycController extends Controller
     /**
      * Generate a globally-unique verification ID for Cashfree Bharat OCR requests.
      *
-     * Cashfree rejects duplicate verification IDs with a
+     * Cashfree requires the verification_id to be exactly 7 or 14 alphanumeric
+     * characters (its documentation describes the field like an "AD Code").
+     * A 32-character UUID is rejected by the API, so we must stay within the
+     * allowed length.
+     *
+     * Cashfree also rejects duplicate verification IDs with a
      * "verification id already exists" error, so the previously used
      * 4-digit random number (random_int(1000, 9999), only 9,000 possible
      * values) was collision-prone across repeated attempts and customers.
-     * A UUID (hyphens removed) guarantees uniqueness per request.
+     *
+     * A 14-character cryptographically random string (Str::random uses
+     * random_bytes) gives 62^14 possible values, so collisions are
+     * effectively impossible while satisfying the 7/14 character rule.
      */
     private function generateVerificationId(): string
     {
-        return str_replace('-', '', (string) Str::uuid());
+        return Str::random(14);
     }
 
     /**

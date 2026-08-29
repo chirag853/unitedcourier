@@ -1748,13 +1748,13 @@
                                     <label class="form-label-custom">AD Code (Authorized Dealer Code)</label>
                                     <div class="input-group-custom">
                                         <input type="text" class="form-control input-custom"
-                                            placeholder="Enter 14-digit AD Code" id="bizAdCode"
-                                            inputmode="numeric" maxlength="14" pattern="[0-9]{14}"
-                                            title="AD Code must be exactly 14 digits"
+                                            placeholder="Enter 7 or 14-digit AD Code" id="bizAdCode"
+                                            inputmode="numeric" maxlength="14" pattern="[0-9]{7}|[0-9]{14}"
+                                            title="AD Code must be exactly 7 or 14 digits"
                                             oninput="this.value = this.value.replace(/\D/g, '').slice(0, 14)">
                                         <i class="fas fa-university"></i>
                                     </div>
-                                    <small class="text-muted">AD Code must be exactly 14 numeric digits.</small>
+                                    <small class="text-muted">AD Code must be exactly 7 or 14 numeric digits.</small>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label-custom">Upload AD Code Document</label>
@@ -4484,7 +4484,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 if (!gstType.checked && !lutType.checked) return fail('Please select GST, LUT, or both before continuing.', gstType);
                                 if (!iecInput || !/^[A-Z0-9]{10}$/.test(iecInput.value.trim().toUpperCase())) return fail('IEC Number must be exactly 10 letters or digits.', iecInput);
                                 if (!validateFile(iecFile, 'IEC Certificate', allowedDocumentTypes, fiveMb, kycData.iec_document)) return false;
-                                if (!adCodeInput || !/^\d{14}$/.test(adCodeInput.value.trim())) return fail('AD Code must be exactly 14 numeric digits.', adCodeInput);
+                                if (!adCodeInput || !/^(\d{7}|\d{14})$/.test(adCodeInput.value.trim())) return fail('AD Code must be exactly 7 or 14 numeric digits.', adCodeInput);
                                 if (!validateFile(adCodeFile, 'AD Code Document', allowedDocumentTypes, fiveMb, kycData.ad_code_document)) return false;
                                 syncBusinessLutBondYear();
                                 if (lutType.checked) {

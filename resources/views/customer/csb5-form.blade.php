@@ -202,12 +202,12 @@
                                     <label class="section-label">AD Code</label>
 
                                     <div class="input-wrapper">
-                                        <input type="text" class="input-custom" placeholder="Enter 14-digit AD Code *"
+                                        <input type="text" class="input-custom" placeholder="Enter 7 or 14-digit AD Code *"
                                             name="ad_code" required inputmode="numeric" maxlength="14"
-                                            pattern="[0-9]{14}" title="AD Code must be exactly 14 digits"
+                                            pattern="[0-9]{7}|[0-9]{14}" title="AD Code must be exactly 7 or 14 digits"
                                             oninput="this.value = this.value.replace(/\D/g, '').slice(0, 14)"
                                             value="{{ old('ad_code', $csbForm->ad_code ?? '') }}">
-                                    <small class="text-muted">AD Code must be exactly 14 numeric digits.</small>
+                                    <small class="text-muted">AD Code must be exactly 7 or 14 numeric digits.</small>
 
                                         <i class="fas fa-barcode"></i>
                                     </div>
@@ -804,7 +804,7 @@
                             }
                             var standardDocuments = ['pdf', 'jpg', 'jpeg', 'png'];
 
-                            if (!/^\d{14}$/.test(fieldValue('ad_code'))) return showCsb5ValidationError('AD Code must be exactly 14 numeric digits.', targetForm.querySelector('[name="ad_code"]'));
+                            if (!/^(\d{7}|\d{14})$/.test(fieldValue('ad_code'))) return showCsb5ValidationError('AD Code must be exactly 7 or 14 numeric digits.', targetForm.querySelector('[name="ad_code"]'));
                             if (!/^[A-Z0-9]{10}$/.test(fieldValue('iec_number').toUpperCase())) return showCsb5ValidationError('IEC Number must be exactly 10 letters or digits.', targetForm.querySelector('[name="iec_number"]'));
 
                             var gstEnabled = !!(document.getElementById('gstType') || {}).checked;
