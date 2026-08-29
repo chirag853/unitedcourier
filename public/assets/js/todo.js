@@ -1,7 +1,4 @@
-/*
-Author       : Dreamstechnologies
-Template Name: Dleohr - Bootstrap Admin Template
-*/
+
 
 (function () {
     "use strict";

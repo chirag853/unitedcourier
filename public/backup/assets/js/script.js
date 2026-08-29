@@ -1,7 +1,4 @@
-/*
-Author       : Dreamstechnologies
-Template Name: CRMS - Bootstrap Admin Template
-*/
+
 
 (function () {
     "use strict";

@@ -1,7 +1,4 @@
-/*
-Author       : Dreamstechnologies
-Template Name: DreamsEMR - Bootstrap Admin Template
-*/
+
 
 (function () {
     "use strict";

@@ -2,7 +2,7 @@
 <html lang="en">
 
 
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:23 GMT -->
+
 
 <head>
     <!-- Meta Tags -->
@@ -967,6 +967,6 @@
     <script src="{{ asset('assets/js/script.js') }}"></script>
 </body>
 
-<!-- Mirrored from crms.dreamstechnologies.com/html/template/dashboard.html by HTTrack Website Copier/3.x [XR&CO'2014], Thu, 31 Jul 2025 06:57:26 GMT -->
+
 
 </html>

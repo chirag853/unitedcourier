@@ -1,10 +1,5 @@
 @charset "UTF-8";
-/*
-Template Name: CRMS - Responsive Bootstrap 5 Admin Dashboard
-Version: 1.0.0
-Author: Dreams Technologies
-Author URL: https://themeforest.net/user/dreamstechnologies
-*/
+
 @import url("https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..900&amp;display=swap");
 :root {
   --crms-sidenav-width: 240px;
