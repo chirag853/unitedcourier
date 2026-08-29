@@ -122,7 +122,7 @@
                 @endif
 
                 <!-- Breadcrumb -->
-                <div class="page-header">
+                <!-- <div class="page-header">
                     <div class="page-title">
                         <h4>My Profile</h4>
                     </div>
@@ -134,7 +134,7 @@
                             </ol>
                         </nav>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Profile Content -->
                 <div class="row">

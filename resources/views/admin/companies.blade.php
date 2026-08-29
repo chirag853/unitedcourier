@@ -239,7 +239,7 @@
             <div class="content">
 
                 <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
+                <!-- <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
                         <h4 class="mb-1">View Customer List</h4>
                         <nav aria-label="breadcrumb">
@@ -252,7 +252,7 @@
                     <div class="gap-2 d-flex align-items-center flex-wrap">
                         <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></a>
                     </div>
-                </div>                
+                </div>                 -->
 				<!-- End Page Header -->
 
                 @if(session('success'))
@@ -296,6 +296,18 @@
                                 <span class="badge" style="background:#f59e0b;color:#fff;">{{ count($readyToDispatchShipments) }}</span>
                             </button>
                         </li>
+                        <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
+                            <a href="javascript:void(0);" 
+                            class="btn btn-icon btn-outline-light shadow" 
+                            data-bs-toggle="tooltip" 
+                            data-bs-placement="top" 
+                            aria-label="Refresh" 
+                            data-bs-original-title="Refresh" 
+                            onclick="location.reload();">
+                                <i class="ti ti-refresh"></i>
+                            </a>
+                        </div>
+                    </div>
                     </ul>
                     <div class="tab-content" id="shipmentTabContent">
 

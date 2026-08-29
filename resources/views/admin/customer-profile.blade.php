@@ -2293,8 +2293,8 @@
                     <div class="row g-3">
                         <div class="col-md-6"><h6>Identity Details</h6><div class="small text-muted">GST: {{ $previewValue('gst_number') }}<br>Aadhaar: {{ $previewValue('aadhar_number') }}<br>PAN: {{ $previewValue('pan_number') }}<br>PAN Holder: {{ $previewValue('pan_holder_name') }}</div></div>
                         <div class="col-md-6"><h6>Business Details</h6><div class="small text-muted">Organization: {{ $previewValue('organization_name') }}<br>Tax Type: {{ $selectedTaxTypes ? implode(', ', $selectedTaxTypes) : '—' }}<br>LUT Number: {{ data_get($businessKyc, 'lut_number') ?: '—' }}<br>IEC: {{ $previewValue('iec_number') }}<br>AD Code: {{ $previewValue('ad_code') }}<br>Bank: {{ $previewValue('bank_type') }} / {{ $previewValue('bank_account_number') }}</div></div>
-                        <div class="col-md-6"><h6>Billing Details</h6><div class="small text-muted">GST: {{ $previewValue('billing_gst') }}<br>Contact: {{ $previewValue('billing_contact') }}<br>Email: {{ $previewValue('billing_email') }}<br>Address: {{ $previewValue('billing_address') }}</div></div>
-                        <div class="col-md-6"><h6>Agreement</h6><div class="small text-muted">Terms: {{ $previewValue('terms_accepted') === true || $previewValue('terms_accepted') === 1 ? 'Accepted' : ($previewValue('terms_accepted') === '—' ? '—' : 'Not Accepted') }}<br>Accepted At: {{ $previewValue('terms_accepted_at') }}<br>Agreement Accepted At: {{ $previewValue('merchant_agreement_accepted_at') }}</div></div>
+                        <div class="col-md-6"><h6>Billing Details</h6><div class="small text-muted">Contact: {{ $previewValue('billing_contact') }}<br>Email: {{ $previewValue('billing_email') }}<br>Address: {{ $previewValue('billing_address') }}</div></div>
+                        <!-- <div class="col-md-6"><h6>Agreement</h6><div class="small text-muted">Terms: {{ $previewValue('terms_accepted') === true || $previewValue('terms_accepted') === 1 ? 'Accepted' : ($previewValue('terms_accepted') === '—' ? '—' : 'Not Accepted') }}<br>Accepted At: {{ $previewValue('terms_accepted_at') }}<br>Agreement Accepted At: {{ $previewValue('merchant_agreement_accepted_at') }}</div></div> -->
                     </div>
                     <hr>
                     <h6>Documents</h6>
@@ -2304,7 +2304,7 @@
                                 <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
                                     <span><i class="ti ti-file me-1"></i>{{ $document['label'] }} <small class="text-muted">({{ $docName($document['url']) }})</small></span>
                                     <div class="d-flex gap-2">
-                                        <a class="btn btn-sm btn-outline-primary document-preview-link" href="{{ $document['url'] }}" data-doc-label="{{ $document['label'] }}"><i class="ti ti-eye"></i> View</a>
+                                        <!-- <a class="btn btn-sm btn-outline-primary document-preview-link" href="{{ $document['url'] }}" target="blank"><i class="ti ti-eye"></i> View</a> -->
                                         <a class="btn btn-sm btn-outline-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => $documentKey]) }}"><i class="ti ti-download me-1"></i>Download</a>
                                     </div>
                                 </div>
@@ -2317,7 +2317,7 @@
                                     <i class="ti ti-chevron-down signed-agreement-chevron"></i>
                                 </a>
                                 <div class="d-flex gap-2">
-                                    <a href="javascript:void(0)" class="btn btn-sm btn-outline-primary signed-agreement-toggle" role="button"><i class="ti ti-eye"></i> View</a>
+                                    <!-- <a href="javascript:void(0)" class="btn btn-sm btn-outline-primary signed-agreement-toggle" role="button"><i class="ti ti-eye"></i> View</a> -->
                                     <a class="btn btn-sm btn-success" href="{{ route('admin.customer.kyc-document.download', ['id' => $customer->id, 'document' => 'signed_merchant_agreement']) }}"><i class="ti ti-download me-1"></i>Download Signed Agreement (PDF)</a>
                                 </div>
                             </div>
