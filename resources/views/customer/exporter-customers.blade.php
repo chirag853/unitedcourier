@@ -27,11 +27,11 @@
         <div class="content">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
                 <div>
-                    <h4 class="mb-1">Customer Management</h4>
+                    <!-- <h4 class="mb-1">Customer Management</h4> -->
                     <!-- <p class="text-muted mb-0">Add and manage your saved customers.</p> -->
                 </div>
                 <a href="{{ route('customer.create-shipment') }}" class="btn btn-outline-primary">
-                    <i class="ti ti-package-export me-1"></i>Create Shipment
+                    <i class="ti ti-package-export me-1"></i>Create Order
                 </a>
             </div>
 

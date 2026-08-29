@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
+
 <header class="navbar-header">
             @php
                 $authCustomer = auth()->guard('customer')->user();
