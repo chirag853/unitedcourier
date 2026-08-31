@@ -596,62 +596,55 @@
 
                         <div class="stepper-wrapper">
                             @if($isBusinessFlow)
-                            <div class="step-item active" data-step="1">
+                            <div class="step-item active" data-step="1" data-panel="step1-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">1. Verify GST</div>
                             </div>
-                            <div class="step-item @if($aadharSkipped) skipped @endif" data-step="2" @if($aadharSkipped) data-skipped="1" @endif>
+                            <div class="step-item @if($aadharSkipped) skipped @endif" data-step="2" data-panel="step2-content" @if($aadharSkipped) data-skipped="1" @endif>
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">2. Verify Aadhar @if($aadharSkipped)<span class="step-skip-chip">Skipped</span>@endif</div>
                             </div>
-                            <div class="step-item" data-step="3">
+                            <div class="step-item" data-step="3" data-panel="step3-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">3. Verify PAN</div>
                             </div>
-                            <div class="step-item" data-step="4">
+                            <div class="step-item" data-step="4" data-panel="step4-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">4. CSB-V</div>
                             </div>
-                            <div class="step-item" data-step="5">
+                            <div class="step-item" data-step="5" data-panel="step5-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">5. Uploaded Signature</div>
                             </div>
-                            <div class="step-item" data-step="6">
+                            <div class="step-item" data-step="6" data-panel="step6-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">6. Merchant Agreement (Signed)</div>
                             </div>
                             @else
-                            <div class="step-item active" data-step="1">
+                            <div class="step-item active @if($aadharSkipped) skipped @endif" data-step="1" data-panel="step2-content" @if($aadharSkipped) data-skipped="1" @endif>
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">1. KYC Verification</div>
+                                <div class="step-label">1. Verify Aadhar @if($aadharSkipped)<span class="step-skip-chip">Skipped</span>@endif</div>
                             </div>
-                            <div class="step-item @if($aadharSkipped) skipped @endif" data-step="2" @if($aadharSkipped) data-skipped="1" @endif>
+                            <div class="step-item" data-step="2" data-panel="step3-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">2. Verify Aadhar @if($aadharSkipped)<span class="step-skip-chip">Skipped</span>@endif</div>
+                                <div class="step-label">2. Verify PAN</div>
                             </div>
-                            <div class="step-item" data-step="3">
+                            <div class="step-item" data-step="3" data-panel="step5-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">3. Verify PAN</div>
+                                <div class="step-label">3. Upload Signature</div>
                             </div>
-                            <div class="step-item" data-step="4">
+                            <div class="step-item" data-step="4" data-panel="step6-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">4. Basic Info &amp; Signing</div>
-                            </div>
-                            <div class="step-item" data-step="5">
-                                <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">5. Upload Signature</div>
-                            </div>
-                            <div class="step-item" data-step="6">
-                                <div class="step-bar"><div class="step-bar-fill"></div></div>
-                                <div class="step-label">6. Merchant Agreement (Signed)</div>
+                                <div class="step-label">4. Merchant Agreement (Signed)</div>
                             </div>
                             @endif
                         </div>
 
                         <div class="kyc-card">
 
+                            @if($isBusinessFlow)
                             <!-- Step 1: Verify GST -->
-                            <div id="step1-content" class="step-content active">
+                            <div id="step1-content" class="step-content {{ $isBusinessFlow ? 'active' : '' }}">
                                 <h3 class="kyc-card-title">Verify <span class="gradient-text">GST</span></h3>
                                 <p class="text-muted mb-4">GST details submitted during KYC.</p>
 
@@ -710,9 +703,10 @@
                                     </div>
                                 </div>
                             </div>
+                            @endif
 
                             <!-- Step 2: Verify Aadhar -->
-                            <div id="step2-content" class="step-content">
+                            <div id="step2-content" class="step-content {{ $isBusinessFlow ? '' : 'active' }}">
                                 @if($aadharSkipped)
                                 <div class="text-center py-4">
                                     <i class="ti ti-circle-x" style="font-size:48px;color:#94a3b8;"></i>
@@ -1025,31 +1019,6 @@
                                             <input type="text" class="form-control input-custom"
                                                 value="{{ $kyc->billing_address ?? '—' }}" readonly>
                                             <i class="ti ti-map-pin"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            @else
-                            <!-- Step 4 (Personal): Business Details -->
-                            <div id="step4-content" class="step-content">
-                                <h3 class="kyc-card-title">Business <span class="gradient-text">Details</span></h3>
-                                <p class="text-muted mb-4">Details provided for the digital agreement.</p>
-
-                                <div class="row g-4">
-                                    <div class="col-md-6">
-                                        <label class="form-label-custom">Organization Name</label>
-                                        <div class="input-group-custom">
-                                            <input type="text" class="form-control input-custom"
-                                                value="{{ $kyc->organization_name ?? '—' }}" readonly>
-                                            <i class="ti ti-building"></i>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6" style="display:none;">
-                                        <label class="form-label-custom">Authorized Signatory</label>
-                                        <div class="input-group-custom">
-                                            <input type="text" class="form-control input-custom"
-                                                value="{{ $kyc->authorized_signatory ?? '—' }}" readonly>
-                                            <i class="ti ti-user-tie"></i>
                                         </div>
                                     </div>
                                 </div>
@@ -2710,8 +2679,9 @@
                 item.classList.toggle('active', n === step);
                 item.classList.toggle('completed', n < step);
             });
+            var targetPanelId = items[step - 1] ? items[step - 1].getAttribute('data-panel') : null;
             panels.forEach(function(panel) {
-                panel.classList.toggle('active', panel.id === 'step' + step + '-content');
+                panel.classList.toggle('active', targetPanelId && panel.id === targetPanelId);
             });
             var prevBtn = card.querySelector('.stepper-prev');
             var nextBtn = card.querySelector('.stepper-next');

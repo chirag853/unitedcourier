@@ -109,7 +109,7 @@ class PrimusApiClient
             }
         }
 
-        return 'Primus token request failed with HTTP status '.$status.'.';
+        return 'Primus token request failed. Please try again later.';
     }
 
     private function shipmentErrorMessage(mixed $responseData, int $status): string
@@ -127,6 +127,6 @@ class PrimusApiClient
             }
         }
 
-        return 'Primus shipment request failed with HTTP status '.$status.'.';
+        return 'Primus shipment request failed. Please try again later.';
     }
 }

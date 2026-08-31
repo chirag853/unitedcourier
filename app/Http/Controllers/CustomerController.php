@@ -652,7 +652,9 @@ class CustomerController extends Controller
         $businessCategory = BusinessCategory::find($customer->business_category_id);
         $customer->setRelation('businessCategory', $businessCategory);
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
-        $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+        $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+        $isAadhaarOptional = $isCourierOrAggregator;
+        $skipCsbV = strtolower((string) $userType) === 'business' && $isCourierOrAggregator;
         $kycType = strtolower($userType) === 'business' ? 'business' : 'personal';
         // Whether the customer has accepted the Merchant Agreement (welcome modal).
         // Persisted server-side so the modal does not reappear after refresh.
@@ -760,7 +762,7 @@ class CustomerController extends Controller
                 'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
                 'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
                 'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-                'userType', 'businessCategory', 'isAadhaarOptional', 'kycDraft',
+                'userType', 'businessCategory', 'isAadhaarOptional', 'skipCsbV', 'kycDraft',
                 'merchantAgreementAccepted'
             ))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
@@ -1294,11 +1296,16 @@ class CustomerController extends Controller
             : ($businessGstVerified ? $businessKyc : null);
         $csbGstRequired = ! $verifiedGstSource;
 
+        // Courier / Aggregator customers are not required to submit the
+        // CSB-V export details. Pass the flag so the form can hide them.
+        $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+
         return view('customer.csb5-form', compact(
             'customer',
             'csbForm',
             'verifiedGstSource',
-            'csbGstRequired'
+            'csbGstRequired',
+            'isCourierOrAggregator'
         ));
     }
 
@@ -1317,11 +1324,15 @@ class CustomerController extends Controller
             // logout / login does not require re-verifying documents.
             KycVerificationState::restore($customer);
 
+            // Courier / Aggregator customers are not required to submit the
+            // CSB-V export details. Reuse the flag to relax validation below.
+            $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+
             $request->merge([
                 'is_gst' => $request->boolean('is_gst'),
                 'is_lut' => $request->boolean('is_lut'),
             ]);
-            if (! $request->boolean('is_gst') && ! $request->boolean('is_lut')) {
+            if (! $isCourierOrAggregator && ! $request->boolean('is_gst') && ! $request->boolean('is_lut')) {
                 throw ValidationException::withMessages([
                     'tax_type' => 'Select GST, LUT, or both before submitting the CSB-V form.',
                 ]);
@@ -1485,28 +1496,30 @@ class CustomerController extends Controller
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120',
                 ],
                 'pan_document_path' => ['nullable', 'string'],
-                'ad_code' => ['required', 'regex:/^(\d{7}|\d{14})$/'],
+                'ad_code' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
                 'ad_code_document' => [
                     Rule::requiredIf(
-                        ! $existingCsbForm?->ad_code_document
+                        ! $isCourierOrAggregator
+                        && ! $existingCsbForm?->ad_code_document
                         && ! $request->filled('ad_code_document_path')
                         && ! $storedDraftPath('ad_code_document')
                     ),
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'ad_code_document_path' => ['nullable', 'string'],
-                'iec_number' => ['required', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
+                'iec_number' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
                 'iec_document' => [
                     Rule::requiredIf(
-                        ! $existingCsbForm?->iec_document
+                        ! $isCourierOrAggregator
+                        && ! $existingCsbForm?->iec_document
                         && ! $request->filled('iec_document_path')
                         && ! $storedDraftPath('iec_document')
                     ),
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'iec_document_path' => ['nullable', 'string'],
-                'bank_account_number' => ['required', 'regex:/^[0-9]{9,18}$/'],
-                'bank_type' => 'required|in:private,government',
+                'bank_account_number' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^[0-9]{9,18}$/'],
+                'bank_type' => ['nullable', Rule::requiredIf(! $isCourierOrAggregator), 'in:private,government'],
                 'lut_document' => [
                     Rule::requiredIf(
                         $request->boolean('is_lut')
@@ -1520,9 +1533,9 @@ class CustomerController extends Controller
                 'lut_number' => ['required_if:is_lut,1', 'nullable', 'string', 'max:100'],
                 'lut_expiry_date' => 'required_if:is_lut,1|nullable|date|after_or_equal:today',
                 'lut_bond_year' => ['required_if:is_lut,1', 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
-                'billing_address' => 'required|string|min:10|max:1000',
-                'billing_contact' => ['required', 'regex:/^[6-9][0-9]{9}$/'],
-                'billing_email' => 'required|email|max:255',
+                'billing_address' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'string', 'min:10', 'max:1000'],
+                'billing_contact' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
+                'billing_email' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'email', 'max:255'],
                 'signature_document' => [
                     Rule::requiredIf(
                         ! $isStandaloneCsb5
@@ -1625,7 +1638,7 @@ class CustomerController extends Controller
             // Aadhaar is optional only for Courier / Aggregator customers. Use
             // the value submitted with this form so an old incomplete customer
             // value does not prevent the customer from intentionally skipping it.
-            $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+            $isAadhaarOptional = $isCourierOrAggregator;
             $submittedAadhaar = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
             $storedAadhaar = preg_replace('/\s+/', '', (string) $customer->aadhar_number);
             $aadhar = $isAadhaarOptional
@@ -1812,12 +1825,12 @@ class CustomerController extends Controller
                     ?? ($existingPersonalKyc->gst_certificate_document ?? null),
                 'lut_number' => $validated['is_lut'] ? ($validated['lut_number'] ?? null) : null,
                 'lut_verified' => false,
-                'ad_code' => $validated['ad_code'],
+                'ad_code' => $validated['ad_code'] ?? null,
                 'ad_code_document' => $adCodeDocumentPath ?? ($existingCsbForm->ad_code_document ?? null),
-                'iec_number' => $validated['iec_number'],
+                'iec_number' => $validated['iec_number'] ?? null,
                 'iec_document' => $iecDocumentPath ?? ($existingCsbForm->iec_document ?? null),
-                'bank_account_number' => $validated['bank_account_number'],
-                'bank_type' => $validated['bank_type'],
+                'bank_account_number' => $validated['bank_account_number'] ?? null,
+                'bank_type' => $validated['bank_type'] ?? null,
                 'lut_document' => $validated['is_lut']
                     ? ($lutDocumentPath ?? ($existingCsbForm->lut_document ?? null))
                     : null,
@@ -1831,9 +1844,9 @@ class CustomerController extends Controller
                 'signature_document' => $signaturePath
                     ?? ($existingCsbForm->signature_document ?? null)
                     ?? ($existingBusinessKyc->signature_document ?? null),
-                'billing_address' => $validated['billing_address'],
-                'billing_contact' => $validated['billing_contact'],
-                'billing_email' => $validated['billing_email'],
+                'billing_address' => $validated['billing_address'] ?? null,
+                'billing_contact' => $validated['billing_contact'] ?? null,
+                'billing_email' => $validated['billing_email'] ?? null,
                 'merchant_agreement' => $merchantAgreementPath ?? ($existingCsbForm->merchant_agreement ?? null),
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
             ];
@@ -1884,9 +1897,9 @@ class CustomerController extends Controller
                 'signature' => $signaturePath
                     ?? ($existingKyc?->signature_document ?? null)
                     ?? ($existingCsbForm->signature_document ?? null),
-                'billing_address' => $validated['billing_address'],
-                'billing_contact' => $validated['billing_contact'],
-                'billing_email' => $validated['billing_email'],
+                'billing_address' => $validated['billing_address'] ?? null,
+                'billing_contact' => $validated['billing_contact'] ?? null,
+                'billing_email' => $validated['billing_email'] ?? null,
                 'merchant_agreement' => $merchantAgreementPath ?? ($existingKyc?->merchant_agreement ?? null),
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'terms_accepted' => $validated['terms_accepted'],
@@ -1912,8 +1925,10 @@ class CustomerController extends Controller
             // Update customer record with the actual Aadhaar state and CSB status.
             $customer->aadhar_number = $aadhar;
             $customer->aadhar_verified = $aadharVerified;
-            // Business KYC: CSB-IV (1) or CSB-V (2) based on selection
-            $customer->csb_status = $validated['is_csb_v'] ? 2 : 1;
+            // Business KYC: CSB-IV (1) or CSB-V (2) based on selection.
+            // Courier / Aggregator business KYC never includes CSB-V, so the
+            // customer is recorded as CSB-IV even though a business KYC was done.
+            $customer->csb_status = $isCourierOrAggregator ? 1 : ($validated['is_csb_v'] ? 2 : 1);
             $customer->save();
             KycDraft::where('customer_id', $customer->id)
                 ->where('kyc_type', 'business')
@@ -2093,7 +2108,21 @@ class CustomerController extends Controller
 
     private function databaseKycIdentifierFromException(QueryException $exception): ?string
     {
+        // Only a genuine duplicate-key violation (e.g. a unique index on
+        // gst_number / aadhar_number / pan_number) should be reported as a
+        // KYC identifier conflict. Other 23000 errors - like a NOT NULL
+        // violation where the raw SQL happens to reference a KYC column -
+        // must not be misreported as a duplicate.
+        if ($exception->getCode() !== '23000') {
+            return null;
+        }
+
         $message = strtolower($exception->getMessage());
+
+        // MySQL / MariaDB: "Duplicate entry 'X' for key 'idx_name'"
+        if (! str_contains($message, 'duplicate entry')) {
+            return null;
+        }
 
         foreach (['gst' => ['gst_number', 'gst_certificate_number'], 'aadhar' => ['aadhar_number'], 'pan' => ['pan_number']] as $identifier => $columns) {
             foreach ($columns as $column) {
@@ -3999,7 +4028,7 @@ class CustomerController extends Controller
             // rates). The query below is fully parameterized by
             // $destinationCountry, so adding 'AUS' here makes the
             // ARAMEX GPX ALL IN service rates resolve correctly.
-            if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE') {
+            if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE' || $destinationCountry === 'BD' || $destinationCountry === 'ZW') {
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -5620,6 +5649,7 @@ class CustomerController extends Controller
         if ($customer->business_category_id) {
             $businessCategory = BusinessCategory::find($customer->business_category_id);
         }
+        $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
 
         // Mask the Aadhar number for display (show only last 4 digits)
         $maskedAadhar = null;
@@ -5681,6 +5711,7 @@ class CustomerController extends Controller
             'csbForm',
             'walletBalance',
             'businessCategory',
+            'userType',
             'maskedAadhar',
             'aadharSource',
             'aadharVerified',
@@ -7916,7 +7947,8 @@ class CustomerController extends Controller
      * Normalize a delivery-destination name, code, or numeric destination ID
      * into the short code used by the courier_services.country column.
      *
-     * Returns one of: "UK", "CA", "AUS", "UAE", "NZ", "SG", "MY", "US".
+     * Returns one of: "UK", "CA", "AUS", "UAE", "NZ", "SG", "MY", "DE", "BD",
+     * "US", or any other destinations.country_code value.
      *
      * The destination string can arrive in several formats depending on the
      * caller:
@@ -7924,18 +7956,21 @@ class CustomerController extends Controller
      *   - previewBulkUpload() Excel cell → "UK", "GB", "United Kingdom",
      *                                       "Great Britain", "Canada", "CA", ...
      *
-     * Anything that is not recognised as UK, Canada or Australia is treated
-     * as "US".
+     * Common countries are resolved with fast-path checks below. Any country
+     * that is not matched there is looked up dynamically against the
+     * destinations table (by country_code, code, or name) so newly added
+     * destinations keep working without editing this method. Only when
+     * nothing matches does it fall back to "US".
      *
      * @param  string|null  $destination
-     * @return string "UK" | "CA" | "AUS" | "UAE" | "NZ" | "SG" | "MY" | "US"
+     * @return string
      */
     public function resolveDestinationCountry($destination)
     {
         $destinationValue = trim((string) ($destination ?? ''));
-        if ($destinationValue === '') {
-            return 'US';
-        }
+        // if ($destinationValue === '') {
+        //     // return 'US';
+        // }
 
         // Resolve numeric dropdown/API values through the destination record so
         // country selection never depends on a display-name fallback.
@@ -7949,6 +7984,21 @@ class CustomerController extends Controller
         }
 
         $destUpper = strtoupper($destinationValue);
+
+        // i want same as USA
+        // USA detection — covers "USA", "US", "United States",
+        // "United States of America", "US - United States", etc.
+        $isUSA = (
+            $destUpper === 'USA'
+            || $destUpper === 'US'
+            || str_contains($destUpper, 'UNITED STATES')
+            || str_starts_with($destUpper, 'US -')
+        );
+
+        if ($isUSA) {
+            return 'USA';
+        }
+
 
         // UK detection — covers "UK", "GB", "United Kingdom", "UK - United Kingdom",
         // "Great Britain", and any string starting with "UK -".
@@ -7988,7 +8038,6 @@ class CustomerController extends Controller
 
         // UAE detection also covers the destination display name "Dubai".
         $isUae = (
-            // $destUpper === 'DUBAI'
             $destUpper === 'UNITED ARAB EMIRATES'
             || $destUpper === 'UAE'
             || $destUpper === 'AE'
@@ -8001,7 +8050,6 @@ class CustomerController extends Controller
             return 'UAE';
         }
 
-        // i want to add newzealand as well so i am adding it here
         // New Zealand detection — covers "New Zealand", "NZ", "NZL",
         // and any string containing "New Zealand". Returns "NZ" to match the
         // destinations.country_code value used for New Zealand.
@@ -8037,7 +8085,7 @@ class CustomerController extends Controller
             return 'MY';
         }
 
-        // i want to implement germany destination
+        // Germany detection — covers "Germany", "DE", and "DEU".
         $isGermany = (
             $destUpper === 'GERMANY'
             || $destUpper === 'DE'
@@ -8048,8 +8096,39 @@ class CustomerController extends Controller
             return 'DE';
         }
 
+        // Bangladesh detection — covers "Bangladesh", "BD", and "BGD".
+        $isBangladesh = (
+            $destUpper === 'BANGLADESH'
+            || $destUpper === 'BD'
+            || $destUpper === 'BGD'
+            || str_contains($destUpper, 'BANGLADESH')
+        );
+        if ($isBangladesh) {
+            return 'BD';
+        }
+
+        // ------------------------------------------------------------------
+        // DYNAMIC LOOKUP — resolve any remaining destination against the
+        // destinations table by country_code, code, or name (case-insensitive,
+        // including a substring match on the display name). This keeps newly
+        // added destinations (e.g. Zimbabwe) working without having to edit
+        // this method every time a country is added.
+        // ------------------------------------------------------------------
+        $matchedDestination = Destination::where(function ($query) use ($destUpper) {
+            $query->whereRaw('UPPER(country_code) = ?', [$destUpper])
+                ->orWhereRaw('UPPER(code) = ?', [$destUpper])
+                ->orWhereRaw('UPPER(name) = ?', [$destUpper])
+                ->orWhereRaw('UPPER(name) LIKE ?', ['%'.$destUpper.'%']);
+        })->first();
+
+        if ($matchedDestination) {
+            return $matchedDestination->country_code
+                ?: $matchedDestination->code
+                ?: $matchedDestination->name;
+        }
+
         // Everything else (US, USA, United States, etc.) → US.
-        return 'US';
+        // return 'US';
     }
 
     /**

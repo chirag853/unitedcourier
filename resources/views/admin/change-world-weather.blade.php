@@ -108,7 +108,7 @@
                         <!-- Page Header -->
                         <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                             <div>
-                                <h4 class="mb-1">Change World Weather Page</h4>
+                                <!-- <h4 class="mb-1">Change World Weather Page</h4> -->
                             </div>
                             <div class="gap-2 d-flex align-items-center flex-wrap">
                                 <!-- <a href="{{ route('admin.create-world-weather') }}" class="btn btn-primary"><i

@@ -346,6 +346,6 @@ class AdomantraApiClient
             }
         }
 
-        return 'Adomantra ' . $label . ' request failed with HTTP status ' . $status . '.';
+        return 'Adomantra ' . $label . ' request failed. Please try again later.';
     }
 }

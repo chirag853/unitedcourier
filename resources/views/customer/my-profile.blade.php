@@ -203,6 +203,63 @@
             font-size: 14px;
             margin-left: 4px;
         }
+
+        /* KYC Progress Stepper (matches dashboard Personal KYC steps) */
+        .profile-kyc-stepper {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            padding: 12px 0 4px;
+        }
+
+        .profile-kyc-stepper-track {
+            position: absolute;
+            top: 29px;
+            left: 4%;
+            right: 4%;
+            height: 3px;
+            background: #eef0f5;
+            border-radius: 3px;
+        }
+
+        .profile-kyc-step {
+            flex: 1;
+            position: relative;
+            text-align: center;
+            z-index: 1;
+        }
+
+        .profile-kyc-step-icon {
+            width: 34px;
+            height: 34px;
+            margin: 0 auto 8px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #dde3ee;
+            color: #b6c0d2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+        }
+
+        .profile-kyc-step.is-done .profile-kyc-step-icon {
+            background: #2f66f3;
+            border-color: #2f66f3;
+            color: #fff;
+        }
+
+        .profile-kyc-step-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #8a94a6;
+            line-height: 1.3;
+            display: block;
+        }
+
+        .profile-kyc-step.is-done .profile-kyc-step-label {
+            color: #2f66f3;
+        }
     </style>
 </head>
 
@@ -245,7 +302,7 @@
 
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
-                    <div>
+                    <!-- <div>
                         <h4 class="mb-1">My Profile</h4>
                         <nav aria-label="breadcrumb">
                             <ol class="breadcrumb mb-0 p-0">
@@ -253,7 +310,7 @@
                                 <li class="breadcrumb-item active" aria-current="page">My Profile</li>
                             </ol>
                         </nav>
-                    </div>
+                    </div> -->
                     <!-- <div class="gap-2 d-flex align-items-center flex-wrap">
                         <button class="btn btn-light d-flex align-items-center" onclick="window.print()">
                             <i class="ti ti-printer me-1"></i> Print
@@ -391,6 +448,60 @@
                                 </a>
                             </div>
                         </div>
+
+                        @php
+                            // Personal KYC progress - mirrors the 5-step dashboard flow:
+                            // 1. Verify Aadhar  2. Verify PAN  3. Upload Signature
+                            // 4. Merchant Agreement  5. Activation Pending
+                            $profileIsBusiness = strcasecmp(trim((string) $userType), 'Business') === 0;
+                            $aadharComplete = (bool) ($aadharVerified ?? false);
+                            $panComplete = (bool) ($panVerified ?? false);
+                            $signatureComplete = (bool) (
+                                ($kyc && ($kyc->signature_document || $kyc->signature || $kyc->merchant_agreement)) ||
+                                ($customer->signature_document ?? null) ||
+                                ($customer->signature ?? null)
+                            );
+                            $agreementComplete = (bool) (
+                                ($kyc && ($kyc->merchant_agreement_accepted_at || $kyc->terms_accepted_at)) ||
+                                ($customer->merchant_agreement_accepted_at ?? null)
+                            );
+                            $kycApproved = (bool) ($kyc && $kyc->kyc_status === 'approved');
+                            $profileKycSteps = [
+                                ['label' => 'Verify Aadhar',   'done' => $aadharComplete],
+                                ['label' => 'Verify PAN',      'done' => $panComplete],
+                                ['label' => 'Upload Signature', 'done' => $signatureComplete],
+                                ['label' => 'Merchant Agreement', 'done' => $agreementComplete],
+                                ['label' => 'Activation Pending', 'done' => $kycApproved],
+                            ];
+                            $profileCompletedKycSteps = collect($profileKycSteps)->filter(fn ($s) => $s['done'])->count();
+                        @endphp
+
+                        @if(! $profileIsBusiness && $kycStatusInfo['label'] !== 'Approved')
+                        <div class="mt-4 pt-3 border-top">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <p class="mb-0 fw-semibold" style="font-size:13px;">KYC Progress</p>
+                                <span class="badge badge-status"
+                                    style="font-size:11px; background:#e7edff; color:#2f66f3;">
+                                    {{ $profileCompletedKycSteps }} / 5 Steps
+                                </span>
+                            </div>
+                            <div class="profile-kyc-stepper">
+                                <div class="profile-kyc-stepper-track"></div>
+                                @foreach($profileKycSteps as $i => $profileStep)
+                                <div class="profile-kyc-step {{ $profileStep['done'] ? 'is-done' : '' }}">
+                                    <div class="profile-kyc-step-icon">
+                                        @if($profileStep['done'])
+                                            <i class="ti ti-check"></i>
+                                        @else
+                                            <span style="font-size:12px;">{{ $i + 1 }}</span>
+                                        @endif
+                                    </div>
+                                    <span class="profile-kyc-step-label">{{ $profileStep['label'] }}</span>
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        @endif
                     </div>
                 </div>
 
@@ -485,7 +596,8 @@
                         </div>
                     </div>
 
-                    <!-- Business / Organization Information -->
+                    <!-- Business / Organization Details (Business users only) -->
+                    @if(strtolower(trim((string) $userType)) === 'business')
                     <div class="col-12 col-lg-6">
                         <div class="card detail-card shadow-sm h-100">
                             <div class="card-header d-flex align-items-center gap-2">
@@ -514,8 +626,10 @@
                             </div>
                         </div>
                     </div>
+                    @endif
 
-                    <!-- GST Details -->
+                    <!-- GST Details (Business users only) -->
+                    @if(strtolower(trim((string) $userType)) === 'business')
                     <div class="col-12 col-lg-6">
                         <div class="card detail-card shadow-sm h-100">
                             <div class="card-header d-flex align-items-center gap-2">
@@ -577,6 +691,7 @@
                             </div>
                         </div>
                     </div>
+                    @endif
 
                     <!-- Account & Verification Summary -->
                     <div class="col-12 col-lg-6">

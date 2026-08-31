@@ -102,7 +102,7 @@
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
-                        <h4 class="mb-1">Common Stats (Fact Number Section)</h4>
+                        <!-- <h4 class="mb-1">Common Stats (Fact Number Section)</h4> -->
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
                         <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></a>

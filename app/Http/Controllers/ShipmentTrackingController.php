@@ -263,7 +263,7 @@ class ShipmentTrackingController extends Controller
         }
 
         if (! $response->successful()) {
-            return ['state' => 'failed', 'message' => 'HTTP '.$response->status(), 'response' => $body];
+            return ['state' => 'failed', 'message' => 'Tracking service is unavailable. Please try again later.', 'response' => $body];
         }
 
         return [
@@ -306,7 +306,7 @@ class ShipmentTrackingController extends Controller
             $body = ['raw_body' => $response->body()];
         }
         if (! $response->successful()) {
-            return ['state' => 'failed', 'message' => 'HTTP '.$response->status(), 'response' => $body];
+            return ['state' => 'failed', 'message' => 'Tracking service is unavailable. Please try again later.', 'response' => $body];
         }
 
         return ['state' => 'success', 'response' => $body, 'status' => $this->extractStatus($body)];

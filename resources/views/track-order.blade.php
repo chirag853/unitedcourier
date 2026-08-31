@@ -760,7 +760,7 @@
             .then(response => {
                 console.log('Tracking search response status:', response);
                 if (!response.ok) {
-                    throw new Error('Server returned ' + response.status + ': ' + response.statusText);
+                    throw new Error('Tracking service is unavailable. Please try again later.');
                 }
                 return response.json();
             })

@@ -74,27 +74,47 @@
 </head>
 
 <body>
-    <!-- Wrapper -->
-     <div class="main-wrapper">
-        <div class="page-wrapper">
-        <!-- Sidebar -->
+
+    <!-- Begin Wrapper -->
+    <div class="main-wrapper">
+
+        @include('admin.partials.header')
+
+        <!-- Search Modal -->
+        <div class="modal fade" id="searchModal">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content bg-transparent">
+                    <div class="card shadow-none mb-0">
+                        <div class="px-3 py-2 d-flex flex-row align-items-center" id="search-top">
+                            <i class="ti ti-search fs-22"></i>
+                            <input type="search" class="form-control border-0" placeholder="Search">
+                            <button type="button" class="btn p-0" data-bs-dismiss="modal" aria-label="Close"><i class="ti ti-x fs-22"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         @include('admin.partials.sidebar')
 
-        <!-- Main -->
-        <div id="main">
-            <!-- Top Header -->
-            @include('admin.partials.header')
-            
-            <!-- Main Body -->
-            <div class="main-content">
-                <div class="p-4">
-                    <!-- Page Header -->
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h4 class="mb-0">Manage Network Offices</h4>
+        <!-- ========================
+            Start Page Content
+        ========================= -->
+         
+        <div class="page-wrapper">
+
+            <!-- Start Content -->
+            <div class="content pb-0">
+
+                <!-- Page Header -->
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
+                    <div class="gap-2 d-flex align-items-center flex-wrap">
                         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addOfficeModal">
                             <i class="ti ti-plus me-2"></i>Add New Office
                         </button>
                     </div>
+                </div>
+                <!-- End Page Header -->
 
                     <!-- India Offices Section -->
                     <div class="mb-5">
@@ -266,9 +286,11 @@
                         </div>
                     </div>
                 </div>
+                <!-- End Content -->
             </div>
+            <!-- End Page Wrapper -->
         </div>
-    </div>
+        <!-- End Wrapper -->
 
     <!-- Add FAQ Modal -->
     <div class="modal fade" id="addFaqModal" tabindex="-1" aria-labelledby="addFaqModalLabel" aria-hidden="true">

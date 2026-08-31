@@ -1296,67 +1296,63 @@
                             </div>
                             <div class="step-label">3. Verify PAN</div>
                         </div>
+                        @if(! $skipCsbV)
                         <div class="step-item" id="step4-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
                             <div class="step-label">4. CSB-V</div>
                         </div>
+                        @endif
                         <div class="step-item" id="step5-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Upload Signature</div>
+                            <div class="step-label">{{ $skipCsbV ? 4 : 5 }}. Upload Signature</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. Merchant Agreement</div>
+                            <div class="step-label">{{ $skipCsbV ? 5 : 6 }}. Merchant Agreement</div>
                         </div>
                         <div class="step-item" id="step7-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">7. Activation Pending</div>
+                            <div class="step-label">{{ $skipCsbV ? 6 : 7 }}. Activation Pending</div>
                         </div>
                         @else
-                        <!-- Personal KYC (CSB-IV): 7 Steps -->
-                        <div class="step-item active" id="step1-indicator">
+                        <!-- Personal KYC (CSB-IV): 5 Steps -->
+                        <div class="step-item active" id="step2-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">1. KYC Verification</div>
-                        </div>
-                        <div class="step-item" id="step2-indicator">
-                            <div class="step-bar">
-                                <div class="step-bar-fill"></div>
-                            </div>
-                            <div class="step-label">2. Verify Aadhar</div>
+                            <div class="step-label">1. Verify Aadhar</div>
                         </div>
                         <div class="step-item" id="step3-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">3. Verify PAN</div>
+                            <div class="step-label">2. Verify PAN</div>
                         </div>
                         <div class="step-item" id="step5-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">4. Upload Signature</div>
+                            <div class="step-label">3. Upload Signature</div>
                         </div>
                         <div class="step-item" id="step6-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">5. Marchant Agreement</div>
+                            <div class="step-label">4. Merchant Agreement</div>
                         </div>
                         <div class="step-item" id="step7-indicator">
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">6. CSB V Ramp UP</div>
+                            <div class="step-label">5. Activation Pending</div>
                         </div>
                         @endif
                     </div>
@@ -1436,80 +1432,6 @@
                                     <button class="btn btn-outline-custom flex-md-shrink-1"
                                         style="width: auto; padding-left: 40px; padding-right: 40px;"
                                         onclick="nextStep(2)">Continue</button>
-                                </div>
-                            </div>
-                        @else
-                            <!-- Step 1 Content: Complete KYC (Personal) -->
-                            <div id="step1-content" class="step-content active">
-                                <h3 class="kyc-card-title">GST Details <span class="text-muted">(Optional)</span></h3>
-                                <p class="text-muted mb-1">GST is optional for Personal KYC. You may provide and verify
-                                    your GST details, or leave all GST fields empty and continue.</p>
-                                <p class="text-muted small mb-4" style="color: #b45309 !important;">
-                                    <i class="fas fa-info-circle me-1"></i>If you provide GST details, GST Number,
-                                    Business Name, verification, and GST Certificate PDF are all required.
-                                </p>
-
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-8">
-                                        <label class="form-label-custom">GST Number <span class="text-muted">(Optional)</span></label>
-                                        <div class="input-group-custom">
-                                            <input type="text" class="form-control input-custom"
-                                                placeholder="22AAAAA0000A1Z5" id="gstInput" maxlength="15"
-                                                style="text-transform: uppercase;">
-                                            <i class="fas fa-file-invoice"></i>
-                                        </div>
-                                        <small class="text-muted d-block mt-1">Format: 2-digit state code + 10-char PAN
-                                            + entity code + Z + checksum (15 chars)</small>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label-custom d-none d-md-block">&nbsp;</label>
-                                        <button class="btn btn-primary-custom" style="padding: 14px;" id="verifyGstBtn"
-                                            onclick="verifyGst()">Verify GST</button>
-                                    </div>
-                                </div>
-
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-12">
-                                        <label class="form-label-custom" for="gstBusinessName">Business Name <span class="text-muted">(Optional)</span></label>
-                                        <div class="input-group-custom">
-                                            <input type="text" class="form-control input-custom"
-                                                placeholder="Enter the name registered under this GSTIN"
-                                                id="gstBusinessName" maxlength="255" autocomplete="organization">
-                                            <i class="fas fa-building"></i>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row g-4 mb-4">
-                                    <div class="col-md-12">
-                                        <label class="form-label-custom">Upload GST Certificate <span class="text-muted">(Optional)</span></label>
-                                        <div id="gstCertUploadArea"
-                                            style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
-                                            onclick="document.getElementById('gstCertFileInput').click()">
-                                            <input type="file" id="gstCertFileInput"
-                                                accept=".pdf,application/pdf" style="display: none;">
-                                            <div id="gstCertUploadPlaceholder">
-                                                <i class="fas fa-file-invoice"
-                                                    style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
-                                                <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">
-                                                    Click to upload GST Certificate PDF
-                                                </p>
-                                                <p class="text-muted small mb-0">PDF only (max 5MB)</p>
-                                            </div>
-                                            <div id="gstCertPreview" style="display: none;">
-                                                <i class="fas fa-check-circle"
-                                                    style="font-size: 28px; color: #10b981; display: block; margin-bottom: 6px;"></i>
-                                                <p class="mb-0 fw-semibold small" id="gstCertFileName"
-                                                    style="color: #166534;"></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div id="gstStatus" class="otp-sent-status" style="display: none;"></div>
-
-                                <div class="text-end mt-4">
-                                    <button class="btn btn-primary-custom" onclick="nextStep(2)">Skip / Continue</button>
                                 </div>
                             </div>
                         @endif
@@ -1594,12 +1516,14 @@
                             </div>
 
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
+                                @if($userType === 'Business')
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
                                     onclick="nextStep(1)">Back</button>
+                                @endif
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;" id="aadharContinueBtn"
-                                    onclick="{{ $isAadhaarOptional ? 'skipAadhaarStep()' : 'nextStep(3)' }}">{{ $isAadhaarOptional ? 'Skip / Continue' : 'Continue' }}</button>
+                                    onclick="{{ $isAadhaarOptional ? 'skipAadhaarStep()' : 'nextStep(' . ($userType === 'Business' ? 3 : 2) . ')' }}">{{ $isAadhaarOptional ? 'Skip / Continue' : 'Continue' }}</button>
                             </div>
                         </div>
 
@@ -1673,16 +1597,17 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(2)">Back</button>
+                                    onclick="nextStep({{ $userType === 'Business' ? 2 : 1 }})">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;" id="panContinueBtn"
-                                    onclick="nextStep(4)">Continue</button>
+                                    onclick="nextStep({{ $userType === 'Business' ? 4 : 3 }})">Continue</button>
                             </div>
                         </div>
 
                         @if($userType === 'Business')
                         <!-- ===== BUSINESS KYC (CSB-V) STEPS 4-7 ===== -->
 
+                        @if(! $skipCsbV)
                         <!-- Business Step 4: CSB-V (Export Codes + LUT + Banking + Billing merged) -->
                         <div id="step4-content" class="step-content">
                             <h3 class="kyc-card-title">CSB-<span class="gradient-text">V</span></h3>
@@ -1942,6 +1867,7 @@
                                     onclick="nextStep(5)">Continue</button>
                             </div>
                         </div>
+                        @endif
 
                         <!-- Business Step 5: Upload Signature -->
                         <div id="step5-content" class="step-content">
@@ -1978,10 +1904,10 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(4)">Back</button>
+                                    onclick="nextStep({{ $skipCsbV ? 3 : 4 }})">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(6)">Continue</button>
+                                    onclick="nextStep({{ $skipCsbV ? 5 : 6 }})">Continue</button>
                             </div>
                         </div>
 
@@ -2021,10 +1947,10 @@
                             <div class="d-flex flex-column flex-md-row justify-content-between pt-3 gap-3">
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                    onclick="nextStep(3)">Back</button>
+                                    onclick="nextStep(2)">Back</button>
                                 <button class="btn btn-primary-custom"
                                     style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(5)">Continue</button>
+                                    onclick="nextStep(4)">Continue</button>
                             </div>
                         </div>
                         @endif
@@ -3058,10 +2984,10 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mt-3">
                                     <button class="btn btn-outline-custom"
                                         style="width: auto; padding-left: 40px; padding-right: 40px;"
-                                        onclick="nextStep(isBusinessFlow ? 5 : 4)">Back</button>
+                                        onclick="nextStep(isBusinessFlow ? (skipCsbV ? 4 : 5) : 3)">Back</button>
                                     <button class="btn btn-primary-custom"
                                         style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                        onclick="nextStep(isBusinessFlow ? 7 : 6)">Submit & Finish</button>
+                                        onclick="nextStep(isBusinessFlow ? (skipCsbV ? 6 : 7) : 5)">Submit & Finish</button>
                                 </div>
                             </div>
                         </div>
@@ -3074,7 +3000,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             <h3 class="kyc-card-title mb-2">Activation <span class="gradient-text">Pending</span></h3>
                             <p class="text-muted mx-auto" style="max-width: 500px;">
                                 @if($userType === 'Business')
-                                    We have received your Business KYC and CSB-V documents. Our verification team will review your application within 24 hours.
+                                    We have received your Business KYC{{ $skipCsbV ? ' documents' : ' and CSB-V documents' }}. Our verification team will review your application within 24 hours.
                                 @else
                                     We have received your KYC documents. Our verification team will review your application within 24 hours.
                                 @endif
@@ -3186,13 +3112,16 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     // Detect Business vs Personal flow and merge any server-side draft.
                     const isBusinessFlow = @json(strcasecmp(trim((string) $userType), 'Business') === 0);
                     const isAadhaarOptional = @json($isAadhaarOptional);
-                    const totalSteps = isBusinessFlow ? 7 : 6;
+                    const skipCsbV = @json($skipCsbV);
+                    const totalSteps = isBusinessFlow ? (skipCsbV ? 6 : 7) : 5;
                     const savedKycDraft = @json($kycDraft?->form_data ?? []);
                     const rawSavedKycStep = Number(@json($kycDraft?->current_step ?? 1)) || 1;
-                    // Personal step 4 was removed. Shift only later saved steps down by one.
-                    const normalizedSavedKycStep = !isBusinessFlow && rawSavedKycStep >= 5
-                        ? rawSavedKycStep - 1
-                        : rawSavedKycStep;
+                    // The Personal "Complete KYC" intro step has been removed, so any
+                    // restored personal draft step is shifted down by one to map onto
+                    // the new 5-step flow. Business drafts are never shifted.
+                    const normalizedSavedKycStep = isBusinessFlow
+                        ? rawSavedKycStep
+                        : Math.max(1, rawSavedKycStep - 1);
                     const savedKycStep = Math.min(totalSteps - 1, Math.max(1, normalizedSavedKycStep));
                     const kycDraftSaveUrl = @json(route('customer.kyc.draft.save'));
                     const kycType = isBusinessFlow ? 'business' : 'personal';
@@ -3260,7 +3189,9 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         const match = active && active.id.match(/step(\d+)-content/);
                         if (!match) return 1;
                         const domStep = Number(match[1]);
-                        return isBusinessFlow ? domStep : (domStep >= 5 ? domStep - 1 : domStep);
+                        return isBusinessFlow
+                            ? (skipCsbV ? (domStep >= 5 ? domStep - 1 : domStep) : domStep)
+                            : (domStep <= 3 ? domStep - 1 : domStep - 2);
                     }
 
                     function readKycField(id, key, transform) {
@@ -3332,9 +3263,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     }
 
                     function captureKycDraftData() {
-                        readKycField('gstInput', 'gst_number', value => value.trim().toUpperCase());
-                        const businessNameFieldId = isBusinessFlow ? 'bizGstBusinessName' : 'gstBusinessName';
-                        const businessNameField = document.getElementById(businessNameFieldId);
+                        const businessNameField = document.getElementById('bizGstBusinessName');
                         if (businessNameField && businessNameField.value.trim()) {
                             kycData.gst_business_name = businessNameField.value.trim();
                         }
@@ -3586,17 +3515,14 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         syncBusinessLutBondYear();
                     }
 
-                    function invalidateGstVerification(isBusiness) {
-                        const verified = isBusiness
-                            ? kycData.gst_certificate_verified || kycData.gst_verified
-                            : kycData.gst_verified;
-                        if (!verified) return;
+                    function invalidateGstVerification() {
+                        if (!(kycData.gst_certificate_verified || kycData.gst_verified)) return;
 
                         kycData.gst_verified = false;
                         kycData.gst_certificate_verified = false;
 
-                        const button = document.getElementById(isBusiness ? 'bizVerifyGstCertBtn' : 'verifyGstBtn');
-                        const status = document.getElementById(isBusiness ? 'bizGstStatus' : 'gstStatus');
+                        const button = document.getElementById('bizVerifyGstCertBtn');
+                        const status = document.getElementById('bizGstStatus');
                         if (button) {
                             button.innerHTML = 'Verify GST';
                             button.disabled = false;
@@ -3656,30 +3582,17 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     }
 
                     // GST identity inputs invalidate any verification tied to their old values.
-                    const gstInput = document.getElementById('gstInput');
-                    const gstBusinessName = document.getElementById('gstBusinessName');
                     const bizGstInput = document.getElementById('bizGstCertNumber');
                     const bizGstBusinessName = document.getElementById('bizGstBusinessName');
-                    if (gstInput) {
-                        gstInput.addEventListener('input', function(e) {
-                            e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
-                            invalidateGstVerification(false);
-                        });
-                    }
-                    if (gstBusinessName) {
-                        gstBusinessName.addEventListener('input', function() {
-                            invalidateGstVerification(false);
-                        });
-                    }
                     if (bizGstInput) {
                         bizGstInput.addEventListener('input', function(e) {
                             e.target.value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
-                            invalidateGstVerification(true);
+                            invalidateGstVerification();
                         });
                     }
                     if (bizGstBusinessName) {
                         bizGstBusinessName.addEventListener('input', function() {
-                            invalidateGstVerification(true);
+                            invalidateGstVerification();
                         });
                     }
 
@@ -3755,143 +3668,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
 
                     function normalizeName(value) {
                         return String(value || '').trim().toLowerCase();
-                    }
-
-                    function verifyGst() {
-                        const gstField = document.getElementById('gstInput');
-                        const businessNameField = document.getElementById('gstBusinessName');
-                        const gstFileInput = document.getElementById('gstCertFileInput');
-                        const verifyBtn = document.getElementById('verifyGstBtn');
-                        const gstStatus = document.getElementById('gstStatus');
-
-                        if (!gstField || !businessNameField || !verifyBtn) return;
-
-                        const gst = gstField.value.trim().toUpperCase();
-                        const businessName = businessNameField.value.trim();
-
-                        const missingItems = [];
-                        const invalidFields = [];
-
-                        if (!gst) {
-                            missingItems.push('GST Number');
-                            invalidFields.push(gstField);
-                        } else if (gst.length !== 15) {
-                            missingItems.push('A valid 15-character GST Number');
-                            invalidFields.push(gstField);
-                        }
-                        if (!businessName) {
-                            missingItems.push('Business Name (as registered under this GSTIN)');
-                            invalidFields.push(businessNameField);
-                        }
-                        const hasGstFile = Boolean(gstFileInput && gstFileInput.files && gstFileInput.files[0]);
-                        const hasStoredGstPath = Boolean(kycData.gst_certificate_document);
-                        if (!hasGstFile && !hasStoredGstPath) {
-                            missingItems.push('GST Certificate PDF');
-                            invalidFields.push(gstFileInput ? gstFileInput.closest('#gstCertUploadArea') : null);
-                        }
-
-                        if (missingItems.length > 0) {
-                            markFieldsInvalid(invalidFields);
-                            showKycAlert(
-                                'Complete your GST details',
-                                buildKycAlertList(
-                                    'Please fill in the following fields before verifying your GST:',
-                                    missingItems
-                                )
-                            );
-                            return;
-                        }
-                        if (hasGstFile && !validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
-                            return;
-                        }
-
-                        const verifyData = new FormData();
-                        verifyData.append('gst_number', gst);
-                        verifyData.append('business_name', businessName);
-                        if (hasGstFile) {
-                            verifyData.append('gst_certificate_document', gstFileInput.files[0]);
-                        } else {
-                            verifyData.append('gst_certificate_document_path', kycData.gst_certificate_document);
-                        }
-
-                        verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
-                        verifyBtn.disabled = true;
-
-                        fetch('{{ route("customer.verify.gst") }}', {
-                                method: 'POST',
-                                headers: {
-                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Accept': 'application/json'
-                                },
-                                body: verifyData
-                            })
-                            .then(response => {
-                                const contentType = response.headers.get('content-type');
-                                if (contentType && contentType.includes('application/json')) {
-                                    return response.json();
-                                }
-                                return response.text().then(text => {
-                                    console.error('Non-JSON GST response:', text);
-                                    return {
-                                        success: false,
-                                        message: 'Server error (non-JSON response). Please try again.'
-                                    };
-                                });
-                            })
-                            .then(data => {
-                                if (data.success) {
-                                    // Use the exact business name returned in the verification
-                                    // response so every later check compares the same value.
-                                    const verifiedBusinessName = (data.business_name || businessName).trim();
-                                    kycData.gst_number = gst;
-                                    kycData.gst_business_name = verifiedBusinessName;
-                                    businessNameField.value = verifiedBusinessName;
-                                    kycData.gst_verified = true;
-                                    saveKycDraft(getActiveKycStep());
-
-                                    // Prefill Billing Address from the GST verification response
-                                    if (data.address) {
-                                        kycData.billing_address = data.address;
-                                        const billingAddress = document.getElementById('bizBillingAddress');
-                                        if (billingAddress) billingAddress.value = data.address;
-                                        queueKycDraftSave();
-                                    }
-
-                                    gstStatus.innerHTML = '<i class="fas fa-check-circle"></i> ' + (data.message ||
-                                        'GST verified successfully!');
-                                    gstStatus.style.display = 'block';
-                                    gstStatus.style.color = '#10b981';
-
-                                    verifyBtn.innerHTML = '<i class="fas fa-check"></i> Verified';
-                                    verifyBtn.disabled = true;
-                                    gstField.readOnly = true;
-                                    businessNameField.readOnly = true;
-                                } else {
-                                    gstStatus.innerHTML = '<i class="fas fa-times-circle"></i> ' + (data.message ||
-                                        'GST verification failed.');
-                                    gstStatus.style.display = 'block';
-                                    gstStatus.style.color = '#dc3545';
-
-                                    verifyBtn.innerHTML = 'Verify GST';
-                                    verifyBtn.disabled = false;
-
-                                    showKycAlert('GST verification failed', data.message ||
-                                        'GST verification failed. Please check your details and try again.');
-                                }
-                            })
-                            .catch(error => {
-                                console.error('GST verify error:', error);
-                                gstStatus.innerHTML = '<i class="fas fa-times-circle"></i> Connection error';
-                                gstStatus.style.display = 'block';
-                                gstStatus.style.color = '#dc3545';
-
-                                verifyBtn.innerHTML = 'Verify GST';
-                                verifyBtn.disabled = false;
-
-                                showKycAlert('Connection error',
-                                    'A network error occurred while verifying your GST. Please try again.');
-                            });
                     }
 
                     function verifyAadhar() {
@@ -4168,7 +3944,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         'panFileInput'
                     ]);
                     const gstCertificateInputIds = new Set([
-                        'gstCertFileInput',
                         'bizGstCertFileInput'
                     ]);
 
@@ -4271,7 +4046,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         if (!input) return;
                         input.addEventListener('change', function () {
                             if (gstCertificateInputIds.has(fileInputId)) {
-                                invalidateGstVerification(fileInputId === 'bizGstCertFileInput');
+                                invalidateGstVerification();
                             }
                             if (fileInputId === 'aadharFrontFileInput') {
                                 invalidateAadharVerification();
@@ -4310,7 +4085,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     }
 
                     function initFileUploadPreviews() {
-                        handleFilePreview('gstCertFileInput', 'gstCertUploadPlaceholder', 'gstCertPreview', 'gstCertFileName', 'gst_certificate_file');
                         handleFilePreview('aadharFrontFileInput', 'aadharFrontUploadPlaceholder', 'aadharFrontPreview', 'aadharFrontFileName', 'aadhar_front_file');
                         handleFilePreview('aadharBackFileInput', 'aadharBackUploadPlaceholder', 'aadharBackPreview', 'aadharBackFileName', 'aadhar_back_file');
                         handleFilePreview('panFileInput', 'panUploadPlaceholder', 'panPreview', 'panFileName', 'pan_file');
@@ -4332,7 +4106,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     // restored Aadhaar draft data and continue without Aadhaar.
                     function skipAadhaarStep() {
                         if (!isAadhaarOptional) {
-                            nextStep(3);
+                            nextStep(isBusinessFlow ? 3 : 2);
                             return;
                         }
 
@@ -4363,14 +4137,18 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         delete kycData.aadhar_front_file;
                         delete kycData.aadhar_back_file;
                         delete kycData.aadhar_address;
-                        saveKycDraft(3);
-                        renderKycStep(3, true);
+                        saveKycDraft(isBusinessFlow ? 3 : 2);
+                        renderKycStep(isBusinessFlow ? 3 : 2, true);
                     }
 
                     // Validate that the current step is complete before allowing forward navigation
                     function validateStep(step) {
                         if (isBusinessFlow) {
                             // ===== BUSINESS FLOW (7 steps) =====
+                            // When the CSB-V step is skipped (Courier / Aggregator),
+                            // the Signature step becomes logical step 4, so later
+                            // steps shift up by one before validation.
+                            if (skipCsbV && step >= 4) step = step + 1;
                             if (step === 1) {
                                 // Step 1: Verify GST Certificate and its registered business name.
                                 const businessName = document.getElementById('bizGstBusinessName');
@@ -4518,42 +4296,9 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 if (selectedSignature && !validateBusinessSignatureFile(selectedSignature, sigFile)) return false;
                             }
                         } else {
-                            // ===== PERSONAL FLOW (6 steps) =====
+                            // ===== PERSONAL FLOW (5 steps) =====
                             if (step === 1) {
-                                // GST remains optional, but partially entered GST details must be completed and verified.
-                                const gstField = document.getElementById('gstInput');
-                                const businessName = document.getElementById('gstBusinessName');
-                                const gstFile = document.getElementById('gstCertFileInput');
-                                const gstNumber = gstField ? gstField.value.trim().toUpperCase() : '';
-                                const businessNameValue = businessName ? businessName.value.trim() : '';
-                                const hasGstFile = Boolean(gstFile && gstFile.files && gstFile.files[0]);
-                                const hasStoredGstPath = Boolean(kycData.gst_certificate_document);
-                                const hasAnyGstData = Boolean(gstNumber || businessNameValue || hasGstFile || hasStoredGstPath);
-
-                                if (hasAnyGstData) {
-                                    if (gstNumber.length !== 15) {
-                                        showKycAlert('Attention Needed', 'Please enter a valid 15-character GST number.');
-                                        if (gstField) gstField.focus();
-                                        return false;
-                                    }
-                                    if (!businessNameValue) {
-                                        showKycAlert('Attention Needed', 'Please enter the Business Name registered under this GSTIN.');
-                                        if (businessName) businessName.focus();
-                                        return false;
-                                    }
-                                    if (!hasGstFile && !hasStoredGstPath) {
-                                        showKycAlert('Attention Needed', 'Please upload your GST Certificate PDF before continuing.');
-                                        return false;
-                                    }
-                                    if (!kycData.gst_verified
-                                        || gstNumber !== String(kycData.gst_number || '').trim().toUpperCase()
-                                        || businessNameValue.toLowerCase() !== String(kycData.gst_business_name || '').trim().toLowerCase()) {
-                                        showKycAlert('Attention Needed', 'Please verify your GST details before continuing.');
-                                        return false;
-                                    }
-                                }
-                            } else if (step === 2) {
-                                // Step 2: Verify Aadhar
+                                // Step 1: Verify Aadhar
                                 if (!kycData.aadhar_verified) { showKycAlert('Attention Needed', 'Please verify your Aadhar number before continuing.'); return false; }
                                 const frontFile = document.getElementById('aadharFrontFileInput');
                                 const backFile = document.getElementById('aadharBackFileInput');
@@ -4561,13 +4306,13 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 const hasBackStored = Boolean(kycData.aadhar_back_document);
                                 if (!frontFile || (!frontFile.files || !frontFile.files[0]) && !hasFrontStored) { showKycAlert('Attention Needed', 'Please upload the front side of your Aadhaar.'); return false; }
                                 if (!backFile || (!backFile.files || !backFile.files[0]) && !hasBackStored) { showKycAlert('Attention Needed', 'Please upload the back side of your Aadhaar.'); return false; }
-                            } else if (step === 3) {
-                                // Step 3: Verify PAN
+                            } else if (step === 2) {
+                                // Step 2: Verify PAN
                                 if (!kycData.pan_verified) { showKycAlert('Attention Needed', 'Please verify your PAN before continuing.'); return false; }
                                 const panFile = document.getElementById('panFileInput');
                                 if (!panFile || (!panFile.files || !panFile.files[0]) && !kycData.pan_document) { showKycAlert('Attention Needed', 'Please upload your PAN card.'); return false; }
-                            } else if (step === 4) {
-                                // Step 4: Upload Signature
+                            } else if (step === 3) {
+                                // Step 3: Upload Signature
                                 const selectedSignature = signatureFileInput
                                     && signatureFileInput.files
                                     && signatureFileInput.files[0];
@@ -4579,7 +4324,9 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
 
                     function renderKycStep(stepNumber, shouldScroll) {
                         document.querySelectorAll('.step-content').forEach(content => content.classList.remove('active'));
-                        const domStep = isBusinessFlow || stepNumber <= 3 ? stepNumber : stepNumber + 1;
+                        const domStep = isBusinessFlow
+                            ? ((!skipCsbV || stepNumber <= 3) ? stepNumber : stepNumber + 1)
+                            : (stepNumber <= 2 ? stepNumber + 1 : stepNumber + 2);
                         const target = document.getElementById('step' + domStep + '-content');
                         if (target) target.classList.add('active');
 
@@ -4590,7 +4337,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             else if (currentIdx === stepNumber) item.classList.add('active');
                         });
 
-                        if (stepNumber === (isBusinessFlow ? 6 : 5)) {
+                        if (stepNumber === (isBusinessFlow ? (skipCsbV ? 5 : 6) : 4)) {
                             const billSignatureImg = document.getElementById('billSignatureImg');
                             const billSignaturePlaceholder = document.getElementById('billSignaturePlaceholder');
                             // Object URLs only exist until the current page is closed.
@@ -4634,7 +4381,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 // Leaving step 1 (Verify GST Certificate) -> save GST certificate number
                                 const gstCertInput = document.getElementById('bizGstCertNumber');
                                 if (gstCertInput) kycData.gst_certificate_number = gstCertInput.value.trim().toUpperCase();
-                            } else if (stepNumber === 5) {
+                            } else if (!skipCsbV && stepNumber === 5) {
                                 // Leaving step 4 (CSB-V merged) -> save IEC + AD Code + LUT + Bank + Billing
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
@@ -4669,14 +4416,14 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 if (billingContact) kycData.billing_contact = billingContact.value.trim();
                                 if (billingEmail) kycData.billing_email = billingEmail.value.trim();
                                 if (billingAddress) kycData.billing_address = billingAddress.value.trim();
-                            } else if (stepNumber === 7) {
+                            } else if (stepNumber === (skipCsbV ? 6 : 7)) {
                                 // Leaving step 6 (Terms & Conditions) -> submit Business KYC
                                 submitBusinessKYC();
                             }
                         } else {
-                            // ===== PERSONAL FLOW (6 steps) =====
-                            if (stepNumber === 6) {
-                                // Leaving step 5 (Bill) -> submit KYC data
+                            // ===== PERSONAL FLOW (5 steps) =====
+                            if (stepNumber === 5) {
+                                // Leaving step 4 (Bill) -> submit KYC data
                                 submitKYC();
                             }
                         }
@@ -4867,8 +4614,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             kycData.billing_address = @json(session('kyc_gst_address', ''));
                         }
                         const values = {
-                            gstInput: kycData.gst_number,
-                            gstBusinessName: kycData.gst_business_name || kycData.organization_name,
                             aadharInput: kycData.aadhar_number ? String(kycData.aadhar_number).replace(/(.{4})(?=.)/g, '$1 ') : '',
                             panInput: kycData.pan_number,
                             panHolderName: kycData.pan_holder_name,
@@ -4920,7 +4665,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         delete kycData.business_signature;
 
                         // Restore previews for documents already stored server-side.
-                        restoreStoredKycDocPreview('gst_certificate_document', 'gstCertUploadPlaceholder', 'gstCertPreview', 'gstCertFileName', false);
                         restoreStoredKycDocPreview('aadhar_front_document', 'aadharFrontUploadPlaceholder', 'aadharFrontPreview', 'aadharFrontFileName', true);
                         restoreStoredKycDocPreview('aadhar_back_document', 'aadharBackUploadPlaceholder', 'aadharBackPreview', 'aadharBackFileName', true);
                         restoreStoredKycDocPreview('pan_document', 'panUploadPlaceholder', 'panPreview', 'panFileName', true);
@@ -4943,8 +4687,6 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             if (businessSignaturePreviewWrap) businessSignaturePreviewWrap.style.display = 'block';
                         }
 
-                        restoreVerifiedState('gstInput', 'verifyGstBtn', 'gstStatus', kycData.gst_verified,
-                            'GST verification restored from your saved KYC.', 'gstBusinessName');
                         restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus',
                             kycData.aadhar_verified,
                             kycData.aadhar_verified
@@ -5076,9 +4818,8 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                         message: (await response.text()).trim()
                                     };
 
-                                data.httpStatus = response.status;
                                 if (!data.message) {
-                                    data.message = 'Server returned HTTP ' + response.status + '.';
+                                    data.message = 'Something went wrong. Please try again.';
                                 }
 
                                 return data;
@@ -5113,8 +4854,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                     const validationErrors = data.errors
                                         ? Object.values(data.errors).flat().join('\n')
                                         : '';
-                                    const status = data.httpStatus ? ' (HTTP ' + data.httpStatus + ')' : '';
-                                    showKycAlert('Attention Needed', 'Error' + status + ': ' + (validationErrors || data.message || 'Unknown server response'));
+                                    showKycAlert('Attention Needed', validationErrors || data.message || 'Something went wrong. Please try again.');
                                     if (submitBtn) {
                                         submitBtn.innerHTML = 'Go to Dashboard';
                                         submitBtn.disabled = false;
@@ -5534,6 +5274,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     <!-- End Shipment Analytics Section -->
 
                     <!-- start row -->
+                    @if(! $skipCsbV)
                     <h6 class="mb-2">Upgrade Your Service</h6>
 
                     <div class="row row-gap-3 mb-4">
@@ -5569,6 +5310,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         <!-- /Total Companies -->
 
                     </div>
+                    @endif
                     <!-- end row -->
 
 

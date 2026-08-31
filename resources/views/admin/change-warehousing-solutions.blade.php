@@ -105,7 +105,7 @@
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
-                        <h4 class="mb-1">Change Warehousing Solutions</h4>
+                        <!-- <h4 class="mb-1">Change Warehousing Solutions</h4> -->
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
                         <!-- <button type="button" class="btn btn-primary" onclick="openCreateModal()"><i class="ti ti-plus me-1"></i> Add New Content</button> -->

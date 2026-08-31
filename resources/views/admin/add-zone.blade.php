@@ -106,9 +106,9 @@
                                 <form id="addZoneForm" method="POST" action="{{ route('admin.add-zone.store') }}">
                                     @csrf
 
-                                    <!-- Step 1: Country -->
+                                    <!-- Step 1: Country & Service -->
                                     <div class="mb-4">
-                                        <h6 class="mb-3"><span class="step-badge">1</span>Select Country</h6>
+                                        <h6 class="mb-3"><span class="step-badge">1</span>Select Country & Service</h6>
                                         <div class="row g-3">
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
@@ -119,6 +119,19 @@
                                                     @endforeach
                                                 </select>
                                                 <small class="text-muted">Choose the country these zones belong to. Need a new country? <a href="{{ route('admin.add-country') }}">Add Country</a>.</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Service <span class="text-muted">(optional)</span></label>
+                                                <select class="form-select" id="service_id" name="service_id">
+                                                    <option value="">— No Service —</option>
+                                                    @foreach($services as $svc)
+                                                        <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
+                                                            {{ $svc->method ?? ('Service #' . $svc->id) }}
+                                                            @if(!empty($svc->service_code)) - ({{ $svc->service_code }}) @endif
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                <small class="text-muted">Only services for the selected country are shown. Optionally link these zones to a courier service (e.g. United Ground Premium).</small>
                                             </div>
                                         </div>
                                     </div>
@@ -160,7 +173,7 @@
                                         </div>
                                         <div class="alert alert-info py-2">
                                             <i class="ti ti-info-circle me-1"></i>
-                                            Add one row per zone entry. For the "State" category, enter state names (e.g. Alabama, Texas). For "Zipcode", enter postal codes (e.g. 10001, 90210). For "City", enter city names. <strong>A single zone name can have multiple zone codes</strong> — to add more codes for the same name, just add another row with the same zone name and a different zone code. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country.
+                                            Add one row per zone entry. For the "State" category, enter state names (e.g. Alabama, Texas). For "Zipcode", enter postal codes (e.g. 10001, 90210). For "City", enter city names. <strong>A single zone name can have multiple zone codes</strong> — to add more codes for the same name, just add another row with the same zone name and a different zone code. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country <strong>and the selected Service</strong> (if a Service is chosen).
                                         </div>
                                         <div class="table-responsive">
                                             <table class="table table-bordered" id="zoneEntriesTable">
@@ -208,14 +221,14 @@
                             <div class="card-body">
                                 <div class="alert alert-info">
                                     <i class="ti ti-info-circle me-1"></i>
-                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>A single zone name can have multiple zone codes</strong> — repeat the same zone name on multiple rows with a different zone code each time. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country. <strong>Tip:</strong> select the Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. The Country, Zone Category and Zone Number you select below will be applied to <em>every</em> row in the file.
+                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>A single zone name can have multiple zone codes</strong> — repeat the same zone name on multiple rows with a different zone code each time. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country <strong>and the selected Service</strong> (if a Service is chosen). <strong>Tip:</strong> select the Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. The Country, Zone Category, Zone Number and Service you select below will be applied to <em>every</em> row in the file.
                                 </div>
                                 <form id="uploadZoneForm" method="POST" action="{{ route('admin.add-zone.upload') }}" enctype="multipart/form-data">
                                     @csrf
                                     <div class="row g-3 align-items-end">
                                         <div class="col-md-3">
                                             <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
-                                            <select class="form-select" name="destination_id" required>
+                                            <select class="form-select" id="upload_destination_id" name="destination_id" required>
                                                 <option value="">— Select Country —</option>
                                                 @foreach($destinations as $dest)
                                                     <option value="{{ $dest->id }}">{{ $dest->name }} ({{ $dest->code }})</option>
@@ -240,7 +253,19 @@
                                                 @endfor
                                             </select>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-bold">Service <span class="text-muted">(optional)</span></label>
+                                            <select class="form-select" id="upload_service_id" name="service_id">
+                                                <option value="">— No Service —</option>
+                                                @foreach($services as $svc)
+                                                    <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
+                                                        {{ $svc->method ?? ('Service #' . $svc->id) }}
+                                                        @if(!empty($svc->service_code)) [{{ $svc->service_code }}] @endif
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
                                             <label class="form-label fw-bold">Excel File <span class="text-danger">*</span></label>
                                             <small class="text-muted">Max 5 MB. .xlsx, .xls or .csv</small>
                                             <input type="file" class="form-control" name="zone_file" accept=".xlsx,.xls,.csv" required>
@@ -304,16 +329,56 @@
                 });
             }
 
-            // Step 1 -> Step 2: when a country is selected, reveal the category section.
+            // Show only the services that belong to the selected country.
+            // Each option carries a data-country-id attribute (the matching
+            // destination id), populated server-side via $serviceDestMap.
+            function filterServicesByCountry(countryId, $serviceSelect) {
+                $serviceSelect.find('option').each(function() {
+                    var $opt = $(this);
+                    if ($opt.val() === '') {
+                        $opt.show(); // keep the "— No Service —" placeholder
+                        return;
+                    }
+                    if (String($opt.data('country-id')) === String(countryId)) {
+                        $opt.show();
+                    } else {
+                        $opt.hide();
+                    }
+                });
+            }
+
+            function showAllServices($serviceSelect) {
+                $serviceSelect.find('option').each(function() {
+                    $(this).show();
+                });
+            }
+
+            // Step 1 -> Step 2: when a country is selected, reveal the category
+            // section and filter the Service dropdown to that country only.
             $('#destination_id').on('change', function() {
                 if (this.value) {
                     $('#categorySection').show();
+                    $('#service_id').val('');
+                    filterServicesByCountry(this.value, $('#service_id'));
                 } else {
                     $('#categorySection').hide();
                     $('#entriesSection').hide();
                     $('#submitSection').hide();
                     $('#zone_category').val('');
                     $('#zone_number').val('');
+                    $('#service_id').val('');
+                    showAllServices($('#service_id'));
+                }
+            });
+
+            // Keep the bulk upload form's Service dropdown in sync with its
+            // Country selection.
+            $('#upload_destination_id').on('change', function() {
+                $('#upload_service_id').val('');
+                if (this.value) {
+                    filterServicesByCountry(this.value, $('#upload_service_id'));
+                } else {
+                    showAllServices($('#upload_service_id'));
                 }
             });
 
@@ -357,6 +422,8 @@
                 $('#entriesSection').hide();
                 $('#submitSection').hide();
                 $('#zoneEntriesBody').empty();
+                $('#service_id').val('');
+                showAllServices($('#service_id'));
             });
 
             // Form submit guard: ensure at least one non-empty entry exists.

@@ -3492,7 +3492,7 @@ class AdminController extends Controller
             'service_id'      => 'required|integer|exists:courier_services,id',
             'wt_range_start'  => 'required|numeric|min:0',
             'wt_range_end'    => 'required|numeric|min:0|gt:wt_range_start',
-            'zone_no'         => 'required|integer|min:0|max:13',
+            'zone_no'         => 'nullable|integer|min:0|max:13',
             'price'           => 'required|numeric|min:0',
             'fuel_charge'     => 'nullable|numeric|min:0',
             'fuel_percentage' => 'nullable|numeric|min:0',
@@ -3507,12 +3507,27 @@ class AdminController extends Controller
             (array) ($validated['surcharge_id'] ?? [])
         ))));
 
+        // Zone-less countries submit an empty zone_no. Normalize it to null
+        // so the rate is stored as a zone-independent default rate.
+        $zoneNo = $validated['zone_no'] ?? null;
+        if ($zoneNo === '' || $zoneNo === null) {
+            $zoneNo = null;
+        } else {
+            $zoneNo = (int) $zoneNo;
+        }
+
         // Guard against duplicate default rates for the same service+weight+zone.
         $exists = \App\Models\CourierRate::where('customer_id', 0)
             ->where('service_id', $validated['service_id'])
             ->where('wt_range_start', $validated['wt_range_start'])
             ->where('wt_range_end', $validated['wt_range_end'])
-            ->where('zone_no', $validated['zone_no'])
+            ->where(function ($q) use ($zoneNo) {
+                if ($zoneNo === null) {
+                    $q->whereNull('zone_no');
+                } else {
+                    $q->where('zone_no', $zoneNo);
+                }
+            })
             ->exists();
 
         if ($exists) {
@@ -3524,13 +3539,13 @@ class AdminController extends Controller
 
         $customerCount = 0;
 
-        DB::transaction(function () use ($validated, $surchargeIds, &$rate, &$customerCount) {
+        DB::transaction(function () use ($validated, $zoneNo, $surchargeIds, &$rate, &$customerCount) {
             $rate = \App\Models\CourierRate::create([
                 'customer_id'     => 0,
                 'service_id'      => $validated['service_id'],
                 'wt_range_start'  => $validated['wt_range_start'],
                 'wt_range_end'    => $validated['wt_range_end'],
-                'zone_no'         => $validated['zone_no'],
+                'zone_no'         => $zoneNo,
                 'price'           => $validated['price'],
                 'fuel_charge'     => $validated['fuel_charge'] ?? 0,
                 'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
@@ -3554,7 +3569,13 @@ class AdminController extends Controller
                     ->where('service_id', $validated['service_id'])
                     ->where('wt_range_start', $validated['wt_range_start'])
                     ->where('wt_range_end', $validated['wt_range_end'])
-                    ->where('zone_no', $validated['zone_no'])
+                    ->where(function ($q) use ($zoneNo) {
+                        if ($zoneNo === null) {
+                            $q->whereNull('zone_no');
+                        } else {
+                            $q->where('zone_no', $zoneNo);
+                        }
+                    })
                     ->pluck('customer_id')
                     ->toArray();
 
@@ -3563,13 +3584,13 @@ class AdminController extends Controller
 
                 if (!empty($customersNeedingRate)) {
                     $now = now();
-                    $rows = array_map(function ($customerId) use ($validated, $now, $surchargeIds) {
+                    $rows = array_map(function ($customerId) use ($validated, $zoneNo, $now, $surchargeIds) {
                         return [
                             'customer_id'     => $customerId,
                             'service_id'      => $validated['service_id'],
                             'wt_range_start'  => $validated['wt_range_start'],
                             'wt_range_end'    => $validated['wt_range_end'],
-                            'zone_no'         => $validated['zone_no'],
+                            'zone_no'         => $zoneNo,
                             'price'           => $validated['price'],
                             'fuel_charge'     => $validated['fuel_charge'] ?? 0,
                             'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
@@ -4142,8 +4163,26 @@ class AdminController extends Controller
     public function addZone()
     {
         $destinations = \App\Models\Destination::orderBy('name')->get();
+        $services = \App\Models\CourierService::orderBy('real_name')->get();
 
-        return view('admin.add-zone', compact('destinations'));
+        // Build a service_id => destination_id map so the view can filter the
+        // Service dropdown by the selected Country without extra DB queries.
+        // A service is matched to a destination by its `country` string against
+        // the destination's country_code / code / name (same logic as
+        // destinationIdForCountry()).
+        $destinationIdByCountryKey = collect();
+        foreach ($destinations as $dest) {
+            foreach ([$dest->country_code, $dest->code, $dest->name] as $key) {
+                $destinationIdByCountryKey[strtolower(trim((string) $key))] = $dest->id;
+            }
+        }
+
+        $serviceDestMap = [];
+        foreach ($services as $svc) {
+            $serviceDestMap[$svc->id] = $destinationIdByCountryKey[strtolower(trim((string) $svc->country))] ?? null;
+        }
+
+        return view('admin.add-zone', compact('destinations', 'services', 'serviceDestMap'));
     }
 
     /**
@@ -4179,6 +4218,7 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
+            'service_id'     => 'nullable|integer|exists:courier_services,id',
             'entries'        => 'required|array|min:1',
             'entries.*.zone_name' => 'required|string|max:100',
             'entries.*.zone_code' => 'nullable|string|max:10',
@@ -4197,12 +4237,18 @@ class AdminController extends Controller
         // unique) and exact (name + code) pairs (to avoid identical rows).
         //
         // CODE UNIQUENESS SCOPE:
-        //   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for
-        //   every category (state, zipcode, city). The same code may exist in
-        //   different countries; it is only a duplicate within the same
-        //   selected country + category.
+        //   zone_code uniqueness is scoped to the SELECTED COUNTRY +
+        //   SELECTED SERVICE only, for every category (state, zipcode, city).
+        //   The same code may exist in different countries or under different
+        //   services; it is only a duplicate within the same selected country
+        //   + category + service.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
+            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
+                $q->where('service_id', $validated['service_id']);
+            }, function ($q) {
+                $q->whereNull('service_id');
+            })
             ->get(['zone_name', 'zone_code']);
 
         $existingCodes = [];
@@ -4266,6 +4312,7 @@ class AdminController extends Controller
 
             \App\Models\Zone::create([
                 'destination_id'      => $validated['destination_id'],
+                'service_id'          => $validated['service_id'] ?? null,
                 'zone_category'       => $validated['zone_category'],
                 'zone_number'         => $validated['zone_number'],
                 'zone_number_testing' => $validated['zone_number'],
@@ -4392,6 +4439,7 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
+            'service_id'     => 'nullable|integer|exists:courier_services,id',
             'zone_file'      => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
 
@@ -4483,12 +4531,18 @@ class AdminController extends Controller
         // unique) and exact (name + code) pairs (to avoid identical rows).
         //
         // CODE UNIQUENESS SCOPE:
-        //   zone_code uniqueness is scoped to the SELECTED COUNTRY only, for
-        //   every category (state, zipcode, city). The same code may exist in
-        //   different countries; it is only a duplicate within the same
-        //   selected country + category.
+        //   zone_code uniqueness is scoped to the SELECTED COUNTRY +
+        //   SELECTED SERVICE only, for every category (state, zipcode, city).
+        //   The same code may exist in different countries or under different
+        //   services; it is only a duplicate within the same selected country
+        //   + category + service.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
+            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
+                $q->where('service_id', $validated['service_id']);
+            }, function ($q) {
+                $q->whereNull('service_id');
+            })
             ->get(['zone_name', 'zone_code']);
 
         $existingCodes = [];
@@ -4580,6 +4634,7 @@ class AdminController extends Controller
 
             \App\Models\Zone::create([
                 'destination_id'      => $validated['destination_id'],
+                'service_id'          => $validated['service_id'] ?? null,
                 'zone_category'       => $validated['zone_category'],
                 'zone_number'         => $validated['zone_number'],
                 'zone_number_testing' => $validated['zone_number'],

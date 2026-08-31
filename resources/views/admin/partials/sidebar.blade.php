@@ -308,9 +308,9 @@
                             <a href="{{ route('admin.my-profile') }}" class="{{ request()->is('admin/my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                         </li>
                         @endif
-                        <li>
+                        <!-- <li>
                             <a href="#"><i class="ti ti-chart-arcs"></i><span>Logout</span></a>
-                        </li>
+                        </li> -->
                     </ul>
                 </li>
             </ul>

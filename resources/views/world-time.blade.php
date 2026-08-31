@@ -430,7 +430,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch(url)
                 .then(res => {
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    if (!res.ok) throw new Error('World time service is unavailable. Please try again later.');
                     return res.json();
                 })
                 .then(data => {

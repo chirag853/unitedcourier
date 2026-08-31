@@ -21,6 +21,7 @@ class Zone extends Model
         'zone_category',
         'description',
         'destination_id',
+        'service_id',
     ];
 
     protected $casts = [
@@ -42,5 +43,13 @@ class Zone extends Model
     public function destination()
     {
         return $this->belongsTo(Destination::class, 'destination_id', 'id');
+    }
+
+    /**
+     * Get the courier service this zone belongs to.
+     */
+    public function service()
+    {
+        return $this->belongsTo(CourierService::class, 'service_id', 'id');
     }
 }

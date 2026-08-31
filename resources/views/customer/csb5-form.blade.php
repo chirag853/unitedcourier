@@ -100,8 +100,8 @@
                 <div class="form-wrapper">
                     <div class="kyc-card">
                         <div class="form-header">
-                            <h2>Complete <span class="gradient-text">CSB V Onboarding</span></h2>
-                            <p>Provide details for the digital agreement.</p>
+                            <h2>Complete <span class="gradient-text">{{ $isCourierOrAggregator ? 'Business KYC' : 'CSB V Onboarding' }}</span></h2>
+                            <p>{{ $isCourierOrAggregator ? 'Provide your business details for verification.' : 'Provide details for the digital agreement.' }}</p>
                         </div>
 
                         <form id="csbvForm" action="{{ route('customer.csb5-form.standalone.store') }}" method="POST"
@@ -117,20 +117,22 @@
                             @endphp
 
                             <div class="section-title-alt">Select Tax Type <span class="text-danger">*</span></div>
-                            <p class="text-muted small mb-2">Select GST, LUT, or both. At least one option is required.</p>
+                            <p class="text-muted small mb-2">{{ $isCourierOrAggregator ? 'GST registration is required for Business KYC.' : 'Select GST, LUT, or both. At least one option is required.' }}</p>
                             <div class="d-flex flex-wrap gap-4 mb-4">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="gstType" name="is_gst"
-                                        value="1" {{ old('is_gst', $csbForm->is_gst ?? false) ? 'checked' : '' }}
+                                        value="1" {{ $isCourierOrAggregator ? 'checked disabled' : (old('is_gst', $csbForm->is_gst ?? false) ? 'checked' : '') }}
                                         onchange="toggleCsbTaxSections();">
                                     <label class="form-check-label fw-bold" for="gstType">GST</label>
                                 </div>
+                                @if(! $isCourierOrAggregator)
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="lutType" name="is_lut"
                                         value="1" {{ old('is_lut', $csbForm->is_lut ?? false) ? 'checked' : '' }}
                                         onchange="toggleCsbTaxSections();">
                                     <label class="form-check-label fw-bold" for="lutType">LUT (Against Bond or UT)</label>
                                 </div>
+                                @endif
                             </div>
 
                             <div id="gstSectionWrapper">
@@ -196,6 +198,7 @@
                                 </div>
                             </div>
 
+                            @if(! $isCourierOrAggregator)
                             <div class="section-title-alt">Export Codes</div>
                             <div class="row g-3">
                                 <div class="col-md-6">
@@ -277,7 +280,9 @@
                                     </div>
                                 </div>
                             </div>
+                            @endif
 
+                            @if(! $isCourierOrAggregator)
                             <div class="section-title-alt">Bank Details</div>
                             <div class="row g-3">
                                 <div class="col-md-6">
@@ -304,6 +309,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @endif
 
                             @php
                                 $savedLutBondYear = old('lut_bond_year', $csbForm->lut_bond_year ?? '');
@@ -322,6 +328,7 @@
                                 $currentLutYear = now()->year;
                                 $lutStartYears = range($currentLutYear, $currentLutYear + 5);
                             @endphp
+                            @if(! $isCourierOrAggregator)
                             <div id="lutSectionWrapper">
                                 <div class="section-title-alt">LUT Details</div>
                                 <div class="row g-3" id="lutDetailsSection">
@@ -401,7 +408,9 @@
                                 </div>
                             </div>
                             </div>
+                            @endif
 
+                            @if(! $isCourierOrAggregator)
                             <div class="section-title-alt">Billing Details</div>
                             <div class="row g-3">
                                 <div class="col-12">
@@ -441,6 +450,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @endif
                             <div class="section-title-alt">Merchant Agreement</div>
                             <div class="row g-3">
                                 <div class="col-12">
@@ -804,12 +814,16 @@
                             }
                             var standardDocuments = ['pdf', 'jpg', 'jpeg', 'png'];
 
+                            @if(! $isCourierOrAggregator)
                             if (!/^(\d{7}|\d{14})$/.test(fieldValue('ad_code'))) return showCsb5ValidationError('AD Code must be exactly 7 or 14 numeric digits.', targetForm.querySelector('[name="ad_code"]'));
                             if (!/^[A-Z0-9]{10}$/.test(fieldValue('iec_number').toUpperCase())) return showCsb5ValidationError('IEC Number must be exactly 10 letters or digits.', targetForm.querySelector('[name="iec_number"]'));
+                            @endif
 
                             var gstEnabled = !!(document.getElementById('gstType') || {}).checked;
                             var lutEnabled = !!(document.getElementById('lutType') || {}).checked;
+                            @if(! $isCourierOrAggregator)
                             if (!gstEnabled && !lutEnabled) return showCsb5ValidationError('Please select GST, LUT, or both before continuing.', document.getElementById('gstType'));
+                            @endif
 
                             if (gstEnabled) {
                                 var gstCertInput = targetForm.querySelector('[name="gst_certificate_document"]');
@@ -824,10 +838,12 @@
                                 if (!csbGstVerified) return showCsb5ValidationError('Verify the GSTIN and Business Name through Cashfree before continuing.', verifyCsbGstBtn);
                             }
 
+                            @if(! $isCourierOrAggregator)
                             if (!validateCsb5File(targetForm, 'ad_code_document', 'the AD Code Document', standardDocuments, 5)) return false;
                             if (!validateCsb5File(targetForm, 'iec_document', 'the IEC Document', standardDocuments, 5)) return false;
                             if (!/^\d{9,18}$/.test(fieldValue('bank_account_number'))) return showCsb5ValidationError('Bank Account Number must contain 9 to 18 digits.', targetForm.querySelector('[name="bank_account_number"]'));
                             if (['private', 'government'].indexOf(fieldValue('bank_type')) === -1) return showCsb5ValidationError('Please select a valid Bank Type.', targetForm.querySelector('[name="bank_type"]'));
+                            @endif
 
                             if (lutEnabled) {
                                 if (!fieldValue('lut_number')) return showCsb5ValidationError('Please enter the LUT Number.', targetForm.querySelector('[name="lut_number"]'));
@@ -842,9 +858,11 @@
                                 if (!validateCsb5File(targetForm, 'lut_document', 'the LUT Document', ['pdf'], 5)) return false;
                             }
 
+                            @if(! $isCourierOrAggregator)
                             if (fieldValue('billing_address').length < 10 || fieldValue('billing_address').length > 1000) return showCsb5ValidationError('Billing Address must contain 10 to 1000 characters.', targetForm.querySelector('[name="billing_address"]'));
                             if (!/^[6-9]\d{9}$/.test(fieldValue('billing_contact'))) return showCsb5ValidationError('Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.', targetForm.querySelector('[name="billing_contact"]'));
                             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fieldValue('billing_email'))) return showCsb5ValidationError('Please enter a valid Billing Email address.', targetForm.querySelector('[name="billing_email"]'));
+                            @endif
                             if (!validateCsb5File(targetForm, 'merchant_agreement', 'the signed Merchant Agreement', ['pdf'], 10)) return false;
                             if (!targetForm.querySelector('[name="terms_accepted"]').checked) return showCsb5ValidationError('Please accept the declaration and terms before continuing.', targetForm.querySelector('[name="terms_accepted"]'));
                             return true;
@@ -860,7 +878,7 @@
                             var formData = new FormData(form);
                             formData.set('is_csb_v', '1');
                             formData.set('is_gst', document.getElementById('gstType').checked ? '1' : '0');
-                            formData.set('is_lut', document.getElementById('lutType').checked ? '1' : '0');
+                            formData.set('is_lut', (document.getElementById('lutType') || {}).checked ? '1' : '0');
                             formData.set('lut_verified', '0');
 
                             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> SUBMITTING...';

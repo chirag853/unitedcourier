@@ -64,7 +64,7 @@
                 <!-- Page Header -->
                 <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
-                        <h4 class="mb-1">Change Document Download Page</h4>
+                        <!-- <h4 class="mb-1">Change Document Download Page</h4> -->
                     </div>
                     <div class="gap-2 d-flex align-items-center flex-wrap">
                         <!-- <a href="{{ route('admin.edit-all-document-download') }}" class="btn btn-success"><i class="ti ti-pencil me-1"></i> Edit All</a> -->

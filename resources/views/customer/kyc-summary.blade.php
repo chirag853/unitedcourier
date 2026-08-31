@@ -274,7 +274,7 @@
             <div class="content pb-0">
 
                 <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
+                <!-- <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                     <div>
                         <h4 class="mb-1">KYC Summary</h4>
                         <nav aria-label="breadcrumb">
@@ -289,7 +289,7 @@
                             <i class="ti ti-user me-1"></i> My Profile
                         </a>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Success/Error Messages -->
                 <div id="alertContainer"></div>
@@ -322,7 +322,11 @@
 
                     // CSB type label
                     $csbTypeLabel = 'None';
-                    if ($customer->csb_status == 1) {
+                    if ($isCourierOrAggregator) {
+                        // Courier / Aggregator customers complete Business KYC
+                        // without the CSB-V export details.
+                        $csbTypeLabel = 'Business KYC';
+                    } elseif ($customer->csb_status == 1) {
                         $csbTypeLabel = 'CSB-IV (Personal)';
                     } elseif ($customer->csb_status == 2) {
                         $csbTypeLabel = 'CSB-V (Business)';
@@ -472,12 +476,12 @@
                                     </a>
                                     <a href="{{ route('customer.csb5-form') }}" class="btn kyc-action-btn btn-business btn-kyc-secondary">
                                         <i class="ti ti-building me-1"></i>
-                                        {{ $businessKyc ? 'Edit Business KYC' : 'Start Business KYC (CSB-V)' }}
+                                        {{ $businessKyc ? 'Edit Business KYC' : ($isCourierOrAggregator ? 'Start Business KYC' : 'Start Business KYC (CSB-V)') }}
                                     </a>
                                 @else
                                     <a href="{{ route('customer.csb5-form') }}" class="btn kyc-action-btn btn-business">
                                         <i class="ti ti-building me-1"></i>
-                                        {{ $businessKyc ? 'Edit Business KYC' : 'Start Business KYC (CSB-V)' }}
+                                        {{ $businessKyc ? 'Edit Business KYC' : ($isCourierOrAggregator ? 'Start Business KYC' : 'Start Business KYC (CSB-V)') }}
                                     </a>
                                     <a href="{{ route('customer.kyc.personal') }}" class="btn kyc-action-btn btn-personal btn-kyc-secondary">
                                         <i class="ti ti-user me-1"></i>
@@ -615,7 +619,7 @@
                             <div class="card-header d-flex align-items-center justify-content-between gap-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <i class="ti ti-building-store"></i>
-                                    <span>Business KYC Details (CSB-V)</span>
+                                    <span>Business KYC Details{{ $isCourierOrAggregator ? '' : ' (CSB-V)' }}</span>
                                 </div>
                                 <span class="badge {{ $businessStatusClass }} badge-status">{{ $businessStatus }}</span>
                             </div>
@@ -633,6 +637,7 @@
                                         <span class="detail-label"><i class="ti ti-file-upload"></i>GST Document</span>
                                         <span class="detail-value">{!! $docLink($businessKyc->gst_document, 'View') !!}</span>
                                     </div>
+                                    @if(! $isCourierOrAggregator)
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-file-text"></i>IEC Number</span>
                                         <span class="detail-value">{{ $businessKyc->iec_number ?: 'N/A' }}</span>
@@ -671,6 +676,8 @@
                                             @endif
                                         </span>
                                     </div>
+                                    @endif
+                                    @if(! $isCourierOrAggregator)
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-university"></i>Bank Account Number</span>
                                         <span class="detail-value">{{ $businessKyc->bank_account_number ?: 'N/A' }}</span>
@@ -679,6 +686,7 @@
                                         <span class="detail-label"><i class="ti ti-landmark"></i>Bank Type</span>
                                         <span class="detail-value">{{ ucfirst($businessKyc->bank_type ?: 'N/A') }}</span>
                                     </div>
+                                    @endif
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-id-badge-2"></i>Aadhaar Number</span>
                                         <span class="detail-value">{{ $maskAadhar($businessKyc->aadhar_number) }}</span>
@@ -691,6 +699,7 @@
                                         <span class="detail-label"><i class="ti ti-signature"></i>Authorized Signature</span>
                                         <span class="detail-value">{!! $docLink($businessKyc->signature_document, 'View') !!}</span>
                                     </div>
+                                    @if(! $isCourierOrAggregator)
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-map-pin"></i>Billing Address</span>
                                         <span class="detail-value" style="max-width:60%;">{{ $businessKyc->billing_address ?: 'N/A' }}</span>
@@ -707,6 +716,7 @@
                                         <span class="detail-label"><i class="ti ti-mail"></i>Billing Email</span>
                                         <span class="detail-value">{{ $businessKyc->billing_email ?: 'N/A' }}</span>
                                     </div>
+                                    @endif
                                     <div class="detail-row">
                                         <span class="detail-label"><i class="ti ti-file-upload"></i>Merchant Agreement</span>
                                         <span class="detail-value">

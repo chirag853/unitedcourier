@@ -1178,7 +1178,21 @@ class KycController extends Controller
 
     private function databaseKycIdentifierFromException(\Illuminate\Database\QueryException $exception): ?string
     {
+        // Only a genuine duplicate-key violation (e.g. a unique index on
+        // gst_number / aadhar_number / pan_number) should be reported as a
+        // KYC identifier conflict. Other 23000 errors - like a NOT NULL
+        // violation where the raw SQL happens to reference a KYC column -
+        // must not be misreported as a duplicate.
+        if ($exception->getCode() !== '23000') {
+            return null;
+        }
+
         $message = strtolower($exception->getMessage());
+
+        // MySQL / MariaDB: "Duplicate entry 'X' for key 'idx_name'"
+        if (! str_contains($message, 'duplicate entry')) {
+            return null;
+        }
 
         foreach (['gst' => ['gst_number', 'gst_certificate_number'], 'aadhar' => ['aadhar_number'], 'pan' => ['pan_number']] as $identifier => $columns) {
             foreach ($columns as $column) {
@@ -1274,6 +1288,7 @@ class KycController extends Controller
                 ], 503);
             }
 
+            
             // User-friendly replacement for the raw Cashfree OCR error message.
             $customImageReadError = 'We could not read the uploaded Aadhaar image. Please upload a clear, sharp photo of the Aadhaar card with all four corners and the 12-digit number clearly visible, then try again.';
 
@@ -2173,7 +2188,11 @@ class KycController extends Controller
         $businessCategory = BusinessCategory::find($customer->business_category_id);
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
 
-        return view('customer.kyc-summary', compact('customer', 'personalKyc', 'businessKyc', 'userType', 'businessCategory'));
+        // Courier / Aggregator business customers are not required to submit
+        // the CSB-V export details, so the summary must hide CSB-V wording.
+        $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+
+        return view('customer.kyc-summary', compact('customer', 'personalKyc', 'businessKyc', 'userType', 'businessCategory', 'isCourierOrAggregator'));
     }
 
     /**

@@ -334,8 +334,8 @@
                                                         <th>Service Code</th>
                                                         <th>Method</th>
                                                         <th>TAT</th>
-                                                        <th>Weight Start (gm)</th>
-                                                        <th>Weight End (gm)</th>
+                                                        <th>Weight Start (KG)</th>
+                                                        <th>Weight End (KG)</th>
                                                         <th>Zone No</th>
                                                         <th>Zone Category</th>
                                                         <th>Price</th>
@@ -522,7 +522,7 @@
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="addRateForm">
+                <form id="addRateForm" novalidate>
                     @csrf
                     <div class="modal-body">
                         <div class="row g-3">
@@ -547,12 +547,12 @@
                             </div>
                             <!-- Weight Start -->
                             <div class="col-md-4">
-                                <label class="form-label fw-bold">Weight Start (gm) <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bold">Weight Start (KG) <span class="text-danger">*</span></label>
                                 <input type="number" step="0.001" min="0" class="form-control" id="addRateWtStart" name="wt_range_start" required>
                             </div>
                             <!-- Weight End -->
                             <div class="col-md-4">
-                                <label class="form-label fw-bold">Weight End (gm) <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bold">Weight End (KG) <span class="text-danger">*</span></label>
                                 <input type="number" step="0.001" min="0" class="form-control" id="addRateWtEnd" name="wt_range_end" required>
                             </div>
                             <!-- Zone No -->
@@ -986,8 +986,8 @@
                     { title: 'Service Code' },
                     { title: 'Method' },
                     { title: 'TAT' },
-                    { title: 'Weight Start (gm)' },
-                    { title: 'Weight End (gm)' },
+                    { title: 'Weight Start (KG)' },
+                    { title: 'Weight End (KG)' },
                     { title: 'Zone No' },
                     { title: 'Zone Category' },
                     { title: 'Price', orderable: false },
@@ -1340,8 +1340,10 @@
                     ph.textContent = '— Select Country First —';
                     selectEl.appendChild(ph);
                     initZoneSelect2(selectEl, '— Select Country First —');
-                    // Show the section so the admin knows to pick a country.
+                    // Show the section so the admin knows to pick a country,
+                    // but zone is not required until a country with zones is chosen.
                     zoneSection.style.display = '';
+                    selectEl.removeAttribute('required');
                     return;
                 }
 
@@ -1364,6 +1366,11 @@
                 // section so the admin is not asked to pick a zone.
                 if (zoneKeys.length === 0) {
                     zoneSection.style.display = 'none';
+                    // The country has no zones, so zone_no is not required.
+                    // Dropping the required attribute prevents the browser from
+                    // failing validation on a hidden, non-focusable select
+                    // ("An invalid form control with name='zone_no' is not focusable").
+                    selectEl.removeAttribute('required');
                     // Clear any previous selection and reset Select2.
                     var none = document.createElement('option');
                     none.value = '';
@@ -1374,8 +1381,9 @@
                 }
 
                 // Show the section (it may have been hidden for a previous
-                // country that had no zones).
+                // country that had no zones). Zones exist, so re-require it.
                 zoneSection.style.display = '';
+                selectEl.setAttribute('required', 'required');
 
                 var placeholder = document.createElement('option');
                 placeholder.value = '';
@@ -1456,7 +1464,10 @@
                 var wtEnd = document.getElementById('addRateWtEnd').value;
                 var zoneSection = document.getElementById('addRateZoneSection');
                 var zoneSectionVisible = zoneSection && zoneSection.style.display !== 'none';
-                var zoneNo = zoneSectionVisible ? document.getElementById('addRateZoneNo').value : '0';
+                // When the Zone No section is hidden the country has no zones,
+                // so submit an empty zone_no. The backend stores it as null
+                // (a zone-independent default rate) instead of forcing zone '0'.
+                var zoneNo = zoneSectionVisible ? document.getElementById('addRateZoneNo').value : '';
                 var price = document.getElementById('addRatePrice').value;
 
                 // Client-side validation
