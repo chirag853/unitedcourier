@@ -121,9 +121,9 @@
                                                 <small class="text-muted">Choose the country these zones belong to. Need a new country? <a href="{{ route('admin.add-country') }}">Add Country</a>.</small>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label fw-bold">Service <span class="text-muted">(optional)</span></label>
-                                                <select class="form-select" id="service_id" name="service_id">
-                                                    <option value="">— No Service —</option>
+                                                <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
+                                                <select class="form-select" id="service_id" name="service_id" required>
+                                                    <option value="">— Select Service —</option>
                                                     @foreach($services as $svc)
                                                         <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
                                                             {{ $svc->method ?? ('Service #' . $svc->id) }}
@@ -131,7 +131,7 @@
                                                         </option>
                                                     @endforeach
                                                 </select>
-                                                <small class="text-muted">Only services for the selected country are shown. Optionally link these zones to a courier service (e.g. United Ground Premium).</small>
+                                                <small class="text-muted">Only services for the selected country are shown. Select a courier service for these zones.</small>
                                             </div>
                                         </div>
                                     </div>
@@ -254,9 +254,9 @@
                                             </select>
                                         </div>
                                         <div class="col-md-2">
-                                            <label class="form-label fw-bold">Service <span class="text-muted">(optional)</span></label>
-                                            <select class="form-select" id="upload_service_id" name="service_id">
-                                                <option value="">— No Service —</option>
+                                            <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="upload_service_id" name="service_id" required>
+                                                <option value="">— Select Service —</option>
                                                 @foreach($services as $svc)
                                                     <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
                                                         {{ $svc->method ?? ('Service #' . $svc->id) }}

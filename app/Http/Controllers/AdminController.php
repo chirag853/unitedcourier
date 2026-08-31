@@ -4218,7 +4218,7 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
-            'service_id'     => 'nullable|integer|exists:courier_services,id',
+            'service_id'     => 'required|integer|exists:courier_services,id',
             'entries'        => 'required|array|min:1',
             'entries.*.zone_name' => 'required|string|max:100',
             'entries.*.zone_code' => 'nullable|string|max:10',
@@ -4439,7 +4439,7 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
-            'service_id'     => 'nullable|integer|exists:courier_services,id',
+            'service_id'     => 'required|integer|exists:courier_services,id',
             'zone_file'      => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
 
