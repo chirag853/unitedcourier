@@ -941,11 +941,6 @@ class CustomerController extends Controller
 
         abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
 
-        $selectedBusinessCategory = BusinessCategory::active()
-            ->find($request->input('business_category_id'));
-        $isBusinessCustomer = $selectedBusinessCategory
-            && strcasecmp((string) $selectedBusinessCategory->user_type, 'Business') === 0;
-
         // The wizard submits either Aadhaar or PAN verification data depending on
         // the selected KYC type; unify them into the kyc_number column.
         $requestedKycType = $request->input('kyc_type');
@@ -960,7 +955,7 @@ class CustomerController extends Controller
             'business_category_id' => $request->filled('business_category_id')
                 ? (int) $request->input('business_category_id')
                 : null,
-            'csb_type' => $isBusinessCustomer ? 'csb_v' : $request->input('csb_type'),
+            'csb_type' => $request->input('csb_type'),
             'company_name' => trim((string) $request->input('company_name')),
             'contact_person' => trim((string) $request->input('contact_person')),
             'email' => strtolower(trim((string) $request->input('email'))),

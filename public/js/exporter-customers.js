@@ -309,17 +309,13 @@
             var selectedOption = customerType.options[customerType.selectedIndex];
             var isBusiness = selectedOption && selectedOption.dataset.userType === 'business';
 
+            // Both business and personal customers can freely choose CSB IV or CSB V.
             if (csbTypeCheck) {
-                if (isBusiness) {
-                    csbTypeCheck.checked = true;
-                    csbTypeCheck.disabled = true;
-                } else {
-                    csbTypeCheck.disabled = false;
-                }
+                csbTypeCheck.disabled = false;
             }
             if (csbTypeHint) {
                 csbTypeHint.textContent = isBusiness
-                    ? 'Business customers are eligible for CSB V only.'
+                    ? 'Business customers can select CSB IV or CSB V.'
                     : 'Personal customers can select CSB IV or CSB V.';
             }
 
