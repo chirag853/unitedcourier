@@ -1230,6 +1230,76 @@ class CustomerController extends Controller
             ->with('success', 'Customer saved successfully.');
     }
 
+    /**
+     * Update the billing/shipping address of a saved exporter customer
+     * (Address Line 1, Address Line 2, Address Line 3, Pincode, City, State).
+     */
+    public function updateExporterCustomerAddress(Request $request, $id)
+    {
+        $exporter = auth()->guard('customer')->user();
+        if (! $exporter) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
+
+        $customer = $exporter->exporterCustomers()->findOrFail((int) $id);
+
+        $request->merge([
+            'address_line1' => trim((string) $request->input('address_line1')),
+            'address_line2' => trim((string) $request->input('address_line2')),
+            'address_line3' => trim((string) $request->input('address_line3')),
+            'pincode' => preg_replace('/\D+/', '', (string) $request->input('pincode')),
+            'city' => trim((string) $request->input('city')),
+            'state' => trim((string) $request->input('state')),
+        ]);
+
+        $validated = $request->validate([
+            'address_line1' => ['required', 'string', 'min:5', 'max:255'],
+            'address_line2' => ['nullable', 'string', 'max:255'],
+            'address_line3' => ['nullable', 'string', 'max:255'],
+            'pincode' => ['required', 'regex:/^[1-9][0-9]{5}$/'],
+            'city' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+            'state' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+        ], [
+            'address_line1.required' => 'Address Line 1 is required.',
+            'address_line1.min' => 'Address Line 1 must be at least 5 characters.',
+            'pincode.required' => 'Pincode is required.',
+            'pincode.regex' => 'Enter a valid 6-digit Indian pincode.',
+            'city.required' => 'City is required.',
+            'city.regex' => 'City may contain letters, spaces, dots, apostrophes and hyphens only.',
+            'state.required' => 'State is required.',
+            'state.regex' => 'State may contain letters, spaces, dots, apostrophes and hyphens only.',
+        ]);
+
+        $customer->update(collect($validated)->only([
+            'address_line1',
+            'address_line2',
+            'address_line3',
+            'pincode',
+            'city',
+            'state',
+        ])->all());
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Address updated successfully.',
+                'address' => [
+                    'address_line1' => $customer->address_line1,
+                    'address_line2' => $customer->address_line2,
+                    'address_line3' => $customer->address_line3,
+                    'pincode' => $customer->pincode,
+                    'city' => $customer->city,
+                    'state' => $customer->state,
+                ],
+            ]);
+        }
+
+        return redirect()->route('customer.exporter-customers')
+            ->with('success', 'Address updated successfully.');
+    }
+
     public function createShipment()
     {
         // Check if customer is logged in using auth guard

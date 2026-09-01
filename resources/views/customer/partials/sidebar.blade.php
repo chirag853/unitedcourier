@@ -75,7 +75,7 @@
                                         @if($sidebarCanManageSavedCustomers)
                                             <li><a href="{{ route('customer.exporter-customers') }}" class="{{ request()->routeIs('customer.exporter-customers*') ? 'active' : '' }}">Add Customer</a></li>
                                         @endif
-                                        <li><a href="{{ url('/customer/create-shipment') }}" class="{{ request()->routeIs('customer.create-shipment*') ? 'active' : '' }}">Add Order</a></li>
+                                        <li><a href="{{ url('/customer/create-shipment') }}" class="{{ request()->routeIs('customer.create-shipment*') ? 'active' : '' }}">Create Order</a></li>
                                         <li><a href="{{ url('/customer/bulk-upload') }}" class="{{ request()->routeIs('customer.bulk-upload*') ? 'active' : '' }}">Bulk Upload</a></li>
                                         <li><a href="{{ url('/customer/view-all-shipments') }}" class="{{ request()->routeIs('customer.view-all-shipments') ? 'active' : '' }}">View All Order</a></li>
                                     </ul>

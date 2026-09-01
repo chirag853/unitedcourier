@@ -1425,7 +1425,8 @@
 
             // AJAX call to generate label PDF
             $.ajax({
-                url: '/admin/generate-label',
+                // url: '/admin/generate-label',
+                url: '{{ route("admin.generate-label") }}',
                 type: 'POST',
                 data: { shipment_id: shipmentId },
                 headers: {

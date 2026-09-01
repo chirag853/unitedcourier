@@ -1887,7 +1887,7 @@
                 if (!shipperId) return;
 
                 // Confirm with user
-                if (!confirm('Are you sure you want to manifest this shipment? This will call the appropriate shipping API (UPS or Ship Global) based on the shipment network.')) {
+                if (!confirm('Are you sure you want to manifest this shipment')) {
                     return;
                 }
 

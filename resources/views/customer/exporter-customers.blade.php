@@ -656,6 +656,7 @@
                                             <th>CSB Type</th>
                                             <th>KYC Details</th>
                                             <th>Added On</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -669,12 +670,14 @@
                                                     <div>{{ $savedCustomer->phone_number }}</div>
                                                     <div class="small text-muted">{{ $savedCustomer->email }}</div>
                                                 </td>
-                                                <td>
-                                                    <div>{{ $savedCustomer->address_line1 }}</div>
+                                                <td id="address-cell-{{ $savedCustomer->id }}">
+                                                    <div class="address-line1">{{ $savedCustomer->address_line1 }}</div>
                                                     @if($savedCustomer->address_line2 || $savedCustomer->address_line3)
-                                                        <div class="small text-muted">{{ collect([$savedCustomer->address_line2, $savedCustomer->address_line3])->filter()->implode(', ') }}</div>
+                                                        <div class="small text-muted address-lines23">{{ collect([$savedCustomer->address_line2, $savedCustomer->address_line3])->filter()->implode(', ') }}</div>
+                                                    @else
+                                                        <div class="small text-muted address-lines23" style="display:none;"></div>
                                                     @endif
-                                                    <div class="small text-muted">{{ $savedCustomer->city }}, {{ $savedCustomer->state }} - {{ $savedCustomer->pincode }}</div>
+                                                    <div class="small text-muted address-city-state">{{ $savedCustomer->city }}, {{ $savedCustomer->state }} - {{ $savedCustomer->pincode }}</div>
                                                 </td>
                                                 <td>
                                                     <span class="badge {{ $savedCustomer->csb_type === 'csb_v' ? 'bg-primary' : 'bg-secondary' }}">
@@ -690,10 +693,25 @@
                                                     @endif
                                                 </td>
                                                 <td>{{ $savedCustomer->created_at?->format('d M Y') }}</td>
+                                                <td>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-primary add-address-btn"
+                                                            data-customer-id="{{ $savedCustomer->id }}"
+                                                            data-company="{{ $savedCustomer->company_name }}"
+                                                            data-address1="{{ $savedCustomer->address_line1 }}"
+                                                            data-address2="{{ $savedCustomer->address_line2 }}"
+                                                            data-address3="{{ $savedCustomer->address_line3 }}"
+                                                            data-pincode="{{ $savedCustomer->pincode }}"
+                                                            data-city="{{ $savedCustomer->city }}"
+                                                            data-state="{{ $savedCustomer->state }}"
+                                                            title="Add Address">
+                                                        <i class="fas fa-location-dot me-1"></i> Add Address
+                                                    </button>
+                                                </td>
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="9" class="text-center text-muted py-4">No customers added yet.</td>
+                                                <td colspan="10" class="text-center text-muted py-4">No customers added yet.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
@@ -703,6 +721,84 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Address Modal -->
+<div class="modal fade" id="addAddressModal" tabindex="-1" aria-labelledby="addAddressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="addAddressForm" method="POST"
+                  action="{{ route('customer.exporter-customers.address', '__CUSTOMER_ID__') }}"
+                  data-action-template="{{ route('customer.exporter-customers.address', '__CUSTOMER_ID__') }}">
+                @csrf
+                <input type="hidden" id="addressCustomerId" name="customer_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAddressModalLabel"><i class="fas fa-location-dot me-2 text-primary"></i>Add Address</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="section-label">Address Line 1 <span class="text-danger">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="text" id="modalAddressLine1" name="address_line1" class="input-custom" minlength="5" maxlength="255" required>
+                            <i class="fas fa-location-dot"></i>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="section-label">Address Line 2</label>
+                                <div class="input-wrapper">
+                                    <input type="text" id="modalAddressLine2" name="address_line2" class="input-custom" maxlength="255">
+                                    <i class="fas fa-map"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="section-label">Address Line 3</label>
+                                <div class="input-wrapper">
+                                    <input type="text" id="modalAddressLine3" name="address_line3" class="input-custom" maxlength="255">
+                                    <i class="fas fa-map-pin"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="section-label">Pincode <span class="text-danger">*</span></label>
+                                <div class="input-wrapper">
+                                    <input type="text" id="modalAddressPincode" name="pincode" class="input-custom" inputmode="numeric" minlength="6" maxlength="6" pattern="[1-9][0-9]{5}" required>
+                                    <i class="fas fa-hashtag"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="section-label">City <span class="text-danger">*</span></label>
+                                <div class="input-wrapper">
+                                    <input type="text" id="modalAddressCity" name="city" class="input-custom" minlength="2" maxlength="100" pattern="[A-Za-z][A-Za-z .'-]*" required>
+                                    <i class="fas fa-city"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="section-label">State <span class="text-danger">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="text" id="modalAddressState" name="state" class="input-custom" minlength="2" maxlength="100" pattern="[A-Za-z][A-Za-z .'-]*" required>
+                            <i class="fas fa-flag"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="addAddressSubmitBtn"><i class="fas fa-plus me-1"></i> Add Address</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -768,6 +864,128 @@
                 allowInput: false
             });
         }
+    });
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalEl = document.getElementById('addAddressModal');
+        var form = document.getElementById('addAddressForm');
+        if (!modalEl || !form) {
+            return;
+        }
+
+        // Open the popup pre-filled with the customer's current address.
+        document.querySelectorAll('.add-address-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-customer-id');
+                document.getElementById('addressCustomerId').value = id || '';
+
+                var template = form.getAttribute('data-action-template') || '';
+                form.setAttribute('action', template.replace('__CUSTOMER_ID__', id || ''));
+
+                document.getElementById('modalAddressLine1').value = btn.getAttribute('data-address1') || '';
+                document.getElementById('modalAddressLine2').value = btn.getAttribute('data-address2') || '';
+                document.getElementById('modalAddressLine3').value = btn.getAttribute('data-address3') || '';
+                document.getElementById('modalAddressPincode').value = btn.getAttribute('data-pincode') || '';
+                document.getElementById('modalAddressCity').value = btn.getAttribute('data-city') || '';
+                document.getElementById('modalAddressState').value = btn.getAttribute('data-state') || '';
+
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            });
+        });
+
+        // Submit via AJAX, then update the row's Address cell in place.
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var submitBtn = document.getElementById('addAddressSubmitBtn');
+            var originalHtml = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+            }
+
+            var formData = new FormData(form);
+            var token = document.querySelector('meta[name="csrf-token"]');
+            var csrf = token ? token.getAttribute('content') : '';
+
+            fetch(form.getAttribute('action'), {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrf,
+                    'Accept': 'application/json'
+                },
+                body: formData
+            })
+                .then(function (res) {
+                    return res.json().then(function (data) {
+                        return { ok: res.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    var data = result.data || {};
+                    if (result.ok && data.success) {
+                        var id = document.getElementById('addressCustomerId').value;
+                        var cell = document.getElementById('address-cell-' + id);
+                        if (cell && data.address) {
+                            var a = data.address;
+                            var line1El = cell.querySelector('.address-line1');
+                            if (line1El) { line1El.textContent = a.address_line1 || ''; }
+
+                            var lines23El = cell.querySelector('.address-lines23');
+                            if (lines23El) {
+                                var parts = [a.address_line2, a.address_line3].filter(function (p) { return p && p.trim(); });
+                                if (parts.length) {
+                                    lines23El.textContent = parts.join(', ');
+                                    lines23El.style.display = '';
+                                } else {
+                                    lines23El.textContent = '';
+                                    lines23El.style.display = 'none';
+                                }
+                            }
+
+                            var cityStateEl = cell.querySelector('.address-city-state');
+                            if (cityStateEl) {
+                                cityStateEl.textContent = (a.city || '') + ', ' + (a.state || '') + ' - ' + (a.pincode || '');
+                            }
+                        }
+
+                        // Also refresh the button's data-* attributes so re-opening shows updated values.
+                        var btn = document.querySelector('.add-address-btn[data-customer-id="' + id + '"]');
+                        if (btn && data.address) {
+                            var a = data.address;
+                            btn.setAttribute('data-address1', a.address_line1 || '');
+                            btn.setAttribute('data-address2', a.address_line2 || '');
+                            btn.setAttribute('data-address3', a.address_line3 || '');
+                            btn.setAttribute('data-pincode', a.pincode || '');
+                            btn.setAttribute('data-city', a.city || '');
+                            btn.setAttribute('data-state', a.state || '');
+                        }
+
+                        showAlert(data.message || 'Address updated successfully!', 'success');
+
+                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        modal.hide();
+                    } else {
+                        var msg = data.message || 'Failed to update address. Please check your details.';
+                        if (data.errors) {
+                            msg = Object.values(data.errors).flat().join(' ');
+                        }
+                        showAlert(msg, 'error');
+                    }
+                })
+                .catch(function () {
+                    showAlert('A network error occurred. Please try again.', 'error');
+                })
+                .finally(function () {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalHtml;
+                    }
+                });
+        });
     });
 </script>
 
