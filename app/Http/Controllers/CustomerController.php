@@ -4947,7 +4947,9 @@ class CustomerController extends Controller
         // - Services with weight "LBS" (2nd Day Air / Ground): 1255AK
         $serviceWeight = $service->weight ?? 'LBS';
         $isSaver = str_contains($serviceWeight, 'OZS');
-        $shipperNumber = $isSaver ? 'X19700' : '1255AK';
+        // $shipperNumber = $isSaver ? 'X19700' : '1255AK';
+        $shipperNumber = 'X19700';
+
 
         $shipperAddressLine = '218 WEST 37 STREET 6TH FLOOR';
         $shipperCity = 'NEW YORK';
