@@ -2844,7 +2844,54 @@ class AdminController extends Controller
             }
         }
 
-        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry', 'surcharges'));
+        // ------------------------------------------------------------------
+        // Per-service zone lookup for the Bulk Upload modal.
+        //
+        // Zones are either service-specific (zone.service_id is set) or
+        // shared across every service of a destination (service_id IS NULL).
+        // For each courier service we pre-compute the sorted list of zone
+        // numbers that apply to it (shared zones + its own service-specific
+        // zones for the service's destination). The bulk modal uses this to
+        // decide whether the selected service has any zones for the chosen
+        // country: if it does, the zone section is shown with the applicable
+        // zone checkboxes; otherwise the without-zone format is used.
+        // ------------------------------------------------------------------
+        $sharedZonesByDest = [];
+        $serviceZonesByDest = [];
+        $zoneRows = \App\Models\Zone::select('destination_id', 'service_id', 'zone_number_testing')
+            ->whereNotNull('destination_id')
+            ->get();
+        foreach ($zoneRows as $z) {
+            $destId = (int) $z->destination_id;
+            $zoneNo = (int) $z->zone_number_testing;
+            if ($z->service_id) {
+                $serviceZonesByDest[(int) $z->service_id][$destId][$zoneNo] = true;
+            } else {
+                $sharedZonesByDest[$destId][$zoneNo] = true;
+            }
+        }
+
+        $serviceZoneNumbers = [];
+        foreach ($services as $svc) {
+            if (!$svc->country) {
+                continue;
+            }
+            $destId = $countryToDestinationId[strtolower(trim((string) $svc->country))] ?? null;
+            if (!$destId) {
+                continue;
+            }
+            $merged = $sharedZonesByDest[$destId] ?? [];
+            foreach ($serviceZonesByDest[$svc->id][$destId] ?? [] as $zoneNo => $_) {
+                $merged[$zoneNo] = true;
+            }
+            if (!empty($merged)) {
+                $zonesList = array_map('intval', array_keys($merged));
+                sort($zonesList);
+                $serviceZoneNumbers[$svc->id] = $zonesList;
+            }
+        }
+
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry', 'surcharges', 'serviceZoneNumbers'));
     }
 
     /**
@@ -3640,8 +3687,15 @@ class AdminController extends Controller
             abort(422, 'The selected service does not belong to the selected country.');
         }
 
-        if ($withoutZone && (!$destinationId || $this->destinationHasConfiguredZones($destinationId))) {
-            abort(422, 'The without-zone sample is available only for a selected country that has no configured zones.');
+        if ($withoutZone) {
+            $hasConfiguredZones = $destinationId
+                ? ($serviceId
+                    ? $this->serviceHasConfiguredZones((int) $serviceId, $destinationId)
+                    : $this->destinationHasConfiguredZones($destinationId))
+                : false;
+            if (!$destinationId || $hasConfiguredZones) {
+                abort(422, 'The without-zone sample is available only for a selected country (and service) that has no configured zones.');
+            }
         }
 
         $zoneNos = $request->query('zone_nos', []);
@@ -3777,10 +3831,10 @@ class AdminController extends Controller
                 ->with('error', 'The selected service does not belong to the selected country.');
         }
 
-        if ($withoutZone && $this->destinationHasConfiguredZones($destinationId)) {
+        if ($withoutZone && $this->serviceHasConfiguredZones($validated['service_id'], $destinationId)) {
             return redirect()
                 ->route('admin.manage-rate')
-                ->with('error', 'The selected country has configured zones. Select at least one zone and use the zoned sample file.');
+                ->with('error', 'The selected country has configured zones for this service. Select at least one zone and use the zoned sample file.');
         }
 
         $file = $request->file('rate_file');
@@ -4143,6 +4197,23 @@ class AdminController extends Controller
     private function destinationHasConfiguredZones(int $destinationId): bool
     {
         return \App\Models\Zone::where('destination_id', $destinationId)->exists();
+    }
+
+    /**
+     * Determine whether a service has configured zones for a destination.
+     *
+     * Zones are either service-specific (zone.service_id = $serviceId) or
+     * shared across every service of the destination (service_id IS NULL).
+     * The service therefore has zones if either kind exists.
+     */
+    private function serviceHasConfiguredZones(int $serviceId, int $destinationId): bool
+    {
+        return \App\Models\Zone::where('destination_id', $destinationId)
+            ->where(function ($query) use ($serviceId) {
+                $query->where('service_id', $serviceId)
+                    ->orWhereNull('service_id');
+            })
+            ->exists();
     }
 
     private function serviceBelongsToDestination(int $serviceId, int $destinationId): bool

@@ -803,6 +803,12 @@
         var currentCustomerEndDate = null;
         var allServices = @json($servicesForJs);
         var zoneLookup = @json($zoneLookup);
+        // serviceZoneNumbers: service_id -> sorted list of zone numbers that
+        // apply to that service for its destination (shared zones where
+        // zone.service_id is NULL + the service's own service-specific zones).
+        // Used by the Bulk Upload modal to decide whether the selected service
+        // has any zones for the chosen country.
+        var serviceZoneNumbers = @json($serviceZoneNumbers);
         var countryToDestinationId = @json($countryToDestinationId);
         // Maps a destination NAME to the matching courier_services.country
         // value (the short code, e.g. "US", "UK", "CA", "AUS"). Kept for
@@ -1552,7 +1558,22 @@
                 return { map: zoneMap || {}, keys: zoneKeys };
             }
 
-            function populateBulkZoneCheckboxes(country) {
+            // Return the sorted zone numbers that apply to the selected service
+            // for the selected country. Uses the server-built serviceZoneNumbers
+            // map (service_id -> zones), which already merges shared zones
+            // (zone.service_id IS NULL) with the service's own service-specific
+            // zones for its destination. A selected service that is absent from
+            // the map has NO zones for the country → the without-zone format is
+            // used. When no service is selected, fall back to all of the
+            // country's zones (existing behaviour).
+            function getBulkServiceZoneNumbers(country, serviceId) {
+                if (serviceId) {
+                    return (serviceZoneNumbers[serviceId] || []).slice();
+                }
+                return getBulkCountryZones(country).keys;
+            }
+
+            function populateBulkZoneCheckboxes(country, serviceId) {
                 var zoneSection = document.getElementById('bulkZoneSection');
                 var container = document.getElementById('bulkZoneCheckboxes');
                 var withoutZoneInput = document.getElementById('bulkWithoutZone');
@@ -1570,17 +1591,26 @@
 
                 var zoneData = getBulkCountryZones(country);
                 var zoneMap = zoneData.map;
-                var zoneKeys = zoneData.keys;
+                var zoneKeys = getBulkServiceZoneNumbers(country, serviceId);
 
                 zoneSection.classList.remove('d-none');
                 if (!zoneKeys.length) {
                     withoutZoneInput.value = '1';
-                    container.innerHTML = '<div class="col-12 text-success">This country has no configured zones. The sample and uploaded rates will use the without-zone format.</div>';
-                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>This country has no configured zones. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.';
+                    container.innerHTML = '<div class="col-12 text-success">' +
+                        (serviceId
+                            ? 'This service has no configured zones for the selected country. The sample and uploaded rates will use the without-zone format.'
+                            : 'This country has no configured zones. The sample and uploaded rates will use the without-zone format.') +
+                        '</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>' +
+                        (serviceId
+                            ? 'The selected service has no zones for this country. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.'
+                            : 'This country has no configured zones. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.');
                     return;
                 }
 
-                instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.';
+                instructions.innerHTML = serviceId
+                    ? '<i class="ti ti-info-circle me-1"></i>This service has configured zones for the selected country. Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.'
+                    : '<i class="ti ti-info-circle me-1"></i>Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.';
 
                 zoneKeys.forEach(function(zone) {
                     var info = zoneMap[zone] || {};
@@ -1606,7 +1636,7 @@
             // selected country, so they appear once a country is chosen.
             document.getElementById('bulkUploadModal').addEventListener('shown.bs.modal', function() {
                 populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value);
+                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value, document.getElementById('bulkService').value);
             });
 
             // Country change → repopulate BOTH the service dropdown (only
@@ -1619,7 +1649,14 @@
                 var serviceCountry = resolveServiceCountry(country);
                 populateServiceDropdown(document.getElementById('bulkService'), serviceCountry);
                 document.getElementById('bulkService').value = '';
-                populateBulkZoneCheckboxes(country);
+                populateBulkZoneCheckboxes(country, '');
+            });
+
+            // Service change → re-evaluate the zone section for the selected
+            // service. If the service has no zones for the chosen country the
+            // without-zone format is used and the zone section is hidden.
+            document.getElementById('bulkService').addEventListener('change', function() {
+                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value, this.value);
             });
 
             document.getElementById('bulkSelectAllZones').addEventListener('click', function() {
@@ -1671,7 +1708,7 @@
             document.getElementById('bulkUploadModal').addEventListener('hidden.bs.modal', function() {
                 document.getElementById('bulkUploadForm').reset();
                 populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneCheckboxes('');
+                populateBulkZoneCheckboxes('', '');
             });
         });
 
