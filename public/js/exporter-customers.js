@@ -71,10 +71,82 @@
             }
         }
 
+        // Block "NEXT" navigation until all required information in the
+        // current step (Details / KYC Document) has been provided.
+        function validateStep(step) {
+            if (step === 1) {
+                if (!customerType || !customerType.value) {
+                    showAlert('Please select a customer type before continuing to the next step.', 'error');
+                    if (customerType) customerType.focus();
+                    return false;
+                }
+                if (!kycType || !kycType.value) {
+                    showAlert('Please select a KYC type before continuing to the next step.', 'error');
+                    if (kycType) kycType.focus();
+                    return false;
+                }
+                return true;
+            }
+
+            if (step === 2) {
+                var isAadharStep = kycType && kycType.value === 'Aadhar Card';
+                if (isAadharStep) {
+                    if (!aadharNumber || !aadharNumber.value) {
+                        showAlert('Please enter the Aadhaar number before continuing to the next step.', 'error');
+                        if (aadharNumber) aadharNumber.focus();
+                        return false;
+                    }
+                    if (!validateImageDocument(aadharFrontFileInput, true)) {
+                        return false;
+                    }
+                    if (!validateImageDocument(aadharBackFileInput, true)) {
+                        return false;
+                    }
+                    if (!aadharVerified) {
+                        showAlert('Please verify the Aadhaar details and both Aadhaar images before continuing to the next step.', 'error');
+                        if (aadharVerifyBtn) aadharVerifyBtn.focus();
+                        return false;
+                    }
+                } else {
+                    if (!panNumber || !panNumber.value) {
+                        showAlert('Please enter the PAN number before continuing to the next step.', 'error');
+                        if (panNumber) panNumber.focus();
+                        return false;
+                    }
+                    if (!panHolderName || !panHolderName.value.trim()) {
+                        showAlert('Please enter the PAN holder name before continuing to the next step.', 'error');
+                        if (panHolderName) panHolderName.focus();
+                        return false;
+                    }
+                    if (!panDob || !panDob.value) {
+                        showAlert('Please select the PAN date of birth before continuing to the next step.', 'error');
+                        if (panDob) panDob.focus();
+                        return false;
+                    }
+                    if (!validateImageDocument(panFileInput, true)) {
+                        return false;
+                    }
+                    if (!panVerified) {
+                        showAlert('Please verify the PAN details and PAN image before continuing to the next step.', 'error');
+                        if (panVerifyBtn) panVerifyBtn.focus();
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            return true;
+        }
+
         form.querySelectorAll('.wizard-next').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var next = parseInt(btn.getAttribute('data-next'), 10);
                 if (next) {
+                    var currentPanel = btn.closest('.wizard-panel');
+                    var currentStep = currentPanel ? parseInt(currentPanel.getAttribute('data-panel'), 10) : 0;
+                    if (!validateStep(currentStep)) {
+                        return;
+                    }
                     showPanel(next);
                 }
             });
