@@ -196,7 +196,7 @@
                                                         <h6 class="sub-section-title mb-0">Aadhaar Verification</h6>
                                                         <!-- <small class="sub-section-desc">Verify Aadhaar details through Cashfree OCR</small> -->
                                                     </div>
-                                                    <span class="badge-sub">Cashfree OCR</span>
+                                                    <!-- <span class="badge-sub">Cashfree OCR</span> -->
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
@@ -279,9 +279,9 @@
                                                     <div class="sub-section-icon"><i class="fas fa-file-invoice"></i></div>
                                                     <div>
                                                         <h6 class="sub-section-title mb-0">PAN Verification</h6>
-                                                        <small class="sub-section-desc">Verify PAN details through Cashfree OCR</small>
+                                                        <small class="sub-section-desc">Verify PAN details </small>
                                                     </div>
-                                                    <span class="badge-sub">Cashfree OCR</span>
+                                                    <!-- <span class="badge-sub">Cashfree OCR</span> -->
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
