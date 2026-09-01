@@ -4705,9 +4705,13 @@ class AdminController extends Controller
         $skippedRows = session('skipped_zone_rows');
 
         if (empty($skippedRows)) {
+            // There is nothing to download. This happens when the user hits
+            // the URL/button without a fresh upload, or after the file was
+            // already downloaded once (the session key is cleared below).
+            // Show a helpful message instead of a confusing one.
             return redirect()
                 ->route('admin.add-zone')
-                ->with('error', 'There are no skipped records to download. Please upload a zone Excel file first.');
+                ->with('error', 'There are no skipped records available to download right now. Please upload a zone Excel file that contains some skipped (e.g. duplicate) rows first.');
         }
 
         // Capture the data and clear the flash key so it cannot be

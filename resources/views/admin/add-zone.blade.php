@@ -87,16 +87,30 @@
                     </div>
                 @endif
                 @if(session('skipped_zone_rows'))
-                    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center justify-content-between" role="alert">
+                    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center justify-content-between" role="alert" id="skippedZoneAlert">
                         <div class="me-2">
                             <i class="ti ti-download me-1"></i>
                             Some zone records were skipped during the last upload. You can download them below.
                         </div>
-                        <a href="{{ route('admin.add-zone.skipped') }}" class="btn btn-sm btn-warning fw-bold text-nowrap">
+                        <a href="{{ route('admin.add-zone.skipped') }}" class="btn btn-sm btn-warning fw-bold text-nowrap" id="downloadSkippedBtn">
                             <i class="ti ti-download me-1"></i>Download Skipped Records
                         </a>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
+                    <script>
+                        // The download request clears the skipped rows from the
+                        // session but stays on this page. Hide the alert right
+                        // away so the button cannot be clicked a second time
+                        // (which would show the confusing "no skipped records"
+                        // error). The alert is also re-shown automatically if a
+                        // new upload skips rows, because the page reloads then.
+                        document.getElementById('downloadSkippedBtn').addEventListener('click', function() {
+                            var alertEl = document.getElementById('skippedZoneAlert');
+                            if (alertEl) {
+                                alertEl.remove();
+                            }
+                        });
+                    </script>
                 @endif
 
                 <div class="row">

@@ -638,6 +638,7 @@ Route::prefix('customer')->name('customer.')->middleware('log.activity')->group(
     Route::get('/exporter-customers', [CustomerController::class, 'exporterCustomers'])->name('exporter-customers');
     Route::post('/exporter-customers', [CustomerController::class, 'storeExporterCustomer'])->name('exporter-customers.store');
     Route::post('/verify-exporter-customer-aadhar', [KycController::class, 'verifyExporterCustomerAadhar'])->name('verify.exporter-customer-aadhar');
+    Route::post('/verify-exporter-customer-pan', [KycController::class, 'verifyExporterCustomerPan'])->name('verify.exporter-customer-pan');
     Route::get('/create-shipment', [CustomerController::class, 'createShipment'])->name('create-shipment');
     Route::get('/zones-by-destination', [CustomerController::class, 'getZonesByDestination'])->name('zones-by-destination');
     Route::get('/csb5-form', [CustomerController::class, 'csb5Form'])->name('csb5-form');

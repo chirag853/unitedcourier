@@ -787,6 +787,7 @@
                     'id' => $s->id,
                     'network' => $s->network,
                     'method' => $s->method,
+                    'service_code' => $s->service_code ?? '',
                     'country' => $s->country ?? '',
                 ];
             })->values();
@@ -879,7 +880,11 @@
                 if (!country || s.country === country) {
                     var opt = document.createElement('option');
                     opt.value = s.id;
-                    opt.textContent = s.network + ' — ' + s.method;
+                    var label = s.network + ' — ' + s.method;
+                    if (s.service_code) {
+                        label += ' (' + s.service_code + ')';
+                    }
+                    opt.textContent = label;
                     selectEl.appendChild(opt);
                 }
             });

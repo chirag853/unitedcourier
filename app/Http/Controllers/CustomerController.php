@@ -946,6 +946,16 @@ class CustomerController extends Controller
         $isBusinessCustomer = $selectedBusinessCategory
             && strcasecmp((string) $selectedBusinessCategory->user_type, 'Business') === 0;
 
+        // The wizard submits either Aadhaar or PAN verification data depending on
+        // the selected KYC type; unify them into the kyc_number column.
+        $requestedKycType = $request->input('kyc_type');
+        $rawKycNumber = strtoupper(preg_replace('/\s+/', '', (string) $request->input('kyc_number')));
+        if ($requestedKycType === 'PAN Card' && $rawKycNumber === '') {
+            $rawKycNumber = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number')));
+        } elseif ($requestedKycType === 'Aadhar Card' && $rawKycNumber === '') {
+            $rawKycNumber = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
+        }
+
         $request->merge([
             'business_category_id' => $request->filled('business_category_id')
                 ? (int) $request->input('business_category_id')
@@ -956,7 +966,12 @@ class CustomerController extends Controller
             'email' => strtolower(trim((string) $request->input('email'))),
             'phone_number' => preg_replace('/\D+/', '', (string) $request->input('phone_number')),
             'pincode' => preg_replace('/\D+/', '', (string) $request->input('pincode')),
-            'kyc_number' => strtoupper(preg_replace('/\s+/', '', (string) $request->input('kyc_number'))),
+            'kyc_number' => $rawKycNumber,
+            'pan_number' => strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number'))),
+            'pan_holder_name' => trim((string) $request->input('pan_holder_name')),
+            'pan_dob' => $request->filled('pan_dob')
+                ? ($this->normalizePanDob((string) $request->input('pan_dob')) ?? (string) $request->input('pan_dob'))
+                : null,
             'ad_code' => preg_replace('/\D+/', '', (string) $request->input('ad_code')),
             'iec_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('iec_number'))),
             'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
@@ -993,7 +1008,7 @@ class CustomerController extends Controller
                 Rule::unique('exporter_customers', 'email')->where('exporter_id', $exporter->id),
             ],
             'email_opt_out' => ['sometimes', 'boolean'],
-            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['Aadhar Card'])],
+            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['Aadhar Card', 'PAN Card'])],
             'kyc_number' => [
                 'nullable',
                 'required_with:kyc_type',
@@ -1001,6 +1016,7 @@ class CustomerController extends Controller
                 function (string $attribute, mixed $value, \Closure $fail) use ($request, $exporter): void {
                     $patterns = [
                         'Aadhar Card' => ['/^[2-9][0-9]{11}$/', 'Enter a valid 12-digit Aadhaar number.'],
+                        'PAN Card' => ['/^[A-Z]{5}[0-9]{4}[A-Z]$/', 'Enter a valid 10-character PAN number.'],
                     ];
                     $kycType = $request->input('kyc_type');
                     $rule = $patterns[$kycType] ?? null;
@@ -1010,19 +1026,23 @@ class CustomerController extends Controller
                         return;
                     }
 
-                    if (
-                        $value
-                        && $kycType === 'Aadhar Card'
-                        && ExporterCustomer::query()
-                            ->where('exporter_id', $exporter->id)
-                            ->where('kyc_type', 'Aadhar Card')
-                            ->where('kyc_number', (string) $value)
-                            ->exists()
-                    ) {
-                        $fail('This Aadhaar number is already registered for another saved customer.');
+                    if ($value && $kycType && ExporterCustomer::query()
+                        ->where('exporter_id', $exporter->id)
+                        ->where('kyc_type', $kycType)
+                        ->where('kyc_number', (string) $value)
+                        ->exists()) {
+                        $fail($kycType === 'Aadhar Card'
+                            ? 'This Aadhaar number is already registered for another saved customer.'
+                            : 'This PAN number is already registered for another saved customer.');
                     }
                 },
             ],
+            'aadhar_front_document' => ['nullable', 'required_if:kyc_type,Aadhar Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'aadhar_back_document' => ['nullable', 'required_if:kyc_type,Aadhar Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'pan_number' => ['nullable', 'required_if:kyc_type,PAN Card', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
+            'pan_holder_name' => ['nullable', 'required_if:kyc_type,PAN Card', 'string', 'min:2', 'max:255'],
+            'pan_dob' => ['nullable', 'required_if:kyc_type,PAN Card', 'date', 'before:today'],
+            'pan_document' => ['nullable', 'required_if:kyc_type,PAN Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'csb_type' => ['required', Rule::in(['csb_iv', 'csb_v'])],
             'is_lut' => ['nullable', 'boolean'],
             'ad_code' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
@@ -1037,8 +1057,10 @@ class CustomerController extends Controller
             'billing_address' => [Rule::requiredIf($isCsbV), 'nullable', 'string', 'min:10', 'max:1000'],
             'billing_contact' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'billing_email' => [Rule::requiredIf($isCsbV), 'nullable', 'email:rfc', 'max:255'],
-            'merchant_agreement' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf', 'max:10240'],
-            'terms_accepted' => [Rule::excludeIf(! $isCsbV), 'required', 'accepted'],
+            // The exporter-customers wizard does not include a merchant agreement upload
+            // or terms-acceptance step, so both fields are optional for CSB V as well.
+            'merchant_agreement' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
+            'terms_accepted' => ['sometimes', 'nullable', 'boolean'],
         ], [
             'business_category_id.required' => 'Please select a customer type.',
             'business_category_id.exists' => 'The selected customer type is invalid or inactive.',
@@ -1069,15 +1091,49 @@ class CustomerController extends Controller
         $validated['terms_accepted'] = $isCsbV && $request->boolean('terms_accepted');
         $validated['merchant_agreement_accepted_at'] = $validated['terms_accepted'] ? now() : null;
 
-        // An Aadhaar number entered on this page must be Cashfree-verified first,
+        $kycType = $validated['kyc_type'] ?? null;
+
+        // PAN-specific fields are only meaningful when the PAN Card KYC type is chosen.
+        if ($kycType === 'PAN Card') {
+            $validated['pan_number'] = $validated['kyc_number'];
+            $normalizedPanDob = $this->normalizePanDob((string) $validated['pan_dob']);
+            $validated['pan_dob'] = $normalizedPanDob ?? $validated['pan_dob'];
+        } else {
+            $validated = collect($validated)->except([
+                'pan_number',
+                'pan_holder_name',
+                'pan_dob',
+                'pan_document',
+            ])->all();
+        }
+
+        if ($kycType !== 'Aadhar Card') {
+            $validated = collect($validated)->except([
+                'aadhar_front_document',
+                'aadhar_back_document',
+            ])->all();
+        }
+
+        // The KYC identifier entered on this page must be Cashfree-verified first,
         // mirroring the verification required in the KYC flow.
-        if (($validated['kyc_type'] ?? null) === 'Aadhar Card' && ! empty($validated['kyc_number'])) {
+        if ($kycType === 'Aadhar Card' && ! empty($validated['kyc_number'])) {
             if (
                 ! session('kyc_aadhar_cashfree_verified')
                 || session('kyc_aadhar_number') !== $validated['kyc_number']
             ) {
                 throw ValidationException::withMessages([
                     'kyc_number' => 'Verify the submitted Aadhaar number through Cashfree before saving the customer.',
+                ]);
+            }
+        }
+
+        if ($kycType === 'PAN Card' && ! empty($validated['kyc_number'])) {
+            if (
+                ! session('kyc_pan_cashfree_verified')
+                || session('kyc_pan_number') !== $validated['kyc_number']
+            ) {
+                throw ValidationException::withMessages([
+                    'kyc_number' => 'Verify the submitted PAN through Cashfree before saving the customer.',
                 ]);
             }
         }
@@ -1101,6 +1157,23 @@ class CustomerController extends Controller
                     'lut_expiry_date' => 'The LUT Expiry Date must be 31 March of the selected LUT Bond End Year.',
                 ]);
             }
+        }
+
+        // Store the KYC verification documents (Aadhaar front/back or PAN image).
+        $kycUploadDirectory = public_path('uploads/exporter_customer_kyc_documents/'.$exporter->id);
+        if (! is_dir($kycUploadDirectory)) {
+            mkdir($kycUploadDirectory, 0755, true);
+        }
+
+        foreach (['aadhar_front_document', 'aadhar_back_document', 'pan_document'] as $kycDocumentField) {
+            if (! $request->hasFile($kycDocumentField)) {
+                continue;
+            }
+
+            $kycFile = $request->file($kycDocumentField);
+            $kycFilename = Str::uuid().'_'.$kycDocumentField.'.'.$kycFile->extension();
+            $kycFile->move($kycUploadDirectory, $kycFilename);
+            $validated[$kycDocumentField] = 'uploads/exporter_customer_kyc_documents/'.$exporter->id.'/'.$kycFilename;
         }
 
         if ($isCsbV) {
@@ -1142,6 +1215,17 @@ class CustomerController extends Controller
 
         $exporter->exporterCustomers()->create($validated);
 
+        // The wizard submits via fetch() with Accept: application/json, so return
+        // a JSON payload instead of a redirect (fetch would follow the 302 and
+        // response.json() would throw on the HTML page, surfacing a network error).
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Customer saved successfully.',
+                'redirect' => route('customer.exporter-customers'),
+            ]);
+        }
+
         return redirect()->route('customer.exporter-customers')
             ->with('success', 'Customer saved successfully.');
     }
@@ -1157,7 +1241,15 @@ class CustomerController extends Controller
         $csbForm = $customer->csbForm;
         // Only enabled services (status = 1) are offered to the customer.
         $courierServices = CourierService::where('status', 1)->get();
-        $zones = Zone::orderBy('zone_name')->get();
+        // The same zone (name + code) is stored once per service, so the raw
+        // query returns duplicates. Deduplicate here so the initial consignee
+        // state dropdown does not show the same state/zipcode multiple times.
+        $zones = Zone::orderBy('zone_name')
+            ->get()
+            ->unique(function ($zone) {
+                return strtolower(trim((string) $zone->zone_code)) . '|' . strtolower(trim((string) $zone->zone_name));
+            })
+            ->values();
         $destinations = Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
         $canManageSavedCustomers = $this->canManageSavedCustomers($customer);
@@ -1218,9 +1310,16 @@ class CustomerController extends Controller
             ], 200);
         }
 
+        // The same zone (name + code) is stored once per service, so the raw
+        // query returns duplicates. Deduplicate here so the state dropdown /
+        // zipcode suggestions do not show the same value twice.
         $zones = Zone::where('destination_id', $destination->id)
             ->orderBy('zone_name')
-            ->get();
+            ->get()
+            ->unique(function ($zone) {
+                return strtolower(trim((string) $zone->zone_code)) . '|' . strtolower(trim((string) $zone->zone_name));
+            })
+            ->values();
 
         if ($zones->isEmpty()) {
             return response()->json([

@@ -1448,16 +1448,22 @@ class KycController extends Controller
                 'kyc_aadhar_verified',
                 'kyc_aadhar_cashfree_verified',
                 'kyc_aadhar_front_hash',
+                'kyc_aadhar_back_hash',
                 'kyc_aadhar_verification_id',
+                'kyc_aadhar_name',
             ]);
 
             $validated = $request->validate([
                 'aadhar_number' => ['required', 'string', 'regex:/^[2-9][0-9]{11}$/'],
                 'aadhar_front_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'aadhar_back_document' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             ], [
                 'aadhar_front_document.required' => 'Upload the Aadhaar front image before verification.',
                 'aadhar_front_document.mimes' => 'The Aadhaar front document must be a JPG, JPEG, or PNG image.',
                 'aadhar_front_document.max' => 'The Aadhaar front image must not exceed 5 MB.',
+                'aadhar_back_document.required' => 'Upload the Aadhaar back image before verification.',
+                'aadhar_back_document.mimes' => 'The Aadhaar back document must be a JPG, JPEG, or PNG image.',
+                'aadhar_back_document.max' => 'The Aadhaar back image must not exceed 5 MB.',
             ]);
 
             $aadhar = preg_replace('/\s+/', '', $validated['aadhar_number']);
@@ -1495,6 +1501,16 @@ class KycController extends Controller
                 ], 422);
             }
             [$frontRealPath, $frontOriginalName] = $frontFile;
+
+            $backFile = $this->resolveKycDocumentForVerification($customer, $request, 'aadhar_back_document');
+            if (!$backFile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the Aadhaar back image before verification.',
+                ], 422);
+            }
+            [$backRealPath, $backOriginalName] = $backFile;
+
             $verificationId = $this->generateVerificationId();
             $fileStream = fopen($frontRealPath, 'r');
             if ($fileStream === false) {
@@ -1572,13 +1588,54 @@ class KycController extends Controller
                 ], 422);
             }
 
+            // Extract the OCR name (used to autofill the basic-info step on the frontend).
+            // When document_fields is incomplete (e.g. address is null), fall back to the
+            // QR code details embedded in the Aadhaar card (qr_details / split_address).
+            $qrAddress = trim((string) data_get($cashfreeData, 'qr_details.address', ''));
+            $qrSplit = (array) data_get($cashfreeData, 'qr_details.split_address', []);
+            $qrName = trim((string) data_get($cashfreeData, 'qr_details.name', ''));
+
+            $ocrName = trim((string) (collect([
+                data_get($cashfreeData, 'document_fields.name'),
+                data_get($cashfreeData, 'document_fields.full_name'),
+                $qrName,
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '') ?? ''));
+            $ocrAddressLine = trim((string) (collect([
+                data_get($cashfreeData, 'document_fields.address'),
+                data_get($cashfreeData, 'document_fields.care_of'),
+                data_get($cashfreeData, 'document_fields.careof'),
+                $qrAddress,
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '') ?? ''));
+            $ocrPincode = preg_replace('/\D+/', '', (string) (collect([
+                data_get($cashfreeData, 'document_fields.pincode'),
+                data_get($qrSplit, 'pincode'),
+                data_get($cashfreeData, 'qr_details.pincode'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '') ?? ''));
+            $ocrCity = trim((string) (collect([
+                data_get($cashfreeData, 'document_fields.city'),
+                data_get($cashfreeData, 'document_fields.district'),
+                data_get($qrSplit, 'dist'),
+                data_get($qrSplit, 'subdist'),
+                data_get($qrSplit, 'vtc'),
+                data_get($qrSplit, 'po'),
+                data_get($qrSplit, 'locality'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '') ?? ''));
+            $ocrState = trim((string) (collect([
+                data_get($cashfreeData, 'document_fields.state'),
+                data_get($qrSplit, 'state'),
+                data_get($cashfreeData, 'qr_details.state'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '') ?? ''));
+
             $frontHash = hash_file('sha256', $frontRealPath);
+            $backHash = hash_file('sha256', $backRealPath);
             session([
                 'kyc_aadhar_number' => $aadhar,
                 'kyc_aadhar_verified' => true,
                 'kyc_aadhar_cashfree_verified' => true,
                 'kyc_aadhar_front_hash' => $frontHash,
+                'kyc_aadhar_back_hash' => $backHash,
                 'kyc_aadhar_verification_id' => $verificationId,
+                'kyc_aadhar_name' => $ocrName,
             ]);
 
             return response()->json([
@@ -1586,6 +1643,13 @@ class KycController extends Controller
                 'message' => 'Aadhaar document verified successfully',
                 'aadhar_number' => $aadhar,
                 'verification_id' => $verificationId,
+                'autofill' => [
+                    'name' => $ocrName,
+                    'address_line1' => $ocrAddressLine,
+                    'pincode' => $ocrPincode,
+                    'city' => $ocrCity,
+                    'state' => $ocrState,
+                ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -1598,6 +1662,276 @@ class KycController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Aadhaar verification failed. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify a PAN number and its image through Cashfree Bharat OCR for a
+     * saved (exporter) customer on the exporter-customers page.
+     */
+    public function verifyExporterCustomerPan(Request $request)
+    {
+        try {
+            $customer = auth()->guard('customer')->user();
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You must be logged in to verify your PAN.',
+                ], 401);
+            }
+
+            session()->forget([
+                'kyc_pan_number',
+                'kyc_pan_holder_name',
+                'kyc_pan_dob',
+                'kyc_pan_verified',
+                'kyc_pan_cashfree_verified',
+                'kyc_pan_document_hash',
+                'kyc_pan_verification_id',
+            ]);
+
+            if ($request->filled('pan_dob')) {
+                $normalizedPanDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+                if ($normalizedPanDob !== null) {
+                    $request->merge(['pan_dob' => $normalizedPanDob]);
+                }
+            }
+
+            $validated = $request->validate([
+                'pan_number' => ['required', 'string', 'regex:/^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/'],
+                'pan_holder_name' => ['required', 'string', 'max:255'],
+                'pan_dob' => ['required', 'date', 'before:today'],
+                'pan_document' => ['required_without:pan_document_path', 'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+                'pan_document_path' => ['required_without:pan_document', 'nullable', 'string'],
+            ], [
+                'pan_document.required' => 'Upload the PAN image before verification.',
+                'pan_document.mimes' => 'The PAN document must be a JPG, JPEG, or PNG image.',
+                'pan_document.max' => 'The PAN image must not exceed 5 MB.',
+            ]);
+
+            $pan = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', $validated['pan_number']));
+            $panHolderName = $this->normalizePanHolderName($validated['pan_holder_name']);
+            $panDob = $this->normalizePanDob($validated['pan_dob']);
+            if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', $pan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid PAN number. It must be 10 characters: 5 letters, 4 digits, and 1 letter (e.g. ABCDE1234F).',
+                ], 422);
+            }
+
+            // Duplication is checked only within this exporter's own saved customers.
+            if (ExporterCustomer::query()
+                ->where('exporter_id', $customer->id)
+                ->where('kyc_type', 'PAN Card')
+                ->where('kyc_number', $pan)
+                ->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This PAN number is already registered for another saved customer.',
+                ], 409);
+            }
+
+            $clientId = config('services.cashfree.verification_client_id');
+            $clientSecret = config('services.cashfree.verification_client_secret');
+            if (!$clientId || !$clientSecret) {
+                \Log::error('Cashfree PAN OCR credentials are not configured.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'PAN verification is temporarily unavailable.',
+                ], 503);
+            }
+
+            $panFile = $this->resolveKycDocumentForVerification($customer, $request, 'pan_document');
+            if (!$panFile) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload the PAN image before verification.',
+                ], 422);
+            }
+            [$panRealPath, $panOriginalName] = $panFile;
+            $fileStream = fopen($panRealPath, 'r');
+            if ($fileStream === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN image could not be read. Please upload it again.',
+                ], 422);
+            }
+
+            $verificationId = $this->generateVerificationId();
+            try {
+                $cashfreeResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'x-client-id' => $clientId,
+                        'x-client-secret' => $clientSecret,
+                        'x-api-version' => '2024-12-01',
+                    ])
+                    ->attach('file', $fileStream, $panOriginalName)
+                    ->timeout((int) config('services.cashfree.verification_timeout', 30))
+                    ->post(rtrim(config('services.cashfree.verification_base_url'), '/') . '/bharat-ocr', [
+                        'verification_id' => $verificationId,
+                        'document_type' => 'PAN',
+                        'do_verification' => 'true',
+                    ]);
+            } finally {
+                fclose($fileStream);
+            }
+
+            $cashfreeData = $cashfreeResponse->json();
+            if (!$cashfreeResponse->successful()) {
+                \Log::warning('Cashfree PAN OCR rejected.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'http_status' => $cashfreeResponse->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'We could not read this PAN image.',
+                ], 422);
+            }
+
+            $providerStatus = strtoupper(trim((string) (
+                data_get($cashfreeData, 'verification_status')
+                ?? data_get($cashfreeData, 'status')
+                ?? data_get($cashfreeData, 'status_code')
+                ?? ''
+            )));
+            if (in_array($providerStatus, ['FAILED', 'FAILURE', 'INVALID', 'ERROR'], true)
+                || data_get($cashfreeData, 'success') === false) {
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'message')
+                        ?: 'we could not read this PAN image.',
+                ], 422);
+            }
+
+            $panVerificationStatus = strtoupper(trim((string) data_get(
+                $cashfreeData,
+                'verification_details.status',
+                ''
+            )));
+            if ($panVerificationStatus !== 'VALID') {
+                \Log::warning('Cashfree PAN verification status is not valid.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                    'verification_status' => $panVerificationStatus ?: 'MISSING',
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => data_get($cashfreeData, 'verification_details.message')
+                        ?: ($panVerificationStatus === ''
+                            ? 'PAN verification Failed'
+                            : 'PAN verification failed. Your Pan card is : ' . $panVerificationStatus . '.'),
+                    'verification_status' => $panVerificationStatus ?: null,
+                ], 422);
+            }
+
+            $ocrPan = strtoupper(preg_replace(
+                '/[^A-Z0-9]+/',
+                '',
+                (string) data_get($cashfreeData, 'document_fields.pan', '')
+            ));
+            $ocrPanHolderNameValue = collect([
+                data_get($cashfreeData, 'document_fields.name'),
+                data_get($cashfreeData, 'document_fields.pan_name'),
+                data_get($cashfreeData, 'document_fields.full_name'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '');
+            $ocrPanDobValue = collect([
+                data_get($cashfreeData, 'document_fields.dob'),
+                data_get($cashfreeData, 'document_fields.date_of_birth'),
+            ])->first(fn ($value) => is_scalar($value) && trim((string) $value) !== '');
+            $ocrPanHolderName = $this->normalizePanHolderName((string) $ocrPanHolderNameValue);
+            $ocrPanDob = $this->normalizePanDob((string) $ocrPanDobValue);
+            if (!preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', $ocrPan)) {
+                \Log::warning('Cashfree PAN OCR response did not contain a valid document_fields.pan.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid PAN number from the uploaded image.',
+                ], 422);
+            }
+
+            if (!hash_equals($pan, $ocrPan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN number entered does not match the PAN read from the uploaded image.',
+                ], 422);
+            }
+
+            if ($ocrPanHolderName === '') {
+                \Log::warning('Cashfree PAN OCR response did not contain a holder name.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read the holder name from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if (!hash_equals($panHolderName, $ocrPanHolderName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN holder name entered does not match the name read from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if ($ocrPanDob === null) {
+                \Log::warning('Cashfree PAN OCR response did not contain a valid date of birth.', [
+                    'customer_id' => $customer->id,
+                    'verification_id' => $verificationId,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cashfree could not read a valid date of birth from the uploaded PAN image.',
+                ], 422);
+            }
+
+            if ($panDob === null || !hash_equals($panDob, $ocrPanDob)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The PAN date of birth entered does not match the date read from the uploaded PAN image.',
+                ], 422);
+            }
+
+            $documentHash = hash_file('sha256', $panRealPath);
+            $rawHolderName = trim((string) $ocrPanHolderNameValue);
+            session([
+                'kyc_pan_number' => $pan,
+                'kyc_pan_holder_name' => $panHolderName,
+                'kyc_pan_dob' => $panDob,
+                'kyc_pan_verified' => true,
+                'kyc_pan_cashfree_verified' => true,
+                'kyc_pan_document_hash' => $documentHash,
+                'kyc_pan_verification_id' => $verificationId,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'PAN document verified successfully',
+                'pan_number' => $pan,
+                'verification_id' => $verificationId,
+                'verification_status' => $panVerificationStatus,
+                'autofill' => [
+                    'name' => $rawHolderName,
+                    'dob' => $panDob,
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error('Exporter customer PAN verification error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'PAN verification failed. Please try again.',
             ], 500);
         }
     }

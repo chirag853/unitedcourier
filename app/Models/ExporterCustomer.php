@@ -22,6 +22,12 @@ class ExporterCustomer extends Model
         'email_opt_out',
         'kyc_type',
         'kyc_number',
+        'aadhar_front_document',
+        'aadhar_back_document',
+        'pan_number',
+        'pan_holder_name',
+        'pan_dob',
+        'pan_document',
         'csb_type',
         'is_lut',
         'ad_code',
@@ -46,6 +52,7 @@ class ExporterCustomer extends Model
         'is_lut' => 'boolean',
         'terms_accepted' => 'boolean',
         'lut_expiry_date' => 'date',
+        'pan_dob' => 'date',
         'merchant_agreement_accepted_at' => 'datetime',
     ];
 
