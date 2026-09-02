@@ -926,7 +926,24 @@ class CustomerController extends Controller
             ->get()
             ->groupBy(fn (BusinessCategory $category) => $category->parent_group ?: $category->user_type ?: 'Other');
 
-        return view('customer.exporter-customers', compact('exporterCustomers', 'groupedBusinessCategories'));
+        // If this account already completed a Cashfree GST verification (session
+        // keys set by the shared customer.verify.gst endpoint, which survive
+        // logout/login through KycVerificationState), the same GSTIN + business
+        // name can be reused for a new saved customer without re-verifying.
+        // The per-customer GST certificate PDF is still uploaded on this form.
+        $verifiedGstNumber = session('kyc_gst_number');
+        $verifiedGstBusinessName = session('kyc_gst_business_name');
+        $verifiedGstReusable = (bool) session('kyc_gst_cashfree_verified')
+            && ! empty($verifiedGstNumber)
+            && ! empty($verifiedGstBusinessName);
+
+        return view('customer.exporter-customers', compact(
+            'exporterCustomers',
+            'groupedBusinessCategories',
+            'verifiedGstReusable',
+            'verifiedGstNumber',
+            'verifiedGstBusinessName'
+        ));
     }
 
     /**
@@ -941,20 +958,50 @@ class CustomerController extends Controller
 
         abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
 
-        // The wizard submits either Aadhaar or PAN verification data depending on
-        // the selected KYC type; unify them into the kyc_number column.
-        $requestedKycType = $request->input('kyc_type');
+        // The wizard derives the primary KYC identifier from the KYC Type chosen in
+        // Step 1. Individual customers are locked to Aadhar Card (kyc_number =
+        // Aadhaar). Business customers may pick PAN Card or GST (Normal) from the
+        // dropdown (kyc_number = PAN or GSTIN); PAN is additionally stored in the
+        // dedicated pan_* columns. Step 2 always verifies PAN + GST for Business
+        // regardless of which KYC Type was chosen.
+        $selectedCategory = BusinessCategory::query()
+            ->where('id', (int) $request->input('business_category_id'))
+            ->where('status', 'active')
+            ->first();
+        $isBusinessKyc = $selectedCategory !== null
+            && strtolower(trim((string) $selectedCategory->user_type)) === 'business';
+        $submittedKycType = trim((string) $request->input('kyc_type'));
+        $requestedKycType = match (true) {
+            ! $isBusinessKyc => 'Aadhar Card',
+            in_array($submittedKycType, ['PAN Card', 'GST (Normal)'], true) => $submittedKycType,
+            default => 'GST (Normal)',
+        };
+
         $rawKycNumber = strtoupper(preg_replace('/\s+/', '', (string) $request->input('kyc_number')));
-        if ($requestedKycType === 'PAN Card' && $rawKycNumber === '') {
-            $rawKycNumber = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number')));
-        } elseif ($requestedKycType === 'Aadhar Card' && $rawKycNumber === '') {
+        if ($requestedKycType === 'Aadhar Card' && $rawKycNumber === '') {
             $rawKycNumber = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
+        } elseif ($requestedKycType === 'GST (Normal)' && $rawKycNumber === '') {
+            $rawKycNumber = strtoupper(preg_replace('/\s+/', '', (string) $request->input('gst_kyc_number')));
+        } elseif ($requestedKycType === 'PAN Card' && $rawKycNumber === '') {
+            $rawKycNumber = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number')));
+        }
+
+        // PAN values are normalized before validation so the uppercase PAN regex
+        // and the Y-m-d date rules receive consistent input (the OCR autofill sends
+        // Y-m-d while the flatpickr field may submit d/m/Y).
+        $request->merge(['pan_number' => strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number')))]);
+        if ($request->filled('pan_dob')) {
+            $normalizedPanDob = $this->normalizePanDob((string) $request->input('pan_dob'));
+            if ($normalizedPanDob !== null) {
+                $request->merge(['pan_dob' => $normalizedPanDob]);
+            }
         }
 
         $request->merge([
             'business_category_id' => $request->filled('business_category_id')
                 ? (int) $request->input('business_category_id')
                 : null,
+            'kyc_type' => $requestedKycType,
             'csb_type' => $request->input('csb_type'),
             'company_name' => trim((string) $request->input('company_name')),
             'contact_person' => trim((string) $request->input('contact_person')),
@@ -962,11 +1009,6 @@ class CustomerController extends Controller
             'phone_number' => preg_replace('/\D+/', '', (string) $request->input('phone_number')),
             'pincode' => preg_replace('/\D+/', '', (string) $request->input('pincode')),
             'kyc_number' => $rawKycNumber,
-            'pan_number' => strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) $request->input('pan_number'))),
-            'pan_holder_name' => trim((string) $request->input('pan_holder_name')),
-            'pan_dob' => $request->filled('pan_dob')
-                ? ($this->normalizePanDob((string) $request->input('pan_dob')) ?? (string) $request->input('pan_dob'))
-                : null,
             'ad_code' => preg_replace('/\D+/', '', (string) $request->input('ad_code')),
             'iec_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('iec_number'))),
             'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
@@ -979,6 +1021,15 @@ class CustomerController extends Controller
         $isCsbV = $request->input('csb_type') === 'csb_v';
         $usesLut = $isCsbV && $request->boolean('is_lut');
         $usesGst = $isCsbV && $request->boolean('is_gst');
+        // The Step-2 GST KYC panel is independent of both the CSB V GST/LUT choice
+        // and the KYC Type dropdown: every Business customer must verify PAN + GST
+        // in Step 2 (a CSB IV customer or a CSB V LUT-only customer still uploads
+        // the GST certificate as a KYC document), so the GST certificate handling
+        // follows the customer type rather than the chosen KYC Type.
+        $usesGstKyc = $isBusinessKyc;
+        // Aadhaar is the primary (mandatory) KYC only for Individual customers; for
+        // Business customers it is an optional extra that keeps its document columns.
+        $aadharRequired = ! $isBusinessKyc;
 
         if ($isCsbV && ! $usesLut && ! $usesGst) {
             throw ValidationException::withMessages([
@@ -1012,41 +1063,92 @@ class CustomerController extends Controller
                 Rule::unique('exporter_customers', 'email')->where('exporter_id', $exporter->id),
             ],
             'email_opt_out' => ['sometimes', 'boolean'],
-            'kyc_type' => ['nullable', 'required_with:kyc_number', Rule::in(['Aadhar Card', 'PAN Card'])],
+            'kyc_type' => ['required', Rule::in(['Aadhar Card', 'PAN Card', 'GST (Normal)'])],
             'kyc_number' => [
-                'nullable',
-                'required_with:kyc_type',
+                'required',
                 'max:100',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request, $exporter): void {
-                    $patterns = [
-                        'Aadhar Card' => ['/^[2-9][0-9]{11}$/', 'Enter a valid 12-digit Aadhaar number.'],
-                        'PAN Card' => ['/^[A-Z]{5}[0-9]{4}[A-Z]$/', 'Enter a valid 10-character PAN number.'],
-                    ];
-                    $kycType = $request->input('kyc_type');
-                    $rule = $patterns[$kycType] ?? null;
-                    if ($value && $rule && ! preg_match($rule[0], (string) $value)) {
-                        $fail($rule[1]);
+                function (string $attribute, mixed $value, \Closure $fail) use ($exporter, $requestedKycType): void {
+                    if ($requestedKycType === 'GST (Normal)') {
+                        if ($value && ! preg_match('/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', (string) $value)) {
+                            $fail('Enter a valid 15-character GSTIN.');
+
+                            return;
+                        }
+
+                        if ($value && ExporterCustomer::query()
+                            ->where('exporter_id', $exporter->id)
+                            ->where('kyc_type', 'GST (Normal)')
+                            ->where('kyc_number', (string) $value)
+                            ->exists()) {
+                            $fail('This GSTIN is already registered for another saved customer.');
+                        }
 
                         return;
                     }
 
-                    if ($value && $kycType && ExporterCustomer::query()
+                    if ($requestedKycType === 'PAN Card') {
+                        if ($value && ! preg_match('/^[A-Z]{5}[0-9]{4}[A-Z]$/', (string) $value)) {
+                            $fail('Enter a valid 10-character PAN number.');
+
+                            return;
+                        }
+
+                        if ($value && ExporterCustomer::query()
+                            ->where('exporter_id', $exporter->id)
+                            ->where('kyc_type', 'PAN Card')
+                            ->where('kyc_number', (string) $value)
+                            ->exists()) {
+                            $fail('This PAN number is already registered for another saved customer.');
+                        }
+
+                        return;
+                    }
+
+                    if ($value && ! preg_match('/^[2-9][0-9]{11}$/', (string) $value)) {
+                        $fail('Enter a valid 12-digit Aadhaar number.');
+
+                        return;
+                    }
+
+                    if ($value && ExporterCustomer::query()
                         ->where('exporter_id', $exporter->id)
-                        ->where('kyc_type', $kycType)
+                        ->where('kyc_type', 'Aadhar Card')
                         ->where('kyc_number', (string) $value)
                         ->exists()) {
-                        $fail($kycType === 'Aadhar Card'
-                            ? 'This Aadhaar number is already registered for another saved customer.'
-                            : 'This PAN number is already registered for another saved customer.');
+                        $fail('This Aadhaar number is already registered for another saved customer.');
                     }
                 },
             ],
-            'aadhar_front_document' => ['nullable', 'required_if:kyc_type,Aadhar Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
-            'aadhar_back_document' => ['nullable', 'required_if:kyc_type,Aadhar Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
-            'pan_number' => ['nullable', 'required_if:kyc_type,PAN Card', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
-            'pan_holder_name' => ['nullable', 'required_if:kyc_type,PAN Card', 'string', 'min:2', 'max:255'],
-            'pan_dob' => ['nullable', 'required_if:kyc_type,PAN Card', 'date', 'before:today'],
-            'pan_document' => ['nullable', 'required_if:kyc_type,PAN Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'aadhar_front_document' => [$aadharRequired ? 'required' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'aadhar_back_document' => [$aadharRequired ? 'required' : 'nullable', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+            'pan_number' => [
+                'required',
+                'string',
+                'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/',
+                function (string $attribute, mixed $value, \Closure $fail) use ($exporter): void {
+                    if (! $value) {
+                        return;
+                    }
+
+                    if (ExporterCustomer::query()
+                        ->where('exporter_id', $exporter->id)
+                        ->where(function ($query) use ($value) {
+                            $query->where('pan_number', (string) $value)
+                                // Also catch legacy rows that stored the PAN through
+                                // the old kyc_type/kyc_number pair.
+                                ->orWhere(function ($legacy) use ($value) {
+                                    $legacy->where('kyc_type', 'PAN Card')
+                                        ->where('kyc_number', (string) $value);
+                                });
+                        })
+                        ->exists()) {
+                        $fail('This PAN number is already registered for another saved customer.');
+                    }
+                },
+            ],
+            'pan_holder_name' => ['required', 'string', 'max:255'],
+            'pan_dob' => ['required', 'date', 'before:today'],
+            'pan_document' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'csb_type' => ['required', Rule::in(['csb_iv', 'csb_v'])],
             'is_lut' => ['nullable', 'boolean'],
             'is_gst' => ['nullable', 'boolean'],
@@ -1061,7 +1163,7 @@ class CustomerController extends Controller
             'lut_document' => [Rule::requiredIf($usesLut), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
             'gst_certificate_number' => [Rule::requiredIf($usesGst), 'nullable', 'regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/'],
             'gst_business_name' => [Rule::requiredIf($usesGst), 'nullable', 'string', 'min:2', 'max:255'],
-            'gst_certificate_document' => [Rule::requiredIf($usesGst), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+            'gst_certificate_document' => [Rule::requiredIf($usesGst || $usesGstKyc), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
             'billing_address' => [Rule::requiredIf($isCsbV), 'nullable', 'string', 'min:10', 'max:1000'],
             'billing_contact' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'billing_email' => [Rule::requiredIf($isCsbV), 'nullable', 'email:rfc', 'max:255'],
@@ -1080,8 +1182,19 @@ class CustomerController extends Controller
             'phone_number.regex' => 'Enter a valid 10-digit Indian mobile number starting with 6, 7, 8 or 9.',
             'phone_number.unique' => 'A customer with this phone number already exists.',
             'email.unique' => 'A customer with this email address already exists.',
-            'kyc_type.required_with' => 'Select a KYC type when entering a KYC number.',
-            'kyc_number.required_with' => 'Enter the KYC number for the selected KYC type.',
+            'kyc_number.required' => match ($requestedKycType) {
+                'PAN Card' => 'Enter the PAN number for the selected business customer type.',
+                'GST (Normal)' => 'Enter the GSTIN for the selected business customer type.',
+                default => 'Enter the Aadhaar number for the selected individual customer type.',
+            },
+            'pan_number.regex' => 'Enter a valid 10-character PAN number.',
+            'pan_holder_name.required' => 'Enter the name as printed on the PAN card.',
+            'pan_dob.required' => 'Select the date of birth as printed on the PAN card.',
+            'pan_dob.date' => 'Enter a valid date of birth.',
+            'pan_dob.before' => 'The PAN date of birth must be a date before today.',
+            'pan_document.required' => 'Upload the PAN card document image.',
+            'pan_document.mimes' => 'The PAN document must be a JPG, JPEG, or PNG image.',
+            'pan_document.max' => 'The PAN document image must not exceed 5 MB.',
             'ad_code.regex' => 'The AD Code must be exactly 7 or 14 numeric digits.',
             'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
             'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
@@ -1103,25 +1216,11 @@ class CustomerController extends Controller
 
         $kycType = $validated['kyc_type'] ?? null;
 
-        // PAN-specific fields are only meaningful when the PAN Card KYC type is chosen.
-        if ($kycType === 'PAN Card') {
-            $validated['pan_number'] = $validated['kyc_number'];
-            $normalizedPanDob = $this->normalizePanDob((string) $validated['pan_dob']);
-            $validated['pan_dob'] = $normalizedPanDob ?? $validated['pan_dob'];
-        } else {
-            $validated = collect($validated)->except([
-                'pan_number',
-                'pan_holder_name',
-                'pan_dob',
-                'pan_document',
-            ])->all();
-        }
-
+        // For Business customers Aadhaar is optional, so rows that did not upload
+        // documents persist null in the Aadhaar document columns.
         if ($kycType !== 'Aadhar Card') {
-            $validated = collect($validated)->except([
-                'aadhar_front_document',
-                'aadhar_back_document',
-            ])->all();
+            $validated['aadhar_front_document'] = $validated['aadhar_front_document'] ?? null;
+            $validated['aadhar_back_document'] = $validated['aadhar_back_document'] ?? null;
         }
 
         // The KYC identifier entered on this page must be Cashfree-verified first,
@@ -1137,15 +1236,44 @@ class CustomerController extends Controller
             }
         }
 
+        // A GST KYC selection must also be Cashfree-verified first; the Step-2 GST
+        // verify handler stores the GSTIN/business name in the same session keys
+        // that the CSB V GST registration below relies on.
+        if ($kycType === 'GST (Normal)' && ! empty($validated['kyc_number'])) {
+            if (
+                ! session('kyc_gst_cashfree_verified')
+                || session('kyc_gst_number') !== $validated['kyc_number']
+            ) {
+                throw ValidationException::withMessages([
+                    'kyc_number' => 'Verify the submitted GSTIN and Business Name through Cashfree before saving the customer.',
+                ]);
+            }
+        }
+
+        // A PAN Card primary KYC selection must also be Cashfree-verified first; the
+        // Step-2 PAN verify handler stores the verified PAN in the same session keys
+        // (kyc_pan_number), so the identifier must match exactly.
         if ($kycType === 'PAN Card' && ! empty($validated['kyc_number'])) {
             if (
                 ! session('kyc_pan_cashfree_verified')
                 || session('kyc_pan_number') !== $validated['kyc_number']
             ) {
                 throw ValidationException::withMessages([
-                    'kyc_number' => 'Verify the submitted PAN through Cashfree before saving the customer.',
+                    'kyc_number' => 'Verify the submitted PAN details through Cashfree before saving the customer.',
                 ]);
             }
+        }
+
+        // The PAN is mandatory for both customer types and must be Cashfree-verified
+        // before it is persisted in the dedicated pan_* columns.
+        $normalizedPan = strtoupper(preg_replace('/[^A-Z0-9]+/i', '', (string) ($validated['pan_number'] ?? '')));
+        if (
+            ! session('kyc_pan_cashfree_verified')
+            || session('kyc_pan_number') !== $normalizedPan
+        ) {
+            throw ValidationException::withMessages([
+                'pan_number' => 'Verify the submitted PAN details through Cashfree before saving the customer.',
+            ]);
         }
 
         // The GSTIN and Business Name entered on this page must be Cashfree-verified
@@ -1182,13 +1310,20 @@ class CustomerController extends Controller
             }
         }
 
-        // Store the KYC verification documents (Aadhaar front/back or PAN image).
+        // Store the KYC verification documents (Aadhaar front/back or GST certificate).
         $kycUploadDirectory = public_path('uploads/exporter_customer_kyc_documents/'.$exporter->id);
         if (! is_dir($kycUploadDirectory)) {
             mkdir($kycUploadDirectory, 0755, true);
         }
 
-        foreach (['aadhar_front_document', 'aadhar_back_document', 'pan_document'] as $kycDocumentField) {
+        $kycDocumentFields = ['aadhar_front_document', 'aadhar_back_document', 'pan_document'];
+        // CSB IV has no CSB document bucket, so a GST KYC certificate is stored
+        // alongside the other KYC documents. CSB V documents are handled below.
+        if ($usesGstKyc && ! $isCsbV) {
+            $kycDocumentFields[] = 'gst_certificate_document';
+        }
+
+        foreach ($kycDocumentFields as $kycDocumentField) {
             if (! $request->hasFile($kycDocumentField)) {
                 continue;
             }
@@ -1216,7 +1351,7 @@ class CustomerController extends Controller
                 $validated[$documentField] = 'uploads/exporter_customer_csb_documents/'.$exporter->id.'/'.$filename;
             }
         } else {
-            $validated = collect($validated)->except([
+            $csbIvExcludedFields = [
                 'is_lut',
                 'is_gst',
                 'gst_certificate_number',
@@ -1237,7 +1372,16 @@ class CustomerController extends Controller
                 'merchant_agreement',
                 'terms_accepted',
                 'merchant_agreement_accepted_at',
-            ])->all();
+            ];
+
+            // A CSB IV Business customer keeps the verified Step-2 GST certificate
+            // (stored above in the KYC documents directory); the rest of the CSB V
+            // GST/LUT fields remain inapplicable for CSB IV.
+            if ($usesGstKyc) {
+                $csbIvExcludedFields = array_values(array_diff($csbIvExcludedFields, ['gst_certificate_document']));
+            }
+
+            $validated = collect($validated)->except($csbIvExcludedFields)->all();
         }
 
         $exporter->exporterCustomers()->create($validated);

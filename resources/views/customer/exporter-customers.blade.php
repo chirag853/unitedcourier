@@ -109,14 +109,14 @@
                                           action="{{ route('customer.exporter-customers.store') }}"
                                           method="POST" enctype="multipart/form-data" novalidate
                                           data-verify-aadhar-url="{{ route('customer.verify.exporter-customer-aadhar') }}"
-                                          data-verify-pan-url="{{ route('customer.verify.exporter-customer-pan') }}"
-                                          data-verify-gst-url="{{ route('customer.verify.gst') }}">
+                                          data-verify-gst-url="{{ route('customer.verify.gst') }}"
+                                          data-verify-pan-url="{{ route('customer.verify.exporter-customer-pan') }}">
                                         @csrf
 
                                         <!-- ==================== STEP 1: User Type + KYC Type + CSB Type ==================== -->
                                         <div class="wizard-panel active" data-panel="1">
                                             <div class="section-title-alt"><i class="fas fa-sliders"></i> Customer Configuration <span class="step-chip">Step 1 of 4</span></div>
-                                            <p class="step-intro">Select the customer type, KYC document and CSB type. Selecting CSB V adds an extra step to collect the CSB V details.</p>
+                                            <p class="step-intro">Select the customer type and CSB type. The KYC type is set automatically from the customer type - Aadhar Card for Individual; for Business you can choose between PAN Card and GST (Normal). Selecting CSB V adds an extra step to collect the CSB V details.</p>
 
                                             <div class="row g-3">
                                                 <div class="col-md-6">
@@ -139,7 +139,7 @@
                                                     <small class="text-muted">Select the type of customer you are adding.</small>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label class="section-label">CSB Type <span class="text-danger">*</span></label>
+                                                    <label class="section-label">CSB Type <span class="" style="color:gray">(Optional)</span></label>
                                                     <div class="csb-type-box">
                                                         <label class="csb-checkbox">
                                                             <input type="checkbox" id="csbTypeCheck" {{ old('csb_type') === 'csb_v' ? 'checked' : '' }}>
@@ -154,12 +154,14 @@
                                                     <label class="section-label">KYC Type <span class="text-danger">*</span></label>
                                                     <div class="input-wrapper">
                                                         <select name="kyc_type" id="kycType" class="input-custom select-custom" required>
+                                                            <option value="">Select KYC Type</option>
                                                             <option value="Aadhar Card" {{ old('kyc_type', 'Aadhar Card') === 'Aadhar Card' ? 'selected' : '' }}>Aadhar Card</option>
                                                             <option value="PAN Card" {{ old('kyc_type') === 'PAN Card' ? 'selected' : '' }}>PAN Card</option>
+                                                            <option value="GST (Normal)" {{ old('kyc_type') === 'GST (Normal)' ? 'selected' : '' }}>GST (Normal)</option>
                                                         </select>
                                                         <i class="fas fa-id-card"></i>
                                                     </div>
-                                                    <small class="text-muted">Choose the KYC document that will be verified in Step 2.</small>
+                                                    <small class="text-muted">KYC type is set automatically from the customer type - Aadhar Card for Individual; PAN Card or GST (Normal) for Business. For Business, Step 2 always requires PAN + GST verification regardless of the KYC Type chosen here.</small>
                                                 </div>
                                             </div>
 
@@ -187,9 +189,9 @@
                                         <!-- ==================== STEP 2: KYC Document ==================== -->
                                         <div class="wizard-panel" data-panel="2">
                                             <div class="section-title-alt"><i class="fas fa-shield-halved"></i> KYC Document Verification <span class="step-chip">Step 2 of 4</span></div>
-                                            <p class="step-intro">Enter the details of the selected KYC document and upload the required images. The details are verified through </p>
+                                            <p class="step-intro">Verify the required KYC documents below. The sections shown depend on the customer type selected in Step 1. Upload the required document images and verify each section.</p>
 
-                                            <!-- Aadhar section (shown when kyc_type = Aadhar Card) -->
+                                            <!-- Aadhar section (mandatory for Individual customers, optional for Business customers) -->
                                             <div id="aadharKycSection">
                                                 <div class="sub-section-header">
                                                     <div class="sub-section-icon"><i class="fas fa-id-card"></i></div>
@@ -197,7 +199,7 @@
                                                         <h6 class="sub-section-title mb-0">Aadhaar Verification</h6>
                                                         <!-- <small class="sub-section-desc">Verify Aadhaar details through Cashfree OCR</small> -->
                                                     </div>
-                                                    <!-- <span class="badge-sub">Cashfree OCR</span> -->
+                                                    <span class="badge-sub badge-kyc-optional" id="aadharRequirementBadge" style="display: none;">Optional</span>
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
@@ -222,7 +224,7 @@
                                                     <div class="sub-section-icon"><i class="fas fa-images"></i></div>
                                                     <div>
                                                         <h6 class="sub-section-title mb-0">Aadhaar Card Documents</h6>
-                                                        <small class="sub-section-desc">Upload clear photos of the front and back of your Aadhaar card</small>
+                                                        <small class="sub-section-desc">Upload clear, JPG / PNG photos of the front and back of your Aadhaar card</small>
                                                     </div>
                                                     <span class="badge-sub">JPG / PNG</span>
                                                 </div>
@@ -274,22 +276,21 @@
                                                 </div>
                                             </div>
 
-                                            <!-- PAN section (shown when kyc_type = PAN Card) -->
+                                            <!-- PAN section (mandatory for both Individual and Business customers) -->
                                             <div id="panKycSection" class="d-none">
-                                                <div class="sub-section-header">
-                                                    <div class="sub-section-icon"><i class="fas fa-file-invoice"></i></div>
+                                                <div class="sub-section-header mt-4">
+                                                    <div class="sub-section-icon"><i class="fas fa-credit-card"></i></div>
                                                     <div>
                                                         <h6 class="sub-section-title mb-0">PAN Verification</h6>
-                                                        <small class="sub-section-desc">Verify PAN details </small>
+                                                        <small class="sub-section-desc">Verify PAN details</small>
                                                     </div>
-                                                    <!-- <span class="badge-sub">Cashfree OCR</span> -->
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
                                                         <label class="section-label">PAN Number</label>
                                                         <div class="input-wrapper">
-                                                            <input type="text" class="input-custom" id="panNumber" placeholder="Enter PAN Number (e.g. ABCDE1234F) *" name="pan_number" maxlength="10" style="text-transform: uppercase;" value="{{ old('pan_number') }}" required>
-                                                            <i class="fas fa-file-invoice"></i>
+                                                            <input type="text" class="input-custom text-uppercase" id="panNumber" placeholder="Enter 10-character PAN Number *" name="pan_number" maxlength="10" style="text-transform: uppercase;" value="{{ old('pan_number') }}" required>
+                                                            <i class="fas fa-credit-card"></i>
                                                         </div>
                                                         <div class="d-flex align-items-center flex-wrap gap-2">
                                                             <button type="button" class="btn-verify mt-1" id="panVerifyBtn">
@@ -302,26 +303,27 @@
                                                         <div id="panVerifyStatus" class="kyc-alert" style="display: none;"></div>
                                                     </div>
                                                     <div class="col-md-6">
-                                                        <label class="section-label">PAN Holder Name</label>
+                                                        <label class="section-label">Name as on PAN</label>
                                                         <div class="input-wrapper">
-                                                            <input type="text" class="input-custom" id="panHolderName" placeholder="Enter Name as on PAN *" name="pan_holder_name" value="{{ old('pan_holder_name') }}" required>
+                                                            <input type="text" class="input-custom" id="panHolderName" placeholder="Enter name as on PAN *" name="pan_holder_name" maxlength="255" value="{{ old('pan_holder_name') }}" required>
                                                             <i class="fas fa-user"></i>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
-                                                        <label class="section-label">Date of Birth (as per PAN)</label>
+                                                        <label class="section-label">Date of Birth</label>
                                                         <div class="input-wrapper">
-                                                            <input type="text" class="input-custom" id="panDob" placeholder="DD/MM/YYYY" name="pan_dob" value="{{ old('pan_dob') }}" autocomplete="bday" readonly required>
-                                                            <i class="fas fa-calendar"></i>
+                                                            <input type="text" class="input-custom" id="panDob" placeholder="DD/MM/YYYY" name="pan_dob" autocomplete="bday" readonly value="{{ old('pan_dob') }}" required>
+                                                            <i class="fas fa-calendar-alt"></i>
                                                         </div>
+                                                        <small class="text-muted">Date of birth as per the PAN record.</small>
                                                     </div>
                                                     <div class="col-md-6">
-                                                        <label class="section-label">PAN Document</label>
+                                                        <label class="section-label">PAN Card Document</label>
                                                         <div class="doc-item compact" id="panDocContainer">
                                                             <div class="doc-meta">
-                                                                <div class="doc-file-icon"><i class="fas fa-file-invoice"></i></div>
+                                                                <div class="doc-file-icon"><i class="fas fa-credit-card"></i></div>
                                                                 <div>
                                                                     <span class="doc-name">PAN Card</span>
                                                                     <div id="panFileInfo" class="file-status">Selected: <span id="panFileNameDisplay">file</span></div>
@@ -342,6 +344,67 @@
                                                 </div>
                                             </div>
 
+                                            <!-- GST section (shown when customer type = Business) -->
+                                            <div id="gstKycSection" class="d-none">
+                                                <div class="sub-section-header">
+                                                    <div class="sub-section-icon"><i class="fas fa-receipt"></i></div>
+                                                    <div>
+                                                        <h6 class="sub-section-title mb-0">GST Verification</h6>
+                                                        <small class="sub-section-desc">Verify GSTIN and registered business name </small>
+                                                    </div>
+                                                    <!-- <span class="badge-sub">Cashfree</span> -->
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="section-label">GSTIN</label>
+                                                        <div class="input-wrapper">
+                                                            <input type="text" class="input-custom text-uppercase" id="gstKycNumber" placeholder="Enter 15-character GSTIN *" name="gst_kyc_number" maxlength="15" value="{{ old('gst_kyc_number') }}" required>
+                                                            <i class="fas fa-receipt"></i>
+                                                        </div>
+                                                        <div class="d-flex align-items-center flex-wrap gap-2">
+                                                            <button type="button" class="btn-verify mt-1" id="gstKycVerifyBtn">
+                                                                <i class="fas fa-shield-halved me-1"></i> Verify GST
+                                                            </button>
+                                                            <span class="verified-badge" id="gstKycVerifiedBadge" style="display: none;">
+                                                                <i class="fas fa-circle-check me-1"></i> Verified
+                                                            </span>
+                                                        </div>
+                                                        <div id="gstKycVerifyStatus" class="kyc-alert" style="display: none;"></div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="section-label">Registered Business Name</label>
+                                                        <div class="input-wrapper">
+                                                            <input type="text" class="input-custom" id="gstKycBusinessName" placeholder="Enter registered business name *" name="gst_kyc_business_name" maxlength="255" value="{{ old('gst_kyc_business_name') }}" required>
+                                                            <i class="fas fa-building"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="section-label">GST Certificate (PDF)</label>
+                                                        <div class="doc-item compact" id="gstKycDocContainer">
+                                                            <div class="doc-meta">
+                                                                <div class="doc-file-icon"><i class="fas fa-file-pdf"></i></div>
+                                                                <div>
+                                                                    <span class="doc-name">GST Certificate</span>
+                                                                    <div id="gstKycFileInfo" class="file-status">Selected: <span id="gstKycFileNameDisplay">file</span></div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="text-end d-flex align-items-center">
+                                                                <input type="file" id="gstKycFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf" required
+                                                                    onchange="handleDocSelect(this, 'gstKycFileNameDisplay', 'gstKycFileInfo', 'gstKycRemoveFile', '.gstKycUploadBtn', '#gstKycDocContainer');">
+                                                                <button type="button" class="link-alt border-0 bg-transparent gstKycUploadBtn" onclick="document.getElementById('gstKycFileInput').click();">
+                                                                    <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                                                </button>
+                                                                <span class="text-danger-alt gstKycRemoveFile" style="display: none;"
+                                                                    onclick="clearDocInput('gstKycFileInput', 'gstKycFileNameDisplay', 'gstKycFileInfo', 'gstKycRemoveFile', '.gstKycUploadBtn', '#gstKycDocContainer');"><i class="fas fa-trash-alt"></i> Remove</span>
+                                                            </div>
+                                                        </div>
+                                                        <small class="text-muted">GST certificate in PDF format, up to 5 MB.</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <div class="wizard-nav">
                                                 <button type="button" class="btn-back wizard-prev" data-prev="1"><i class="fas fa-arrow-left me-2"></i> BACK</button>
                                                 <button type="button" class="btn-gradient wizard-next" data-next="3">NEXT <i class="fas fa-arrow-right ms-2"></i></button>
@@ -354,7 +417,7 @@
                                             <p class="step-intro">Provide the customer's basic information. Fields verified in Step 2 are auto-filled for you.</p>
 
                                             <div class="row g-3">
-                                                <div class="col-md-6">
+                                                <div class="col-md-6" id="companyNameWrapper">
                                                     <label class="section-label">Company Name <span class="text-danger">*</span></label>
                                                     <div class="input-wrapper">
                                                         <input type="text" id="companyName" name="company_name" class="input-custom" value="{{ old('company_name') }}" minlength="2" maxlength="150" pattern="[A-Za-z0-9][A-Za-z0-9 .&()'/-]*" required>
@@ -443,11 +506,21 @@
                                             <p class="step-intro">Provide the additional CSB V details required for your business account.</p>
 
                                             <div id="csbVFields">
+                                                @php
+                                                    // Reuse the account's Cashfree-verified GST (session-based). When a
+                                                    // valid verification is present, GST is auto-selected and the GSTIN +
+                                                    // registered business name are prefilled read-only so the customer can
+                                                    // save without re-verifying. The GST certificate PDF is still required
+                                                    // because every saved customer stores its own copy.
+                                                    $reuseGst = $verifiedGstReusable ?? false;
+                                                    $prefilledGstNumber = $reuseGst ? ($verifiedGstNumber ?? '') : old('gst_certificate_number');
+                                                    $prefilledGstBusinessName = $reuseGst ? ($verifiedGstBusinessName ?? '') : old('gst_business_name');
+                                                @endphp
                                                 <div class="row g-3">
                                                     <div class="col-12">
                                                         <div class="d-flex flex-wrap gap-4 align-items-center">
                                                             <div class="form-check mb-0">
-                                                                <input type="checkbox" class="form-check-input" id="isGst" name="is_gst" value="1" {{ old('is_gst') ? 'checked' : '' }}>
+                                                                <input type="checkbox" class="form-check-input" id="isGst" name="is_gst" value="1" {{ (old('is_gst') || $reuseGst) ? 'checked' : '' }}>
                                                                 <label class="form-check-label fw-semibold" for="isGst">GST</label>
                                                             </div>
                                                             <div class="form-check mb-0">
@@ -601,7 +674,7 @@
                                                     </div>
                                                 </div>
 
-                                                <div id="gstFields">
+                                                <div id="gstFields" data-gst-reusable="{{ $reuseGst ? '1' : '0' }}">
                                                     <div class="sub-section-header mt-4">
                                                         <div class="sub-section-icon"><i class="fas fa-receipt"></i></div>
                                                         <div>
@@ -614,7 +687,7 @@
                                                         <div class="col-md-6">
                                                             <label class="section-label">GSTIN <span class="text-danger">*</span></label>
                                                             <div class="input-wrapper">
-                                                                <input type="text" id="gstNumber" name="gst_certificate_number" class="input-custom text-uppercase" value="{{ old('gst_certificate_number') }}" maxlength="15" placeholder="Enter 15-character GSTIN *">
+                                                                <input type="text" id="gstNumber" name="gst_certificate_number" class="input-custom text-uppercase" value="{{ $prefilledGstNumber }}" maxlength="15" placeholder="Enter 15-character GSTIN *" {{ $reuseGst ? 'readonly' : '' }}>
                                                                 <i class="fas fa-receipt"></i>
                                                             </div>
                                                             <small class="text-muted">Enter exactly 15 characters (e.g., 22AAAAA0000A1Z5).</small>
@@ -622,7 +695,7 @@
                                                         <div class="col-md-6">
                                                             <label class="section-label">Registered Business Name <span class="text-danger">*</span></label>
                                                             <div class="input-wrapper">
-                                                                <input type="text" id="gstBusinessName" name="gst_business_name" class="input-custom" value="{{ old('gst_business_name') }}" maxlength="255" placeholder="Enter registered business name *">
+                                                                <input type="text" id="gstBusinessName" name="gst_business_name" class="input-custom" value="{{ $prefilledGstBusinessName }}" maxlength="255" placeholder="Enter registered business name *" {{ $reuseGst ? 'readonly' : '' }}>
                                                                 <i class="fas fa-building"></i>
                                                             </div>
                                                         </div>
@@ -649,9 +722,14 @@
                                                         </div>
                                                         <div class="col-12">
                                                             <div id="gstVerifyStatus" class="small text-muted" role="status">Click VERIFY GST to validate your details through Cashfree before submission.</div>
-                                                            <button type="button" id="verifyGstBtn" class="btn-gradient mt-2">
-                                                                <i class="fas fa-shield-alt me-1"></i> VERIFY GST
-                                                            </button>
+                                                            <div class="d-flex align-items-center flex-wrap gap-2 mt-2">
+                                                                <button type="button" id="verifyGstBtn" class="btn-gradient">
+                                                                    <i class="fas fa-shield-alt me-1"></i> VERIFY GST
+                                                                </button>
+                                                                <span class="verified-badge" id="gstVerifiedBadge" style="display: none;">
+                                                                    <i class="fas fa-circle-check me-1"></i> Verified
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -899,7 +977,7 @@
                     ['image/jpeg', 'image/png'].indexOf(file.type) === -1 ||
                     file.size > 5 * 1024 * 1024)) {
                 input.value = '';
-                showAlert('Aadhaar and PAN documents must be JPG, JPEG, or PNG images up to 5 MB.', 'warning');
+                showAlert('Uploaded documents must be JPG, JPEG, or PNG images up to 5 MB.', 'warning');
                 return;
             }
             var name = file.name;
@@ -931,20 +1009,124 @@
     }
 </script>
 
-<script src="{{ asset('js/exporter-customers.js') }}?v={{ filemtime(public_path('js/exporter-customers.js')) ?: 1 }}"></script>
-
+<script src="{{ asset('assets/plugins/flatpickr/flatpickr.min.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var panDob = document.getElementById('panDob');
-        if (panDob && typeof flatpickr === 'function') {
+        if (panDob && typeof flatpickr !== 'undefined') {
             flatpickr(panDob, {
                 dateFormat: 'd/m/Y',
-                maxDate: new Date(new Date().setFullYear(new Date().getFullYear() - 18)),
-                allowInput: false
+                maxDate: 'today'
             });
         }
     });
 </script>
+
+<script>
+    // KYC Type (Step 1) must reflect the selected customer type:
+    //   Individual => ONLY "Aadhar Card".
+    //   Business   => "PAN Card" and "GST (Normal)" (GST stays the default).
+    // Selecting one of the two Business options does not change Step 2 - a
+    // Business customer still verifies PAN + GST before saving; the dropdown
+    // only records which document is the customer's primary KYC type.
+    // Kept inline (in addition to exporter-customers.js) so it can never be
+    // skipped by an externally cached JS file or an unrelated load error.
+    (function () {
+        function desiredOptions(isBusiness) {
+            if (isBusiness) {
+                return [
+                    { value: 'PAN Card', label: 'PAN Card', selected: false },
+                    { value: 'GST (Normal)', label: 'GST (Normal)', selected: true }
+                ];
+            }
+            return [
+                { value: 'Aadhar Card', label: 'Aadhar Card', selected: true }
+            ];
+        }
+
+        function sameOptionSet(kycType, desiredValues) {
+            if (!kycType.options || kycType.options.length !== desiredValues.length) {
+                return false;
+            }
+            for (var i = 0; i < kycType.options.length; i++) {
+                if (kycType.options[i].value !== desiredValues[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function syncKycTypeFromCustomerType() {
+            var customerType = document.getElementById('businessCategoryId');
+            var kycType = document.getElementById('kycType');
+            if (!customerType || !kycType) {
+                return;
+            }
+            // No customer type chosen yet - keep the server-rendered options
+            // (including any old() preselection after a validation error).
+            if (!customerType.value) {
+                return;
+            }
+            var option = customerType.options[customerType.selectedIndex];
+            var isBusiness = !!(option && option.value && option.dataset.userType === 'business');
+            var desired = desiredOptions(isBusiness);
+            var desiredValues = [];
+            var defaultOption = null;
+            for (var i = 0; i < desired.length; i++) {
+                desiredValues.push(desired[i].value);
+                if (desired[i].selected) {
+                    defaultOption = desired[i];
+                }
+            }
+
+            var previousValue = kycType.value;
+
+            // Rebuild only when the current option set differs, so this stays
+            // idempotent alongside the identical logic in exporter-customers.js.
+            if (sameOptionSet(kycType, desiredValues)) {
+                if (previousValue && desiredValues.indexOf(previousValue) !== -1) {
+                    return;
+                }
+                if (defaultOption) {
+                    kycType.value = defaultOption.value;
+                }
+                return;
+            }
+
+            kycType.innerHTML = '';
+            var preserveSelection = previousValue && desiredValues.indexOf(previousValue) !== -1;
+            for (var j = 0; j < desired.length; j++) {
+                var newOption = document.createElement('option');
+                newOption.value = desired[j].value;
+                newOption.textContent = desired[j].label;
+                newOption.selected = preserveSelection ? desired[j].value === previousValue : !!desired[j].selected;
+                kycType.appendChild(newOption);
+            }
+            if (kycType.value === '' && defaultOption) {
+                kycType.value = defaultOption.value;
+            }
+        }
+
+        function init() {
+            var customerType = document.getElementById('businessCategoryId');
+            if (!customerType) {
+                return;
+            }
+            customerType.addEventListener('change', syncKycTypeFromCustomerType);
+            if (customerType.value) {
+                syncKycTypeFromCustomerType();
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+</script>
+
+<script src="{{ asset('js/exporter-customers.js') }}?v={{ filemtime(public_path('js/exporter-customers.js')) ?: 1 }}"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {

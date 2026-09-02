@@ -731,6 +731,13 @@ select.input-custom.select-custom:disabled {
     flex-shrink: 0;
 }
 
+/* Aadhaar "Optional" badge (Business customers only) */
+.badge-kyc-optional {
+    color: #047857;
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
 @media (max-width: 480px) {
     .sub-section-header {
         flex-wrap: wrap;

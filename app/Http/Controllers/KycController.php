@@ -1721,10 +1721,17 @@ class KycController extends Controller
             }
 
             // Duplication is checked only within this exporter's own saved customers.
+            // New wizard records persist the PAN in pan_number while legacy rows stored
+            // it through the old kyc_type/kyc_number pair, so both are covered.
             if (ExporterCustomer::query()
                 ->where('exporter_id', $customer->id)
-                ->where('kyc_type', 'PAN Card')
-                ->where('kyc_number', $pan)
+                ->where(function ($query) use ($pan) {
+                    $query->where('pan_number', $pan)
+                        ->orWhere(function ($legacy) use ($pan) {
+                            $legacy->where('kyc_type', 'PAN Card')
+                                ->where('kyc_number', $pan);
+                        });
+                })
                 ->exists()) {
                 return response()->json([
                     'success' => false,
