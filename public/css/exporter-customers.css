@@ -834,3 +834,160 @@ select.input-custom.select-custom:disabled {
 .row.g-3 > [class*='col-'] > .doc-item.compact {
     flex: 1 1 auto;
 }
+
+/* ============================================================
+   [Override] Match the theme form-control look used on
+   create-shipment (Bootstrap / style.css form styles).
+   ------------------------------------------------------------
+   The wizard originally used large rounded inputs (16px radius,
+   48px icon padding, uppercase 11px labels). This appended block
+   restyles them to the flat theme controls used across the app:
+   - .section-label            -> looks like .form-label
+   - .input-custom             -> looks like .form-control
+   - select.input-custom       -> looks like .form-select
+   - decorative wrapper icons  -> hidden
+   Class hooks used by JS/validation are preserved:
+   .input-custom.input-invalid (red border) and
+   .input-custom.auto-filled (green tint).
+   ============================================================ */
+
+/* Labels like the theme .form-label */
+.section-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--crms-heading-color, #1F2020);
+    margin-bottom: 0.5rem;
+}
+
+/* Decorative leading icons are not part of the theme form look */
+.input-wrapper i {
+    display: none;
+}
+
+/* Field spacing matches theme .mb-3 / .row g-3 rhythm */
+.input-wrapper {
+    margin-bottom: 1rem;
+}
+
+/* In the Add Address modal each field already sits in a .mb-3
+   wrapper, so drop the extra wrapper margin to avoid doubling */
+.mb-3 > .input-wrapper,
+.modal-body .input-wrapper {
+    margin-bottom: 0;
+}
+
+/* Inputs behave like the theme .form-control */
+.input-custom {
+    appearance: none;
+    background-color: var(--crms-secondary-bg, #fff);
+    border: var(--crms-border-width, 1px) solid var(--crms-border-color, #E8E8E8);
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.77rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--crms-body-color, #707070);
+    box-shadow: var(--crms-box-shadow, 0px 4px 4px 0px rgba(219, 219, 219, 0.25));
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.input-custom:focus {
+    background-color: var(--crms-secondary-bg, #fff);
+    border-color: var(--crms-border-color, #E8E8E8);
+    box-shadow: none;
+    outline: 0;
+}
+
+.input-custom::placeholder {
+    color: #868788;
+    opacity: 1;
+}
+
+.input-custom:disabled {
+    background-color: var(--crms-light, #F7F8F9);
+    opacity: 1;
+}
+
+/* Readonly fields keep the normal control look (theme behaviour:
+   only :disabled controls get the muted background) */
+.input-custom[readonly] {
+    background-color: var(--crms-secondary-bg, #fff);
+    opacity: 1;
+}
+
+/* Keep the server-side validation cue visible but flat */
+.input-custom.input-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.1rem rgba(220, 53, 69, 0.15);
+}
+
+.input-custom.input-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.1rem rgba(220, 53, 69, 0.15);
+}
+
+/* Textarea: theme paddings (also neutralizes the inline padding-top) */
+textarea.input-custom {
+    padding: 0.5rem 0.77rem !important;
+    min-height: 90px;
+    resize: vertical;
+}
+
+/* Selects behave like the theme .form-select */
+select.input-custom.select-custom {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding: 0.5rem 2.31rem 0.5rem 0.77rem;
+    background-color: var(--crms-secondary-bg, #fff);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23323333' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.77rem center;
+    background-size: 14px 10px;
+    border: var(--crms-border-width, 1px) solid var(--crms-border-color, #E8E8E8);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--crms-body-color, #707070);
+    box-shadow: var(--crms-box-shadow, 0px 4px 4px 0px rgba(219, 219, 219, 0.25));
+    cursor: pointer;
+}
+
+select.input-custom.select-custom:focus {
+    border-color: var(--crms-border-color, #E8E8E8);
+    box-shadow: none;
+    outline: 0;
+}
+
+select.input-custom.select-custom:disabled {
+    background-color: var(--crms-light, #F7F8F9);
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+/* Keep the verified-KYC green cue visible after the override */
+.input-custom.auto-filled {
+    background-color: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+}
+
+/* Light harmonization of the CSB Type option card so it sits
+   comfortably next to the flat theme controls */
+.csb-checkbox {
+    background: #fff;
+    border: var(--crms-border-width, 1px) solid var(--crms-border-color, #E8E8E8);
+    border-radius: 0.5rem;
+    box-shadow: var(--crms-box-shadow, 0px 4px 4px 0px rgba(219, 219, 219, 0.25));
+    padding: 12px 14px;
+}
+
+.csb-checkbox-box {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    border: 1.5px solid #ced4da;
+}

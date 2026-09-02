@@ -321,6 +321,14 @@
         var lutBondYear = document.getElementById('lutBondYear');
         var lutExpiryDate = document.getElementById('lutExpiryDate');
         var lutDocument = document.getElementById('lutFileInput');
+        var isGst = document.getElementById('isGst');
+        var gstFields = document.getElementById('gstFields');
+        var gstNumber = document.getElementById('gstNumber');
+        var gstBusinessName = document.getElementById('gstBusinessName');
+        var gstFileInput = document.getElementById('gstFileInput');
+        var gstVerifyStatus = document.getElementById('gstVerifyStatus');
+        var verifyGstBtn = document.getElementById('verifyGstBtn');
+        var gstVerified = false;
 
         function isCsbVSelected() {
             return csbTypeCheck ? csbTypeCheck.checked : (csbType && csbType.value === 'csb_v');
@@ -377,6 +385,21 @@
             }
         }
 
+        function updateGstState() {
+            var csbVEnabled = isCsbVSelected();
+            var enabled = csbVEnabled && isGst && isGst.checked;
+            gstFields.classList.toggle('d-none', !csbVEnabled);
+            gstFields.querySelectorAll('input, button').forEach(function (field) {
+                field.disabled = !enabled;
+            });
+            if (gstNumber) { gstNumber.required = enabled; }
+            if (gstBusinessName) { gstBusinessName.required = enabled; }
+            if (gstFileInput) { gstFileInput.required = enabled; }
+            if (!enabled) {
+                gstVerified = false;
+            }
+        }
+
         function updateCustomerTypeState() {
             var selectedOption = customerType.options[customerType.selectedIndex];
             var isBusiness = selectedOption && selectedOption.dataset.userType === 'business';
@@ -430,6 +453,7 @@
             });
             updateProgressBar(currentStep);
             updateLutState();
+            updateGstState();
         }
 
         if (step3ActionBtn) {
@@ -448,6 +472,9 @@
         }
         if (isLut) {
             isLut.addEventListener('change', updateLutState);
+        }
+        if (isGst) {
+            isGst.addEventListener('change', updateGstState);
         }
         if (lutStartYear) {
             lutStartYear.addEventListener('change', function () {
@@ -801,6 +828,98 @@
         }
 
         /* ------------------------------------------------------------------
+           GST verification (Cashfree) - GSTIN + business name must match
+        ------------------------------------------------------------------ */
+        if (verifyGstBtn) {
+            verifyGstBtn.addEventListener('click', function () {
+                if (!gstNumber || !gstNumber.value) {
+                    showAlert('Please enter the GSTIN first.', 'error');
+                    return;
+                }
+                var gstin = gstNumber.value.toUpperCase().replace(/\s+/g, '');
+                if (!/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
+                    showAlert('Invalid GSTIN format. It must be a 15-character GSTIN (e.g. 22AAAAA0000A1Z5).', 'error');
+                    return;
+                }
+                if (!gstBusinessName || !gstBusinessName.value.trim()) {
+                    showAlert('Please enter the registered business name before verification.', 'error');
+                    return;
+                }
+                if (!gstFileInput || !gstFileInput.files[0]) {
+                    showAlert('Please upload the GST certificate PDF before verification.', 'error');
+                    return;
+                }
+
+                var verifyData = new FormData();
+                verifyData.append('gst_number', gstin);
+                verifyData.append('business_name', gstBusinessName.value.trim());
+                verifyData.append('gst_certificate_document', gstFileInput.files[0]);
+
+                gstVerified = false;
+                verifyGstBtn.disabled = true;
+                verifyGstBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Verifying...';
+
+                fetch(form.getAttribute('data-verify-gst-url'), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken(),
+                        'Accept': 'application/json'
+                    },
+                    body: verifyData
+                })
+                    .then(function (res) {
+                        return res.json().then(function (data) {
+                            return { ok: res.ok, data: data };
+                        });
+                    })
+                    .then(function (result) {
+                        var data = result.data || {};
+                        if (result.ok && data.success) {
+                            gstVerified = true;
+                            verifyGstBtn.style.display = 'none';
+                            if (data.gst_number && gstNumber) { gstNumber.value = data.gst_number; }
+                            if (data.business_name && gstBusinessName) { gstBusinessName.value = data.business_name; }
+                            if (gstNumber) { gstNumber.setAttribute('readonly', 'readonly'); }
+                            if (gstBusinessName) { gstBusinessName.setAttribute('readonly', 'readonly'); }
+                            if (gstFileInput) { gstFileInput.disabled = false; }
+                            showKycVerifyStatus(gstVerifyStatus, data.message || 'GST verified successfully!', 'success');
+                        } else {
+                            var message = data.message || 'GST verification failed.';
+                            if (data.errors) {
+                                message = Object.values(data.errors).flat().join(' ');
+                            }
+                            showKycVerifyStatus(gstVerifyStatus, message, 'error');
+                            verifyGstBtn.disabled = false;
+                            verifyGstBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> VERIFY GST';
+                        }
+                    })
+                    .catch(function () {
+                        gstVerified = false;
+                        verifyGstBtn.disabled = false;
+                        verifyGstBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> VERIFY GST';
+                        showKycVerifyStatus(gstVerifyStatus, 'GST verification could not be completed. Please check your connection and try again.', 'error');
+                    });
+            });
+
+            ['gstNumber', 'gstBusinessName', 'gstFileInput'].forEach(function (id) {
+                var input = document.getElementById(id);
+                if (input) {
+                    input.addEventListener('change', function () {
+                        if (!gstVerified) {
+                            return;
+                        }
+                        gstVerified = false;
+                        if (verifyGstBtn) {
+                            verifyGstBtn.style.display = '';
+                            verifyGstBtn.disabled = false;
+                        }
+                        if (gstVerifyStatus) { gstVerifyStatus.style.display = 'none'; }
+                    });
+                }
+            });
+        }
+
+        /* ------------------------------------------------------------------
            Form submission (AJAX with FormData)
         ------------------------------------------------------------------ */
         var submitBtn = document.getElementById('submitCustomerBtn');
@@ -820,6 +939,21 @@
                 if (!panVerified) {
                     showAlert('Please verify the PAN details and PAN image before saving the customer.', 'error');
                     showPanel(2);
+                    return;
+                }
+            }
+
+            if (isCsbVSelected()) {
+                var gstEnabled = isGst && isGst.checked;
+                var lutEnabled = isLut && isLut.checked;
+                if (!gstEnabled && !lutEnabled) {
+                    showAlert('Select GST, LUT, or both. At least one option is required for CSB V customers.', 'error');
+                    showPanel(4);
+                    return;
+                }
+                if (gstEnabled && !gstVerified) {
+                    showAlert('Verify the GSTIN and Business Name through Cashfree before continuing.', 'error');
+                    showPanel(4);
                     return;
                 }
             }

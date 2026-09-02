@@ -4257,6 +4257,56 @@ class AdminController extends Controller
     }
 
     /**
+     * Return the list of zones (as JSON) for a selected country and an
+     * optional service.
+     *
+     * Used by the "Zone List" tab on the Add Zone page. When a service is
+     * selected, both the service-specific zones (zone.service_id matches)
+     * and the shared zones (service_id IS NULL) are returned, matching the
+     * semantics used everywhere else in the rate system.
+     */
+    public function listZones(Request $request)
+    {
+        $validated = $request->validate([
+            'destination_id' => 'required|integer|exists:destinations,id',
+            'service_id'     => 'nullable|integer|exists:courier_services,id',
+        ]);
+
+        $zones = \App\Models\Zone::with('service:id,method,service_code')
+            ->where('destination_id', $validated['destination_id'])
+            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
+                $q->where(function ($query) use ($validated) {
+                    $query->where('service_id', $validated['service_id'])
+                        ->orWhereNull('service_id');
+                });
+            })
+            ->orderBy('zone_category')
+            ->orderBy('zone_name')
+            ->get();
+
+        return response()->json([
+            'zones' => $zones->map(function ($z) {
+                $serviceName = 'All Services';
+                if ($z->service) {
+                    $serviceName = $z->service->method ?? ('Service #' . $z->service->id);
+                    if (!empty($z->service->service_code)) {
+                        $serviceName .= ' (' . $z->service->service_code . ')';
+                    }
+                }
+
+                return [
+                    'id'            => $z->id,
+                    'zone_name'     => $z->zone_name,
+                    'zone_code'     => $z->zone_code,
+                    'zone_category' => ucfirst((string) $z->zone_category),
+                    'zone_number'   => $z->zone_number_testing,
+                    'service_name'  => $serviceName,
+                ];
+            }),
+        ]);
+    }
+
+    /**
      * Store one or more new zone entries submitted from the Add Zone page.
      *
      * The form submits:

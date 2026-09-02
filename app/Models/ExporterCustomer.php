@@ -30,6 +30,10 @@ class ExporterCustomer extends Model
         'pan_document',
         'csb_type',
         'is_lut',
+        'is_gst',
+        'gst_certificate_number',
+        'gst_business_name',
+        'gst_certificate_document',
         'ad_code',
         'ad_code_document',
         'iec_number',
@@ -50,6 +54,7 @@ class ExporterCustomer extends Model
     protected $casts = [
         'email_opt_out' => 'boolean',
         'is_lut' => 'boolean',
+        'is_gst' => 'boolean',
         'terms_accepted' => 'boolean',
         'lut_expiry_date' => 'date',
         'pan_dob' => 'date',

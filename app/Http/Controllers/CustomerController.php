@@ -972,10 +972,19 @@ class CustomerController extends Controller
             'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
             'billing_contact' => preg_replace('/\D+/', '', (string) $request->input('billing_contact')),
             'billing_email' => strtolower(trim((string) $request->input('billing_email'))),
+            'gst_certificate_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('gst_certificate_number'))),
+            'gst_business_name' => trim((string) $request->input('gst_business_name')),
         ]);
 
         $isCsbV = $request->input('csb_type') === 'csb_v';
         $usesLut = $isCsbV && $request->boolean('is_lut');
+        $usesGst = $isCsbV && $request->boolean('is_gst');
+
+        if ($isCsbV && ! $usesLut && ! $usesGst) {
+            throw ValidationException::withMessages([
+                'is_lut' => 'Select GST, LUT, or both. At least one option is required for CSB V customers.',
+            ]);
+        }
 
         $validated = $request->validate([
             'business_category_id' => [
@@ -1040,6 +1049,7 @@ class CustomerController extends Controller
             'pan_document' => ['nullable', 'required_if:kyc_type,PAN Card', 'file', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'csb_type' => ['required', Rule::in(['csb_iv', 'csb_v'])],
             'is_lut' => ['nullable', 'boolean'],
+            'is_gst' => ['nullable', 'boolean'],
             'ad_code' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
             'ad_code_document' => [Rule::requiredIf($isCsbV), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'iec_number' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[A-Z0-9]{10}$/'],
@@ -1049,6 +1059,9 @@ class CustomerController extends Controller
             'lut_bond_year' => [Rule::requiredIf($usesLut), 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
             'lut_expiry_date' => [Rule::requiredIf($usesLut), 'nullable', 'date', 'after_or_equal:today'],
             'lut_document' => [Rule::requiredIf($usesLut), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+            'gst_certificate_number' => [Rule::requiredIf($usesGst), 'nullable', 'regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/'],
+            'gst_business_name' => [Rule::requiredIf($usesGst), 'nullable', 'string', 'min:2', 'max:255'],
+            'gst_certificate_document' => [Rule::requiredIf($usesGst), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
             'billing_address' => [Rule::requiredIf($isCsbV), 'nullable', 'string', 'min:10', 'max:1000'],
             'billing_contact' => [Rule::requiredIf($isCsbV), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'billing_email' => [Rule::requiredIf($isCsbV), 'nullable', 'email:rfc', 'max:255'],
@@ -1073,6 +1086,7 @@ class CustomerController extends Controller
             'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
             'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
             'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
+            'gst_certificate_number.regex' => 'The GSTIN must be a valid 15-character GST number.',
             'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
             'terms_accepted.accepted' => 'You must accept the declaration and terms.',
         ]);
@@ -1083,6 +1097,7 @@ class CustomerController extends Controller
             $validated['kyc_type'] = null;
         }
         $validated['is_lut'] = $usesLut;
+        $validated['is_gst'] = $usesGst;
         $validated['terms_accepted'] = $isCsbV && $request->boolean('terms_accepted');
         $validated['merchant_agreement_accepted_at'] = $validated['terms_accepted'] ? now() : null;
 
@@ -1133,6 +1148,19 @@ class CustomerController extends Controller
             }
         }
 
+        // The GSTIN and Business Name entered on this page must be Cashfree-verified
+        // first, mirroring the verification required in the KYC flow.
+        if ($usesGst && ! empty($validated['gst_certificate_number'])) {
+            if (
+                ! session('kyc_gst_cashfree_verified')
+                || session('kyc_gst_number') !== $validated['gst_certificate_number']
+            ) {
+                throw ValidationException::withMessages([
+                    'gst_certificate_number' => 'Verify the submitted GSTIN and Business Name through Cashfree before saving the customer.',
+                ]);
+            }
+        }
+
         if ($isCsbV && ! empty($validated['lut_bond_year'])) {
             [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
             $startYear = (int) $startYear;
@@ -1177,7 +1205,7 @@ class CustomerController extends Controller
                 mkdir($uploadDirectory, 0755, true);
             }
 
-            foreach (['ad_code_document', 'iec_document', 'lut_document', 'merchant_agreement'] as $documentField) {
+            foreach (['ad_code_document', 'iec_document', 'lut_document', 'gst_certificate_document', 'merchant_agreement'] as $documentField) {
                 if (! $request->hasFile($documentField)) {
                     continue;
                 }
@@ -1190,6 +1218,10 @@ class CustomerController extends Controller
         } else {
             $validated = collect($validated)->except([
                 'is_lut',
+                'is_gst',
+                'gst_certificate_number',
+                'gst_business_name',
+                'gst_certificate_document',
                 'ad_code',
                 'ad_code_document',
                 'iec_number',

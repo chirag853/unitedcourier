@@ -576,6 +576,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
 
     // Add Zone & Add Country Routes
     Route::get('/add-zone', [AdminController::class, 'addZone'])->name('admin.add-zone');
+    Route::get('/add-zone/list', [AdminController::class, 'listZones'])->name('admin.add-zone.list');
     Route::post('/add-zone', [AdminController::class, 'storeZone'])->name('admin.add-zone.store');
     Route::get('/add-zone/sample', [AdminController::class, 'downloadZoneSample'])->name('admin.add-zone.sample');
     Route::post('/add-zone/upload', [AdminController::class, 'uploadZoneExcel'])->name('admin.add-zone.upload');

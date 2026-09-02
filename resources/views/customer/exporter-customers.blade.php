@@ -109,7 +109,8 @@
                                           action="{{ route('customer.exporter-customers.store') }}"
                                           method="POST" enctype="multipart/form-data" novalidate
                                           data-verify-aadhar-url="{{ route('customer.verify.exporter-customer-aadhar') }}"
-                                          data-verify-pan-url="{{ route('customer.verify.exporter-customer-pan') }}">
+                                          data-verify-pan-url="{{ route('customer.verify.exporter-customer-pan') }}"
+                                          data-verify-gst-url="{{ route('customer.verify.gst') }}">
                                         @csrf
 
                                         <!-- ==================== STEP 1: User Type + KYC Type + CSB Type ==================== -->
@@ -444,10 +445,17 @@
                                             <div id="csbVFields">
                                                 <div class="row g-3">
                                                     <div class="col-12">
-                                                        <div class="form-check">
-                                                            <input type="checkbox" class="form-check-input" id="isLut" name="is_lut" value="1" {{ old('is_lut') ? 'checked' : '' }}>
-                                                            <label class="form-check-label fw-semibold" for="isLut">LUT (Against Bond or UT)</label>
+                                                        <div class="d-flex flex-wrap gap-4 align-items-center">
+                                                            <div class="form-check mb-0">
+                                                                <input type="checkbox" class="form-check-input" id="isGst" name="is_gst" value="1" {{ old('is_gst') ? 'checked' : '' }}>
+                                                                <label class="form-check-label fw-semibold" for="isGst">GST</label>
+                                                            </div>
+                                                            <div class="form-check mb-0">
+                                                                <input type="checkbox" class="form-check-input" id="isLut" name="is_lut" value="1" {{ old('is_lut') ? 'checked' : '' }}>
+                                                                <label class="form-check-label fw-semibold" for="isLut">LUT (Against Bond or UT)</label>
+                                                            </div>
                                                         </div>
+                                                        <small class="text-muted">Select GST, LUT, or both. At least one option is required.</small>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="section-label">AD Code <span class="text-danger">*</span></label>
@@ -593,6 +601,61 @@
                                                     </div>
                                                 </div>
 
+                                                <div id="gstFields">
+                                                    <div class="sub-section-header mt-4">
+                                                        <div class="sub-section-icon"><i class="fas fa-receipt"></i></div>
+                                                        <div>
+                                                            <h6 class="sub-section-title mb-0">GST Registration</h6>
+                                                            <small class="sub-section-desc">Enter and verify your GSTIN and registered business name through Cashfree</small>
+                                                        </div>
+                                                        <span class="badge-sub">Required when GST is selected</span>
+                                                    </div>
+                                                    <div class="row g-3">
+                                                        <div class="col-md-6">
+                                                            <label class="section-label">GSTIN <span class="text-danger">*</span></label>
+                                                            <div class="input-wrapper">
+                                                                <input type="text" id="gstNumber" name="gst_certificate_number" class="input-custom text-uppercase" value="{{ old('gst_certificate_number') }}" maxlength="15" placeholder="Enter 15-character GSTIN *">
+                                                                <i class="fas fa-receipt"></i>
+                                                            </div>
+                                                            <small class="text-muted">Enter exactly 15 characters (e.g., 22AAAAA0000A1Z5).</small>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="section-label">Registered Business Name <span class="text-danger">*</span></label>
+                                                            <div class="input-wrapper">
+                                                                <input type="text" id="gstBusinessName" name="gst_business_name" class="input-custom" value="{{ old('gst_business_name') }}" maxlength="255" placeholder="Enter registered business name *">
+                                                                <i class="fas fa-building"></i>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <label class="section-label">GST Certificate (PDF) <span class="text-danger">*</span></label>
+                                                            <div class="doc-item compact" id="gstDocContainer">
+                                                                <div class="doc-meta">
+                                                                    <div>
+                                                                        <span class="doc-name">GST Certificate (PDF)</span>
+                                                                        <div id="gstFileInfo" class="file-status">Selected: <span id="gstFileNameDisplay">file</span></div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="text-end d-flex align-items-center">
+                                                                    <input type="file" id="gstFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf"
+                                                                        onchange="handleDocSelect(this, 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');">
+                                                                    <button type="button" class="link-alt border-0 bg-transparent gstUploadBtn" onclick="document.getElementById('gstFileInput').click();">
+                                                                        <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                                                                    </button>
+                                                                    <span class="text-danger-alt gstRemoveFile" style="display: none;"
+                                                                        onclick="clearDocInput('gstFileInput', 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');"><i class="fas fa-trash-alt"></i> Remove</span>
+                                                                </div>
+                                                            </div>
+                                                            <small class="text-muted">GST certificate in PDF format, up to 5 MB.</small>
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <div id="gstVerifyStatus" class="small text-muted" role="status">Click VERIFY GST to validate your details through Cashfree before submission.</div>
+                                                            <button type="button" id="verifyGstBtn" class="btn-gradient mt-2">
+                                                                <i class="fas fa-shield-alt me-1"></i> VERIFY GST
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
                                                 <div class="sub-section-header mt-4">
                                                     <div class="sub-section-icon"><i class="fas fa-receipt"></i></div>
                                                     <div>
@@ -654,6 +717,7 @@
                                             <th>Contact Details</th>
                                             <th>Address</th>
                                             <th>CSB Type</th>
+                                            <th>GST / LUT</th>
                                             <th>KYC Details</th>
                                             <th>Added On</th>
                                             <th>Actions</th>
@@ -685,6 +749,21 @@
                                                     </span>
                                                 </td>
                                                 <td>
+                                                    @if($savedCustomer->csb_type === 'csb_v')
+                                                        @if($savedCustomer->is_gst)
+                                                            <span class="badge bg-success">GST</span>
+                                                        @endif
+                                                        @if($savedCustomer->is_lut)
+                                                            <span class="badge bg-warning text-dark">LUT</span>
+                                                        @endif
+                                                        @if(! $savedCustomer->is_gst && ! $savedCustomer->is_lut)
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    @else
+                                                        <span class="text-muted">N/A</span>
+                                                    @endif
+                                                </td>
+                                                <td>
                                                     @if($savedCustomer->kyc_type || $savedCustomer->kyc_number)
                                                         <div>{{ $savedCustomer->kyc_type ?: 'Not specified' }}</div>
                                                         <div class="small text-muted">{{ $savedCustomer->kyc_number ?: '-' }}</div>
@@ -711,7 +790,7 @@
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="10" class="text-center text-muted py-4">No customers added yet.</td>
+                                                <td colspan="11" class="text-center text-muted py-4">No customers added yet.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
