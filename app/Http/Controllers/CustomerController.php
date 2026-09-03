@@ -2004,15 +2004,23 @@ class CustomerController extends Controller
                 // by the validator above. Do not force it into the bond end year.
             }
 
-            // Aadhaar is optional only for Exporter customers. Use the value
+            // Aadhaar is optional only for Exporter customers. Prefer the value
             // submitted with this form so an old incomplete customer value does
-            // not prevent the customer from intentionally skipping it.
+            // not prevent the customer from intentionally skipping it. When the
+            // submitted value is empty, fall back to a verified, valid Aadhaar
+            // that is already stored so an optional account which verified
+            // Aadhaar earlier does not lose it on a later resubmission.
             $isAadhaarOptional = $isExporter;
             $submittedAadhaar = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
             $storedAadhaar = preg_replace('/\s+/', '', (string) $customer->aadhar_number);
-            $aadhar = $isAadhaarOptional
+            $storedAadhaarIsVerifiedValid = $storedAadhaar !== ''
+                && (bool) $customer->aadhar_verified
+                && preg_match('/^[2-9][0-9]{11}$/', $storedAadhaar);
+            $aadhar = $submittedAadhaar !== ''
                 ? $submittedAadhaar
-                : ($submittedAadhaar !== '' ? $submittedAadhaar : $storedAadhaar);
+                : ($storedAadhaarIsVerifiedValid
+                    ? $storedAadhaar
+                    : ($isAadhaarOptional ? '' : $storedAadhaar));
 
             $isValidVerifiedAadhaar = $aadhar !== ''
                 && (bool) $customer->aadhar_verified

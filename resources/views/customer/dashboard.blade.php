@@ -4157,10 +4157,19 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     }
 
                     // Optional Aadhaar users (Exporter business accounts) can
-                    // deliberately discard any restored Aadhaar draft data and
-                    // continue without Aadhaar.
+                    // deliberately discard any restored, still-unverified Aadhaar
+                    // draft data and continue without Aadhaar. A genuinely verified
+                    // Aadhaar is preserved below so the KYC submission still stores it.
                     function skipAadhaarStep() {
                         if (!isAadhaarOptional) {
+                            nextStep(isBusinessFlow ? 3 : 2);
+                            return;
+                        }
+
+                        // The exporter completed a real Cashfree verification in this
+                        // flow, so the button acts as "Continue": keep the verified
+                        // number + documents and let normal step validation run.
+                        if (kycData.aadhar_verified) {
                             nextStep(isBusinessFlow ? 3 : 2);
                             return;
                         }
