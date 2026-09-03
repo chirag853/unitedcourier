@@ -986,11 +986,36 @@
             .replace(/"/g, '"')
             .replace(/'/g, ''');
     }
-    function showAlert(message, type) {
-        if (typeof window !== 'undefined' && window.showAlertGlobal) {
-            window.showAlertGlobal(message, type);
-        }
-    }
+    (function () {
+        // The shared header (partials/global-alert.blade.php) registers the real
+        // modal popup as window.showAlert. Capture it BEFORE this script overwrites
+        // the binding, so every helper on this page forwards to the visible popup
+        // and messages are never silently swallowed.
+        var realShowAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
+            ? window.showAlert
+            : null;
+        var alertFallingBack = false;
+
+        window.showAlert = function (message, type) {
+            if (realShowAlert) {
+                try {
+                    realShowAlert(message, type);
+                    return;
+                } catch (e) {
+                    // Fall through to the native fallback below.
+                }
+            }
+            // Native fallback (guarded so an overridden alert() cannot recurse).
+            if (!alertFallingBack && typeof window.alert === 'function') {
+                alertFallingBack = true;
+                try {
+                    window.alert(message == null ? '' : String(message));
+                } finally {
+                    alertFallingBack = false;
+                }
+            }
+        };
+    })();
     function handleDocSelect(input, nameId, infoId, removeClass, uploadBtnSel, containerSel) {
         if (input.files && input.files.length > 0) {
             var file = input.files[0];
@@ -1221,6 +1246,30 @@
             var formData = new FormData(form);
             var token = document.querySelector('meta[name="csrf-token"]');
             var csrf = token ? token.getAttribute('content') : '';
+            var savedOk = false;
+
+            function parsePayload(res) {
+                // Parse JSON safely. A non-JSON body (redirect HTML, proxy error
+                // page, Laravel 419 page, etc.) must NOT abort the chain - we fall
+                // back to the raw text so the real failure is still reported.
+                return res.text().then(function (text) {
+                    var data = null;
+                    var body = (text || '').trim();
+                    if (body) {
+                        try {
+                            data = JSON.parse(body);
+                        } catch (e) {
+                            data = null;
+                        }
+                    }
+                    return {
+                        ok: res.ok,
+                        status: res.status,
+                        data: data,
+                        raw: body
+                    };
+                });
+            }
 
             fetch(form.getAttribute('action'), {
                 method: 'POST',
@@ -1230,33 +1279,79 @@
                 },
                 body: formData
             })
-                .then(function (res) {
-                    return res.json().then(function (data) {
-                        return { ok: res.ok, data: data };
-                    });
-                })
+                .then(parsePayload)
                 .then(function (result) {
                     var data = result.data || {};
+
+                    // Success: server persisted the address and returned JSON.
                     if (result.ok && data.success) {
-                        var id = document.getElementById('addressCustomerId').value;
-                        var cell = document.getElementById('address-cell-' + id);
-                        if (cell) {
-                            renderAddressList(cell, data.addresses || []);
+                        savedOk = true;
+
+                        // Close the popup FIRST so a later UI hiccup can never
+                        // leave the user stuck staring at the modal.
+                        try {
+                            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                            modal.hide();
+                        } catch (e) {
+                            // Best-effort: this modal was opened successfully earlier.
                         }
 
-                        showAlert(data.message || 'Address saved successfully!', 'success');
+                        // Re-render the row's Address cell + confirmation popup.
+                        // Any failure here must NOT surface as a network error.
+                        try {
+                            var id = document.getElementById('addressCustomerId').value;
+                            var cell = document.getElementById('address-cell-' + id);
+                            if (cell) {
+                                renderAddressList(cell, data.addresses || []);
+                            }
+                            showAlert(data.message || 'Address saved successfully!', 'success');
+                        } catch (e) {
+                            // The save DID succeed - never hide that fact.
+                            showAlert(data.message || 'Address saved successfully!', 'success');
+                        }
+                        return;
+                    }
 
-                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                        modal.hide();
-                    } else {
+                    // Any JSON payload that reports a failure (validation errors,
+                    // CSRF message, etc.) - always prefer the server's real message.
+                    if (data && !data.success && (data.message || data.errors)) {
                         var msg = data.message || 'Failed to save address. Please check your details.';
                         if (data.errors) {
-                            msg = Object.values(data.errors).flat().join(' ');
+                            var parts = [];
+                            Object.keys(data.errors).forEach(function (k) {
+                                var v = data.errors[k];
+                                if (Array.isArray(v)) {
+                                    parts = parts.concat(v);
+                                } else {
+                                    parts.push(v);
+                                }
+                            });
+                            if (parts.length) {
+                                msg = parts.join(' ');
+                            }
                         }
                         showAlert(msg, 'error');
+                        return;
+                    }
+
+                    // Empty or non-JSON body - derive the best message from the
+                    // HTTP status so a real failure is never hidden.
+                    if (result.status === 419) {
+                        showAlert('Your session has expired. Please refresh the page and try again.', 'error');
+                    } else if (result.status === 422) {
+                        showAlert('Please check the highlighted fields and try again.', 'error');
+                    } else if (result.status === 403) {
+                        showAlert('You are not allowed to perform this action.', 'error');
+                    } else {
+                        showAlert('A network error occurred. Please try again.', 'error');
                     }
                 })
                 .catch(function () {
+                    // Only a true network failure reaches here. If the save already
+                    // succeeded above, never override it with the generic message.
+                    if (savedOk) {
+                        return;
+                    }
                     showAlert('A network error occurred. Please try again.', 'error');
                 })
                 .finally(function () {
