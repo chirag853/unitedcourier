@@ -917,7 +917,7 @@ class CustomerController extends Controller
         abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
 
         $exporterCustomers = $exporter->exporterCustomers()
-            ->with('businessCategory')
+            ->with(['businessCategory', 'addresses'])
             ->orderBy('company_name')
             ->orderBy('contact_person')
             ->get();
@@ -1443,32 +1443,39 @@ class CustomerController extends Controller
             'state.regex' => 'State may contain letters, spaces, dots, apostrophes and hyphens only.',
         ]);
 
-        $customer->update(collect($validated)->only([
-            'address_line1',
-            'address_line2',
-            'address_line3',
-            'pincode',
-            'city',
-            'state',
-        ])->all());
+        // A saved customer can hold several addresses. Each "Save Address"
+        // submission appends a new address row instead of overwriting the
+        // primary address stored on the exporter_customers row.
+        $customer->addresses()->create([
+            'address_line1' => $validated['address_line1'],
+            'address_line2' => $validated['address_line2'] ?? null,
+            'address_line3' => $validated['address_line3'] ?? null,
+            'pincode' => $validated['pincode'],
+            'city' => $validated['city'],
+            'state' => $validated['state'],
+        ]);
+
+        // Reload so the JSON response contains the full address list.
+        $customer->load('addresses');
 
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Address updated successfully.',
+                'message' => 'Address saved successfully.',
+                'addresses' => $customer->displayAddresses(),
                 'address' => [
-                    'address_line1' => $customer->address_line1,
-                    'address_line2' => $customer->address_line2,
-                    'address_line3' => $customer->address_line3,
-                    'pincode' => $customer->pincode,
-                    'city' => $customer->city,
-                    'state' => $customer->state,
+                    'address_line1' => $validated['address_line1'],
+                    'address_line2' => $validated['address_line2'] ?? null,
+                    'address_line3' => $validated['address_line3'] ?? null,
+                    'pincode' => $validated['pincode'],
+                    'city' => $validated['city'],
+                    'state' => $validated['state'],
                 ],
             ]);
         }
 
         return redirect()->route('customer.exporter-customers')
-            ->with('success', 'Address updated successfully.');
+            ->with('success', 'Address saved successfully.');
     }
 
     public function createShipment()
@@ -1495,7 +1502,7 @@ class CustomerController extends Controller
         $canCreateShipment = (bool) ($customer->can_create_shipment ?? true);
         $canManageSavedCustomers = $this->canManageSavedCustomers($customer);
         $exporterCustomers = $canManageSavedCustomers
-            ? $customer->exporterCustomers()->orderByDesc('id')->get()
+            ? $customer->exporterCustomers()->with('addresses')->orderByDesc('id')->get()
             : collect();
 
         return view('customer.create-shipment', compact(

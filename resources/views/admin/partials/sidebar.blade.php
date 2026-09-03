@@ -183,8 +183,8 @@
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
-                                class="{{ request()->is('admin/companies') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
-                                <i class="ti ti-dashboard"></i><span>Order</span><span class="menu-arrow"></span>
+                                class="{{ request()->is('admin/companies') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-dashboard"></i><span>Manage Orders</span><span class="menu-arrow"></span>
                             </a>
                             <ul>
                                 <li class="submenu submenu-two">
@@ -194,23 +194,6 @@
                                     <ul>
                                         <li><a href="{{ url('/admin/companies') }}"
                                                 class="{{ request()->is('admin/companies') ? 'active' : '' }}">View All Order</a></li>
-                                    </ul>
-                                </li>
-                                <li class="submenu submenu-two">
-                                    <a href="javascript:void(0);"
-                                        class="{{ request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/customer-profile*') || request()->is('admin/csb5-form*') ? 'active' : '' }}">KYC<span
-                                            class="menu-arrow inside-submenu"></span></a>
-                                    <ul>
-                                        <li><a href="{{ url('/admin/csb5-form') }}"
-                                                class="{{ request()->is('admin/csb5-form') ? 'active' : '' }}">CSB5 Forms</a></li>
-                                        <li><a href="{{ url('/admin/kyc-pending') }}"
-                                                class="{{ request()->is('admin/kyc-pending') ? 'active' : '' }}">Pending Customer</a></li>
-                                        <li><a href="{{ url('/admin/kyc-approved') }}"
-                                                class="{{ request()->is('admin/kyc-approved') ? 'active' : '' }}">Approved Customer</a></li>
-                                        <li><a href="{{ route('admin.kyc-rejected') }}"
-                                                class="{{ request()->is('admin/kyc-rejected') ? 'active' : '' }}">Rejected Customer</a></li>
-                                        <li><a href="{{ route('admin.kyc-export', ['status' => 'all']) }}"
-                                                class="{{ request()->is('admin/kyc-export*') ? 'active' : '' }}"><i class="ti ti-file-spreadsheet me-1"></i>Export KYC (Excel)</a></li>
                                     </ul>
                                 </li>
                                 <!-- <li class="submenu">
@@ -250,6 +233,38 @@
                                     </ul>
                                 </li>
                                 <!-- <li><a href="/admin/create-shipment" class="active">Add Shipment</a></li> -->
+                            </ul>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/all-customer*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-users-group"></i><span>Manage Customer</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.export-customers') }}"
+                                        class="{{ request()->is('admin/all-customer') ? 'active' : '' }}">All Customers</a></li>
+                            </ul>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/csb5-form*') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/kyc-export*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-id-badge-2"></i><span>Manage KYC</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ url('/admin/csb5-form') }}"
+                                        class="{{ request()->is('admin/csb5-form') ? 'active' : '' }}">CSB5 Forms</a></li>
+                                <li><a href="{{ url('/admin/kyc-pending') }}"
+                                        class="{{ request()->is('admin/kyc-pending') ? 'active' : '' }}">Pending Customer</a></li>
+                                <li><a href="{{ url('/admin/kyc-approved') }}"
+                                        class="{{ request()->is('admin/kyc-approved') ? 'active' : '' }}">Approved Customer</a></li>
+                                <li><a href="{{ route('admin.kyc-rejected') }}"
+                                        class="{{ request()->is('admin/kyc-rejected') ? 'active' : '' }}">Rejected Customer</a></li>
+                                <li><a href="{{ route('admin.kyc-export', ['status' => 'all']) }}"
+                                        class="{{ request()->is('admin/kyc-export*') ? 'active' : '' }}"><i class="ti ti-file-spreadsheet me-1"></i>Export KYC (Excel)</a></li>
                             </ul>
                         </li>
                         @endif

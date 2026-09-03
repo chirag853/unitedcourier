@@ -10,10 +10,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Models\Admin;
+use App\Models\BusinessCategory;
 use App\Models\CsbForm;
 use App\Models\NetworkOffice;
 use App\Models\ShipmentInvoice;
 use App\Models\Customer;
+use App\Models\ExporterCustomer;
 use App\Models\KycDetail;
 use App\Models\ShipperInfo;
 use App\Models\Tracking;
@@ -2353,12 +2355,87 @@ class AdminController extends Controller
 
     public function kycPending()
     {
+        // ===== "Complete KYC" tile =====
+        // Full submissions (KycDetail) that are still waiting for admin review.
         $kycDetails = \App\Models\KycDetail::with(['customer.csbForm'])
             ->whereIn('kyc_status', ['pending', 'under_review'])
             ->orderBy('id', 'desc')
             ->get();
 
-        return view('admin.kyc-pending', compact('kycDetails'));
+        // ===== "Incomplete KYC" tile =====
+        // Every registered customer who does NOT currently hold an approved /
+        // pending / under-review submission is considered incomplete. That covers:
+        //   1. Customers who started the KYC wizard (have a KycDraft row)
+        //   2. Customers who only registered and never submitted/started KYC at all
+        //      (no row in kyc_details and no row in kyc_draft)
+        $activeKycCustomerIds = \App\Models\KycDetail::whereIn('kyc_status', ['pending', 'under_review', 'approved'])
+            ->pluck('customer_id')
+            ->unique()
+            ->values();
+
+        $incompleteCustomers = \App\Models\Customer::with('businessCategory')
+            ->whereNotIn('id', $activeKycCustomerIds)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Latest draft per incomplete customer (a customer may rarely hold more than
+        // one draft row, e.g. one per KYC flow).
+        $draftsByCustomer = \App\Models\KycDraft::whereIn('customer_id', $incompleteCustomers->pluck('id'))
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->groupBy('customer_id');
+
+        // Customers whose last submission was rejected are waiting on a re-submission.
+        $rejectedCustomerIds = \App\Models\KycDetail::where('kyc_status', 'rejected')
+            ->pluck('customer_id')
+            ->unique()
+            ->values();
+
+        $incompleteKycItems = $incompleteCustomers->map(function ($customer) use ($draftsByCustomer, $rejectedCustomerIds) {
+            $draft = $draftsByCustomer->get($customer->id)?->first();
+            $data = $draft && is_array($draft->form_data) ? $draft->form_data : [];
+
+            // Resolve the KYC flow: prefer the draft's type, otherwise fall back to
+            // the customer's business category (Personal / Business).
+            if ($draft) {
+                $kycType = ($draft->kyc_type ?? 'personal') === 'business' ? 'business' : 'personal';
+            } else {
+                $userType = $customer->businessCategory->user_type ?? 'Personal';
+                $kycType = strcasecmp(trim((string) $userType), 'Business') === 0 ? 'business' : 'personal';
+            }
+
+            $steps = $kycType === 'business' ? [
+                'GST' => ! empty($data['gst_number']),
+                'Aadhar' => ! empty($data['aadhar_number']),
+                'PAN' => ! empty($data['pan_number']),
+                'CSB-V' => ! empty($data['gst_certificate_number'])
+                    || ! empty($data['iec_number'])
+                    || ! empty($data['bank_account_number']),
+                'Signature' => ! empty($data['signature_document']) || ! empty($data['signature']),
+                'Agreement' => ! empty($data['terms_accepted']),
+            ] : [
+                'Aadhar' => ! empty($data['aadhar_number']),
+                'PAN' => ! empty($data['pan_number']),
+                'Signature' => ! empty($data['signature_document']) || ! empty($data['signature']),
+                'Agreement' => ! empty($data['terms_accepted']),
+            ];
+
+            $completed = collect($steps)->filter()->keys();
+
+            return [
+                'customer' => $customer,
+                'kyc_type' => $kycType,
+                'has_draft' => (bool) $draft,
+                'form_data' => $data,
+                'updated_at' => $draft ? $draft->updated_at : $customer->created_at,
+                'progress_done' => $completed->count(),
+                'progress_total' => count($steps),
+                'progress_labels' => $completed->implode(', '),
+                'is_rejected' => $rejectedCustomerIds->contains($customer->id),
+            ];
+        });
+
+        return view('admin.kyc-pending', compact('kycDetails', 'incompleteKycItems'));
     }
 
     public function kycApproved()
@@ -5107,6 +5184,86 @@ class AdminController extends Controller
             'userType',
             'wallet'
         ));
+    }
+
+    /**
+     * List all United customers (users) with a count of their exporter customers.
+     */
+    public function exportCustomers()
+    {
+        // User Type is derived from the customer's business_category_id by joining
+        // the business_categories table so we can read that category's user_type.
+        // NOTE: withCount must run AFTER the explicit select() so the
+        // exporter_customers_count alias is appended instead of being overwritten.
+        $customers = Customer::with('businessCategory')
+            ->leftJoin('business_categories', 'business_categories.id', '=', 'customers.business_category_id')
+            ->select(
+                'customers.*',
+                'business_categories.user_type as category_user_type'
+            )
+            ->withCount('exporterCustomers')
+            ->orderByDesc('exporter_customers_count')
+            ->orderBy('customers.id')
+            ->get();
+
+        return view('admin.export-customers', compact('customers'));
+    }
+
+    /**
+     * Show the list of exporter customers belonging to a single United customer.
+     */
+    public function exportCustomersDetail($id)
+    {
+        $customer = Customer::with('businessCategory')
+            ->withCount('exporterCustomers')
+            ->findOrFail($id);
+
+        $exporterCustomers = $customer->exporterCustomers()
+            ->with(['businessCategory', 'addresses'])
+            ->orderByDesc('id')
+            ->get();
+
+        return view('admin.export-customers-detail', compact('customer', 'exporterCustomers'));
+    }
+
+    /**
+     * Show the full profile of a single exporter customer including every
+     * uploaded document (KYC, GST, PAN, IEC, AD Code, LUT, merchant agreement)
+     * with an in-page document preview.
+     */
+    public function exportCustomerView($id)
+    {
+        $exporterCustomer = ExporterCustomer::with(['businessCategory', 'addresses'])
+            ->with('exporter')
+            ->findOrFail($id);
+
+        $parentCustomer = $exporterCustomer->exporter;
+
+        return view('admin.export-customer-view', compact('exporterCustomer', 'parentCustomer'));
+    }
+
+    /**
+     * Resolve the business category ids that are treated as Courier / Aggregator.
+     * Matching mirrors the tolerant slug/name checks used across the codebase.
+     */
+    private function courierAggregatorCategoryIds()
+    {
+        $allowedCategories = [
+            'courier-or-aggregator',
+            'courier-aggregator',
+            'courier or aggregator',
+            'courier / aggregator',
+            'courier/aggregator',
+        ];
+
+        return BusinessCategory::query()
+            ->where(function ($query) use ($allowedCategories) {
+                foreach ($allowedCategories as $category) {
+                    $query->orWhereRaw('LOWER(TRIM(category_name)) = ?', [$category])
+                        ->orWhereRaw('LOWER(TRIM(category_slug)) = ?', [$category]);
+                }
+            })
+            ->pluck('id');
     }
 
     /**

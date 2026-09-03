@@ -49,12 +49,148 @@
 .page-wrapper .content{
     padding:0.5rem;
 }
+
+/* ===== "Select Address" (saved customer) dropdown ===== */
+#savedCustomerAddressWrap .select2-container {
+    width: 100% !important;
+}
+/* Collapsed selection: keep to a single truncated line with a full-text title. */
+.uwc-addr-selection {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+/* Select2's single-selection box is a fixed-height, nowrap container. Force
+   the composed "full" text span to ellipsize instead of overflowing. */
+#savedCustomerAddressWrap .select2-container--default .select2-selection--single .select2-selection__rendered {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+}
+#savedCustomerAddressWrap .select2-selection__rendered .uwc-addr-selection {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+/* Keep the open results list bounded so many addresses scroll neatly. */
+#savedCustomerAddressWrap .select2-container--default .select2-results > .select2-results__options {
+    max-height: 260px;
+    overflow-y: auto;
+}
+/* Open dropdown row: badge + address body (wraps naturally), location muted. */
+.uwc-addr-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    line-height: 1.4;
+    padding: 0.1rem 0;
+    white-space: normal;
+    min-width: 0;
+}
+.uwc-addr-badge {
+    flex: 0 0 auto;
+    margin-top: 0.15rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #2563eb;
+    background: #e8efff;
+    border: 1px solid #c9d8fb;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.uwc-addr-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+}
+.uwc-addr-lines {
+    color: #1e293b;
+    word-break: break-word;
+}
+.uwc-addr-location {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable .uwc-addr-lines {
+    color: #fff;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable .uwc-addr-location {
+    color: #dbe3f5;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable .uwc-addr-badge {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.5);
+}
     </style>
 </head>
 
 <body>
     <!-- Begin Wrapper -->
     <div class="main-wrapper">
+        @php
+            // Indian states and union territories with their 2-letter short codes.
+            // The Shipper Info "State" dropdown on this page displays the full
+            // state name but submits the short code, matching what
+            // CustomerController::storeShipment() expects (e.g. DL, GJ, MH).
+            $shipperStates = [
+                'AN' => 'Andaman And Nicobar Islands',
+                'AP' => 'Andhra Pradesh',
+                'AR' => 'Arunachal Pradesh',
+                'AS' => 'Assam',
+                'BR' => 'Bihar',
+                'CH' => 'Chandigarh',
+                'CT' => 'Chhattisgarh',
+                'DN' => 'Dadra And Nagar Haveli And Daman And Diu',
+                'DL' => 'Delhi',
+                'GA' => 'Goa',
+                'GJ' => 'Gujarat',
+                'HR' => 'Haryana',
+                'HP' => 'Himachal Pradesh',
+                'JK' => 'Jammu And Kashmir',
+                'JH' => 'Jharkhand',
+                'KA' => 'Karnataka',
+                'KL' => 'Kerala',
+                'LA' => 'Ladakh',
+                'LD' => 'Lakshadweep',
+                'MP' => 'Madhya Pradesh',
+                'MH' => 'Maharashtra',
+                'MN' => 'Manipur',
+                'ML' => 'Meghalaya',
+                'MZ' => 'Mizoram',
+                'NL' => 'Nagaland',
+                'OD' => 'Odisha',
+                'PY' => 'Puducherry',
+                'PB' => 'Punjab',
+                'RJ' => 'Rajasthan',
+                'SK' => 'Sikkim',
+                'TN' => 'Tamil Nadu',
+                'TG' => 'Telangana',
+                'TR' => 'Tripura',
+                'UP' => 'Uttar Pradesh',
+                'UK' => 'Uttarakhand',
+                'WB' => 'West Bengal',
+            ];
+            $shipperStateCodeByLower = [];
+            foreach ($shipperStates as $shipperStateCode => $shipperStateName) {
+                $shipperStateCodeByLower[strtolower($shipperStateCode)] = $shipperStateCode;
+                $shipperStateCodeByLower[strtolower($shipperStateName)] = $shipperStateCode;
+            }
+            $oldShipperStateCode = $shipperStateCodeByLower[strtolower(trim((string) old('shipper_state', '')))] ?? '';
+        @endphp
         <!-- Topbar Start -->
         @include('customer.partials.customer_dashboard_header')
         <!-- Topbar End -->
@@ -198,6 +334,13 @@
                                                         @error('selected_exporter_customer_id')
                                                             <div class="text-danger small mt-1">{{ $message }}</div>
                                                         @enderror
+                                                        <div id="savedCustomerAddressWrap" class="mt-3" style="display: none;">
+                                                            <label class="form-label mb-1" for="exporterCustomerAddressSelect">Select Address</label>
+                                                            <small class="text-muted"> (Choose which saved address of the selected customer to use.)</small>
+                                                            <select class="form-select mt-1" id="exporterCustomerAddressSelect" aria-label="Select Address">
+                                                                <option value="">-- Select Address --</option>
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                     <div class="col-md-3 mt-2 mt-md-0">
                                                         <a href="{{ route('customer.exporter-customers') }}" class="btn btn-outline-primary w-100">
@@ -373,12 +516,15 @@
                                                             <div class="mb-3">
                                                                 <label class="form-label">State <span
                                                                         class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control text-uppercase"
-                                                                    name="shipper_state" value="{{ strtoupper(old('shipper_state', '')) }}"
-                                                                    placeholder="DL / GJ" autocomplete="address-level1"
-                                                                    minlength="2" maxlength="2" pattern="[A-Z]{2}"
-                                                                    title="Enter exactly 2 capital letters, for example DL or GJ"
-                                                                    oninput="this.value = this.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2)">
+                                                                <select class="form-select" name="shipper_state"
+                                                                    autocomplete="address-level1">
+                                                                    <option value="">-- Select State --</option>
+                                                                    @foreach($shipperStates as $shipperStateCode => $shipperStateName)
+                                                                        <option value="{{ $shipperStateCode }}" {{ $oldShipperStateCode === $shipperStateCode ? 'selected' : '' }}>
+                                                                            {{ $shipperStateName }}
+                                                                        </option>
+                                                                    @endforeach
+                                                                </select>
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6">
@@ -9629,6 +9775,7 @@
                     'bank_account_number' => $isCsbV
                         ? $savedCustomer->bank_account_number
                         : '',
+                    'addresses' => $savedCustomer->displayAddresses(),
                 ]),
             ];
         });
@@ -9636,6 +9783,8 @@
     document.addEventListener('DOMContentLoaded', function () {
         const sameAsCustomer = document.getElementById('sameAsCustomer');
         const exporterCustomerSelect = document.getElementById('exporterCustomerSelect');
+        const exporterCustomerAddressSelect = document.getElementById('exporterCustomerAddressSelect');
+        const savedCustomerAddressWrap = document.getElementById('savedCustomerAddressWrap');
         if (!sameAsCustomer && !exporterCustomerSelect) return;
 
         const customerData = @json($customerPrefill);
@@ -9644,11 +9793,30 @@
         // Remember user-entered values so unchecking restores them
         const savedValues = {};
 
+        // Indian states for the Shipper "State" dropdown: full name => short code.
+        // The backend stores shipper_state as an uppercase 2-letter code, so any
+        // saved-customer/legacy full state name is translated back to its code.
+        const shipperStateCodeByName = @json(array_flip($shipperStates));
+        function normalizeShipperStateCode(value) {
+            const raw = String(value ?? '').trim();
+            if (!raw) return '';
+            const upper = raw.toUpperCase();
+            if (/^[A-Z]{2}$/.test(upper)) return upper;
+            const entry = Object.entries(shipperStateCodeByName).find(function (pair) {
+                return pair[0].toUpperCase() === upper;
+            });
+            return entry ? entry[1] : raw;
+        }
+
         function setField(name, value) {
             const el = document.querySelector('[name="' + name + '"]');
             if (!el) return;
 
-            const normalizedValue = value ?? '';
+            let normalizedValue = value ?? '';
+            if (name === 'shipper_state') {
+                normalizedValue = normalizeShipperStateCode(normalizedValue);
+            }
+
             if (el.type === 'radio') {
                 document.querySelectorAll('[name="' + name + '"]').forEach(function (radio) {
                     radio.checked = radio.value === normalizedValue;
@@ -9899,7 +10067,10 @@
             const selectedCustomer = exporterCustomerData[selectedCustomerId];
             syncOriginTypeOptions(selectedCustomer ? selectedCustomer.csb_type : '');
             setShipperFieldsLocked(fieldNames, false);
-            if (!selectedCustomer) return;
+            if (!selectedCustomer) {
+                resetExporterCustomerAddressSelect();
+                return;
+            }
 
             // Fill the actual Shipper Info fields and every matching CSB Info field.
             fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (name) {
@@ -9911,6 +10082,139 @@
                 sameAsCustomer.checked = false;
             }
             setShipperFieldsLocked(fieldNames, true);
+
+            // Offer the selected customer's saved addresses so the user can choose
+            // which one populates the Shipper address fields.
+            populateExporterCustomerAddresses();
+        }
+
+        function buildExporterCustomerAddressParts(address, index) {
+            const isPrimary = Boolean(address.is_primary);
+            const badge = isPrimary ? 'Primary' : 'Address ' + (Number(index) + 1);
+            const lines = [
+                String(address.address_line1 || '').trim(),
+                String(address.address_line2 || '').trim(),
+                String(address.address_line3 || '').trim()
+            ].filter(Boolean).join(', ');
+            const location = [
+                String(address.city || '').trim(),
+                String(address.state || '').trim(),
+                String(address.pincode || '').trim()
+            ].filter(Boolean).join(', ');
+            const full = [badge, lines, location].filter(Boolean).join(' — ');
+            return { badge: badge, lines: lines, location: location, full: full };
+        }
+
+        function destroyExporterCustomerAddressSelect() {
+            if (!exporterCustomerAddressSelect) return;
+            if (window.jQuery && jQuery(exporterCustomerAddressSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(exporterCustomerAddressSelect).select2('destroy');
+            }
+        }
+
+        function resetExporterCustomerAddressSelect() {
+            if (!exporterCustomerAddressSelect || !savedCustomerAddressWrap) return;
+            destroyExporterCustomerAddressSelect();
+            exporterCustomerAddressSelect.length = 0;
+            savedCustomerAddressWrap.style.display = 'none';
+        }
+
+        function applyExporterCustomerAddressFields(address) {
+            if (!address) return;
+            [
+                ['shipper_address_line1', address.address_line1],
+                ['shipper_address_line2', address.address_line2 || ''],
+                ['shipper_address_line3', address.address_line3 || ''],
+                ['shipper_pincode', address.pincode],
+                ['shipper_city', address.city],
+                ['shipper_state', address.state]
+            ].forEach(function (pair) {
+                setField(pair[0], pair[1]);
+            });
+        }
+
+        function applySelectedExporterCustomerAddress() {
+            if (!exporterCustomerAddressSelect || !savedCustomerAddressWrap) return;
+
+            const selectedCustomerId = String(exporterCustomerSelect.value || '');
+            const selectedCustomer = exporterCustomerData[selectedCustomerId];
+            const addresses = selectedCustomer && Array.isArray(selectedCustomer.addresses)
+                ? selectedCustomer.addresses
+                : [];
+
+            const index = exporterCustomerAddressSelect.value;
+            if (index === '' || index === null || !addresses.length) {
+                resetExporterCustomerAddressSelect();
+                return;
+            }
+            applyExporterCustomerAddressFields(addresses[Number(index)]);
+        }
+
+        function exporterAddressTemplateResult(data) {
+            if (!data.element) return data.text;
+            const option = data.element;
+
+            const $badge = jQuery('<span class="uwc-addr-badge"></span>').text(option.dataset.badge || '');
+            const $lines = jQuery('<span class="uwc-addr-lines"></span>').text(option.dataset.lines || '');
+            const $location = jQuery('<span class="uwc-addr-location"></span>').text(option.dataset.location || '');
+            const $body = jQuery('<span class="uwc-addr-body"></span>').append($lines).append($location);
+
+            return jQuery('<div class="uwc-addr-option"></div>')
+                .append($badge)
+                .append($body)
+                .attr('title', option.dataset.full || '');
+        }
+
+        function exporterAddressTemplateSelection(data) {
+            if (!data.element) return data.text;
+            return jQuery('<span class="uwc-addr-selection"></span>')
+                .text(data.element.dataset.full || data.text)
+                .attr('title', data.element.dataset.full || '');
+        }
+
+        function populateExporterCustomerAddresses() {
+            if (!exporterCustomerAddressSelect || !savedCustomerAddressWrap) return;
+
+            const selectedCustomerId = String(exporterCustomerSelect.value || '');
+            const selectedCustomer = exporterCustomerData[selectedCustomerId];
+            const addresses = selectedCustomer && Array.isArray(selectedCustomer.addresses)
+                ? selectedCustomer.addresses
+                : [];
+
+            destroyExporterCustomerAddressSelect();
+            exporterCustomerAddressSelect.length = 0;
+            if (!addresses.length) {
+                savedCustomerAddressWrap.style.display = 'none';
+                return;
+            }
+
+            addresses.forEach(function (address, index) {
+                const parts = buildExporterCustomerAddressParts(address, index);
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = parts.full;
+                option.dataset.badge = parts.badge;
+                option.dataset.lines = parts.lines;
+                option.dataset.location = parts.location;
+                option.dataset.full = parts.full;
+                exporterCustomerAddressSelect.appendChild(option);
+            });
+
+            exporterCustomerAddressSelect.value = '0';
+            savedCustomerAddressWrap.style.display = '';
+
+            if (window.jQuery && jQuery.fn.select2) {
+                jQuery(exporterCustomerAddressSelect).select2({
+                    width: '100%',
+                    placeholder: '-- Select Address --',
+                    templateResult: exporterAddressTemplateResult,
+                    templateSelection: exporterAddressTemplateSelection
+                });
+                // Refresh the rendered selection and trigger the fill logic.
+                jQuery(exporterCustomerAddressSelect).trigger('change.select2');
+            } else {
+                applySelectedExporterCustomerAddress();
+            }
         }
 
         if (exporterCustomerSelect) {
@@ -9931,6 +10235,18 @@
             // load, localStorage restoration will dispatch change after restoring.
             if (exporterCustomerSelect.value) {
                 setTimeout(applySelectedExporterCustomer, 0);
+            }
+        }
+
+        // Select2 fires jQuery "change" events rather than native ones. Bind
+        // through jQuery (un-namespaced so both the programmatic
+        // trigger('change.select2') after population and real user selections
+        // run the fill handler); fall back to the native listener otherwise.
+        if (exporterCustomerAddressSelect) {
+            if (window.jQuery) {
+                jQuery(exporterCustomerAddressSelect).on('change', applySelectedExporterCustomerAddress);
+            } else {
+                exporterCustomerAddressSelect.addEventListener('change', applySelectedExporterCustomerAddress);
             }
         }
 
@@ -9960,6 +10276,7 @@
                     }
                     syncExporterCustomerCsbColor();
                     syncOriginTypeOptions('');
+                    resetExporterCustomerAddressSelect();
                 }
                 // Save current values then pre-fill from customer data
                 fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (n) {
@@ -10159,12 +10476,9 @@
             }
 
             const shipperState = form.querySelector('[name="shipper_state"]');
-            if (shipperState) {
-                shipperState.value = shipperState.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
-            }
             const shipperStateValue = shipperState ? shipperState.value : '';
             if (shipperStateValue && !/^[A-Z]{2}$/.test(shipperStateValue)) {
-                addError(shipperState, 'Enter exactly 2 capital letters for shipper state, for example DL or GJ.', 'basic');
+                addError(shipperState, 'Select a valid shipper state.', 'basic');
             }
 
             const selectedRate = form.querySelector('input[name="rate_select"]:checked');

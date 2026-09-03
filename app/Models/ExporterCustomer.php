@@ -71,6 +71,54 @@ class ExporterCustomer extends Model
         return $this->belongsTo(BusinessCategory::class, 'business_category_id');
     }
 
+    /**
+     * Extra addresses saved for this saved customer. The main address is still
+     * stored directly on the exporter_customers row (primary), while every
+     * additional "Save Address" click appends a row here.
+     */
+    public function addresses()
+    {
+        return $this->hasMany(ExporterCustomerAddress::class, 'exporter_customer_id')
+            ->orderBy('id');
+    }
+
+    /**
+     * All addresses to display for this saved customer: the primary (flat)
+     * address first, followed by every extra address that was appended.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function displayAddresses(): array
+    {
+        $items = [];
+
+        if (! empty($this->address_line1)) {
+            $items[] = [
+                'address_line1' => (string) $this->address_line1,
+                'address_line2' => $this->address_line2,
+                'address_line3' => $this->address_line3,
+                'pincode' => (string) $this->pincode,
+                'city' => (string) $this->city,
+                'state' => (string) $this->state,
+                'is_primary' => true,
+            ];
+        }
+
+        foreach ($this->addresses as $child) {
+            $items[] = [
+                'address_line1' => (string) $child->address_line1,
+                'address_line2' => $child->address_line2,
+                'address_line3' => $child->address_line3,
+                'pincode' => (string) $child->pincode,
+                'city' => (string) $child->city,
+                'state' => (string) $child->state,
+                'is_primary' => false,
+            ];
+        }
+
+        return $items;
+    }
+
     public function toShipperArray(): array
     {
         return [

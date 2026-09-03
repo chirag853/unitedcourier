@@ -95,6 +95,9 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         // CRM Routes
     Route::get('/contacts', [AdminController::class, 'contacts'])->name('admin.contacts');
     Route::get('/companies', [AdminController::class, 'companies'])->name('admin.companies');
+    Route::get('/all-customer', [AdminController::class, 'exportCustomers'])->name('admin.export-customers');
+    Route::get('/all-customer/{customer}/view', [AdminController::class, 'exportCustomerView'])->name('admin.export-customers.view');
+    Route::get('/all-customer/{customer}', [AdminController::class, 'exportCustomersDetail'])->name('admin.export-customers.detail');
     Route::post('/assign-delivery', [AdminController::class, 'assignDelivery'])->name('admin.assign-delivery');
     Route::post('/receive-shipment', [AdminController::class, 'receiveShipment'])->name('admin.receive-shipment');
     Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
