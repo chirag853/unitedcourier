@@ -1479,7 +1479,7 @@
                             </h3>
                             <p class="text-muted mb-4">
                                 @if($isAadhaarOptional)
-                                    Aadhaar is optional for Courier / Aggregator customers. You may skip this step, or enter your 12-digit Aadhaar number and upload both images to provide it.
+                                    Aadhaar is optional for your account. You may skip this step, or enter your 12-digit Aadhaar number and upload both images to provide it.
                                 @else
                                     Enter your 12-digit Aadhaar number and upload front & back photos to verify your identity.
                                 @endif
@@ -1651,7 +1651,7 @@
                             <div class="csbv-optional-banner mb-4" role="note">
                                 <i class="fas fa-info-circle mt-1"></i>
                                 <div>
-                                    <strong>CSB-V is optional for eCommerce accounts.</strong>
+                                    <strong>CSB-V is optional for your account.</strong>
                                     You can skip this step and submit your KYC now, or complete it to
                                     enable CSB-V (export) shipments for your account later.
                                 </div>
@@ -4156,8 +4156,9 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         initFileUploadPreviews();
                     }
 
-                    // Optional Courier/Aggregator users can deliberately discard any
-                    // restored Aadhaar draft data and continue without Aadhaar.
+                    // Optional Aadhaar users (Exporter business accounts) can
+                    // deliberately discard any restored Aadhaar draft data and
+                    // continue without Aadhaar.
                     function skipAadhaarStep() {
                         if (!isAadhaarOptional) {
                             nextStep(isBusinessFlow ? 3 : 2);
@@ -4224,7 +4225,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                     }
                                 }
                             } else if (step === 2) {
-                                // Step 2: Aadhaar is optional only for Courier / Aggregator.
+                                // Step 2: Aadhaar is optional only for Exporter business accounts.
                                 const frontFile = document.getElementById('aadharFrontFileInput');
                                 const backFile = document.getElementById('aadharBackFileInput');
                                 const hasFrontFile = Boolean(frontFile && frontFile.files && frontFile.files[0])
@@ -4797,9 +4798,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
 
                         restoreVerifiedState('aadharInput', 'verifyAadharBtn', 'aadharStatus',
                             kycData.aadhar_verified,
-                            kycData.aadhar_verified
-                                ? 'Aadhaar verification restored from your saved KYC.'
-                                : 'Aadhaar verification is optional for your account type.',
+                            'Aadhaar verification restored from your saved KYC.',
                             'aadharInput');
                         restoreVerifiedState('panInput', 'verifyPanBtn', 'panStatus', kycData.pan_verified,
                             'PAN verification restored from your saved KYC.', 'panInput');

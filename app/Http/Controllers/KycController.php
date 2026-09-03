@@ -520,7 +520,8 @@ class KycController extends Controller
                 }
             }
 
-            $isAadhaarOptional = $this->isCourierOrAggregator($customer);
+            // Aadhaar is optional only for Exporter business customers.
+            $isAadhaarOptional = $this->isExporter($customer);
             $hasAnyAadhaarData = $aadharNumber
                 || $request->boolean('aadhar_verified')
                 || $request->hasFile('aadhar_front_document')
@@ -2653,6 +2654,30 @@ class KycController extends Controller
             'courier or aggregator',
             'courier / aggregator',
             'courier/aggregator',
+        ];
+
+        return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)
+            || in_array(strtolower(trim((string) $category->category_name)), $allowedCategories, true);
+    }
+
+    /**
+     * Determine whether the customer belongs to the Exporter category.
+     * For these customers the Aadhaar step and the CSB-V step of Business
+     * KYC are optional.
+     */
+    private function isExporter(Customer $customer): bool
+    {
+        $category = $customer->relationLoaded('businessCategory')
+            ? $customer->businessCategory
+            : $customer->businessCategory()->first();
+
+        if (!$category) {
+            return false;
+        }
+
+        $allowedCategories = [
+            'exporter',
+            'exporters',
         ];
 
         return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)

@@ -654,11 +654,15 @@ class CustomerController extends Controller
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
         $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
         $isEcommerce = $this->isEcommerce($customer);
-        $isAadhaarOptional = $isCourierOrAggregator;
+        $isExporter = $this->isExporter($customer);
+        // Aadhaar is optional only for Exporter business customers. Courier /
+        // Aggregator customers must verify Aadhaar like other business accounts.
+        $isAadhaarOptional = $isExporter;
         $skipCsbV = strtolower((string) $userType) === 'business' && $isCourierOrAggregator;
-        // Ecommerce customers may submit Business KYC without CSB-V details,
-        // so the CSB-V step stays visible but is marked "(Optional)" with a Skip button.
-        $csbVOptional = strtolower((string) $userType) === 'business' && $isEcommerce;
+        // Ecommerce and Exporter customers may submit Business KYC without CSB-V
+        // details, so the CSB-V step stays visible but is marked "(Optional)" with
+        // a Skip button.
+        $csbVOptional = strtolower((string) $userType) === 'business' && ($isEcommerce || $isExporter);
         $kycType = strtolower($userType) === 'business' ? 'business' : 'personal';
         // Whether the customer has accepted the Merchant Agreement (welcome modal).
         // Persisted server-side so the modal does not reappear after refresh.
@@ -766,7 +770,7 @@ class CustomerController extends Controller
                 'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
                 'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
                 'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-                'userType', 'businessCategory', 'isAadhaarOptional', 'isEcommerce', 'skipCsbV', 'csbVOptional', 'kycDraft',
+                'userType', 'businessCategory', 'isAadhaarOptional', 'isEcommerce', 'isExporter', 'skipCsbV', 'csbVOptional', 'kycDraft',
                 'merchantAgreementAccepted'
             ))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
@@ -1678,18 +1682,20 @@ class CustomerController extends Controller
             // Courier / Aggregator customers are not required to submit the
             // CSB-V export details. Reuse the flag to relax validation below.
             $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
-            // eCommerce accounts may also complete Business KYC without the
-            // CSB-V export details (the CSB-V step is optional for them), so
-            // those fields are relaxed below when this flag is set.
+            // eCommerce and Exporter accounts may also complete Business KYC
+            // without the CSB-V export details (the CSB-V step is optional for
+            // them), so those fields are relaxed below when this flag is set.
             $isEcommerce = $this->isEcommerce($customer);
+            $isExporter = $this->isExporter($customer);
+            $isCsbVOptional = $isEcommerce || $isExporter;
             // CSB-V export details remain mandatory for regular business
-            // accounts only. Courier / Aggregator accounts and eCommerce
-            // accounts that skip the optional step are exempt. An eCommerce
+            // accounts only. Courier / Aggregator accounts and eCommerce /
+            // Exporter accounts that skip the optional step are exempt. An
             // account that does choose to complete CSB-V (is_csb_v = true, as
             // the standalone CSB5 form always sends) still receives full
             // validation so its export and billing details are complete.
             $csbVRequired = ! $isCourierOrAggregator
-                && (! $isEcommerce || $request->boolean('is_csb_v'));
+                && (! $isCsbVOptional || $request->boolean('is_csb_v'));
 
             $request->merge([
                 'is_gst' => $request->boolean('is_gst'),
@@ -1998,10 +2004,10 @@ class CustomerController extends Controller
                 // by the validator above. Do not force it into the bond end year.
             }
 
-            // Aadhaar is optional only for Courier / Aggregator customers. Use
-            // the value submitted with this form so an old incomplete customer
-            // value does not prevent the customer from intentionally skipping it.
-            $isAadhaarOptional = $isCourierOrAggregator;
+            // Aadhaar is optional only for Exporter customers. Use the value
+            // submitted with this form so an old incomplete customer value does
+            // not prevent the customer from intentionally skipping it.
+            $isAadhaarOptional = $isExporter;
             $submittedAadhaar = preg_replace('/\s+/', '', (string) $request->input('aadhar_number'));
             $storedAadhaar = preg_replace('/\s+/', '', (string) $customer->aadhar_number);
             $aadhar = $isAadhaarOptional
@@ -12074,6 +12080,30 @@ class CustomerController extends Controller
             'ecommerce',
             'e-commerce',
             'e commerce',
+        ];
+
+        return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)
+            || in_array(strtolower(trim((string) $category->category_name)), $allowedCategories, true);
+    }
+
+    /**
+     * Determine whether the customer belongs to the Exporter category.
+     * For these customers the Aadhaar step and the CSB-V step of Business
+     * KYC are optional.
+     */
+    private function isExporter(Customer $customer): bool
+    {
+        $category = $customer->relationLoaded('businessCategory')
+            ? $customer->businessCategory
+            : $customer->businessCategory()->first();
+
+        if (! $category) {
+            return false;
+        }
+
+        $allowedCategories = [
+            'exporter',
+            'exporters',
         ];
 
         return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)

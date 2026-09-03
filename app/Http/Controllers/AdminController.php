@@ -2404,16 +2404,23 @@ class AdminController extends Controller
                 $kycType = strcasecmp(trim((string) $userType), 'Business') === 0 ? 'business' : 'personal';
             }
 
-            // eCommerce customers may complete Business KYC without CSB-V (the step
-            // is optional for them and is skipped by default), so CSB-V must never
-            // count towards their KYC progress.
-            $isEcommerce = false;
+            // eCommerce and Exporter customers may complete Business KYC without
+            // CSB-V (the step is optional for them and is skipped by default), so
+            // CSB-V must never count towards their KYC progress. Exporter
+            // customers may additionally complete Business KYC without Aadhaar,
+            // so the Aadhar step is also excluded from their progress.
+            $isCsbVOptional = false;
+            $isAadhaarOptional = false;
             if ($customer->relationLoaded('businessCategory') && $customer->businessCategory) {
                 $category = $customer->businessCategory;
                 $categoryKey = strtolower(trim((string) $category->category_slug));
                 $categoryName = strtolower(trim((string) $category->category_name));
-                $isEcommerce = in_array($categoryKey, ['ecommerce', 'e-commerce', 'e commerce'], true)
+                $isExporter = in_array($categoryKey, ['exporter', 'exporters'], true)
+                    || in_array($categoryName, ['exporter', 'exporters'], true);
+                $isCsbVOptional = $isExporter
+                    || in_array($categoryKey, ['ecommerce', 'e-commerce', 'e commerce'], true)
                     || in_array($categoryName, ['ecommerce', 'e-commerce', 'e commerce'], true);
+                $isAadhaarOptional = $isExporter;
             }
 
             $steps = $kycType === 'business' ? [
@@ -2432,8 +2439,11 @@ class AdminController extends Controller
                 'Agreement' => ! empty($data['terms_accepted']),
             ];
 
-            if ($kycType === 'business' && $isEcommerce) {
+            if ($kycType === 'business' && $isCsbVOptional) {
                 unset($steps['CSB-V']);
+            }
+            if ($kycType === 'business' && $isAadhaarOptional) {
+                unset($steps['Aadhar']);
             }
 
             $completed = collect($steps)->filter()->keys();
