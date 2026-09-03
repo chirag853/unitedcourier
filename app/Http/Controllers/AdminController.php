@@ -2404,6 +2404,18 @@ class AdminController extends Controller
                 $kycType = strcasecmp(trim((string) $userType), 'Business') === 0 ? 'business' : 'personal';
             }
 
+            // eCommerce customers may complete Business KYC without CSB-V (the step
+            // is optional for them and is skipped by default), so CSB-V must never
+            // count towards their KYC progress.
+            $isEcommerce = false;
+            if ($customer->relationLoaded('businessCategory') && $customer->businessCategory) {
+                $category = $customer->businessCategory;
+                $categoryKey = strtolower(trim((string) $category->category_slug));
+                $categoryName = strtolower(trim((string) $category->category_name));
+                $isEcommerce = in_array($categoryKey, ['ecommerce', 'e-commerce', 'e commerce'], true)
+                    || in_array($categoryName, ['ecommerce', 'e-commerce', 'e commerce'], true);
+            }
+
             $steps = $kycType === 'business' ? [
                 'GST' => ! empty($data['gst_number']),
                 'Aadhar' => ! empty($data['aadhar_number']),
@@ -2419,6 +2431,10 @@ class AdminController extends Controller
                 'Signature' => ! empty($data['signature_document']) || ! empty($data['signature']),
                 'Agreement' => ! empty($data['terms_accepted']),
             ];
+
+            if ($kycType === 'business' && $isEcommerce) {
+                unset($steps['CSB-V']);
+            }
 
             $completed = collect($steps)->filter()->keys();
 

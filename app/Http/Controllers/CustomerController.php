@@ -653,8 +653,12 @@ class CustomerController extends Controller
         $customer->setRelation('businessCategory', $businessCategory);
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
         $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+        $isEcommerce = $this->isEcommerce($customer);
         $isAadhaarOptional = $isCourierOrAggregator;
         $skipCsbV = strtolower((string) $userType) === 'business' && $isCourierOrAggregator;
+        // Ecommerce customers may submit Business KYC without CSB-V details,
+        // so the CSB-V step stays visible but is marked "(Optional)" with a Skip button.
+        $csbVOptional = strtolower((string) $userType) === 'business' && $isEcommerce;
         $kycType = strtolower($userType) === 'business' ? 'business' : 'personal';
         // Whether the customer has accepted the Merchant Agreement (welcome modal).
         // Persisted server-side so the modal does not reappear after refresh.
@@ -762,7 +766,7 @@ class CustomerController extends Controller
                 'customer', 'totalBooked', 'pickupPending', 'outForDelivery', 'delivered',
                 'recentShipments', 'walletBalance', 'totalShippedValue', 'totalShippedCost',
                 'bookedChangePercent', 'pickupPendingChangePercent', 'outForDeliveryChangePercent', 'deliveredChangePercent',
-                'userType', 'businessCategory', 'isAadhaarOptional', 'skipCsbV', 'kycDraft',
+                'userType', 'businessCategory', 'isAadhaarOptional', 'isEcommerce', 'skipCsbV', 'csbVOptional', 'kycDraft',
                 'merchantAgreementAccepted'
             ))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
@@ -1674,12 +1678,24 @@ class CustomerController extends Controller
             // Courier / Aggregator customers are not required to submit the
             // CSB-V export details. Reuse the flag to relax validation below.
             $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+            // eCommerce accounts may also complete Business KYC without the
+            // CSB-V export details (the CSB-V step is optional for them), so
+            // those fields are relaxed below when this flag is set.
+            $isEcommerce = $this->isEcommerce($customer);
+            // CSB-V export details remain mandatory for regular business
+            // accounts only. Courier / Aggregator accounts and eCommerce
+            // accounts that skip the optional step are exempt. An eCommerce
+            // account that does choose to complete CSB-V (is_csb_v = true, as
+            // the standalone CSB5 form always sends) still receives full
+            // validation so its export and billing details are complete.
+            $csbVRequired = ! $isCourierOrAggregator
+                && (! $isEcommerce || $request->boolean('is_csb_v'));
 
             $request->merge([
                 'is_gst' => $request->boolean('is_gst'),
                 'is_lut' => $request->boolean('is_lut'),
             ]);
-            if (! $isCourierOrAggregator && ! $request->boolean('is_gst') && ! $request->boolean('is_lut')) {
+            if ($csbVRequired && ! $request->boolean('is_gst') && ! $request->boolean('is_lut')) {
                 throw ValidationException::withMessages([
                     'tax_type' => 'Select GST, LUT, or both before submitting the CSB-V form.',
                 ]);
@@ -1843,10 +1859,10 @@ class CustomerController extends Controller
                     'nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120',
                 ],
                 'pan_document_path' => ['nullable', 'string'],
-                'ad_code' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
+                'ad_code' => [Rule::requiredIf($csbVRequired), 'nullable', 'regex:/^(\d{7}|\d{14})$/'],
                 'ad_code_document' => [
                     Rule::requiredIf(
-                        ! $isCourierOrAggregator
+                        $csbVRequired
                         && ! $existingCsbForm?->ad_code_document
                         && ! $request->filled('ad_code_document_path')
                         && ! $storedDraftPath('ad_code_document')
@@ -1854,10 +1870,10 @@ class CustomerController extends Controller
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'ad_code_document_path' => ['nullable', 'string'],
-                'iec_number' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
+                'iec_number' => [Rule::requiredIf($csbVRequired), 'nullable', 'string', 'regex:/^[A-Za-z0-9]{10}$/'],
                 'iec_document' => [
                     Rule::requiredIf(
-                        ! $isCourierOrAggregator
+                        $csbVRequired
                         && ! $existingCsbForm?->iec_document
                         && ! $request->filled('iec_document_path')
                         && ! $storedDraftPath('iec_document')
@@ -1865,8 +1881,8 @@ class CustomerController extends Controller
                     'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120',
                 ],
                 'iec_document_path' => ['nullable', 'string'],
-                'bank_account_number' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^[0-9]{9,18}$/'],
-                'bank_type' => ['nullable', Rule::requiredIf(! $isCourierOrAggregator), 'in:private,government'],
+                'bank_account_number' => [Rule::requiredIf($csbVRequired), 'nullable', 'regex:/^[0-9]{9,18}$/'],
+                'bank_type' => ['nullable', Rule::requiredIf($csbVRequired), 'in:private,government'],
                 'lut_document' => [
                     Rule::requiredIf(
                         $request->boolean('is_lut')
@@ -1880,9 +1896,9 @@ class CustomerController extends Controller
                 'lut_number' => ['required_if:is_lut,1', 'nullable', 'string', 'max:100'],
                 'lut_expiry_date' => 'required_if:is_lut,1|nullable|date|after_or_equal:today',
                 'lut_bond_year' => ['required_if:is_lut,1', 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
-                'billing_address' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'string', 'min:10', 'max:1000'],
-                'billing_contact' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
-                'billing_email' => [Rule::requiredIf(! $isCourierOrAggregator), 'nullable', 'email', 'max:255'],
+                'billing_address' => [Rule::requiredIf($csbVRequired), 'nullable', 'string', 'min:10', 'max:1000'],
+                'billing_contact' => [Rule::requiredIf($csbVRequired), 'nullable', 'regex:/^[6-9][0-9]{9}$/'],
+                'billing_email' => [Rule::requiredIf($csbVRequired), 'nullable', 'email', 'max:255'],
                 'signature_document' => [
                     Rule::requiredIf(
                         ! $isStandaloneCsb5
@@ -12034,6 +12050,30 @@ class CustomerController extends Controller
             'courier or aggregator',
             'courier / aggregator',
             'courier/aggregator',
+        ];
+
+        return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)
+            || in_array(strtolower(trim((string) $category->category_name)), $allowedCategories, true);
+    }
+
+    /**
+     * Determine whether the customer belongs to the eCommerce category.
+     * For these customers the CSB-V step of Business KYC is optional.
+     */
+    private function isEcommerce(Customer $customer): bool
+    {
+        $category = $customer->relationLoaded('businessCategory')
+            ? $customer->businessCategory
+            : $customer->businessCategory()->first();
+
+        if (! $category) {
+            return false;
+        }
+
+        $allowedCategories = [
+            'ecommerce',
+            'e-commerce',
+            'e commerce',
         ];
 
         return in_array(strtolower(trim((string) $category->category_slug)), $allowedCategories, true)

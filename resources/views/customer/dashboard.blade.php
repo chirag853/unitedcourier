@@ -1012,6 +1012,39 @@
                     color: var(--brand-blue-main);
                 }
 
+                .step-optional-badge {
+                    display: inline-block;
+                    margin-left: 4px;
+                    padding: 2px 6px;
+                    border-radius: 999px;
+                    background: rgba(99, 102, 241, 0.12);
+                    border: 1px solid rgba(99, 102, 241, 0.35);
+                    color: #6366f1;
+                    font-size: 9px;
+                    font-weight: 700;
+                    letter-spacing: 0.5px;
+                    line-height: 1.2;
+                    text-transform: uppercase;
+                    vertical-align: middle;
+                }
+
+                .csbv-optional-banner {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                    border: 1px solid #c7d2fe;
+                    background: linear-gradient(135deg, #eef2ff, #f8faff);
+                    border-radius: 14px;
+                    padding: 14px 16px;
+                    font-size: 13px;
+                    color: #4338ca;
+                }
+
+                .csbv-optional-banner i {
+                    font-size: 16px;
+                    color: #6366f1;
+                }
+
                 /* Form Card Styling */
                 .kyc-card {
                     background: white;
@@ -1301,7 +1334,7 @@
                             <div class="step-bar">
                                 <div class="step-bar-fill"></div>
                             </div>
-                            <div class="step-label">4. CSB-V</div>
+                            <div class="step-label">4. CSB-V @if(! empty($csbVOptional))<span class="step-optional-badge">(Optional)</span>@endif</div>
                         </div>
                         @endif
                         <div class="step-item" id="step5-indicator">
@@ -1611,8 +1644,19 @@
                         <!-- Business Step 4: CSB-V (Export Codes + LUT + Banking + Billing merged) -->
                         <div id="step4-content" class="step-content">
                             <h3 class="kyc-card-title">CSB-<span class="gradient-text">V</span></h3>
-                            <p class="text-muted mb-4">Complete your CSB-V details: Export Codes, LUT, Banking and Billing
+                            <p class="text-muted mb-3">Complete your CSB-V details: Export Codes, LUT, Banking and Billing
                                 information.</p>
+
+                            @if(! empty($csbVOptional))
+                            <div class="csbv-optional-banner mb-4" role="note">
+                                <i class="fas fa-info-circle mt-1"></i>
+                                <div>
+                                    <strong>CSB-V is optional for eCommerce accounts.</strong>
+                                    You can skip this step and submit your KYC now, or complete it to
+                                    enable CSB-V (export) shipments for your account later.
+                                </div>
+                            </div>
+                            @endif
 
                             <div class="mb-4">
                                 <label class="form-label-custom d-block">Select Tax Type <span class="text-danger">*</span></label>
@@ -1862,9 +1906,18 @@
                                 <button class="btn btn-outline-custom flex-md-shrink-1"
                                     style="width: auto; padding-left: 40px; padding-right: 40px;"
                                     onclick="nextStep(3)">Back</button>
-                                <button class="btn btn-primary-custom"
-                                    style="width: auto; padding-left: 60px; padding-right: 60px;"
-                                    onclick="nextStep(5)">Continue</button>
+                                <div class="d-flex flex-column flex-sm-row gap-3">
+                                    @if(! empty($csbVOptional))
+                                    <button type="button" class="btn btn-outline-secondary flex-md-shrink-1"
+                                        style="width: auto; padding-left: 40px; padding-right: 40px;"
+                                        onclick="skipCsbVStep()" id="skipCsbVBtn">
+                                        <i class="fas fa-forward me-1"></i>Skip (Optional)
+                                    </button>
+                                    @endif
+                                    <button class="btn btn-primary-custom"
+                                        style="width: auto; padding-left: 60px; padding-right: 60px;"
+                                        onclick="nextStep(5)">Continue</button>
+                                </div>
                             </div>
                         </div>
                         @endif
@@ -3113,6 +3166,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                     const isBusinessFlow = @json(strcasecmp(trim((string) $userType), 'Business') === 0);
                     const isAadhaarOptional = @json($isAadhaarOptional);
                     const skipCsbV = @json($skipCsbV);
+                    const csbVOptional = @json($csbVOptional);
                     const totalSteps = isBusinessFlow ? (skipCsbV ? 6 : 7) : 5;
                     const savedKycDraft = @json($kycDraft?->form_data ?? []);
                     const rawSavedKycStep = Number(@json($kycDraft?->current_step ?? 1)) || 1;
@@ -4212,6 +4266,46 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 }
                             } else if (step === 4) {
                                 // Step 4: validate every CSB-V field and upload before Continue.
+                                // CSB-V is optional for eCommerce accounts: an entirely empty step
+                                // may be skipped (Continue passes when all CSB-V details are cleared),
+                                // but once any CSB-V detail is entered the full validation applies.
+                                if (csbVOptional) {
+                                    const optIec = document.getElementById('bizIecNumber');
+                                    const optAdCode = document.getElementById('bizAdCode');
+                                    const optGst = document.getElementById('bizGstType');
+                                    const optLut = document.getElementById('bizLutType');
+                                    const optLutNumber = document.getElementById('bizLutNumber');
+                                    const optLutExpiry = document.getElementById('bizLutExpiry');
+                                    const optBankType = document.getElementById('bizBankType');
+                                    const optBankAccount = document.getElementById('bizBankAccount');
+                                    const optBillingAddress = document.getElementById('bizBillingAddress');
+                                    const optBillingContact = document.getElementById('bizBillingContact');
+                                    const optBillingEmail = document.getElementById('bizBillingEmail');
+                                    const optIecFile = document.getElementById('bizIecFileInput');
+                                    const optAdCodeFile = document.getElementById('bizAdCodeFileInput');
+                                    const optLutFile = document.getElementById('bizLutFileInput');
+                                    const hasAnyCsbVData = Boolean(
+                                        (optIec && optIec.value.trim()) ||
+                                        (optAdCode && optAdCode.value.trim()) ||
+                                        (optGst && optGst.checked) ||
+                                        (optLut && optLut.checked) ||
+                                        (optLutNumber && optLutNumber.value.trim()) ||
+                                        (optLutExpiry && optLutExpiry.value) ||
+                                        (optBankType && optBankType.value) ||
+                                        (optBankAccount && optBankAccount.value.trim()) ||
+                                        (optBillingAddress && optBillingAddress.value.trim()) ||
+                                        (optBillingContact && optBillingContact.value.trim()) ||
+                                        (optBillingEmail && optBillingEmail.value.trim()) ||
+                                        (optIecFile && optIecFile.files && optIecFile.files[0]) ||
+                                        (optAdCodeFile && optAdCodeFile.files && optAdCodeFile.files[0]) ||
+                                        (optLutFile && optLutFile.files && optLutFile.files[0])
+                                    );
+                                    if (!hasAnyCsbVData) {
+                                        // Intentionally empty: submit as CSB-V skipped (CSB-IV/csb_status=1).
+                                        kycData.is_csb_v = false;
+                                        return true;
+                                    }
+                                }
                                 const iecInput = document.getElementById('bizIecNumber');
                                 const adCodeInput = document.getElementById('bizAdCode');
                                 const gstType = document.getElementById('bizGstType');
@@ -4416,6 +4510,20 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                 if (billingContact) kycData.billing_contact = billingContact.value.trim();
                                 if (billingEmail) kycData.billing_email = billingEmail.value.trim();
                                 if (billingAddress) kycData.billing_address = billingAddress.value.trim();
+                                // CSB-V is optional for eCommerce accounts: it is submitted only when
+                                // at least one CSB-V detail was actually provided. A skipped step
+                                // (cleared by Skip) therefore stays skipped even after revisiting it.
+                                if (csbVOptional) {
+                                    kycData.is_csb_v = Boolean(
+                                        (iecInput && iecInput.value.trim()) ||
+                                        (adCodeInput && adCodeInput.value.trim()) ||
+                                        kycData.is_gst ||
+                                        kycData.is_lut ||
+                                        (bankType && bankType.value) ||
+                                        (bankAccount && bankAccount.value.trim()) ||
+                                        (billingAddress && billingAddress.value.trim())
+                                    );
+                                }
                             } else if (stepNumber === (skipCsbV ? 6 : 7)) {
                                 // Leaving step 6 (Terms & Conditions) -> submit Business KYC
                                 submitBusinessKYC();
@@ -4706,6 +4814,43 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         const lutType = document.getElementById('bizLutType');
                         const section = document.getElementById('bizLutDetailsSection');
                         if (section) section.style.display = lutType && lutType.checked ? '' : 'none';
+                    }
+
+                    // The Business KYC CSB-V step is optional for eCommerce accounts. This clears any
+                    // partial CSB-V data and advances to the Signature step without validating it.
+                    function skipCsbVStep() {
+                        if (!csbVOptional) return;
+                        ['bizGstType', 'bizLutType'].forEach(function(id) {
+                            const el = document.getElementById(id);
+                            if (el) el.checked = false;
+                        });
+                        ['bizIecNumber', 'bizAdCode', 'bizLutNumber', 'bizLutExpiry',
+                            'bizLutBondStartYear', 'bizLutBondEndYear', 'bizLutBondYear',
+                            'bizBankType', 'bizBankAccount', 'bizBillingGst',
+                            'bizBillingContact', 'bizBillingEmail', 'bizBillingAddress'
+                        ].forEach(function(id) {
+                            const el = document.getElementById(id);
+                            if (el) el.value = '';
+                        });
+                        ['bizIecFileInput', 'bizAdCodeFileInput', 'bizLutFileInput'].forEach(function(id) {
+                            const el = document.getElementById(id);
+                            if (el) el.value = '';
+                        });
+                        // Hide any restored previews for CSB-V documents and restore their placeholders.
+                        ['bizIec', 'bizAdCode', 'bizLut'].forEach(function(prefix) {
+                            const preview = document.getElementById(prefix + 'Preview');
+                            const placeholder = document.getElementById(prefix + 'UploadPlaceholder');
+                            if (preview) preview.style.display = 'none';
+                            if (placeholder) placeholder.style.display = '';
+                        });
+                        toggleBusinessLutDetails();
+                        ['iec_document', 'ad_code_document', 'lut_document'].forEach(function(key) {
+                            kycData[key] = '';
+                        });
+                        kycData.is_gst = false;
+                        kycData.is_lut = false;
+                        kycData.is_csb_v = false;
+                        nextStep(5);
                     }
 
                     function initKycDraftAutosave() {
