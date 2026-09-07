@@ -4989,7 +4989,8 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                         submitBtn.disabled = true;
                                         submitBtn.onclick = function() {
                                             if (data.redirect) {
-                                                window.location.href = data.redirect;
+                                                // window.location.href = data.redirect;
+                                                window.location.reload();
                                             } else {
                                                 location.reload();
                                             }
@@ -4998,7 +4999,8 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                     // Show the Activation Pending screen for 5 seconds, then auto-refresh
                                     setTimeout(function() {
                                         if (data.redirect) {
-                                            window.location.href = data.redirect;
+                                            // window.location.href = data.redirect;
+                                            window.location.reload();
                                         } else {
                                             location.reload();
                                         }

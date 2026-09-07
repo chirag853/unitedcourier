@@ -371,6 +371,263 @@
             background: #f5f6f8;
             border-color: #e7ebf3;
         }
+
+        /* Horizontal scrolling for the shipments table so wide draft
+           columns never break the layout. The first 3 columns
+           (checkbox, HAWB Number, Order Date) stay frozen for context. */
+        .shipments-table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            max-width: 100%;
+        }
+
+        .shipments-table-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .shipments-table-scroll::-webkit-scrollbar-thumb {
+            background: #c9d9ff;
+            border-radius: 6px;
+        }
+
+        .shipments-table-scroll::-webkit-scrollbar-track {
+            background: #f1f4fb;
+        }
+
+        .shipments-table {
+            /* Many columns are now hidden/merged, so the table no longer needs
+               a 1500px floor. Keeping it smaller stops auto layout from pouring
+               the leftover space into the Status / Action columns. */
+            min-width: 1150px;
+            white-space: nowrap;
+        }
+
+        .shipments-table thead th,
+        .shipments-table tbody td {
+            vertical-align: middle;
+        }
+
+        /* Freeze the first 3 columns (checkbox, HAWB, Created At) so the
+           row identity is always visible while scrolling horizontally. */
+        .shipments-table thead th.sticky-col,
+        .shipments-table tbody td.sticky-col {
+            position: sticky;
+            background: #fff;
+            z-index: 2;
+            box-shadow: inset -1px 0 0 #dee2e6;
+        }
+
+        .shipments-table thead th.sticky-col {
+            background: #f8f9fa;
+            z-index: 3;
+        }
+
+        /* Checkbox is tiny; pin the column so it cannot absorb slack. */
+        .shipments-table .sticky-col.col-1 { left: 0; width: 40px; min-width: 40px; max-width: 40px; }
+        .shipments-table .sticky-col.col-2 { left: 40px; min-width: 130px; }
+        /* Order Date content is short; cap the width so the column does not
+           soak up the extra space left by wide-table auto layout. */
+        .shipments-table .sticky-col.col-3 { left: 170px; width: 130px; min-width: 130px; max-width: 130px; }
+
+        /* Status badge text is short; cap the column tightly so it fits the
+           badge and cannot stretch to absorb leftover table space. */
+        .shipments-table .status-col {
+            width: 130px;
+            min-width: 120px;
+            max-width: 140px;
+            text-align: center;
+            /* white-space: nowrap; */
+        }
+
+        /* Action column holds up to three 32px icon buttons plus gaps;
+           keep it compact so it does not stretch across empty space. */
+        .shipments-table .action-col {
+            width: 120px;
+            min-width: 110px;
+            max-width: 140px;
+            text-align: center;
+        }
+
+        /* Tracking Number column holds the carrier tracking id (e.g. UPS /
+           overseas airway bill). It is non-sticky, sits after the frozen
+           Order Date column, and allows long ids to wrap instead of
+           stretching the table. */
+        .shipments-table .tracking-col {
+            width: 180px;
+            min-width: 160px;
+            max-width: 220px;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        @media (max-width: 575.98px) {
+            .shipments-table {
+                min-width: 1080px;
+            }
+        }
+
+        /* From / To grid must wrap normally even though the table is nowrap. */
+        .shipments-route-grid {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        /* Give the From / To column enough width so it never becomes
+           absurdly narrow on smaller screens. */
+        .shipments-table .shipments-route-col {
+            min-width: 360px;
+        }
+
+        /* Receiver Details column: clean vertical stack with proper spacing.
+           Width is capped so the column stays compact and does not absorb
+           the leftover space from the wide-table auto layout. */
+        .shipments-table .receiver-details-col {
+            width: 220px;
+            min-width: 200px;
+            max-width: 220px;
+            vertical-align: top;
+        }
+
+        .receiver-details-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .receiver-details-stack .receiver-name {
+            font-weight: 600;
+            color: #1f2937;
+            line-height: 1.3;
+        }
+
+        .receiver-details-stack .receiver-line {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            color: #1f2937;
+            line-height: 1.35;
+            font-weight: 600;
+        }
+
+        .receiver-details-stack .receiver-icon {
+            color: #1f2937;
+            font-size: 12px;
+            line-height: 1.35;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .receiver-details-stack .receiver-label {
+            font-weight: 600;
+            color: #374151;
+            flex-shrink: 0;
+            min-width: 44px;
+        }
+
+        .receiver-details-stack .receiver-value {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* Package Details column: billable / dead / volumetric weight and
+           dimensions, shown as a compact label-value stack per package.
+           Width is capped so it cannot grow wider than its content needs. */
+        .shipments-table .package-details-col {
+            width: 230px;
+            min-width: 210px;
+            max-width: 240px;
+            vertical-align: top;
+        }
+
+        .package-details-card {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 12px;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .package-details-card + .package-details-card {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed #dee2e6;
+        }
+
+        .package-details-title {
+            font-weight: 600;
+            color: #1f2937;
+            line-height: 1.3;
+        }
+
+        .package-details-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            line-height: 1.35;
+        }
+
+        .package-details-label {
+            color: #6b7280;
+            flex-shrink: 0;
+        }
+
+        .package-details-value {
+            font-weight: 600;
+            color: #1f2937;
+            text-align: right;
+            min-width: 0;
+        }
+
+        /* Draft view: the HAWB column is widened and hosts the destination
+           ISO & pin, reference number and invoice number stacked below the
+           AWB number. col-3 (Created At) must shift to stay glued to it. */
+        .shipments-table.shipments-table-draft .sticky-col.col-2 {
+            min-width: 220px;
+        }
+
+        .shipments-table.shipments-table-draft .sticky-col.col-3 {
+            left: 260px;
+        }
+
+        .hawb-sub-info {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed #dee2e6;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-size: 11px;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .hawb-sub-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            line-height: 1.35;
+        }
+
+        .hawb-sub-label {
+            color: #6b7280;
+            flex-shrink: 0;
+            font-weight: 600;
+            min-width: 32px;
+        }
+
+        .hawb-sub-value {
+            color: #1f2937;
+            min-width: 0;
+        }
     </style>
 </head>
 
@@ -419,7 +676,7 @@
                     <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
                         <div class="bulk-actions-row">
                             <button class="btn btn-success rounded-pill px-4 py-2" id="bulkManifestBtn" style="display:none;">
-                                <i class="ti ti-package-export me-1"></i> Bulk Manifest
+                                <i class="ti ti-package-export me-1"></i> Bulk Manifest (Retry)
                             </button>
 
                             <div id="draftBulkActions" class="bulk-action-bar">
@@ -488,7 +745,7 @@
                                     <input type="search" name="shipper_name" class="form-control" value="{{ request('shipper_name') }}" placeholder="Company or contact">
                                 </div>
                                 <div class="col-lg-2 col-md-4">
-                                    <label class="form-label">AWB Number</label>
+                                    <label class="form-label">HAWB Number</label>
                                     <input type="search" name="awb_number" class="form-control" value="{{ request('awb_number') }}" placeholder="Enter AWB">
                                 </div>
                                 <div class="col-lg-2 col-md-4">
@@ -544,6 +801,7 @@
                                 $selectedStatus = request('status');
                                 $isAllOrdersView = $selectedStatus === null || $selectedStatus === 'all';
                                 $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                $showHawbSubInfo = $isDraftView || in_array($selectedStatus, ['ready', 'packed', 'manifested'], true);
                                 $postPackedStatuses = ['packed', 'manifested', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
                                 $hideCurrencyColumn = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideIncotermsAndPayColumns = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
@@ -551,27 +809,37 @@
                                 $hideManifestColumn = $isAllOrdersView || in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
                                 $hideCancelColumn = $isAllOrdersView || in_array($selectedStatus, $postPackedStatuses, true);
                             @endphp
-                            <div class="table-responsive">
-                                <table id="shipmentsTable" class="table table-bordered table-hover">
+                            <div class="table-responsive shipments-table-scroll">
+                                <table id="shipmentsTable" @class(['table', 'table-bordered', 'table-hover', 'shipments-table', 'shipments-table-draft' => $showHawbSubInfo])>
                                     <thead class="table-light">
                                         <tr>
-                                            <th><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
-                                            <th>#</th>
-                                            <th>AWB Number</th>
-                                            <th>Created At</th>
+                                            <th class="sticky-col col-1"><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
+                                            <th class="sticky-col col-2">HAWB Number</th>
+                                            <th class="sticky-col col-3">Order Date</th>
+                                            <th class="tracking-col">Tracking Number</th>
+                                            <th class="receiver-details-col" @class(['d-none' => !$isDraftView])>Receiver Details</th>
+                                            <th class="package-details-col" @class(['d-none' => !$isDraftView])>Package Details</th>
                                             <!-- <th>Ship From → Ship To</th> -->
-                                            <th>From / To</th>
+                                            {{-- From / To column temporarily hidden
+                                            <th class="shipments-route-col">From / To</th>
+                                            --}}
                                             <!-- <th>Invoice Date</th> -->
+                                            {{-- Amount column temporarily hidden
                                             <th>Amount</th>
+                                            --}}
                                             <th @class(['d-none' => $hideCurrencyColumn])>Currency</th>
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Incoterms</th>
                                             <!-- <th>Reference No.</th> -->
-                                            <th>Status</th>
+                                            <th class="status-col">Status</th>
+                                            {{-- Print Label / Pay Now / Manifest columns merged into the Action column
                                             <th @class(['d-none' => $hidePrintLabelColumn])>Print Label</th>
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
                                             <th @class(['d-none' => $hideManifestColumn])>Manifest</th>
-                                            <th @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
+                                            --}}
+                                            <th class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
+                                            {{-- Standalone Cancel column merged into Action column
                                             <th @class(['text-center', 'd-none' => $hideCancelColumn || $showActionColumn])>Cancel</th>
+                                            --}}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -595,12 +863,11 @@
                                                     ? $selectedRate->inclusive_total
                                                     : round((float) $invoice->invoiceItems->sum('amount'), 2));
                                         @endphp
-                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}">
-                                            <td class="text-center">
+                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" data-invoice-id="{{ $invoice->id }}" data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}">
+                                            <td class="text-center sticky-col col-1">
                                                 <input type="checkbox" class="shipment-checkbox bulk-manifest-checkbox" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" style="display:none;">
                                             </td>
-                                            <td>{{ $invoices->firstItem() + $index }}</td>
-                                            <td>
+                                            <td class="sticky-col col-2">
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                     <span class="badge bg-dark" style="cursor:pointer;"
                                                           data-invoice-id="{{ $invoice->id }}"
@@ -610,19 +877,136 @@
                                                 @else
                                                     <strong>{{ $invoice->invoice_number }}</strong>
                                                 @endif
+                                                @if($showHawbSubInfo)
+                                                    @php
+                                                        $hawbConsignee = $invoice->shipperInfo ? $invoice->shipperInfo->consigneeInfo : null;
+                                                        $hawbDestName = $hawbConsignee?->delivery_destination;
+                                                        $hawbIsoCode = $destinationIsoMap[$hawbDestName] ?? ($fallbackIsoMap[$hawbDestName] ?? '-');
+                                                    @endphp
+                                                    <div class="hawb-sub-info">
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Destination:</span>
+                                                            <span class="hawb-sub-value">{{ $hawbIsoCode !== '' ? $hawbIsoCode : '-' }}{{ $hawbConsignee && $hawbConsignee->zip_code ? ' · '.$hawbConsignee->zip_code : '' }}</span>
+                                                        </div>
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Reference number:</span>
+                                                            <span class="hawb-sub-value">{{ $invoice->reference_number ?: '-' }}</span>
+                                                        </div>
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Invoice number:</span>
+                                                            <span class="hawb-sub-value">{{ $invoice->invoice_number ?: '-' }}</span>
+                                                        </div>
+                                                    </div>
+                                                @endif
                                             </td>
-                                            <td>{{ $invoice->created_at ? date('d-m-Y', strtotime($invoice->created_at)) : '-' }}</td>
-                                            <td style="font-size:12px;white-space:normal;">
+                                            <td class="sticky-col col-3">
+                                                @php
+                                                    // Draft rows keep the original order date (created_at).
+                                                    // Once a shipment leaves draft, show the last-updated date from
+                                                    // the shipper record (every status change touches shipper_info),
+                                                    // falling back to the invoice's own updated_at.
+                                                    $orderDateSource = $rowStatus === 'draft'
+                                                        ? $invoice->created_at
+                                                        : ($invoice->shipperInfo?->updated_at ?: $invoice->updated_at);
+                                                @endphp
+                                                @if($orderDateSource)
+                                                    <div>{{ date('d M Y', strtotime($orderDateSource)) }}</div>
+                                                    <div class="text-muted" style="">{{ date('h:i A', strtotime($orderDateSource)) }}</div>
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                            <td class="tracking-col">
+                                                @php
+                                                    $rowTrackingNumber = $invoice->shipperInfo?->shipmentTracking?->shipment_identification_number;
+                                                @endphp
+                                                @if($rowTrackingNumber)
+                                                    <span>{{ $rowTrackingNumber }}</span>
+                                                @else
+                                                    <span class="text-muted">-</span>
+                                                @endif
+                                            </td>
+                                            <td class="receiver-details-col" @class(['d-none' => !$isDraftView])>
+                                                @php
+                                                    $receiverConsignee = $invoice->shipperInfo ? $invoice->shipperInfo->consigneeInfo : null;
+                                                    $receiverDisplayName = $receiverConsignee?->consignee_name ?: ($receiverConsignee?->contact_person ?: '-');
+                                                @endphp
+                                                <div class="receiver-details-stack">
+                                                    <div class="receiver-name">
+                                                        <span class="receiver-value"></span> {{ $receiverDisplayName }}
+                                                    </div>
+                                                    @if($receiverConsignee?->email)
+                                                        <div class="receiver-line">
+                                                            <!-- <i class="bi bi-envelope-fill receiver-icon"></i> -->
+                                                            <!-- <span class="receiver-label"></span> -->
+                                                            <span class="receiver-value">{{ $receiverConsignee->email }}</span>
+                                                        </div>
+                                                    @endif
+                                                    @if($receiverConsignee?->phone_number)
+                                                        <div class="receiver-line">
+                                                            <!-- <i class="bi bi-telephone-fill receiver-icon"></i> -->
+                                                            <!-- <span class="receiver-label"></span> -->
+                                                            <span class="receiver-value">{{ $receiverConsignee->phone_number }}</span>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                            <td class="package-details-col" @class(['d-none' => !$isDraftView])>
+                                                @php
+                                                    $packageShipper = $invoice->shipperInfo;
+                                                    $packages = $packageShipper?->packageDimensions ?? collect();
+                                                    $packageCount = is_countable($packages) ? count($packages) : 0;
+                                                @endphp
+                                                @if($packageCount > 0)
+                                                    @foreach($packages as $package)
+                                                        <div class="package-details-card">
+                                                            @if($packageCount > 1)
+                                                                <div class="package-details-title">Package {{ $loop->iteration }}</div>
+                                                            @endif
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Billable Wt.</span>
+                                                                <span class="package-details-value">{{ ($package->chargeable_weight !== null && $package->chargeable_weight !== '') ? number_format((float) $package->chargeable_weight, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Dead Wt.</span>
+                                                                <span class="package-details-value">{{ ($package->actual_weight_kg !== null && $package->actual_weight_kg !== '') ? number_format((float) $package->actual_weight_kg, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Vol. Wt.</span>
+                                                                <span class="package-details-value">{{ ($package->volumetric_weight !== null && $package->volumetric_weight !== '') ? number_format((float) $package->volumetric_weight, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Dimensions</span>
+                                                                <span class="package-details-value">
+                                                                    @if($package->length_cm !== null && $package->length_cm !== '' && $package->width_cm !== null && $package->width_cm !== '' && $package->height_cm !== null && $package->height_cm !== '')
+                                                                        L: {{ number_format((float) $package->length_cm, 2) }} x B: {{ number_format((float) $package->width_cm, 2) }} x H: {{ number_format((float) $package->height_cm, 2) }} cm
+                                                                    @else
+                                                                        -
+                                                                    @endif
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <span class="text-muted">-</span>
+                                                @endif
+                                            </td>
+                                            {{-- From / To column temporarily hidden
+                                            <td class="shipments-route-col" style="font-size:12px;white-space:normal;">
                                                 @php
                                                     $shipper = $invoice->shipperInfo;
                                                     $consignee = $shipper?->consigneeInfo;
                                                     $senderName = $shipper?->company_name ?: ($shipper?->contact_person ?: '-');
                                                     $receiverName = $consignee?->consignee_name ?: ($consignee?->contact_person ?: '-');
                                                 @endphp
-                                                <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
+                                                <div class="align-items-center w-100 shipments-route-grid" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;">
                                                     <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
                                                         <div>{{ $shipper?->state ?: '-' }}, {{ $shipper?->city ?: '-' }}, India</div>
-                                                        <div class="text-muted">{{ $senderName }} - {{ $shipper?->pincode ?: '-' }}</div>
+                                                        <div style="font-weight:600;">{{ $senderName }}</div>
+                                                        @if($shipper?->phone_number)
+                                                            <div class="text-muted" style=""><i class="bi bi-telephone me-1"></i>{{ $shipper->phone_number }}</div>
+                                                        @endif
+                                                        <div class="text-muted" style=""><i class="bi bi-geo-alt me-1"></i>{{ $shipper?->pincode ?: '-' }}</div>
                                                     </div>
                                                     <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
                                                         <span class="shipment-route-line" aria-hidden="true"></span>
@@ -632,16 +1016,23 @@
                                                     </div>
                                                     <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
                                                         <div>{{ $consignee?->city ?: '-' }}, {{ $consignee?->state ?: '-' }}, {{ $consignee?->delivery_destination ?: '-' }}</div>
-                                                        <div class="text-muted">{{ $receiverName }} - {{ $consignee?->zip_code ?: '-' }}</div>
+                                                        <div style="font-weight:600;">{{ $receiverName }}</div>
+                                                        @if($consignee?->phone_number)
+                                                            <div class="text-muted" style=""><i class="bi bi-telephone me-1"></i>{{ $consignee->phone_number }}</div>
+                                                        @endif
+                                                        <div class="text-muted" style=""><i class="bi bi-geo-alt me-1"></i>{{ $consignee?->zip_code ?: '-' }}</div>
                                                     </div>
                                                 </div>
                                             </td>
+                                            --}}
                                             <!-- <td>{{ $invoice->invoice_date ? date('d-m-Y', strtotime($invoice->invoice_date)) : '-' }}</td> -->
-                                            <td>INR {{ number_format($shipmentAmount, 2) }}</td>
+                                            {{-- Amount column temporarily hidden
+                                            <td class="amount-col">INR {{ number_format($shipmentAmount, 2) }}</td>
+                                            --}}
                                             <td @class(['d-none' => $hideCurrencyColumn])>{{ $invoice->invoice_currency }}</td>
                                             <td @class(['d-none' => $hideIncotermsAndPayColumns])>{{ $invoice->incoterms }}</td>
                                             <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
-                                            <td>
+                                            <td class="status-col">
                                                 @php
                                                     $displayStatus = $invoice->status === 'cancelled' ? 'cancelled' : ($invoice->shipperInfo && $invoice->shipperInfo->status ? $invoice->shipperInfo->status : 'draft');
                                                     $statusBadge = [
@@ -660,7 +1051,7 @@
                                                     ];
                                                     $statusLabel = [
                                                         'draft' => 'Draft',
-                                                        'ready' => 'Ready',
+                                                        'ready' => 'Ready for Packing',
                                                         'packed' => 'Packed',
                                                         'manifested' => 'Manifested',
                                                         'assigned_for_pickup' => 'In-Transit to Hub',
@@ -675,6 +1066,7 @@
                                                 @endphp
                                                 <span class="shipment-status-badge {{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
                                             </td>
+                                            {{-- Print Label column merged into Action column
                                             <td @class(['text-center', 'd-none' => $hidePrintLabelColumn])>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                     <button class="btn btn-sm btn-outline-primary print-label-btn"
@@ -686,6 +1078,7 @@
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
                                                 @endif
                                             </td>
+                                            --}}
                                             <!-- <td class="text-center">
                                                 @if(isset($shipmentDetails[$invoice->id]) && $shipmentDetails[$invoice->id]['has_label'])
                                                     <a href="#" class="label-link"
@@ -696,7 +1089,8 @@
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
                                                 @endif
                                             </td> -->
-                                            <td @class(['text-center', 'd-none' => $hideIncotermsAndPayColumns])>
+                                            {{-- Pay Now column merged into Action column
+                                            <td class="pay-now-col" @class(['text-center', 'd-none' => $hideIncotermsAndPayColumns])>
                                                 @if($invoice->status === 'cancelled')
                                                     <span class="text-muted" style="font-size:12px;">N/A</span>
                                                 @elseif($invoice->shipperInfo && $invoice->shipperInfo->status && $invoice->shipperInfo->status !== 'draft')
@@ -711,6 +1105,8 @@
                                                     </button>
                                                 @endif
                                             </td>
+                                            --}}
+                                            {{-- Manifest column merged into Action column
                                             <td @class(['text-center', 'manifest-col', 'd-none' => $hideManifestColumn])>
                                                 @php
                                                     $isPacked = $invoice->shipperInfo && $invoice->shipperInfo->status === 'packed';
@@ -724,12 +1120,13 @@
                                                         <i class="ti ti-package-export me-1"></i>Manifest
                                                     </button>
                                                 @elseif($isManifested)
-                                                    <span class="badge bg-success" style="font-size:11px;">Manifested</span>
+                                                    <span class="badge bg-success" style="">Manifested</span>
                                                 @else
                                                     <span class="text-muted" style="font-size:12px;">-</span>
                                                 @endif
                                             </td>
-                                            <td @class(['text-center', 'd-none' => !$showActionColumn])>
+                                            --}}
+                                            <td class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>
                                                 <div class="d-inline-flex align-items-center gap-1">
                                                     @if($rowStatus === 'draft')
                                                         <button type="button"
@@ -757,25 +1154,35 @@
                                                                 class="btn btn-sm btn-outline-success manifest-single-btn d-inline-flex align-items-center justify-content-center"
                                                                 data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
                                                                 data-invoice-id="{{ $invoice->id }}"
-                                                                title="Manifest Shipment"
+                                                                title="Manifest Shipment (Retry)"
                                                                 aria-label="Manifest Shipment"
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-package-export" aria-hidden="true"></i>
                                                         </button>
                                                     @endif
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-outline-danger cancel-btn d-inline-flex align-items-center justify-content-center"
-                                                            data-id="{{ $invoice->id }}"
-                                                            data-invoice="{{ $invoice->invoice_number }}"
-                                                            data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
-                                                            data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}"
-                                                            title="Cancel Shipment"
-                                                            aria-label="Cancel Shipment"
-                                                            style="width:32px;height:32px;padding:0;border-radius:4px;">
-                                                        <i class="ti ti-ban" aria-hidden="true"></i>
-                                                    </button>
+                                                    @if($rowStatus === 'draft')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-danger cancel-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-id="{{ $invoice->id }}"
+                                                                data-invoice="{{ $invoice->invoice_number }}"
+                                                                data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}"
+                                                                data-paid="{{ $invoice->shipperInfo && in_array($invoice->shipperInfo->status, ['draft', 'ready', 'packed', 'manifested'], true) ? '1' : '0' }}"
+                                                                title="Cancel Shipment"
+                                                                aria-label="Cancel Shipment"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-ban" aria-hidden="true"></i>
+                                                        </button>
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                                                                title="Edit"
+                                                                aria-label="Edit"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-edit" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
                                                 </div>
                                             </td>
+                                            {{-- Standalone Cancel column merged into Action column
                                             <td @class(['text-center', 'd-none' => $showActionColumn || $hideCancelColumn || in_array($rowStatus, ['packed', 'manifested', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'], true)])>
                                                 @if($invoice->status === 'cancelled')
                                                     <button class="btn btn-cancel" disabled>
@@ -791,6 +1198,7 @@
                                                     </button>
                                                 @endif
                                             </td>
+                                            --}}
                                         </tr>
                                         @endforeach
                                     </tbody>
@@ -878,11 +1286,11 @@
                         </div>
                     </div>
 
-                    <!-- AWB Number -->
+                    <!-- HAWB Number -->
                     <div class="detail-section">
                         <h6><i class="ti ti-clipboard me-1"></i> AWB & Invoice Info</h6>
                         <div class="detail-row">
-                            <span class="label">AWB Number</span>
+                            <span class="label">HAWB Number</span>
                             <span class="value" id="detailAwbNumber">-</span>
                         </div>
                         <div class="detail-row">
@@ -1087,7 +1495,7 @@
                 <div class="modal-body">
                     <p class="mb-0">Are you sure you want to cancel shipment <strong id="cancelInvoiceRef"></strong>?</p>
                     <p id="cancelRefundInfo" class="mt-2 mb-0" style="font-size:13px;color:#28a745;display:none;">
-                        <i class="ti ti-refund me-1"></i> <strong id="cancelRefundAmount"></strong> will be refunded to your wallet.
+                        <i class="ti ti-refund me-1"></i> If <strong id="cancelRefundAmount"></strong> was deducted, it will be refunded to your wallet.
                     </p>
                     <p class="text-muted mt-2 mb-0" style="font-size:13px;">This action cannot be undone.</p>
                 </div>
@@ -1262,7 +1670,7 @@
                     <div id="printItemsSection">
                         <strong style="font-size:13px;">INVOICE ITEMS</strong>
                         <div class="table-responsive mt-1">
-                            <table class="table table-sm table-bordered mb-0" style="font-size:11px;">
+                            <table class="table table-sm table-bordered mb-0" style="">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Box</th>
@@ -1554,6 +1962,28 @@
                 $('#shipmentCountInfo').text('Showing ' + visibleCount + ' of ' + liveStatusCounts.all + ' shipments');
             }
 
+            // Manifest failed → server reverts a Ready shipment back to Draft.
+            // Reflect that in the row so the UI stays consistent with the database.
+            const revertRowToDraft = function ($row) {
+                if (!$row || !$row.length) return;
+                const invoiceId = $row.data('invoice-id');
+
+                $row.attr('data-status', 'draft').data('status', 'draft');
+
+                $row.find('.shipment-status-badge')
+                    .removeClass()
+                    .addClass('shipment-status-badge badge bg-warning text-dark')
+                    .text('Draft');
+
+                if (invoiceId && shipmentData[invoiceId]) {
+                    shipmentData[invoiceId].status = 'draft';
+                }
+
+                liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
+                liveStatusCounts.draft += 1;
+                refreshStatusCounters();
+            };
+
             function getSelectedRowsByStatus(status) {
                 return $('tr[data-status="' + status + '"] .shipment-checkbox:checked').closest('tr');
             }
@@ -1562,8 +1992,9 @@
                 const $row = $(row);
                 const payAmount = $row.find('.pay-now-btn').data('amount');
                 const cancelAmount = $row.find('.cancel-btn').data('amount');
-                const fallbackText = $row.find('td').eq(5).text();
-                const raw = payAmount || cancelAmount || fallbackText;
+                const fallbackText = $row.find('.amount-col').text();
+                const rowAmount = $row.data('amount');
+                const raw = payAmount || cancelAmount || fallbackText || rowAmount;
                 const numeric = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
                 return isNaN(numeric) ? 0 : numeric;
             }
@@ -1734,8 +2165,8 @@
 
                             $row.attr('data-status', 'packed').data('status', 'packed');
 
-                            const $badge = $row.find('td:eq(8) span');
-                            $badge.removeClass().addClass('badge bg-primary').text('Packed');
+                            const $badge = $row.find('.shipment-status-badge');
+                            $badge.removeClass().addClass('shipment-status-badge badge bg-primary').text('Packed');
 
                             shipmentData[invoiceId].status = 'packed';
                             liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
@@ -1849,7 +2280,7 @@
                 $('#payNowModal').modal('show');
             });
 
-            // Confirm Pay Now
+            // Confirm Pay Now — payment + auto-manifest (manifest moved from Packed button to here)
             $('#confirmPayNowBtn').on('click', function () {
                 const amount = parseFloat($('#payAmount').val());
                 if (!amount || amount <= 0) {
@@ -1862,6 +2293,7 @@
                 }
 
                 const btn = $(this);
+                const originalBtnHtml = btn.html();
                 btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
 
                 const queue = bulkPayQueue.length ? bulkPayQueue : [{
@@ -1872,6 +2304,8 @@
 
                 let index = 0;
                 let successfulPayments = 0;
+                let successfulManifests = 0;
+                let failedManifests = 0;
 
                 const markRowReady = function (item, response) {
                     const $row = $('#invoice-row-' + item.invoice_id);
@@ -1881,7 +2315,7 @@
                     $row.find('.shipment-status-badge')
                         .removeClass()
                         .addClass('shipment-status-badge badge bg-info')
-                        .text('Ready');
+                        .text('Ready for Packing');
 
                     if (shipmentData[item.invoice_id]) {
                         shipmentData[item.invoice_id].status = 'ready';
@@ -1894,15 +2328,76 @@
                     refreshStatusCounters();
                 };
 
+                // Manifest Confirm Payment par hota hai, lekin status Ready hi rehta hai (user requirement).
+                const manifestAfterPayment = function (item, done) {
+                    btn.html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting...');
+                    $.ajax({
+                        url: '{{ url("/customer/manifest") }}',
+                        type: 'POST',
+                        data: {
+                            _token: $('meta[name="csrf-token"]').attr('content'),
+                            shipper_id: item.shipper_id,
+                            target_status: 'ready'
+                        },
+                        success: function (manifestResponse) {
+                            if (manifestResponse && manifestResponse.success) {
+                                successfulManifests++;
+                                // Payment is cut ONLY after the manifest succeeds — update wallet from manifest response.
+                                if (typeof manifestResponse.new_balance !== 'undefined' && manifestResponse.new_balance !== null) {
+                                    walletBalance = Number(manifestResponse.new_balance);
+                                    $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+                                }
+                                // Status Ready hi rehta hai, row already Ready mark ho chuki hai.
+                            } else {
+                                failedManifests++;
+                                // Manifest failed — server reverts the shipment back to Draft, reflect it in the row.
+                                if ($('#invoice-row-' + item.invoice_id).data('status') === 'ready') {
+                                    revertRowToDraft($('#invoice-row-' + item.invoice_id));
+                                }
+                                showAlert('danger', (manifestResponse && manifestResponse.message) || 'Manifest failed. No payment was deducted from your wallet. The shipment has been moved back to Draft.');
+                            }
+                            done();
+                        },
+                        error: function (xhr) {
+                            failedManifests++;
+                            // Manifest failed — server reverts the shipment back to Draft, reflect it in the row.
+                            if ($('#invoice-row-' + item.invoice_id).data('status') === 'ready') {
+                                revertRowToDraft($('#invoice-row-' + item.invoice_id));
+                            }
+                            if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
+                                showAddressErrorFallbackModal(xhr.responseJSON);
+                            } else {
+                                let msg = 'Manifest failed. No payment was deducted from your wallet. The shipment has been moved back to Draft.';
+                                if (xhr.responseJSON && xhr.responseJSON.message) {
+                                    msg += ' ' + xhr.responseJSON.message;
+                                }
+                                showAlert('danger', msg);
+                            }
+                            done();
+                        }
+                    });
+                };
+
                 const processNext = function () {
                     if (index >= queue.length) {
                         $('#payNowModal').modal('hide');
-                        btn.prop('disabled', false).text('Pay Now');
+                        btn.prop('disabled', false).html(originalBtnHtml);
 
-                        if (!successfulPayments) return;
+                        // Never show the "Manifest Successful!" popup when nothing was actually manifested.
+                        if (!successfulManifests) return;
 
                         $('#paymentSuccessPopup').remove();
-                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ti-circle-check fs-48" style="color:#28a745;"></i></div><h5 class="fw-bold mb-1">Payment Successful!</h5><p class="text-muted mb-3">' + successfulPayments + ' shipment(s) moved to Ready.<br>New wallet balance: INR ' + number_format(walletBalance, 2) + '</p><button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
+                        const allSucceeded = failedManifests === 0;
+                        const popupTitle = allSucceeded ? 'Manifest Successful!' : 'Manifest Partially Successful';
+                        const popupIcon = allSucceeded ? 'ti-circle-check' : 'ti-alert-triangle';
+                        const popupColor = allSucceeded ? '#28a745' : '#ffc107';
+                        const popupBtnClass = allSucceeded ? 'btn-success' : 'btn-warning';
+                        let resultText = successfulManifests + ' shipment(s) manifested successfully';
+                        if (failedManifests) {
+                            resultText += '.<br>' + failedManifests + ' shipment(s) failed to manifest and were moved back to Draft. No payment was deducted for them.';
+                        }
+                        resultText += '.<br>Payment was deducted from your wallet only after the manifest succeeded.<br>New wallet balance: INR ' + number_format(walletBalance, 2);
+                        const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ' + popupIcon + ' fs-48" style="color:' + popupColor + ';"></i></div><h5 class="fw-bold mb-1">' + popupTitle + '</h5><p class="text-muted mb-3">' + resultText + '</p><button type="button" class="btn ' + popupBtnClass + ' px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
                         $('body').append(popupHtml);
                         const popupElement = document.getElementById('paymentSuccessPopup');
                         const successPopup = new bootstrap.Modal(popupElement);
@@ -1929,10 +2424,11 @@
                             if (response.success) {
                                 successfulPayments++;
                                 markRowReady(item, response);
+                                manifestAfterPayment(item, processNext);
                             } else {
                                 showAlert('danger', response.message || 'Payment failed for one shipment.');
+                                processNext();
                             }
-                            processNext();
                         },
                         error: function (xhr) {
                             let msg = 'Error processing payment.';
@@ -2003,23 +2499,35 @@
                             const $row = $('#invoice-row-' + invoiceId);
                             $row.attr('data-status', 'manifested');
                             // Update status badge
-                            const $badge = $row.find('td:eq(8) span');
-                            $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
-                            // Update manifest column
-                            const $manifestCol = $row.find('.manifest-col');
-                            $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
+                            const $badge = $row.find('.shipment-status-badge');
+                            $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                            // Remove Manifest + Pay Now buttons from the Action column (columns merged into Action)
                             $btn.remove();
-                            // Update Pay Now column
-                            const $payCol = $row.find('td:eq(10)');
-                            $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                            $row.find('.pay-now-btn').remove();
 
-                            showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A'));
+                            // Payment is cut ONLY after the manifest succeeds — update wallet from response.
+                            if (typeof response.new_balance !== 'undefined' && response.new_balance !== null) {
+                                walletBalance = Number(response.new_balance);
+                            }
+                            let chargeNote = '';
+                            if (response.amount_charged && Number(response.amount_charged) > 0) {
+                                chargeNote = ' Payment of INR ' + number_format(response.amount_charged, 2) + ' deducted from your wallet.';
+                            }
+                            showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A') + chargeNote);
                         } else {
-                            showAlert('danger', response.message || 'Manifest failed.');
+                            // Manifest failed — server reverts a Ready shipment back to Draft, reflect it in the row.
+                            if ($('#invoice-row-' + invoiceId).data('status') === 'ready') {
+                                revertRowToDraft($('#invoice-row-' + invoiceId));
+                            }
+                            showAlert('danger', response.message || 'Manifest failed. No payment was deducted. The shipment has been moved back to Draft.');
                             $btn.prop('disabled', false).html(originalButtonHtml);
                         }
                     },
                     error: function (xhr) {
+                        // Manifest failed — server reverts a Ready shipment back to Draft, reflect it in the row.
+                        if ($('#invoice-row-' + invoiceId).data('status') === 'ready') {
+                            revertRowToDraft($('#invoice-row-' + invoiceId));
+                        }
                         // Check if this is an address error that can fall back to Ship Global
                         if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
                             showAddressErrorFallbackModal(xhr.responseJSON);
@@ -2072,13 +2580,33 @@
                                 results.success.forEach(function (item) {
                                     const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
                                     $row.attr('data-status', 'manifested');
-                                    const $badge = $row.find('td:eq(8) span');
-                                    $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
-                                    const $manifestCol = $row.find('.manifest-col');
-                                    $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
-                                    const $payCol = $row.find('td:eq(10)');
-                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                                    const $badge = $row.find('.shipment-status-badge');
+                                    $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                                    $row.find('.manifest-single-btn, .pay-now-btn').remove();
                                 });
+                            }
+
+                            // Manifest failures — server reverts Ready shipments back to Draft, reflect in the rows.
+                            if (results.failed && results.failed.length > 0) {
+                                results.failed.forEach(function (f) {
+                                    const $r = $('tr[data-shipper-id="' + f.shipper_id + '"]');
+                                    if ($r.length && $r.data('status') === 'ready') {
+                                        revertRowToDraft($r);
+                                    }
+                                });
+                            }
+                            if (results.address_errors && results.address_errors.length > 0) {
+                                results.address_errors.forEach(function (f) {
+                                    const $r = $('tr[data-shipper-id="' + f.shipper_id + '"]');
+                                    if ($r.length && $r.data('status') === 'ready') {
+                                        revertRowToDraft($r);
+                                    }
+                                });
+                            }
+
+                            // Payment is cut ONLY after the manifest succeeds — update wallet from response.
+                            if (typeof response.new_balance !== 'undefined' && response.new_balance !== null) {
+                                walletBalance = Number(response.new_balance);
                             }
 
                             // Uncheck all
@@ -2210,7 +2738,7 @@
 
                 // If user chose "Cancel & correct the address" — cancel shipment and refund wallet
                 if (selectedOption === 'cancel') {
-                    if (!confirm('Are you sure you want to cancel this shipment? The paid amount will be refunded to your wallet.')) {
+                    if (!confirm('Are you sure you want to cancel this shipment? If a payment was deducted, it will be refunded to your wallet.')) {
                         return;
                     }
                     $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Cancelling...');
@@ -2233,15 +2761,17 @@
                                 var $row = $('tr[data-shipper-id="' + shipperId + '"]');
                                 if ($row.length) {
                                     $row.attr('data-status', 'cancelled');
-                                    var $badge = $row.find('td:eq(8) span');
-                                    $badge.removeClass().addClass('badge bg-danger').text('Cancelled');
-                                    var $manifestCol = $row.find('.manifest-col');
-                                    $manifestCol.html('<span class="badge bg-danger" style="font-size:11px;">Cancelled</span>');
-                                    var $payCol = $row.find('td:eq(10)');
-                                    $payCol.html('<span class="text-muted" style="font-size:12px;">Refunded</span>');
+                                    var $badge = $row.find('.shipment-status-badge');
+                                    $badge.removeClass().addClass('shipment-status-badge badge bg-danger').text('Cancelled');
+                                    $row.find('.manifest-single-btn, .pay-now-btn, .cancel-btn').remove();
                                 }
 
-                                showAlert('success', response.message || 'Shipment cancelled and payment refunded to wallet.');
+                                // If a refund was processed, update wallet balance from the response.
+                                if (typeof response.new_balance !== 'undefined' && response.new_balance !== null) {
+                                    walletBalance = Number(response.new_balance);
+                                }
+
+                                showAlert('success', response.message || 'Shipment cancelled. Any payment deducted will be refunded to your wallet.');
                             } else {
                                 showAlert('danger', response.message || 'Failed to cancel shipment.');
                                 $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i>Confirm & Manifest');
@@ -2276,12 +2806,13 @@
                             var $row = $('tr[data-shipper-id="' + shipperId + '"]');
                             if ($row.length) {
                                 $row.attr('data-status', 'manifested');
-                                var $badge = $row.find('td:eq(8) span');
-                                $badge.removeClass().addClass('badge bg-secondary').text('Manifested');
-                                var $manifestCol = $row.find('.manifest-col');
-                                $manifestCol.html('<span class="badge bg-success" style="font-size:11px;">Manifested</span>');
-                                var $payCol = $row.find('td:eq(10)');
-                                $payCol.html('<span class="text-muted" style="font-size:12px;">Paid</span>');
+                                var $badge = $row.find('.shipment-status-badge');
+                                $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                                $row.find('.manifest-single-btn, .pay-now-btn').remove();
+                            }
+                            // Payment is cut ONLY after the manifest succeeds — update wallet from response.
+                            if (typeof response.new_balance !== 'undefined' && response.new_balance !== null) {
+                                walletBalance = Number(response.new_balance);
                             }
                             // Hide modal
                             var modalEl = document.getElementById('addressErrorFallbackModal');
@@ -2376,7 +2907,7 @@
 
                 const queue = rows.map(function () {
                     const $row = $(this);
-                    return $row.find('.cancel-btn').data('id');
+                    return $row.find('.cancel-btn').data('id') || $row.data('invoice-id');
                 }).get();
 
                 let index = 0;
@@ -2460,8 +2991,8 @@
                                 const $row = $('tr[data-shipper-id="' + item.shipper_id + '"]');
                                 if ($row.length) {
                                     $row.attr('data-status', 'packed').data('status', 'packed');
-                                    const $badge = $row.find('td:eq(8) span');
-                                    $badge.removeClass().addClass('badge bg-primary').text('Packed');
+                                    const $badge = $row.find('.shipment-status-badge');
+                                    $badge.removeClass().addClass('shipment-status-badge badge bg-primary').text('Packed');
                                     if (shipmentData[item.invoice_id]) {
                                         shipmentData[item.invoice_id].status = 'packed';
                                     }
@@ -2498,7 +3029,7 @@
 
                 const queue = rows.map(function () {
                     const $row = $(this);
-                    return $row.find('.cancel-btn').data('id');
+                    return $row.find('.cancel-btn').data('id') || $row.data('invoice-id');
                 }).get();
 
                 let index = 0;
@@ -2558,7 +3089,7 @@
                 if (!confirmed) return;
 
                 const queue = rows.map(function () {
-                    return $(this).find('.cancel-btn').data('id');
+                    return $(this).find('.cancel-btn').data('id') || $(this).data('invoice-id');
                 }).get().filter(Boolean);
 
                 let index = 0;
@@ -2657,7 +3188,7 @@
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                 '<strong>INVOICE ITEMS</strong>' +
-                '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;">' +
+                '<table style="width:100%;border-collapse:collapse;margin-top:8px;">' +
                 '<thead><tr><th style="border:1px solid #333;padding:4px;">Box</th><th style="border:1px solid #333;padding:4px;">Description</th><th style="border:1px solid #333;padding:4px;">HS Code</th><th style="border:1px solid #333;padding:4px;">Qty</th><th style="border:1px solid #333;padding:4px;">Rate</th><th style="border:1px solid #333;padding:4px;">IGST(%)</th><th style="border:1px solid #333;padding:4px;">IGST</th><th style="border:1px solid #333;padding:4px;">Amount</th></tr></thead>' +
                 '<tbody>' + itemsHtml + '</tbody>' +
                 '</table>' +

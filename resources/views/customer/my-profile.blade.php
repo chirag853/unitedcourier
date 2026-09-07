@@ -341,9 +341,11 @@
                                     <span class="badge {{ $kycStatusInfo['class'] }} badge-status">
                                         <i class="ti ti-shield-check me-1"></i>KYC: {{ $kycStatusInfo['label'] }}
                                     </span>
+                                    @if(! $isCourierOrAggregator)
                                     <span class="badge {{ $csbStatusInfo['class'] }} badge-status">
                                         <i class="ti ti-file-text me-1"></i>CSB: {{ $csbStatusInfo['label'] }}
                                     </span>
+                                    @endif
                                     @if($customer->email_verified)
                                         <span class="badge bg-success badge-status">
                                             <i class="ti ti-circle-check me-1"></i>Email Verified
@@ -381,6 +383,7 @@
                     </div>
 
                     <!-- CSB Status -->
+                    @if(! $isCourierOrAggregator)
                     <div class="col-12 col-sm-6 col-lg-3">
                         <div class="card summary-card shadow-sm h-100">
                             <div class="card-body p-3 d-flex align-items-center gap-3">
@@ -394,6 +397,7 @@
                             </div>
                         </div>
                     </div>
+                    @endif
 
                     <!-- Member Since -->
                     <div class="col-12 col-sm-6 col-lg-3">
@@ -443,9 +447,11 @@
                                 <a href="{{ route('customer.kyc.personal') }}" class="btn btn-light">
                                     <i class="ti ti-user me-1"></i> Personal KYC
                                 </a>
+                                @if(! $isCourierOrAggregator)
                                 <a href="{{ route('customer.csb5-form') }}" class="btn btn-light">
                                     <i class="ti ti-building me-1"></i> Business KYC
                                 </a>
+                                @endif
                             </div>
                         </div>
 
@@ -721,12 +727,14 @@
                                         @endif
                                     </span>
                                 </div>
+                                @if(! $isCourierOrAggregator)
                                 <div class="detail-row">
                                     <span class="detail-label"><i class="ti ti-file-text"></i>CSB Status</span>
                                     <span class="detail-value">
                                         <span class="badge {{ $csbStatusInfo['class'] }} badge-status">{{ $csbStatusInfo['label'] }}</span>
                                     </span>
                                 </div>
+                                @endif
                                 <div class="detail-row">
                                     <span class="detail-label"><i class="ti ti-shield-check"></i>KYC Status</span>
                                     <span class="detail-value">

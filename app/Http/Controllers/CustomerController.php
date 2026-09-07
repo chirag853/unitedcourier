@@ -5667,7 +5667,7 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_amount', 'surcharge_total', 'total_price');
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_amount', 'surcharge_total', 'total_price', 'updated_at');
                 },
                 'shipperInfo.shipmentTracking' => function ($q) {
                     $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
@@ -5702,6 +5702,32 @@ class CustomerController extends Controller
         // "Received" (hub arrival) keeps its own count and tab.
         $statusCounts['assigned_for_pickup'] += ($statusCounts['confirm_pickup'] ?? 0);
         unset($statusCounts['confirm_pickup']);
+
+        // Build a lookup of delivery_destination name to ISO country code so
+        // the draft view can show the destination country ISO next to the
+        // consignee pin code without an N+1 query per row.
+        $destinationNames = $invoices->getCollection()
+            ->pluck('shipperInfo.consigneeInfo.delivery_destination')
+            ->filter()
+            ->unique()
+            ->values();
+        $destinationIsoMap = Destination::query()
+            ->whereIn('name', $destinationNames)
+            ->get(['name', 'country_code'])
+            ->mapWithKeys(function ($destination) {
+                return [$destination->name => strtoupper((string) ($destination->country_code ?? ''))];
+            })
+            ->all();
+        // Fallback mapping for legacy or unmapped destination names so the
+        // ISO is never blank in the shipments table.
+        $fallbackIsoMap = [
+            'US- United State of America' => 'US',
+            'India' => 'IN',
+            'UK - United Kingdom' => 'GB',
+            'China' => 'CN',
+            'Russia' => 'RU',
+            'Srilanka' => 'LK',
+        ];
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
         $shipmentDetails = $invoices->getCollection()->mapWithKeys(function ($invoice) {
@@ -5822,7 +5848,7 @@ class CustomerController extends Controller
             ]);
         });
 
-        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts'));
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap'));
     }
 
     /**
@@ -6030,6 +6056,10 @@ class CustomerController extends Controller
         }
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
 
+        // Courier / Aggregator customers do not go through the CSB-V (Business KYC)
+        // flow, so all CSB references are hidden for them in the profile.
+        $isCourierOrAggregator = $this->isCourierOrAggregator($customer);
+
         // Mask the Aadhar number for display (show only last 4 digits)
         $maskedAadhar = null;
         $aadharSource = null;
@@ -6091,6 +6121,7 @@ class CustomerController extends Controller
             'walletBalance',
             'businessCategory',
             'userType',
+            'isCourierOrAggregator',
             'maskedAadhar',
             'aadharSource',
             'aadharVerified',
@@ -6166,11 +6197,11 @@ class CustomerController extends Controller
                 ], 422);
             }
 
-            // Check if already paid (status is ready)
+            // Check if already moved to ready
             if ($shipper->status === 'ready') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This shipment has already been paid for.',
+                    'message' => 'This shipment has already been moved to Ready.',
                 ]);
             }
 
@@ -6192,26 +6223,13 @@ class CustomerController extends Controller
                 ]);
             }
 
-            // Deduct amount from wallet and update shipper status in a transaction
-            DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
-                $wallet->decrement('balance', $amount);
-                $wallet->refresh();
-                $shipper->status = 'ready';
-                $shipper->save();
+            // Payment is NOT deducted here anymore. The shipment charge is cut only AFTER
+            // the manifest (carrier booking) succeeds. Here we only move the shipment from
+            // draft to ready so that it can be manifested.
+            $shipper->status = 'ready';
+            $shipper->save();
 
-                // Log the wallet debit (shipment charge)
-                WalletTransaction::create([
-                    'customer_id' => $customerId,
-                    'type' => 'debit',
-                    'reason' => 'shipment_charge',
-                    'amount' => $amount,
-                    'balance_after' => $wallet->balance,
-                    'reference' => $shipper->awb_number,
-                    'description' => 'Payment of ₹'.number_format($amount, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id),
-                ]);
-            });
-
-            // Create tracking record for payment confirmed (ready status)
+            // Create tracking record for ready status
             $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
             Tracking::create([
                 'awb_number' => $shipper->awb_number,
@@ -6222,23 +6240,23 @@ class CustomerController extends Controller
                 'status' => 'ready',
             ]);
 
-            // Log the ready status change (payment confirmed)
+            // Log the ready status change. Payment is cut only after manifest succeeds.
             ShipmentLog::logStatus(
                 $shipper->id,
                 $shipper->awb_number,
                 'ready',
                 'draft',
-                'Payment confirmed. Amount ₹'.number_format($amount, 2).' deducted from wallet.',
+                'Shipment moved to Ready. Payment of ₹'.number_format($amount, 2).' will be deducted from the wallet only after the manifest succeeds.',
                 $customerId,
                 'customer'
             );
 
-            // Refresh wallet to get new balance
+            // Refresh wallet to get current balance
             $wallet->refresh();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payment successful! Shipment status updated to Ready.',
+                'message' => 'Shipment moved to Ready. Payment will be deducted only after the manifest succeeds.',
                 'new_balance' => (float) $wallet->balance,
             ]);
 
@@ -6295,16 +6313,20 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            // Determine whether this shipment has a charge to refund back to the wallet.
-            // Draft, ready and packed shipments all carry a shipping amount that should be returned.
-            $wasPaid = in_array($shipper->status, ['draft', 'ready', 'packed', 'manifested']);
+            // Determine whether this shipment has actually been charged. Under the new flow
+            // payment is cut only after a successful manifest, so a ready/packed shipment
+            // may still be unpaid — only refund when a shipment_charge debit really exists.
+            $paidCharge = WalletTransaction::where('customer_id', $customerId)
+                ->where('type', 'debit')
+                ->where('reason', 'shipment_charge')
+                ->where('reference', $shipper->awb_number)
+                ->first();
+            $wasPaid = $paidCharge !== null;
             $previousStatus = $shipper->status;
-            $refundAmount = $shipper->serviceRate
-                ? $shipper->serviceRate->inclusive_total
-                : round((float) $invoice->total_amount, 2);
+            $refundAmount = $paidCharge ? (float) $paidCharge->amount : 0;
 
             // Update status to cancelled and refund wallet when a charge exists.
-            DB::transaction(function () use ($invoice, $shipper, $previousStatus, $customerId, &$refundAmount) {
+            DB::transaction(function () use ($invoice, $shipper, $previousStatus, $customerId, $refundAmount) {
                 $invoice->update(['status' => 'cancelled']);
                 $shipper->update(['status' => 'cancelled']);
 
@@ -6331,10 +6353,22 @@ class CustomerController extends Controller
                 );
 
                 if ($refundAmount > 0) {
-                    // A cancelled draft/ready/packed shipment should return the shipping amount to the wallet.
+                    // Only refund the actual amount that was charged for this shipment.
                     $wallet = Wallet::where('customer_id', $customerId)->first();
                     if ($wallet) {
                         $wallet->increment('balance', $refundAmount);
+                        $wallet->refresh();
+
+                        // Log the refund transaction
+                        WalletTransaction::create([
+                            'customer_id' => $customerId,
+                            'type' => 'credit',
+                            'reason' => 'refund',
+                            'amount' => $refundAmount,
+                            'balance_after' => $wallet->balance,
+                            'reference' => $shipper->awb_number,
+                            'description' => 'Refund of ₹'.number_format($refundAmount, 2).' for cancelled shipment '.($shipper->awb_number ?: '#'.$shipper->id),
+                        ]);
                     }
                 }
             });
@@ -6641,8 +6675,136 @@ class CustomerController extends Controller
     }
 
     /**
+     * Compute the payable amount for a shipment and check whether it has already been charged.
+     * Payment is now cut ONLY after a successful manifest booking, so this is used to
+     * pre-validate that the wallet can cover the charge before calling the carrier API.
+     *
+     * @return array{amount: float, already_charged: bool, balance: float, can_manifest: bool, message: string|null}
+     */
+    private function getShipmentChargeInfo(ShipperInfo $shipper, int $customerId): array
+    {
+        $amount = $shipper->total_price !== null && (float) $shipper->total_price > 0
+            ? (float) $shipper->total_price
+            : ($shipper->serviceRate
+                ? (float) $shipper->serviceRate->inclusive_total
+                : round((float) ($shipper->invoices()->first()->total_amount ?? 0), 2));
+
+        $amount = round((float) $amount, 2);
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        $balance = $wallet ? (float) $wallet->balance : 0;
+
+        if ($amount <= 0) {
+            // Free shipment — nothing to charge, still manifestable.
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => $balance,
+                'can_manifest' => true,
+                'message' => null,
+            ];
+        }
+
+        if (! $wallet) {
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => 0,
+                'can_manifest' => false,
+                'message' => 'Wallet not found. Please contact support.',
+            ];
+        }
+
+        if ($wallet->balance < $amount) {
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => $balance,
+                'can_manifest' => false,
+                'message' => 'Insufficient wallet balance to manifest this shipment. Current balance is ₹'.number_format($wallet->balance, 2).', required ₹'.number_format($amount, 2).'.',
+            ];
+        }
+
+        return [
+            'amount' => $amount,
+            'already_charged' => false,
+            'balance' => $balance,
+            'can_manifest' => true,
+            'message' => null,
+        ];
+    }
+
+    /**
+     * Deduct the shipment charge from the wallet.
+     * Must be called AFTER a successful carrier booking so that payment is cut only when
+     * the manifest succeeds.
+     *
+     * @return array{charged: bool, already_charged: bool, amount: float, new_balance: float, message: string|null}
+     */
+    private function chargeShipmentIfNotPaid(ShipperInfo $shipper, int $customerId): array
+    {
+        $info = $this->getShipmentChargeInfo($shipper, $customerId);
+        $amount = $info['amount'];
+        $balance = $info['balance'];
+
+        if ($amount <= 0) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => 0,
+                'new_balance' => $balance,
+                'message' => null,
+            ];
+        }
+
+        if (! $info['can_manifest']) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => $amount,
+                'new_balance' => $balance,
+                'message' => $info['message'],
+            ];
+        }
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if (! $wallet) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => $amount,
+                'new_balance' => 0,
+                'message' => 'Wallet not found. Please contact support.',
+            ];
+        }
+
+        DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
+            $wallet->decrement('balance', $amount);
+            $wallet->refresh();
+
+            WalletTransaction::create([
+                'customer_id' => $customerId,
+                'type' => 'debit',
+                'reason' => 'shipment_charge',
+                'amount' => $amount,
+                'balance_after' => $wallet->balance,
+                'reference' => $shipper->awb_number,
+                'description' => 'Payment of ₹'.number_format($amount, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id),
+            ]);
+        });
+
+        return [
+            'charged' => true,
+            'already_charged' => false,
+            'amount' => $amount,
+            'new_balance' => (float) $wallet->refresh()->balance,
+            'message' => null,
+        ];
+    }
+
+    /**
      * Manifest a single shipment - check network (UPS vs Ship Global) and call appropriate API.
-     * Only works for shipments in 'packed' status.
+     * Works for shipments in 'ready' (after Confirm Payment) or 'packed' status.
      */
     public function manifestShipment(Request $request)
     {
@@ -6662,8 +6824,69 @@ class CustomerController extends Controller
                 return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
             }
 
-            if ($shipper->status !== 'packed') {
-                return response()->json(['success' => false, 'message' => 'Shipment must be in Packed status to manifest.'], 400);
+            if (! in_array($shipper->status, ['ready', 'packed'])) {
+                return response()->json(['success' => false, 'message' => 'Shipment must be in Ready or Packed status to manifest.'], 400);
+            }
+
+            $previousStatus = $shipper->status;
+            // Confirm Payment se manifest hone par status Ready rakha jata hai (target_status=ready).
+            $targetStatus = $request->input('target_status') === 'ready' ? 'ready' : 'manifested';
+
+            // Agar carrier booking pehle ho chuki hai (Confirm Payment par), to dobara API call mat karo.
+            // Sirf status aage badhao taaki duplicate AWB / double charge na ho.
+            if ($targetStatus === 'manifested') {
+                $existingTracking = ShipmentTracking::where('shipper_id', $shipper->id)
+                    ->whereNotNull('shipment_identification_number')
+                    ->first();
+                if ($existingTracking && ! empty($existingTracking->shipment_identification_number)) {
+                    $createShipmentExisting = CreateShipment::where('shipper_id', $shipper->id)->first();
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+                    Tracking::firstOrCreate(
+                        ['shipper_id' => $shipper->id, 'status' => 'manifested'],
+                        [
+                            'awb_number' => $shipper->awb_number,
+                            'shipping_id' => $createShipmentExisting ? $createShipmentExisting->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                        ]
+                    );
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        'manifested',
+                        $previousStatus,
+                        'Status moved to Manifested (carrier booking already done on payment). Tracking: '.$existingTracking->shipment_identification_number,
+                        $customerId,
+                        'customer'
+                    );
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Already manifested on payment. Status moved to Manifested.',
+                        'tracking_number' => $existingTracking->shipment_identification_number,
+                        'shipper_id' => $shipperId,
+                        'already_manifested' => true,
+                    ]);
+                }
+            }
+
+            // Ready flow me Primus ke liye custom label chahiye hota hai (jo normally Packed me banta hai).
+            // Yahan auto-label bana kar store kar dete hain taaki manifest fail na ho, status change nahi hota.
+            if ($targetStatus === 'ready' && empty($shipper->custom_label)) {
+                try {
+                    [$autoLabelPath, $autoLabelUrl] = $this->storeCustomLabelFile(
+                        $shipper,
+                        '<div style="font-family:Arial,sans-serif;padding:16px;"><h2>Shipping Label (Auto on payment)</h2><p>AWB: '.htmlspecialchars((string) ($shipper->awb_number ?: $shipper->id), ENT_QUOTES, 'UTF-8').'</p></div>'
+                    );
+                    $shipper->custom_label = $autoLabelUrl;
+                    $shipper->save();
+                } catch (\Throwable $e) {
+                    \Log::warning('Auto custom label failed before manifest (ready flow).', [
+                        'shipper_id' => $shipper->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             // Determine the network from the shipping method's CourierService
@@ -6681,6 +6904,8 @@ class CustomerController extends Controller
             if ($apiProvider === 'shipuniversal') {
                 $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
                 if (! $shipUniversalResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
                         'message' => 'ShipUniversal API Failed: '.($shipUniversalResult['message'] ?? 'Unknown error'),
@@ -6694,9 +6919,13 @@ class CustomerController extends Controller
                 $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
 
                 if (empty($trackingNumber)) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'ShipUniversal created no usable AWB number. The shipment remains packed.',
+                        'message' => $previousStatus === 'ready'
+                            ? 'ShipUniversal created no usable AWB number. The shipment has been moved back to Draft.'
+                            : 'ShipUniversal created no usable AWB number. The shipment remains in '.$previousStatus.' status.',
                         'shipuniversal_response' => $apiResponse,
                         'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                     ], 502);
@@ -6709,10 +6938,12 @@ class CustomerController extends Controller
                         $apiResponse,
                         $trackingNumber,
                         $labelUrl,
-                        false
+                        false,
+                        $targetStatus
                     );
                 } catch (\Exception $e) {
                     \Log::error('Failed to store ShipUniversal manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json([
                         'success' => false,
@@ -6720,23 +6951,35 @@ class CustomerController extends Controller
                     ], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via ShipUniversal!',
+                    'message' => 'Shipment manifested successfully via ShipUniversal!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
                     'network' => 'ShipUniversal',
                     'shipuniversal_response' => $apiResponse,
                     'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
             } elseif ($apiProvider === 'primus') {
                 $primusResult = app(PrimusShipmentService::class)->manifest(
                     $shipper,
-                    (int) $customerId
+                    (int) $customerId,
+                    false,
+                    $targetStatus
                 );
 
                 if (! $primusResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Primus API Failed: '.($primusResult['message'] ?? 'Unknown error'),
@@ -6744,14 +6987,22 @@ class CustomerController extends Controller
                     ], 422);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via Primus!',
+                    'message' => 'Shipment manifested successfully via Primus!'.$chargeNote,
                     'tracking_number' => $primusResult['tracking_number'],
                     'label_url' => $primusResult['label'] ?? null,
                     'shipper_id' => $shipperId,
                     'network' => 'Primus',
                     'request_payload' => $primusResult['payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
                 // Priority 0: Overseas Logistic for UNITED CANADA DDP /
                 //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
@@ -6759,6 +7010,7 @@ class CustomerController extends Controller
                 // Call Overseas Logistic API
                 $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
                 if (! $overseasResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
                     $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown error');
 
                     return response()->json([
@@ -6795,26 +7047,26 @@ class CustomerController extends Controller
                         ]
                     );
 
-                    // Update shipper status to manifested
-                    $shipper->status = 'manifested';
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
                     $shipper->save();
 
-                    // Create tracking record for manifested status
+                    // Create tracking record for target status
                     Tracking::create([
                         'awb_number' => $shipper->awb_number,
                         'shipper_id' => $shipper->id,
                         'shipping_id' => $createShipment ? $createShipment->id : null,
                         'uwc_id' => $shipper->awb_number,
-                        'title' => Tracking::getTitleForStatus('manifested'),
-                        'status' => 'manifested',
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
                     ]);
 
                     // Log the manifested status change
                     ShipmentLog::logStatus(
                         $shipper->id,
                         $shipper->awb_number,
-                        'manifested',
-                        'packed',
+                        $targetStatus,
+                        $previousStatus,
                         'Shipment manifested via Overseas Logistic. Tracking: '.($trackingNumber ?? 'N/A'),
                         $customerId,
                         'customer'
@@ -6823,25 +7075,36 @@ class CustomerController extends Controller
                     \Log::info('Shipment manifested via Overseas Logistic: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Overseas Logistic manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via Overseas Logistic!',
+                    'message' => 'Shipment manifested successfully via Overseas Logistic!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
                     'network' => 'Overseas Logistic',
                     'overseas_response' => $apiResponse,
                     'request_payload' => $overseasResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
             } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
                 // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
                 if (! $postShippingResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
                         'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
@@ -6857,6 +7120,8 @@ class CustomerController extends Controller
                 // Call PostShipping API
                 $postShippingResult = $this->callPostShippingApiFromDb($shipper);
                 if (! $postShippingResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
                         'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
@@ -6891,36 +7156,45 @@ class CustomerController extends Controller
                         ]
                     );
 
-                    // Update shipper status to manifested
-                    $shipper->status = 'manifested';
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
                     $shipper->save();
 
-                    // Create tracking record for manifested status
+                    // Create tracking record for target status
                     Tracking::create([
                         'awb_number' => $shipper->awb_number,
                         'shipper_id' => $shipper->id,
                         'shipping_id' => $createShipment ? $createShipment->id : null,
                         'uwc_id' => $shipper->awb_number,
-                        'title' => Tracking::getTitleForStatus('manifested'),
-                        'status' => 'manifested',
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
                     ]);
 
                     \Log::info('Shipment manifested via PostShipping: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for PostShipping manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via PostShipping!',
+                    'message' => 'Shipment manifested successfully via PostShipping!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
                     'network' => 'PostShipping',
                     'postshipping_response' => $apiResponse,
                     'request_payload' => $postShippingResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
             } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                 // Call Flying Tigers API (UNITED ECO POST)
@@ -6928,6 +7202,10 @@ class CustomerController extends Controller
                 if (! $flyingTigersResult['success']) {
                     // Check if this is an address error → return fallback info for dropdown option
                     if (! empty($flyingTigersResult['is_address_error'])) {
+                        // The booking failed. If this shipment was in Ready (Confirm Payment flow),
+                        // take it back to Draft immediately — the customer can still pick the
+                        // UNITED CLASSIC fallback or cancel from the modal.
+                        $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
                         $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
 
                         return response()->json([
@@ -6944,6 +7222,8 @@ class CustomerController extends Controller
                             'total_weight' => $fallbackInfo['total_weight'] ?? 0,
                         ], 422);
                     }
+
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json([
                         'success' => false,
@@ -6978,40 +7258,51 @@ class CustomerController extends Controller
                         ]
                     );
 
-                    // Update shipper status to manifested
-                    $shipper->status = 'manifested';
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
                     $shipper->save();
 
-                    // Create tracking record for manifested status
+                    // Create tracking record for target status
                     Tracking::create([
                         'awb_number' => $shipper->awb_number,
                         'shipper_id' => $shipper->id,
                         'shipping_id' => $createShipment ? $createShipment->id : null,
                         'uwc_id' => $shipper->awb_number,
-                        'title' => Tracking::getTitleForStatus('manifested'),
-                        'status' => 'manifested',
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
                     ]);
 
                     \Log::info('Shipment manifested via Flying Tigers: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Flying Tigers manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via Flying Tigers!',
+                    'message' => 'Shipment manifested successfully via Flying Tigers!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
                     'network' => 'Flying Tigers',
                     'flyingtigers_response' => $apiResponse,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
             } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                 // Call Ship Global API
                 $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
                 if (! $shipGlobalResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Ship Global API Failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
@@ -7068,40 +7359,51 @@ class CustomerController extends Controller
                         ]
                     );
 
-                    // Update shipper status to manifested
-                    $shipper->status = 'manifested';
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
                     $shipper->save();
 
-                    // Create tracking record for manifested status
+                    // Create tracking record for target status
                     Tracking::create([
                         'awb_number' => $shipper->awb_number,
                         'shipper_id' => $shipper->id,
                         'shipping_id' => $createShipment ? $createShipment->id : null,
                         'uwc_id' => $shipper->awb_number,
-                        'title' => Tracking::getTitleForStatus('manifested'),
-                        'status' => 'manifested',
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
                     ]);
 
                     \Log::info('Shipment manifested via Ship Global: '.($trackingNumber ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Ship Global manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via Ship Global!',
+                    'message' => 'Shipment manifested successfully via Ship Global!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'shipper_id' => $shipperId,
                     'network' => 'Ship Global',
                     'ship_global_response' => $apiResponse,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
 
             } else {
                 // Default: Call UPS Ship API
                 $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
                 if (! $payloadResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+
                     return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
                 }
                 $upsPayload = $payloadResult['payload'];
@@ -7109,6 +7411,7 @@ class CustomerController extends Controller
                 $upsResult = $this->callUpsShipApiInternal($upsPayload);
 
                 if (! $upsResult['success']) {
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
                     $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
 
                     return response()->json([
@@ -7151,26 +7454,26 @@ class CustomerController extends Controller
                         ]
                     );
 
-                    // Update shipper status to manifested
-                    $shipper->status = 'manifested';
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
                     $shipper->save();
 
-                    // Create tracking record for manifested status
+                    // Create tracking record for target status
                     Tracking::create([
                         'awb_number' => $shipper->awb_number,
                         'shipper_id' => $shipper->id,
                         'shipping_id' => $createShipment ? $createShipment->id : null,
                         'uwc_id' => $shipper->awb_number,
-                        'title' => Tracking::getTitleForStatus('manifested'),
-                        'status' => 'manifested',
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
                     ]);
 
                     // Log the manifested status change
                     ShipmentLog::logStatus(
                         $shipper->id,
                         $shipper->awb_number,
-                        'manifested',
-                        'packed',
+                        $targetStatus,
+                        $previousStatus,
                         'Shipment manifested via UPS. Tracking: '.($trackingNumber ?? 'N/A'),
                         $customerId,
                         'customer'
@@ -7179,19 +7482,32 @@ class CustomerController extends Controller
                     \Log::info('Shipment manifested via UPS: '.($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for manifest: '.$e->getMessage());
+                    $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
 
                     return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
                 }
 
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment manifested successfully via UPS!',
+                    'message' => 'Shipment manifested successfully via UPS!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'shipper_id' => $shipperId,
                     'network' => 'UPS',
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
                 ]);
             }
         } catch (\Exception $e) {
+            if (isset($shipper, $previousStatus)) {
+                $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
+            }
+
             return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
         }
     }
@@ -7231,11 +7547,13 @@ class CustomerController extends Controller
                         continue;
                     }
 
-                    if ($shipper->status !== 'packed') {
-                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Not in Packed status'];
+                    if (! in_array($shipper->status, ['ready', 'packed'])) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Not in Ready or Packed status'];
 
                         continue;
                     }
+
+                    $bulkPreviousStatus = $shipper->status;
 
                     // Determine the network from the shipping method's CourierService
                     $shippingMethod = $this->resolveShippingMethod($shipper);
@@ -7251,6 +7569,7 @@ class CustomerController extends Controller
                     if ($apiProvider === 'shipuniversal') {
                         $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
                         if (! $shipUniversalResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'ShipUniversal API error: '.($shipUniversalResult['message'] ?? 'Unknown'),
@@ -7266,9 +7585,12 @@ class CustomerController extends Controller
                         $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
 
                         if (empty($trackingNumber)) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
-                                'message' => 'ShipUniversal created no usable AWB number. The shipment remains packed.',
+                                'message' => $bulkPreviousStatus === 'ready'
+                                    ? 'ShipUniversal created no usable AWB number. The shipment has been moved back to Draft.'
+                                    : 'ShipUniversal created no usable AWB number. The shipment remains in '.$shipper->status.' status.',
                                 'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                                 'shipuniversal_response' => $apiResponse,
                             ];
@@ -7285,12 +7607,17 @@ class CustomerController extends Controller
                             true
                         );
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
                             'network' => 'ShipUniversal',
                             'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via ShipUniversal.');
@@ -7302,6 +7629,7 @@ class CustomerController extends Controller
                         );
 
                         if (! $primusResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'Primus API error: '.($primusResult['message'] ?? 'Unknown'),
@@ -7311,12 +7639,17 @@ class CustomerController extends Controller
                             continue;
                         }
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $primusResult['tracking_number'],
                             'label_url' => $primusResult['label'] ?? null,
                             'network' => 'Primus',
                             'request_payload' => $primusResult['payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Primus.');
@@ -7327,6 +7660,7 @@ class CustomerController extends Controller
                         $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
 
                         if (! $overseasResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown');
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
@@ -7376,17 +7710,22 @@ class CustomerController extends Controller
                             'status' => 'manifested',
                         ]);
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
                             'network' => 'Overseas Logistic',
                             'request_payload' => $overseasResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Overseas Logistic.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Overseas Logistic (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Shipment manifested via Overseas Logistic (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
                         // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
@@ -7394,6 +7733,7 @@ class CustomerController extends Controller
                         $postShippingResult = $this->callPostShippingApiFromDb($shipper);
 
                         if (! $postShippingResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'PostShipping API error: '.($postShippingResult['message'] ?? 'Unknown'),
@@ -7442,17 +7782,22 @@ class CustomerController extends Controller
                             'status' => 'manifested',
                         ]);
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
                             'network' => 'PostShipping',
                             'request_payload' => $postShippingResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via PostShipping.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via PostShipping (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Shipment manifested via PostShipping (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
                         // Call Flying Tigers API (UNITED ECO POST)
@@ -7461,6 +7806,10 @@ class CustomerController extends Controller
                         if (! $flyingTigersResult['success']) {
                             // Check if this is an address error → return fallback info for dropdown option
                             if (! empty($flyingTigersResult['is_address_error'])) {
+                                // The booking failed. If this shipment was in Ready (Confirm Payment flow),
+                                // take it back to Draft immediately — the customer can still pick the
+                                // UNITED CLASSIC fallback or cancel.
+                                $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                                 $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId);
                                 $results['address_errors'][] = [
                                     'shipper_id' => $shipperId,
@@ -7478,6 +7827,7 @@ class CustomerController extends Controller
 
                                 continue;
                             }
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'Flying Tigers API error: '.($flyingTigersResult['message'] ?? 'Unknown'),
@@ -7524,22 +7874,28 @@ class CustomerController extends Controller
                             'status' => 'manifested',
                         ]);
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
                             'network' => 'Flying Tigers',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Flying Tigers.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Flying Tigers (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Shipment manifested via Flying Tigers (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
                         // Call Ship Global API
                         $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
 
                         if (! $shipGlobalResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'Ship Global API error: '.($shipGlobalResult['message'] ?? 'Unknown'),
@@ -7609,20 +7965,26 @@ class CustomerController extends Controller
                             'status' => 'manifested',
                         ]);
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'network' => 'Ship Global',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via Ship Global.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Shipment manifested via Ship Global (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
 
                     } else {
                         // Default: Call UPS Ship API
                         $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
                         if (! $payloadResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
 
                             continue;
@@ -7632,6 +7994,7 @@ class CustomerController extends Controller
                         $upsResult = $this->callUpsShipApiInternal($upsPayload);
 
                         if (! $upsResult['success']) {
+                            $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
                             $results['failed'][] = [
                                 'shipper_id' => $shipperId,
                                 'message' => 'UPS API error: '.($upsResult['message'] ?? 'Unknown'),
@@ -7684,20 +8047,35 @@ class CustomerController extends Controller
                             'status' => 'manifested',
                         ]);
 
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'network' => 'UPS',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
                         ];
 
                         \Log::info('Bulk manifest: shipment '.$shipperId.' manifested via UPS.');
 
-                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via UPS (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Shipment manifested via UPS (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
                     }
 
                 } catch (\Exception $e) {
+                    if (isset($shipper, $bulkPreviousStatus)) {
+                        $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $bulkPreviousStatus);
+                    }
                     $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $e->getMessage()];
                     \Log::error('Bulk manifest error for shipper '.$shipperId.': '.$e->getMessage());
+                }
+            }
+
+            $bulkNewBalance = null;
+            foreach ($results['success'] as $bulkSuccessEntry) {
+                if (isset($bulkSuccessEntry['new_balance'])) {
+                    $bulkNewBalance = $bulkSuccessEntry['new_balance'];
                 }
             }
 
@@ -7705,10 +8083,44 @@ class CustomerController extends Controller
                 'success' => true,
                 'message' => 'Bulk manifest completed. '.count($results['success']).' succeeded, '.count($results['failed']).' failed out of '.$results['total'].' shipments.',
                 'results' => $results,
+                'new_balance' => $bulkNewBalance,
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
         }
+    }
+
+    /**
+     * If a manifest (carrier booking) attempt fails, a shipment that had been moved to
+     * 'ready' via Confirm Payment must NOT remain stranded in 'ready'. Revert it back to
+     * 'draft' so the customer can fix/retry. Packed shipments are left untouched because
+     * packed is a physical state, not a payment state.
+     *
+     * @return bool True when the shipment was reverted to draft.
+     */
+    private function revertReadyToDraftOnManifestFailure(ShipperInfo $shipper, int $customerId, string $previousStatus): bool
+    {
+        // Only revert when the failed manifest attempt actually started from 'ready'.
+        if ($previousStatus !== 'ready' || $shipper->status !== 'ready') {
+            return false;
+        }
+
+        $shipper->status = 'draft';
+        $shipper->save();
+
+        ShipmentLog::logStatus(
+            $shipper->id,
+            $shipper->awb_number,
+            'draft',
+            'ready',
+            'Manifest (carrier booking) failed. Shipment moved back to Draft. No payment was deducted from your wallet.',
+            $customerId,
+            'customer'
+        );
+
+        \Log::info('Manifest failed for shipper #'.$shipper->id.' → reverted from ready to draft. No payment was deducted.');
+
+        return true;
     }
 
     /**
@@ -9433,8 +9845,10 @@ class CustomerController extends Controller
         array $apiResponse,
         $trackingNumber,
         $labelUrl,
-        $isBulk = false
+        $isBulk = false,
+        $targetStatus = 'manifested'
     ) {
+        $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
 
         ShipmentTracking::updateOrCreate(
@@ -9455,27 +9869,28 @@ class CustomerController extends Controller
             ]
         );
 
-        $shipper->status = 'manifested';
+        $previousStatus = $shipper->status;
+        $shipper->status = $targetStatus;
         $shipper->save();
 
         Tracking::firstOrCreate(
             [
                 'shipper_id' => $shipper->id,
-                'status' => 'manifested',
+                'status' => $targetStatus,
             ],
             [
                 'awb_number' => $shipper->awb_number,
                 'shipping_id' => $createShipment ? $createShipment->id : null,
                 'uwc_id' => $shipper->awb_number,
-                'title' => Tracking::getTitleForStatus('manifested'),
+                'title' => Tracking::getTitleForStatus($targetStatus),
             ]
         );
 
         ShipmentLog::logStatus(
             $shipper->id,
             $shipper->awb_number,
-            'manifested',
-            'packed',
+            $targetStatus,
+            $previousStatus,
             'Shipment manifested via ShipUniversal'
                 .($isBulk ? ' (bulk)' : '')
                 .'. Tracking: '.($trackingNumber ?? 'N/A'),
@@ -11257,9 +11672,14 @@ class CustomerController extends Controller
 
         \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
 
-        // 5. Get the amount already paid (from invoice)
-        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
-        $paidAmount = $invoice ? floatval($invoice->total_amount ?? 0) : 0;
+        // 5. Determine what was actually paid. Under the new flow payment is only cut
+        //    AFTER a successful manifest, so a packed shipment may still be unpaid.
+        $paidCharge = WalletTransaction::where('customer_id', $customerId)
+            ->where('type', 'debit')
+            ->where('reason', 'shipment_charge')
+            ->where('reference', $shipper->awb_number)
+            ->first();
+        $paidAmount = $paidCharge ? floatval($paidCharge->amount) : 0;
 
         // 6. Calculate the difference
         $difference = $classicTotal - $paidAmount;
@@ -11337,9 +11757,15 @@ class CustomerController extends Controller
 
         \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
 
-        // 5. Get the amount already paid (from invoice)
+        // 5. Determine what was actually paid. Under the new flow payment is only cut
+        //    AFTER a successful manifest, so a packed shipment may still be unpaid.
         $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
-        $paidAmount = $invoice ? floatval($invoice->total_amount ?? 0) : 0;
+        $paidCharge = WalletTransaction::where('customer_id', $customerId)
+            ->where('type', 'debit')
+            ->where('reason', 'shipment_charge')
+            ->where('reference', $shipper->awb_number)
+            ->first();
+        $paidAmount = $paidCharge ? floatval($paidCharge->amount) : 0;
 
         // 6. Calculate the difference
         $difference = $classicTotal - $paidAmount;
@@ -11439,32 +11865,66 @@ class CustomerController extends Controller
             ];
         }
 
-        // 11. Handle wallet deduction/refund
+        // 11. Handle wallet charge/deduction/refund AFTER a successful booking.
+        //     If nothing was ever paid, charge the full UNITED CLASSIC rate now.
+        //     If it was already paid, only handle the rate difference.
         $walletAction = 'none';
         $walletAmount = 0;
         $newBalance = 0;
 
         $wallet = Wallet::where('customer_id', $customerId)->first();
         if ($wallet) {
-            if ($difference > 0.01) {
-                // UNITED CLASSIC is more expensive → deduct difference from wallet
-                $wallet->decrement('balance', $difference);
-                $wallet->refresh();
-                $walletAction = 'deducted';
-                $walletAmount = $difference;
-                $newBalance = (float) $wallet->balance;
-                \Log::info('Flying Tigers address fallback: Deducted ₹'.$difference.' from wallet (CLASSIC rate ₹'.$classicTotal.' > paid ₹'.$paidAmount.')');
-            } elseif ($difference < -0.01) {
-                // UNITED CLASSIC is cheaper → refund difference to wallet
-                $refundAmount = abs($difference);
-                $wallet->increment('balance', $refundAmount);
-                $wallet->refresh();
-                $walletAction = 'refunded';
-                $walletAmount = $refundAmount;
-                $newBalance = (float) $wallet->balance;
-                \Log::info('Flying Tigers address fallback: Refunded ₹'.$refundAmount.' to wallet (CLASSIC rate ₹'.$classicTotal.' < paid ₹'.$paidAmount.')');
+            if (! $paidCharge) {
+                // New flow: nothing paid before → charge the full UNITED CLASSIC rate.
+                if ($classicTotal > 0) {
+                    if ($wallet->balance < $classicTotal) {
+                        $newBalance = (float) $wallet->balance;
+                        $walletAction = 'insufficient';
+                        \Log::warning('Flying Tigers address fallback: Insufficient wallet balance for full charge ₹'.$classicTotal.' on shipper #'.$shipper->id);
+                    } else {
+                        $wallet->decrement('balance', $classicTotal);
+                        $wallet->refresh();
+                        $walletAction = 'charged';
+                        $walletAmount = $classicTotal;
+                        $newBalance = (float) $wallet->balance;
+
+                        WalletTransaction::create([
+                            'customer_id' => $customerId,
+                            'type' => 'debit',
+                            'reason' => 'shipment_charge',
+                            'amount' => $classicTotal,
+                            'balance_after' => $wallet->balance,
+                            'reference' => $shipper->awb_number,
+                            'description' => 'Payment of ₹'.number_format($classicTotal, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id).' (UNITED CLASSIC fallback).',
+                        ]);
+
+                        \Log::info('Flying Tigers address fallback: Charged full ₹'.$classicTotal.' from wallet (UNITED CLASSIC fallback) for shipper #'.$shipper->id);
+                    }
+                } else {
+                    $newBalance = (float) $wallet->balance;
+                }
             } else {
-                $newBalance = (float) $wallet->balance;
+                // Old flow: already paid → handle the rate difference only.
+                if ($difference > 0.01) {
+                    // UNITED CLASSIC is more expensive → deduct difference from wallet
+                    $wallet->decrement('balance', $difference);
+                    $wallet->refresh();
+                    $walletAction = 'deducted';
+                    $walletAmount = $difference;
+                    $newBalance = (float) $wallet->balance;
+                    \Log::info('Flying Tigers address fallback: Deducted ₹'.$difference.' from wallet (CLASSIC rate ₹'.$classicTotal.' > paid ₹'.$paidAmount.')');
+                } elseif ($difference < -0.01) {
+                    // UNITED CLASSIC is cheaper → refund difference to wallet
+                    $refundAmount = abs($difference);
+                    $wallet->increment('balance', $refundAmount);
+                    $wallet->refresh();
+                    $walletAction = 'refunded';
+                    $walletAmount = $refundAmount;
+                    $newBalance = (float) $wallet->balance;
+                    \Log::info('Flying Tigers address fallback: Refunded ₹'.$refundAmount.' to wallet (CLASSIC rate ₹'.$classicTotal.' < paid ₹'.$paidAmount.')');
+                } else {
+                    $newBalance = (float) $wallet->balance;
+                }
             }
         }
 
@@ -11475,7 +11935,11 @@ class CustomerController extends Controller
 
         // Build the user-facing message
         $message = 'Shipment manifested successfully via UNITED CLASSIC (Ship Global).';
-        if ($walletAction === 'deducted') {
+        if ($walletAction === 'charged') {
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been deducted from your wallet.';
+        } elseif ($walletAction === 'insufficient') {
+            $message .= ' The shipment is booked, but your wallet could not be charged (insufficient balance). Please recharge your wallet.';
+        } elseif ($walletAction === 'deducted') {
             $message .= ' ₹'.number_format($walletAmount, 2).' has been deducted from your wallet (rate difference).';
         } elseif ($walletAction === 'refunded') {
             $message .= ' ₹'.number_format($walletAmount, 2).' has been refunded to your wallet (rate difference).';
@@ -11599,15 +12063,21 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            // Determine if the shipment was paid (shipper status is ready/packed)
-            $wasPaid = in_array($shipper->status, ['ready', 'packed']);
+            // Determine if the shipment was actually paid. Under the new flow payment is
+            // cut only after a successful manifest, so a ready/packed shipment may be unpaid.
+            $paidCharge = WalletTransaction::where('customer_id', $customerId)
+                ->where('type', 'debit')
+                ->where('reason', 'shipment_charge')
+                ->where('reference', $shipper->awb_number)
+                ->first();
+            $wasPaid = $paidCharge !== null;
             $previousStatus = $shipper->status;
-            $refundAmount = 0;
+            $refundAmount = $paidCharge ? (float) $paidCharge->amount : 0;
 
             // Find the invoice for this shipper
             $invoice = ShipmentInvoice::where('shipper_id', $shipperId)->first();
 
-            DB::transaction(function () use ($shipper, $invoice, $wasPaid, $previousStatus, $customerId, &$refundAmount) {
+            DB::transaction(function () use ($shipper, $invoice, $wasPaid, $previousStatus, $customerId, $refundAmount) {
                 // Update shipper status to cancelled
                 $shipper->update(['status' => 'cancelled']);
 
@@ -11633,32 +12103,28 @@ class CustomerController extends Controller
                     $shipper->awb_number,
                     'cancelled',
                     $previousStatus,
-                    $wasPaid ? 'Shipment cancelled. Refund ₹'.number_format($invoice->total_amount ?? 0, 2).' to wallet.' : 'Shipment cancelled.',
+                    $wasPaid ? 'Shipment cancelled. Refund ₹'.number_format($refundAmount, 2).' to wallet.' : 'Shipment cancelled.',
                     $customerId,
                     'customer'
                 );
 
-                // Refund the paid amount to wallet
-                if ($wasPaid && $invoice) {
-                    $refundAmount = (float) ($invoice->total_amount ?? 0);
+                // Refund only what was actually paid (the shipment_charge debit), if any.
+                if ($wasPaid && $refundAmount > 0) {
+                    $wallet = Wallet::where('customer_id', $customerId)->first();
+                    if ($wallet) {
+                        $wallet->increment('balance', $refundAmount);
+                        $wallet->refresh();
 
-                    if ($refundAmount > 0) {
-                        $wallet = Wallet::where('customer_id', $customerId)->first();
-                        if ($wallet) {
-                            $wallet->increment('balance', $refundAmount);
-                            $wallet->refresh();
-
-                            // Log the refund transaction
-                            WalletTransaction::create([
-                                'customer_id' => $customerId,
-                                'type' => 'credit',
-                                'reason' => 'refund',
-                                'amount' => $refundAmount,
-                                'balance_after' => $wallet->balance,
-                                'reference' => $shipper->awb_number,
-                                'description' => 'Refund of ₹'.number_format($refundAmount, 2).' for cancelled shipment '.($shipper->awb_number ?: '#'.$shipper->id),
-                            ]);
-                        }
+                        // Log the refund transaction
+                        WalletTransaction::create([
+                            'customer_id' => $customerId,
+                            'type' => 'credit',
+                            'reason' => 'refund',
+                            'amount' => $refundAmount,
+                            'balance_after' => $wallet->balance,
+                            'reference' => $shipper->awb_number,
+                            'description' => 'Refund of ₹'.number_format($refundAmount, 2).' for cancelled shipment '.($shipper->awb_number ?: '#'.$shipper->id),
+                        ]);
                     }
                 }
             });

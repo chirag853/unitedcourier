@@ -497,7 +497,7 @@
                                 @else
                                     <span class="badge-status badge-inactive"><i class="ti ti-circle-x"></i> Deactivated</span>
                                 @endif
-                                <span class="badge-status badge-type">{{ $userType }} ({{ $userType === 'Business' ? 'CSB-V' : 'CSB-IV' }})</span>
+                                <span class="badge-status badge-type">{{ $userType }} ({{ ($userType === 'Business' && ! $isCourierOrAggregator) ? 'CSB-V' : 'CSB-IV' }})</span>
                                 @if($personalKyc)
                                     @php
                                         $kycStatus = $personalKyc->kyc_status ?? 'pending';
@@ -542,6 +542,9 @@
                     @php
                         $isBusinessFlow = strcasecmp(trim((string) $userType), 'Business') === 0
                             || ($businessKyc && (bool) $businessKyc->is_csb_v);
+                        // Courier / Aggregator customers complete Business KYC without
+                        // the CSB-V (export) flow, so the CSB-V step is hidden for them.
+                        $showCsbV = $isBusinessFlow && ! $isCourierOrAggregator;
                         $kyc = $isBusinessFlow ? ($businessKyc ?? $personalKyc) : ($personalKyc ?? $businessKyc);
                         $alt = $isBusinessFlow ? $personalKyc : $businessKyc;
 
@@ -592,7 +595,7 @@
                     </div>
                     @else
                     <div class="stepper-container">
-                        <h2 class="stepper-title">KYC Details <span class="gradient-text">{{ $isBusinessFlow ? 'CSB-V' : 'CSB-IV' }}</span></h2>
+                        <h2 class="stepper-title">KYC Details <span class="gradient-text">{{ $showCsbV ? 'CSB-V' : 'CSB-IV' }}</span></h2>
 
                         <div class="stepper-wrapper">
                             @if($isBusinessFlow)
@@ -608,6 +611,16 @@
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">3. Verify PAN</div>
                             </div>
+                            @if(! $showCsbV)
+                            <div class="step-item" data-step="4" data-panel="step5-content">
+                                <div class="step-bar"><div class="step-bar-fill"></div></div>
+                                <div class="step-label">4. Uploaded Signature</div>
+                            </div>
+                            <div class="step-item" data-step="5" data-panel="step6-content">
+                                <div class="step-bar"><div class="step-bar-fill"></div></div>
+                                <div class="step-label">5. Merchant Agreement (Signed)</div>
+                            </div>
+                            @else
                             <div class="step-item" data-step="4" data-panel="step4-content">
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">4. CSB-V</div>
@@ -620,6 +633,7 @@
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
                                 <div class="step-label">6. Merchant Agreement (Signed)</div>
                             </div>
+                            @endif
                             @else
                             <div class="step-item active @if($aadharSkipped) skipped @endif" data-step="1" data-panel="step2-content" @if($aadharSkipped) data-skipped="1" @endif>
                                 <div class="step-bar"><div class="step-bar-fill"></div></div>
@@ -848,7 +862,7 @@
                                 </div>
                             </div>
 
-                            @if($isBusinessFlow)
+                            @if($showCsbV)
                             <!-- Step 4 (Business): CSB-V -->
                             <div id="step4-content" class="step-content">
                                 <h3 class="kyc-card-title">CSB-<span class="gradient-text">V</span></h3>
@@ -2229,9 +2243,17 @@
                             'pan_card' => ['label' => 'PAN Card', 'url' => $docUrl($kyc?->pan_document, $alt?->pan_document)],
                             'aadhar_front' => ['label' => 'Aadhaar Front', 'url' => $docUrl($kyc?->aadhar_front_document, $kyc?->aadhar_document, $alt?->aadhar_front_document, $alt?->aadhar_document)],
                             'aadhar_back' => ['label' => 'Aadhaar Back', 'url' => $docUrl($kyc?->aadhar_back_document, $alt?->aadhar_back_document)],
-                            'iec_certificate' => ['label' => 'IEC Certificate', 'url' => $docUrl($kyc?->iec_document, $alt?->iec_document)],
-                            'ad_code_document' => ['label' => 'AD Code Document', 'url' => $docUrl($kyc?->ad_code_document, $alt?->ad_code_document)],
-                            'lut_document' => ['label' => 'LUT Document', 'url' => $docUrl($kyc?->lut_document, $alt?->lut_document)],
+                        ];
+                        // IEC / AD Code / LUT are CSB-V (export) documents — only
+                        // included for customers who went through the CSB-V flow.
+                        if ($showCsbV) {
+                            $previewDocuments += [
+                                'iec_certificate' => ['label' => 'IEC Certificate', 'url' => $docUrl($kyc?->iec_document, $alt?->iec_document)],
+                                'ad_code_document' => ['label' => 'AD Code Document', 'url' => $docUrl($kyc?->ad_code_document, $alt?->ad_code_document)],
+                                'lut_document' => ['label' => 'LUT Document', 'url' => $docUrl($kyc?->lut_document, $alt?->lut_document)],
+                            ];
+                        }
+                        $previewDocuments += [
                             'signature' => ['label' => 'Signature', 'url' => $docUrl($personalKyc?->signature_document, $businessKyc?->signature_document, $personalKyc?->signature)],
                             'merchant_agreement' => ['label' => 'Merchant Agreement', 'url' => $docUrl($kyc?->merchant_agreement, $alt?->merchant_agreement)],
                         ];
@@ -2256,7 +2278,7 @@
                         <div class="col-md-6"><strong>Name:</strong> {{ trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')) ?: '—' }}</div>
                         <div class="col-md-6"><strong>Email:</strong> {{ $customer->email ?? '—' }}</div>
                         <div class="col-md-6"><strong>Phone:</strong> {{ $customer->phone_number ?? '—' }}</div>
-                        <div class="col-md-6"><strong>User Type:</strong> {{ $userType }} ({{ $isBusinessFlow ? 'CSB-V' : 'CSB-IV' }})</div>
+                        <div class="col-md-6"><strong>User Type:</strong> {{ $userType }} ({{ $showCsbV ? 'CSB-V' : 'CSB-IV' }})</div>
                         <div class="col-md-6"><strong>KYC Status:</strong> {{ ucfirst(str_replace('_', ' ', $previewValue('kyc_status'))) }}</div>
                     </div>
                     <div class="row g-3">

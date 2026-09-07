@@ -5163,6 +5163,11 @@ class AdminController extends Controller
         $userType = $businessCategory ? $businessCategory->user_type : 'Personal';
         $wallet = $customer->wallet;
 
+        // Courier / Aggregator customers complete Business KYC without the
+        // CSB-V (export) flow, so all CSB-V references are hidden for them.
+        $isCourierOrAggregator = $businessCategory
+            && $this->courierAggregatorCategoryIds()->contains($businessCategory->id);
+
         if ($businessKyc) {
             $documentDiagnostics = [];
             $documentPaths = [
@@ -5208,7 +5213,8 @@ class AdminController extends Controller
             'businessKyc',
             'businessCategory',
             'userType',
-            'wallet'
+            'wallet',
+            'isCourierOrAggregator'
         ));
     }
 

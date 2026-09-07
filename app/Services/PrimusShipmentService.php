@@ -28,8 +28,9 @@ class PrimusShipmentService
      *
      * @return array{success: bool, message: string, data?: array, tracking_number?: string, label?: string|null}
      */
-    public function manifest(ShipperInfo $shipper, int $customerId, bool $isBulk = false): array
+    public function manifest(ShipperInfo $shipper, int $customerId, bool $isBulk = false, string $targetStatus = 'manifested'): array
     {
+        $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         try {
             $payload = $this->buildPayload($shipper);
             $maskedPayload = $this->maskedPayload($payload);
@@ -55,7 +56,8 @@ class PrimusShipmentService
                     $result['status_code'],
                     $result['description'],
                     $result['details'],
-                    $isBulk
+                    $isBulk,
+                    $targetStatus
                 );
             } catch (Throwable $exception) {
                 Log::error('Primus shipment persistence failed.', [
@@ -335,17 +337,21 @@ class PrimusShipmentService
         string $statusCode,
         string $description,
         array $details,
-        bool $isBulk
+        bool $isBulk,
+        string $targetStatus = 'manifested'
     ): void {
-        DB::transaction(function () use ($shipper, $customerId, $response, $trackingNumber, $label, $statusCode, $description, $details, $isBulk): void {
+        $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
+        DB::transaction(function () use ($shipper, $customerId, $response, $trackingNumber, $label, $statusCode, $description, $details, $isBulk, $targetStatus): void {
             $lockedShipper = ShipperInfo::whereKey($shipper->id)
                 ->where('customer_id', $customerId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedShipper->status !== 'packed') {
-                throw new RuntimeException('Shipment is no longer in Packed status.');
+            if (! in_array($lockedShipper->status, ['ready', 'packed', $targetStatus], true)) {
+                throw new RuntimeException('Shipment is no longer in Ready or Packed status.');
             }
+
+            $previousStatus = $lockedShipper->status;
 
             $createShipment = CreateShipment::where('shipper_id', $lockedShipper->id)->first();
 
@@ -367,24 +373,24 @@ class PrimusShipmentService
                 ]
             );
 
-            $lockedShipper->status = 'manifested';
+            $lockedShipper->status = $targetStatus;
             $lockedShipper->save();
 
             Tracking::firstOrCreate(
-                ['shipper_id' => $lockedShipper->id, 'status' => 'manifested'],
+                ['shipper_id' => $lockedShipper->id, 'status' => $targetStatus],
                 [
                     'awb_number' => $lockedShipper->awb_number,
                     'shipping_id' => $createShipment?->id,
                     'uwc_id' => $lockedShipper->awb_number,
-                    'title' => Tracking::getTitleForStatus('manifested'),
+                    'title' => Tracking::getTitleForStatus($targetStatus),
                 ]
             );
 
             ShipmentLog::logStatus(
                 $lockedShipper->id,
                 $lockedShipper->awb_number,
-                'manifested',
-                'packed',
+                $targetStatus,
+                $previousStatus,
                 'Shipment manifested via Primus'.($isBulk ? ' (bulk)' : '').'. Tracking: '.$trackingNumber,
                 $customerId,
                 'customer'
