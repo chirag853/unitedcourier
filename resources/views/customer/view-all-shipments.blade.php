@@ -963,37 +963,62 @@
                                                     $packageShipper = $invoice->shipperInfo;
                                                     $packages = $packageShipper?->packageDimensions ?? collect();
                                                     $packageCount = is_countable($packages) ? count($packages) : 0;
+
+                                                    $totalBillable = 0.0;
+                                                    $totalDead = 0.0;
+                                                    $totalVol = 0.0;
+                                                    $dimensionsList = [];
+                                                    $dimIndex = 0;
+                                                    foreach ($packages as $package) {
+                                                        $dimIndex++;
+                                                        if ($package->chargeable_weight !== null && $package->chargeable_weight !== '') {
+                                                            $totalBillable += (float) $package->chargeable_weight;
+                                                        }
+                                                        if ($package->actual_weight_kg !== null && $package->actual_weight_kg !== '') {
+                                                            $totalDead += (float) $package->actual_weight_kg;
+                                                        }
+                                                        if ($package->volumetric_weight !== null && $package->volumetric_weight !== '') {
+                                                            $totalVol += (float) $package->volumetric_weight;
+                                                        }
+                                                        if ($package->length_cm !== null && $package->length_cm !== '' && $package->width_cm !== null && $package->width_cm !== '' && $package->height_cm !== null && $package->height_cm !== '') {
+                                                            $dimLabel = ($packageCount > 1 ? 'P'.$dimIndex.': ' : '');
+                                                            $dimensionsList[] = $dimLabel
+                                                                . number_format((float) $package->length_cm, 2) . ' x '
+                                                                . number_format((float) $package->width_cm, 2) . ' x '
+                                                                . number_format((float) $package->height_cm, 2) . ' cm';
+                                                        }
+                                                    }
                                                 @endphp
                                                 @if($packageCount > 0)
-                                                    @foreach($packages as $package)
-                                                        <div class="package-details-card">
-                                                            @if($packageCount > 1)
-                                                                <div class="package-details-title">Package {{ $loop->iteration }}</div>
-                                                            @endif
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Billable Wt.</span>
-                                                                <span class="package-details-value">{{ ($package->chargeable_weight !== null && $package->chargeable_weight !== '') ? number_format((float) $package->chargeable_weight, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Dead Wt.</span>
-                                                                <span class="package-details-value">{{ ($package->actual_weight_kg !== null && $package->actual_weight_kg !== '') ? number_format((float) $package->actual_weight_kg, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Vol. Wt.</span>
-                                                                <span class="package-details-value">{{ ($package->volumetric_weight !== null && $package->volumetric_weight !== '') ? number_format((float) $package->volumetric_weight, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Dimensions</span>
-                                                                <span class="package-details-value">
-                                                                    @if($package->length_cm !== null && $package->length_cm !== '' && $package->width_cm !== null && $package->width_cm !== '' && $package->height_cm !== null && $package->height_cm !== '')
-                                                                        L: {{ number_format((float) $package->length_cm, 2) }} x B: {{ number_format((float) $package->width_cm, 2) }} x H: {{ number_format((float) $package->height_cm, 2) }} cm
-                                                                    @else
-                                                                        -
-                                                                    @endif
-                                                                </span>
-                                                            </div>
+                                                    <div class="package-details-card">
+                                                        @if($packageCount > 1)
+                                                            <div class="package-details-title">Total ({{ $packageCount }} pkgs)</div>
+                                                        @endif
+                                                        <div class="package-details-row">
+                                                            <span class="package-details-label">Billable Wt.</span>
+                                                            <span class="package-details-value">{{ $totalBillable > 0 ? number_format($totalBillable, 2).' kg' : '-' }}</span>
                                                         </div>
-                                                    @endforeach
+                                                        <div class="package-details-row">
+                                                            <span class="package-details-label">Dead Wt.</span>
+                                                            <span class="package-details-value">{{ $totalDead > 0 ? number_format($totalDead, 2).' kg' : '-' }}</span>
+                                                        </div>
+                                                        <div class="package-details-row">
+                                                            <span class="package-details-label">Vol. Wt.</span>
+                                                            <span class="package-details-value">{{ $totalVol > 0 ? number_format($totalVol, 2).' kg' : '-' }}</span>
+                                                        </div>
+                                                        <div class="package-details-row">
+                                                            <span class="package-details-label">Dimensions</span>
+                                                            <span class="package-details-value">
+                                                                @if(count($dimensionsList) > 0)
+                                                                    @foreach($dimensionsList as $dim)
+                                                                        <div>{{ $dim }}</div>
+                                                                    @endforeach
+                                                                @else
+                                                                    -
+                                                                @endif
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
