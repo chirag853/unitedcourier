@@ -808,6 +808,7 @@
                                 $hidePrintLabelColumn = $isAllOrdersView || $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideManifestColumn = $isAllOrdersView || in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
                                 $hideCancelColumn = $isAllOrdersView || in_array($selectedStatus, $postPackedStatuses, true);
+                                $hideTrackingColumn = $isDraftView || $selectedStatus === 'ready';
                             @endphp
                             <div class="table-responsive shipments-table-scroll">
                                 <table id="shipmentsTable" @class(['table', 'table-bordered', 'table-hover', 'shipments-table', 'shipments-table-draft' => $showHawbSubInfo])>
@@ -816,7 +817,9 @@
                                             <th class="sticky-col col-1"><input type="checkbox" id="selectAllCheckbox" style="display:none;"></th>
                                             <th class="sticky-col col-2">HAWB Number</th>
                                             <th class="sticky-col col-3">Order Date</th>
+                                            @if(!$hideTrackingColumn)
                                             <th class="tracking-col">Tracking Number</th>
+                                            @endif
                                             <th class="receiver-details-col" @class(['d-none' => !$isDraftView])>Receiver Details</th>
                                             <th class="package-details-col" @class(['d-none' => !$isDraftView])>Package Details</th>
                                             <!-- <th>Ship From → Ship To</th> -->
@@ -916,9 +919,12 @@
                                                     -
                                                 @endif
                                             </td>
+                                            @if(!$hideTrackingColumn)
                                             <td class="tracking-col">
                                                 @php
-                                                    $rowTrackingNumber = $invoice->shipperInfo?->shipmentTracking?->shipment_identification_number;
+                                                    $rowTrackingNumber = in_array($rowStatus, ['packed', 'manifested'], true)
+                                                        ? $invoice->shipperInfo?->shipmentTracking?->shipment_identification_number
+                                                        : null;
                                                 @endphp
                                                 @if($rowTrackingNumber)
                                                     <span>{{ $rowTrackingNumber }}</span>
@@ -926,6 +932,7 @@
                                                     <span class="text-muted">-</span>
                                                 @endif
                                             </td>
+                                            @endif
                                             <td class="receiver-details-col" @class(['d-none' => !$isDraftView])>
                                                 @php
                                                     $receiverConsignee = $invoice->shipperInfo ? $invoice->shipperInfo->consigneeInfo : null;
