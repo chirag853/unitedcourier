@@ -503,6 +503,7 @@
             font-weight: 600;
             color: #1f2937;
             line-height: 1.3;
+            font-size:medium
         }
 
         .receiver-details-stack .receiver-line {
