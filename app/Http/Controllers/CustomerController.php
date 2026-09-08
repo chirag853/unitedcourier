@@ -2785,6 +2785,65 @@ class CustomerController extends Controller
             }
 
             // ------------------------------------------------------------------
+            // Every box declared in the package dimensions must have at least
+            // one invoice item row mapped to it (Box No. 1..N). Otherwise the
+            // shipment invoice would be incomplete, so creation must be blocked.
+            // ------------------------------------------------------------------
+            $numberOfBoxes = (int) ($validatedData['number_of_boxes'] ?? 0);
+            if ($numberOfBoxes < 1) {
+                $numberOfBoxes = count(array_filter(
+                    $validatedData['packages'] ?? [],
+                    function ($package) {
+                        if (! is_array($package)) {
+                            return false;
+                        }
+
+                        return collect($package)->filter(function ($value) {
+                            return $value !== null && $value !== '';
+                        })->isNotEmpty();
+                    }
+                ));
+            }
+            $numberOfBoxes = max(1, $numberOfBoxes);
+
+            $itemBoxNos = collect($validatedData['items'] ?? [])
+                ->pluck('box_no')
+                ->filter(function ($boxNo) {
+                    return $boxNo !== null && $boxNo !== '';
+                })
+                ->map(function ($boxNo) {
+                    return (int) $boxNo;
+                })
+                ->unique()
+                ->values()
+                ->all();
+
+            $missingBoxNos = [];
+            for ($boxNo = 1; $boxNo <= $numberOfBoxes; $boxNo++) {
+                if (! in_array($boxNo, $itemBoxNos, true)) {
+                    $missingBoxNos[] = $boxNo;
+                }
+            }
+
+            if (! empty($missingBoxNos)) {
+                $boxesMessage = 'Invoice item details are missing for Box No. '.
+                    implode(', ', $missingBoxNos).
+                    ' in the Shipment Invoice Items table. Please add an item row for each of these boxes before creating the shipment.';
+                if (! $request->expectsJson()) {
+                    return back()
+                        ->withErrors(['items' => $boxesMessage])
+                        ->withInput()
+                        ->with('error', $boxesMessage);
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $boxesMessage,
+                    'errors' => ['items' => [$boxesMessage]],
+                ], 422);
+            }
+
+            // ------------------------------------------------------------------
             // KYC Number format validation based on the selected KYC Type.
             // Patterns:
             //   GST (Normal)       -> ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
@@ -5667,7 +5726,7 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_amount', 'surcharge_total', 'total_price', 'updated_at');
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_price', 'updated_at');
                 },
                 'shipperInfo.shipmentTracking' => function ($q) {
                     $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
@@ -5679,7 +5738,10 @@ class CustomerController extends Controller
                     $q->select('id', 'shipper_id', 'actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight');
                 },
                 'shipperInfo.serviceRate' => function ($q) {
-                    $q->select('id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage', 'surcharge_id');
+                    $q->select('id', 'service_id', 'price', 'fuel_charge', 'fuel_percentage', 'gst_amount', 'gst_percentage', 'surcharge_id');
+                },
+                'shipperInfo.serviceRate.service' => function ($q) {
+                    $q->select('id', 'api_provider', 'service_code', 'network');
                 },
             ])
             ->orderBy('created_at', 'desc')
@@ -5765,6 +5827,12 @@ class CustomerController extends Controller
                     'service_code' => ($shipper && $shipper->serviceRate && $shipper->serviceRate->service)
                         ? $shipper->serviceRate->service->service_code
                         : null,
+                    'api_provider' => ($shipper && $shipper->serviceRate && $shipper->serviceRate->service)
+                        ? $shipper->serviceRate->service->api_provider
+                        : null,
+                    'gst_percentage' => $shipper && $shipper->gst_percentage !== null
+                        ? $shipper->gst_percentage
+                        : ($shipper && $shipper->serviceRate ? $shipper->serviceRate->gst_percentage : null),
                     'status' => $shipper && $shipper->status ? $shipper->status : ($invoice->status === 'cancelled' ? 'cancelled' : 'draft'),
                     'ship_from' => $shipper ? trim(($shipper->city ?? '').', '.($shipper->state ?? '').' - '.($shipper->pincode ?? '').', India') : null,
                     'ship_to' => $consignee ? trim(($consignee->city ?? '').', '.($consignee->state ?? '').' - '.($consignee->zip_code ?? '').', '.($consignee->delivery_destination ?? '')) : null,
@@ -5774,6 +5842,10 @@ class CustomerController extends Controller
                         'phone' => $shipper->phone_number,
                         'email' => $shipper->email,
                         'address' => trim(($shipper->address_line1 ?? '').' '.($shipper->address_line2 ?? '').' '.($shipper->address_line3 ?? '')),
+                        'address_line1' => $shipper->address_line1,
+                        'address_line2' => $shipper->address_line2,
+                        'address_line3' => $shipper->address_line3,
+                        'kyc_number' => $shipper->kyc_number,
                         'city_state_pin' => trim(($shipper->city ?? '').', '.($shipper->state ?? '').' - '.($shipper->pincode ?? '')),
                     ] : null,
                     'consignee' => $consignee ? [
@@ -5782,6 +5854,9 @@ class CustomerController extends Controller
                         'phone' => $consignee->phone_number,
                         'email' => $consignee->email,
                         'address' => trim(($consignee->address_line1 ?? '').' '.($consignee->address_line2 ?? '').' '.($consignee->address_line3 ?? '')),
+                        'address_line1' => $consignee->address_line1,
+                        'address_line2' => $consignee->address_line2,
+                        'address_line3' => $consignee->address_line3,
                         'city_state_zip' => trim(($consignee->city ?? '').', '.($consignee->state ?? '').' - '.($consignee->zip_code ?? '')),
                     ] : null,
                     'destination' => $consignee ? $consignee->delivery_destination : null,

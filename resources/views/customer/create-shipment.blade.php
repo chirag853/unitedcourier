@@ -10612,6 +10612,34 @@
                     }
                 }
             });
+
+            // Every box declared in the package dimensions must have at least
+            // one invoice item row mapped to it (Box No. 1..N).
+            const selectedBoxNos = new Set();
+            itemRows.forEach(function(row) {
+                const boxNoElement = row.querySelector('[name$="[box_no]"]');
+                const boxNoValue = parseInt(boxNoElement?.value || '0', 10);
+                if (Number.isInteger(boxNoValue) && boxNoValue > 0) {
+                    selectedBoxNos.add(boxNoValue);
+                }
+            });
+            const missingBoxNos = [];
+            for (let boxNo = 1; boxNo <= boxCount; boxNo++) {
+                if (!selectedBoxNos.has(boxNo)) {
+                    missingBoxNos.push(boxNo);
+                }
+            }
+            if (missingBoxNos.length) {
+                // Highlight the Shipment Invoice Items table so the user knows
+                // exactly where to add the missing box details.
+                const boxNoTarget = itemRows[0]?.querySelector('[name$="[box_no]"]') || form.querySelector('[name="invoice_amount"]');
+                addError(
+                    boxNoTarget,
+                    'Please fill Box No. ' + missingBoxNos.join(', ') + ' Detail',
+                    'access-info'
+                );
+            }
+
             if (!itemRows.length) {
                 addError(form.querySelector('[name="invoice_amount"]'), 'Add at least one invoice item.', 'access-info');
             }

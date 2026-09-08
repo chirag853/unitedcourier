@@ -534,11 +534,11 @@
             min-width: 0;
         }
 
-        /* Package Details column: billable / dead / volumetric weight and
-           dimensions, shown as a compact label-value stack per package.
+        /* Package Details column: billable / dead / volumetric weight,
+           shown as a compact label-value stack per package.
            Width is capped so it cannot grow wider than its content needs. */
         .shipments-table .package-details-col {
-            width: 230px;
+            width: 160px;
             min-width: 210px;
             max-width: 240px;
             vertical-align: top;
@@ -967,10 +967,7 @@
                                                     $totalBillable = 0.0;
                                                     $totalDead = 0.0;
                                                     $totalVol = 0.0;
-                                                    $dimensionsList = [];
-                                                    $dimIndex = 0;
                                                     foreach ($packages as $package) {
-                                                        $dimIndex++;
                                                         if ($package->chargeable_weight !== null && $package->chargeable_weight !== '') {
                                                             $totalBillable += (float) $package->chargeable_weight;
                                                         }
@@ -979,13 +976,6 @@
                                                         }
                                                         if ($package->volumetric_weight !== null && $package->volumetric_weight !== '') {
                                                             $totalVol += (float) $package->volumetric_weight;
-                                                        }
-                                                        if ($package->length_cm !== null && $package->length_cm !== '' && $package->width_cm !== null && $package->width_cm !== '' && $package->height_cm !== null && $package->height_cm !== '') {
-                                                            $dimLabel = ($packageCount > 1 ? 'P'.$dimIndex.': ' : '');
-                                                            $dimensionsList[] = $dimLabel
-                                                                . number_format((float) $package->length_cm, 2) . ' x '
-                                                                . number_format((float) $package->width_cm, 2) . ' x '
-                                                                . number_format((float) $package->height_cm, 2) . ' cm';
                                                         }
                                                     }
                                                 @endphp
@@ -1005,18 +995,6 @@
                                                         <div class="package-details-row">
                                                             <span class="package-details-label">Vol. Wt.</span>
                                                             <span class="package-details-value">{{ $totalVol > 0 ? number_format($totalVol, 2).' kg' : '-' }}</span>
-                                                        </div>
-                                                        <div class="package-details-row">
-                                                            <span class="package-details-label">Dimensions</span>
-                                                            <span class="package-details-value">
-                                                                @if(count($dimensionsList) > 0)
-                                                                    @foreach($dimensionsList as $dim)
-                                                                        <div>{{ $dim }}</div>
-                                                                    @endforeach
-                                                                @else
-                                                                    -
-                                                                @endif
-                                                            </span>
                                                         </div>
                                                     </div>
                                                 @else
@@ -1175,8 +1153,8 @@
                                                         <button type="button"
                                                                 class="btn btn-sm btn-outline-primary print-label-btn d-inline-flex align-items-center justify-content-center"
                                                                 data-invoice-id="{{ $invoice->id }}"
-                                                                title="Print Label"
-                                                                aria-label="Print Label"
+                                                                title="Print Label or Invoice"
+                                                                aria-label="Print Label or Invoice"
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-printer" aria-hidden="true"></i>
                                                         </button>
@@ -1748,6 +1726,29 @@
         </div>
     </div>
 
+    <!-- Print Options Modal (Label / Invoice) -->
+    <div class="modal fade" id="printOptionsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-printer me-2"></i>Print Options</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3">
+                    <p class="text-muted mb-3" style="font-size:13px;">What would you like to print for this shipment?</p>
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-primary d-flex align-items-center justify-content-center gap-2" id="printLabelOptionBtn">
+                            <i class="ti ti-barcode"></i> Print Label
+                        </button>
+                        <button type="button" class="btn btn-outline-primary d-flex align-items-center justify-content-center gap-2" id="printInvoiceOptionBtn">
+                            <i class="ti ti-file-invoice"></i> Print Invoice
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- JsBarcode CDN -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
@@ -2087,11 +2088,48 @@
             configureBulkActionsForStatus(@json(request('status', 'all')));
             updateBulkSelectionTotals();
 
-            // Print Label button click handler (delegated)
+            // Print button click handler (delegated) -> opens the Print Options popup
+            let pendingPrintInvoiceId = null;
+            let pendingPrintRow = null;
+
             $('#shipmentsTable').on('click', '.print-label-btn', function () {
                 const invoiceId = $(this).data('invoice-id');
                 const data = shipmentData[invoiceId];
                 if (!data) return;
+
+                pendingPrintInvoiceId = invoiceId;
+                pendingPrintRow = $(this).closest('tr');
+                $('#printOptionsModal').modal('show');
+            });
+
+            // Print Options modal: "Print Label" choice
+            $('#printLabelOptionBtn').on('click', function () {
+                $('#printOptionsModal').modal('hide');
+                const invoiceId = pendingPrintInvoiceId;
+                const $row = pendingPrintRow;
+                if (invoiceId) {
+                    openPrintLabel(invoiceId, $row);
+                }
+            });
+
+            // Print Options modal: "Print Invoice" choice
+            $('#printInvoiceOptionBtn').on('click', function () {
+                $('#printOptionsModal').modal('hide');
+                const invoiceId = pendingPrintInvoiceId;
+                if (invoiceId) {
+                    openPrintInvoice(invoiceId);
+                }
+            });
+
+            // Populate the Print Label modal for the given invoice and show it.
+            // A Ready shipment becomes Packed only after its rendered label is stored.
+            function openPrintLabel(invoiceId, $row) {
+                const data = shipmentData[invoiceId];
+                if (!data) return;
+
+                // Remember which shipment is being printed so the global
+                // printLabel() helper can build the 4x6 courier label.
+                window.currentPrintInvoiceId = invoiceId;
 
                 // Populate Barcode
                 document.getElementById('printLabelBarcode').innerHTML = '';
@@ -2177,8 +2215,10 @@
                     packagesSection.style.display = 'none';
                 }
 
-                // A Ready shipment becomes Packed only after its rendered label is stored.
-                const $row = $(this).closest('tr');
+                if (!$row || !$row.length) {
+                    $row = $('#shipmentsTable').find('.print-label-btn[data-invoice-id="' + invoiceId + '"]').closest('tr');
+                }
+
                 if (data.status === 'ready' && data.shipper_id) {
                     const customLabel = document.getElementById('printLabelBody').innerHTML;
                     $.ajax({
@@ -2204,7 +2244,7 @@
                             liveStatusCounts.ready = Math.max(0, liveStatusCounts.ready - 1);
                             liveStatusCounts.packed += 1;
                             refreshStatusCounters();
-                            $('#printLabelModal').modal('show');
+                            printCourierLabel4x6(invoiceId);
                         },
                         error: function (xhr) {
                             const message = xhr.responseJSON && xhr.responseJSON.message
@@ -2216,8 +2256,222 @@
                     return;
                 }
 
-                $('#printLabelModal').modal('show');
-            });
+                printCourierLabel4x6(invoiceId);
+            }
+
+            // Build and print a standalone A4 invoice from shipmentData.
+            // This mirrors the A4 invoice layout rendered by
+            // bulk-invoice-pdf.blade.php (the invoice the user sees in A4).
+            function openPrintInvoice(invoiceId) {
+                const data = shipmentData[invoiceId];
+                if (!data) return;
+
+                const shipper = data.shipper || {};
+                const consignee = data.consignee || {};
+                const items = Array.isArray(data.items) ? data.items : [];
+                const packages = Array.isArray(data.packages) ? data.packages : [];
+                const pb = data.price_breakdown || null;
+                const currency = data.invoice_currency || '';
+
+                // Safe numeric parse (handles comma-formatted strings)
+                const num = function (v) {
+                    const n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+                    return isNaN(n) ? 0 : n;
+                };
+
+                // Format numbers with two decimals (number_format equivalent)
+                const fmt = function (v) {
+                    return Number(v).toFixed(2);
+                };
+
+                // Total chargeable weight from packages
+                let totalChargeableWeight = 0;
+                packages.forEach(function (pkg) {
+                    totalChargeableWeight += num(pkg.chargeable);
+                });
+
+                // Goods value (Subtotal) from invoice items
+                let subtotal = 0;
+                items.forEach(function (item) {
+                    subtotal += num(item.amount);
+                });
+                const invoiceAmount = num(data.invoice_amount);
+                const goodsTotal = invoiceAmount > 0 ? invoiceAmount : subtotal;
+
+                // Shipping-side totals (mirrors rateDetails in the A4 invoice)
+                const shippingCost = pb && pb.base != null ? num(pb.base) : 0;
+                const fuelCharge = pb && pb.fuel != null ? num(pb.fuel) : 0;
+                const surchargeAmt = pb && pb.surcharge != null ? num(pb.surcharge) : 0;
+                const gstAmt = pb && pb.gst != null ? num(pb.gst) : 0;
+                const shippingTotal = pb && pb.total != null
+                    ? num(pb.total)
+                    : (shippingCost + fuelCharge + surchargeAmt + gstAmt);
+
+                // Grand Total = shipping total + goods subtotal (matches A4 invoice)
+                const grandTotal = shippingTotal + goodsTotal;
+
+                const gstPct = (data.gst_percentage != null && data.gst_percentage !== '')
+                    ? parseFloat(data.gst_percentage)
+                    : 0;
+
+                // Items table uses the same 5 columns as the A4 invoice
+                // (#, Description, Qty, Unit Rate, Amount).
+                const rowsHtml = items.length ? items.map(function (item, idx) {
+                    return '<tr>' +
+                        '<td>' + (item.box_no || (idx + 1)) + '</td>' +
+                        '<td>' + (item.description || 'Goods') + '</td>' +
+                        '<td class="text-center">' + (item.qty || '-') + '</td>' +
+                        '<td class="text-right">' + fmt(item.unit_rate) + '</td>' +
+                        '<td class="text-right">' + fmt(item.amount) + '</td>' +
+                        '</tr>';
+                }).join('') : '<tr><td colspan="5" class="text-center">No items</td></tr>';
+
+                // Totals block mirrors the A4 invoice
+                // (Subtotal, Shipping Cost, Fuel Charge, GST and Grand Total).
+                let totalsHtml = '';
+                totalsHtml += '<tr><td>Subtotal (' + currency + '):</td><td class="text-right">' + fmt(goodsTotal) + '</td></tr>';
+                if (shippingCost > 0) {
+                    totalsHtml += '<tr><td>Shipping Cost:</td><td class="text-right">' + fmt(shippingCost) + '</td></tr>';
+                }
+                if (fuelCharge > 0) {
+                    totalsHtml += '<tr><td>Fuel Charge:</td><td class="text-right">' + fmt(fuelCharge) + '</td></tr>';
+                }
+                if (gstAmt > 0) {
+                    totalsHtml += '<tr><td>GST (' + gstPct + '%):</td><td class="text-right">' + fmt(gstAmt) + '</td></tr>';
+                }
+                totalsHtml += '<tr class="grand-total"><td>Grand Total:</td><td class="text-right">' + fmt(grandTotal) + ' ' + currency + '</td></tr>';
+
+                const weightHtml = packages.length ? fmt(totalChargeableWeight) + ' kg' : '-';
+
+                const printWindow = window.open('', '_blank', 'width=900,height=750');
+                if (!printWindow) {
+                    showAlert('danger', 'Popup blocked. Allow popups to print the invoice.');
+                    return;
+                }
+
+                printWindow.document.write('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">');
+                printWindow.document.write('<title>Invoice ' + (data.invoice_number || '') + '</title>');
+                printWindow.document.write('<style>');
+                printWindow.document.write('* { box-sizing: border-box; }');
+                printWindow.document.write('body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; font-size: 12px; }');
+                printWindow.document.write('.invoice-wrapper { padding: 30px 40px; }');
+                printWindow.document.write('.invoice-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #2d8eff; padding-bottom: 20px; margin-bottom: 25px; }');
+                printWindow.document.write('.company-info h1 { font-size: 22px; color: #2d8eff; margin: 0 0 5px 0; }');
+                printWindow.document.write('.company-info p { margin: 2px 0; color: #666; font-size: 11px; }');
+                printWindow.document.write('.invoice-meta { text-align: right; }');
+                printWindow.document.write('.invoice-meta h2 { font-size: 18px; margin: 0 0 8px 0; color: #333; text-transform: uppercase; letter-spacing: 1px; }');
+                printWindow.document.write('.invoice-meta table { font-size: 11px; margin-left: auto; }');
+                printWindow.document.write('.invoice-meta td { padding: 2px 8px; }');
+                printWindow.document.write('.invoice-meta td:first-child { color: #888; font-weight: 600; }');
+                printWindow.document.write('.parties { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px; }');
+                printWindow.document.write('.party-box { flex: 1; background: #f8f9fa; border-left: 3px solid #2d8eff; padding: 12px 15px; border-radius: 0 6px 6px 0; }');
+                printWindow.document.write('.party-box h4 { font-size: 11px; text-transform: uppercase; color: #2d8eff; margin: 0 0 8px 0; letter-spacing: 0.5px; }');
+                printWindow.document.write('.party-box p { margin: 2px 0; font-size: 11px; line-height: 1.5; }');
+                printWindow.document.write('.party-box .name { font-weight: 700; font-size: 12px; color: #333; }');
+                printWindow.document.write('table.items { width: 100%; border-collapse: collapse; margin-bottom: 25px; }');
+                printWindow.document.write('table.items thead th { background: #2d8eff; color: #fff; padding: 10px 8px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }');
+                printWindow.document.write('table.items tbody td { padding: 8px; border-bottom: 1px solid #e9ecef; font-size: 11px; }');
+                printWindow.document.write('table.items tbody tr:nth-child(even) { background: #fafbfc; }');
+                printWindow.document.write('table.items tfoot td { padding: 8px; font-weight: 600; border-top: 2px solid #2d8eff; }');
+                printWindow.document.write('.totals { margin-left: auto; width: 300px; margin-bottom: 25px; }');
+                printWindow.document.write('.totals table { width: 100%; border-collapse: collapse; }');
+                printWindow.document.write('.totals td { padding: 6px 10px; font-size: 11px; }');
+                printWindow.document.write('.totals td:first-child { color: #666; }');
+                printWindow.document.write('.totals .grand-total td { background: #2d8eff; color: #fff; font-size: 13px; font-weight: 700; border-radius: 4px; }');
+                printWindow.document.write('.awb-box { background: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px; padding: 12px 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }');
+                printWindow.document.write('.awb-box .label { font-size: 11px; color: #997404; text-transform: uppercase; font-weight: 600; }');
+                printWindow.document.write('.awb-box .value { font-size: 16px; font-weight: 700; color: #997404; letter-spacing: 1px; }');
+                printWindow.document.write('.footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e9ecef; text-align: center; color: #999; font-size: 10px; }');
+                printWindow.document.write('.text-right { text-align: right; }');
+                printWindow.document.write('.text-center { text-align: center; }');
+                printWindow.document.write('@page { size: A4; margin: 0; }');
+                printWindow.document.write('@media print { body { margin: 0; } }');
+                printWindow.document.write('</style></head><body>');
+                printWindow.document.write('<div class="invoice-wrapper">');
+
+                // Header
+                printWindow.document.write('<div class="invoice-header">');
+                printWindow.document.write('<div class="company-info">');
+                printWindow.document.write('<h1>United Courier</h1>');
+                printWindow.document.write('<p>Providing seamless global logistics solutions since 1995</p>');
+                printWindow.document.write('<p>support@unitedcourier.com</p>');
+                printWindow.document.write('</div>');
+                printWindow.document.write('<div class="invoice-meta">');
+                printWindow.document.write('<h2>Invoice</h2>');
+                printWindow.document.write('<table>');
+                printWindow.document.write('<tr><td>Invoice No:</td><td><strong>' + (data.invoice_number || '-') + '</strong></td></tr>');
+                printWindow.document.write('<tr><td>Date:</td><td>' + (data.invoice_date || '-') + '</td></tr>');
+                printWindow.document.write('<tr><td>AWB Number:</td><td><strong>' + (data.awb_number || '-') + '</strong></td></tr>');
+                if (data.reference_number) {
+                    printWindow.document.write('<tr><td>Reference:</td><td>' + data.reference_number + '</td></tr>');
+                }
+                printWindow.document.write('</table>');
+                printWindow.document.write('</div>');
+                printWindow.document.write('</div>');
+
+                // Parties (address lines rendered one per line like the A4 invoice)
+                printWindow.document.write('<div class="parties">');
+                printWindow.document.write('<div class="party-box">');
+                printWindow.document.write('<h4>From (Shipper)</h4>');
+                printWindow.document.write('<p class="name">' + (shipper.company || '-') + '</p>');
+                printWindow.document.write('<p>' + (shipper.contact || '') + '</p>');
+                if (shipper.address_line1) { printWindow.document.write('<p>' + shipper.address_line1 + '</p>'); }
+                if (shipper.address_line2) { printWindow.document.write('<p>' + shipper.address_line2 + '</p>'); }
+                if (shipper.address_line3) { printWindow.document.write('<p>' + shipper.address_line3 + '</p>'); }
+                printWindow.document.write('<p>' + (shipper.city_state_pin || '') + '</p>');
+                printWindow.document.write('<p>Phone: ' + (shipper.phone || '-') + '</p>');
+                if (shipper.kyc_number) { printWindow.document.write('<p>GST: ' + shipper.kyc_number + '</p>'); }
+                printWindow.document.write('</div>');
+                printWindow.document.write('<div class="party-box">');
+                printWindow.document.write('<h4>To (Consignee)</h4>');
+                printWindow.document.write('<p class="name">' + (consignee.name || '-') + '</p>');
+                printWindow.document.write('<p>' + (consignee.contact || '') + '</p>');
+                if (consignee.address_line1) { printWindow.document.write('<p>' + consignee.address_line1 + '</p>'); }
+                if (consignee.address_line2) { printWindow.document.write('<p>' + consignee.address_line2 + '</p>'); }
+                if (consignee.address_line3) { printWindow.document.write('<p>' + consignee.address_line3 + '</p>'); }
+                printWindow.document.write('<p>' + (consignee.city_state_zip || '') + '</p>');
+                printWindow.document.write('<p>Phone: ' + (consignee.phone || '-') + '</p>');
+                printWindow.document.write('</div>');
+                printWindow.document.write('</div>');
+
+                // AWB highlight
+                printWindow.document.write('<div class="awb-box">');
+                printWindow.document.write('<div><div class="label">Air Waybill Number</div><div class="value">' + (data.awb_number || '-') + '</div></div>');
+                printWindow.document.write('<div class="text-right"><div class="label">Total Chargeable Weight</div><div class="value">' + weightHtml + '</div></div>');
+                printWindow.document.write('</div>');
+
+                // Items
+                printWindow.document.write('<table class="items">');
+                printWindow.document.write('<thead><tr><th style="width:40px;">#</th><th>Description</th><th class="text-center" style="width:60px;">Qty</th><th class="text-right" style="width:90px;">Unit Rate</th><th class="text-right" style="width:100px;">Amount</th></tr></thead>');
+                printWindow.document.write('<tbody>' + rowsHtml + '</tbody>');
+                printWindow.document.write('</table>');
+
+                // Totals
+                printWindow.document.write('<div class="totals"><table>' + totalsHtml + '</table></div>');
+
+                // Footer
+                printWindow.document.write('<div class="footer">');
+                printWindow.document.write('<p>This is a system-generated invoice. Generated on ' + new Date().toLocaleString() + '.</p>');
+                printWindow.document.write('<p>United Courier &copy; ' + new Date().getFullYear() + '. All rights reserved.</p>');
+                printWindow.document.write('</div>');
+
+                printWindow.document.write('</div></body></html>');
+                printWindow.document.close();
+
+                printWindow.onload = function () {
+                    printWindow.print();
+                    printWindow.onafterprint = function () {
+                        printWindow.close();
+                    };
+                };
+
+                if (printWindow.document.readyState === 'complete') {
+                    printWindow.print();
+                    printWindow.onafterprint = function () {
+                        printWindow.close();
+                    };
+                }
+            }
 
             // Cancel button click handler
             let cancelId = null;
@@ -3158,6 +3412,188 @@
 
         });
 
+        // =====================================================================
+        // 4x6 Courier Label (standard courier label format)
+        // =====================================================================
+
+        const courierLabelStyles =
+            '*{box-sizing:border-box;}' +
+            'html,body{margin:0;padding:0;background:#fff;}' +
+            'body{padding:10px;font-family:Arial,Helvetica,sans-serif;color:#111;}' +
+            '.label{width:384px;height:576px;margin:0 auto;border:2px solid #222;background:#fff;display:flex;flex-direction:column;}' +
+            '.header{text-align:center;padding:7px 7px 5px;border-bottom:2px solid #222;flex-shrink:0;}' +
+            '.company-name{font-size:16px;font-weight:700;line-height:18px;margin-bottom:3px;}' +
+            '.company-address{font-size:11px;line-height:13px;}' +
+            '.company-contact{font-size:11px;line-height:13px;margin-top:3px;}' +
+            '.box-badge{margin-top:4px;font-size:12px;font-weight:700;letter-spacing:1px;text-align:center;border-top:1px solid #222;padding-top:4px;}' +
+            '.ship-row{height:26px;display:flex;border-bottom:1px solid #222;align-items:center;flex-shrink:0;}' +
+            '.ship-title{width:70%;padding-left:8px;font-size:12px;font-weight:700;}' +
+            '.date{width:30%;padding-right:8px;text-align:right;font-size:10px;}' +
+            '.section-title{height:24px;padding:5px 8px 4px;font-size:12px;font-weight:700;border-bottom:1px solid #222;display:flex;align-items:center;flex-shrink:0;}' +
+            '.address{padding:6px 24px 6px;font-size:11px;line-height:15px;border-bottom:1px solid #222;}' +
+            '.from-address{flex:1;min-height:48px;}' +
+            '.to-address{flex:1.35;min-height:70px;}' +
+            '.receiver-name{font-size:13px;font-weight:700;margin-bottom:4px;}' +
+            '.shipping-info{height:45px;display:grid;grid-template-columns:1.15fr 1fr .65fr .55fr .85fr;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.info{padding:5px 6px 4px;font-size:10px;line-height:13px;}' +
+            '.info-title{font-size:10px;font-weight:700;margin-bottom:3px;}' +
+            '.center{text-align:center;}' +
+            '.content{height:34px;display:flex;align-items:center;padding:4px 8px;border-bottom:1px solid #222;font-size:11px;flex-shrink:0;}' +
+            '.content-title{width:72px;font-weight:700;}' +
+            '.barcode-area{height:104px;padding-top:11px;text-align:center;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.barcode-area svg{height:52px;max-width:100%;}' +
+            '.barcode-number{margin-top:8px;font-size:13px;font-weight:700;}' +
+            '.bottom{padding:8px 18px 9px;text-align:center;flex-shrink:0;}' +
+            '.bottom-line{height:2px;background:#111;margin-bottom:5px;}' +
+            '.country{font-size:19px;font-weight:700;line-height:21px;}' +
+            '@media print{html,body{padding:0;} .label{width:100%;height:6in;margin:0;}}' +
+            '@media (max-width:480px){body{padding:3px;} .label{width:100%;height:auto;min-height:576px;}}';
+
+        // Friendly destination country for the label's bottom "country" box
+        function getDestinationCountryCode(destination) {
+            if (!destination) return 'INTL';
+            const dest = String(destination);
+            const map = {
+                'US- United State of America': 'USA',
+                'US': 'USA', 'USA': 'USA',
+                'India': 'INDIA', 'IN': 'INDIA',
+                'UK - United Kingdom': 'UK', 'UK': 'UK', 'GB': 'UK', 'United Kingdom': 'UK',
+                'Canada': 'CANADA', 'CA': 'CANADA',
+                'Australia': 'AUSTRALIA', 'AU': 'AUSTRALIA',
+                'Srilanka': 'SRILANKA', 'Sri Lanka': 'SRILANKA', 'LK': 'SRILANKA',
+                'China': 'CHINA', 'CN': 'CHINA',
+                'Russia': 'RUSSIA', 'RU': 'RUSSIA',
+                'Germany': 'GERMANY', 'DE': 'GERMANY',
+                'France': 'FRANCE', 'FR': 'FRANCE',
+                'UAE': 'UAE', 'AE': 'UAE', 'United Arab Emirates': 'UAE',
+                'Singapore': 'SINGAPORE', 'SG': 'SINGAPORE'
+            };
+            if (map[dest]) return map[dest];
+            const m = dest.match(/^([A-Z]{2,3})[\s-]/);
+            return m ? m[1].toUpperCase() : dest.toUpperCase();
+        }
+
+        // D/S (destination service code) derived from the destination name
+        function getDestinationDs(destination) {
+            if (!destination) return '-';
+            const dest = String(destination);
+            const m = dest.match(/^([A-Z]{2})[\s-]/);
+            return m ? m[1].toUpperCase() : dest.slice(0, 4).toUpperCase();
+        }
+
+        // Build one 4x6 courier label (returns the outer .label HTML, barcode embedded).
+        // When boxIndex/boxCount are given, the label is built for ONE box of the
+        // shipment (per-box ACT WT., marked "BOX X OF N").
+        function buildCourierLabelHtml(data, boxIndex, boxCount) {
+            const shipper = data.shipper || {};
+            const consignee = data.consignee || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            const packages = Array.isArray(data.packages) ? data.packages : [];
+
+            const packageCount = packages.length || 1;
+            const hasBoxContext = typeof boxIndex === 'number' && typeof boxCount === 'number';
+            const boxIdx = hasBoxContext ? boxIndex : 1;
+            const boxTot = hasBoxContext ? boxCount : packageCount;
+
+            // ACT WT. shows this box's weight on a per-box label, otherwise the
+            // summed weight of all packages on a single combined label.
+            let actualWeight = 0;
+            if (hasBoxContext && packages[boxIdx - 1]) {
+                actualWeight = parseFloat(packages[boxIdx - 1].weight) || 0;
+            } else {
+                packages.forEach(function (pkg) {
+                    actualWeight += parseFloat(pkg.weight) || 0;
+                });
+            }
+
+            // CONTENT shows only the items that belong to this box on a
+            // per-box label (matched by box_no). On a combined label (no box
+            // context) all items are shown. If no item maps to this box, fall
+            // back to the full item list so the label never looks empty.
+            let boxItems = items;
+            if (hasBoxContext) {
+                boxItems = items.filter(function (item) {
+                    return String(item.box_no) === String(boxIdx);
+                });
+                if (!boxItems.length) {
+                    boxItems = items;
+                }
+            }
+            const itemText = boxItems.map(function (item) {
+                return item.description;
+            }).filter(Boolean).join(', ') || 'Goods';
+
+            const awb = data.awb_number || 'N/A';
+            const date = data.invoice_date || new Date().toLocaleDateString('en-GB');
+            // NETWORK comes from the courier service's api_provider; SERVICE is
+            // the courier service's service_code. Fall back to the shipping
+            // method / service_code if the courier service lookup is missing.
+            const network = data.api_provider || (data.shipping_method || '-');
+            const service = data.service_code || '-';
+            const country = getDestinationCountryCode(data.destination);
+            const ds = getDestinationDs(data.destination);
+
+            const labelHtml =
+                '<div class="label">' +
+                    '<div class="header">' +
+                        '<div class="company-name">United Worldwide Courier Pvt. Ltd.</div>' +
+                        '<div class="company-address">A-219, First Floor, Road No. 5 Mahipalpur Extension, New Delhi 110037</div>' +
+                        '<div class="company-contact">TEL:-011-46122222,www.unitedcouriers.biz</div>' +
+                        '<div class="box-badge">BOX ' + boxIdx + ' OF ' + boxTot + '</div>' +
+                    '</div>' +
+                    '<div class="ship-row">' +
+                        '<div class="ship-title">SHIP FROM:</div>' +
+                        '<div class="date"><b>DATE:</b>&nbsp;&nbsp;&nbsp;' + date + '</div>' +
+                    '</div>' +
+                    '<div class="section-title">' + (shipper.company || 'SHIPPER') + '</div>' +
+                    '<div class="address from-address">' +
+                        (shipper.address || '') + '<br>' +
+                        (shipper.city_state_pin || '') + '<br>' +
+                        (shipper.phone || '') +
+                    '</div>' +
+                    '<div class="section-title">SHIP TO:</div>' +
+                    '<div class="address to-address">' +
+                        '<div class="receiver-name">' + (consignee.name || '-') + '</div>' +
+                        (consignee.address || '') + '<br>' +
+                        (consignee.city_state_zip || '') + '<br>' +
+                        (consignee.phone || '-') +
+                    '</div>' +
+                    '<div class="shipping-info">' +
+                        '<div class="info"><div class="info-title">NETWORK</div>' + network + '</div>' +
+                        '<div class="info"><div class="info-title">SERVICE</div>' + service + '</div>' +
+                        '<div class="info center"><div class="info-title">D/S</div>' + ds + '</div>' +
+                        '<div class="info center"><div class="info-title">PCS</div>' + packageCount + '</div>' +
+                        '<div class="info center"><div class="info-title">ACT WT.</div>' + actualWeight.toFixed(3) + '</div>' +
+                    '</div>' +
+                    '<div class="content">' +
+                        '<div class="content-title">CONTENT</div>' +
+                        '<div>' + itemText + '</div>' +
+                    '</div>' +
+                    '<div class="barcode-area">' +
+                        '<svg data-label-barcode></svg>' +
+                        '<div class="barcode-number">' + awb + '</div>' +
+                    '</div>' +
+                    '<div class="bottom">' +
+                        '<div class="bottom-line"></div>' +
+                        '<div class="country">' + country + '</div>' +
+                    '</div>' +
+                '</div>';
+
+            const container = document.createElement('div');
+            container.innerHTML = labelHtml;
+            const barcode = container.querySelector('[data-label-barcode]');
+            JsBarcode(barcode, awb, {
+                format: 'CODE128',
+                lineColor: '#000',
+                width: 2,
+                height: 52,
+                displayValue: false,
+                margin: 0
+            });
+            barcode.removeAttribute('data-label-barcode');
+            return container.firstElementChild.outerHTML;
+        }
+
         function buildBulkLabelHtml(data) {
             const shipper = data.shipper || {};
             const consignee = data.consignee || {};
@@ -3278,16 +3714,41 @@
                 // @page margin stays 0 so the browser does not print its own
                 // header/footer (date/time). Spacing is handled via body padding.
                 (is4x6
-                    ? '@page{size:4in 6in;margin:0;} body{padding:3mm;font-size:10px;} '
+                    ? courierLabelStyles + '@page{size:4in 6in;margin:0;}'
                     : '@page{size:A4;margin:0;} body{padding:8mm;} ') +
-                'body{font-family:Arial,sans-serif;color:#000;margin:0;box-sizing:border-box;} ' +
-                'table{border-collapse:collapse;width:100%;} ' +
-                'th,td{border:1px solid #333;padding:4px;text-align:left;} ' +
-                '@media print{body{margin:0;}}' +
+                (is4x6 ? '' : 'body{font-family:Arial,sans-serif;color:#000;margin:0;box-sizing:border-box;} ') +
+                (is4x6 ? '' : 'table{border-collapse:collapse;width:100%;} ') +
+                (is4x6 ? '' : 'th,td{border:1px solid #333;padding:4px;text-align:left;} ') +
+                (is4x6 ? '' : '@media print{body{margin:0;}}') +
                 '</style></head><body>';
 
+            // Total number of 4x6 labels so page breaks go BETWEEN labels only.
+            let totalLabels = 0;
             selectedData.forEach(function (data) {
-                html += buildBulkLabelHtml(data);
+                if (is4x6) {
+                    const packages = Array.isArray(data.packages) ? data.packages : [];
+                    totalLabels += packages.length || 1;
+                }
+            });
+
+            let labelCount = 0;
+            selectedData.forEach(function (data) {
+                if (is4x6) {
+                    // Every box of every shipment gets its own 4x6 label marked
+                    // "BOX X OF N". Page breaks are added between labels so no
+                    // trailing blank page results.
+                    const packages = Array.isArray(data.packages) ? data.packages : [];
+                    const boxCount = packages.length || 1;
+                    for (let b = 1; b <= boxCount; b++) {
+                        html += buildCourierLabelHtml(data, b, boxCount);
+                        labelCount++;
+                        if (labelCount < totalLabels) {
+                            html += '<div style="page-break-after:always;"></div>';
+                        }
+                    }
+                } else {
+                    html += buildBulkLabelHtml(data);
+                }
             });
 
             html += '</body></html>';
@@ -3303,26 +3764,81 @@
             }, 300);
         }
 
+        // Print a 4x6 courier label for a single shipment (globally accessible).
+        // Used directly by the "Print Label" option and by printLabel() when the
+        // 4x6 size is selected.
+        function printCourierLabel4x6(invoiceId) {
+            const data = shipmentData[invoiceId];
+            if (!data) return;
+
+            const packages = Array.isArray(data.packages) ? data.packages : [];
+            const boxCount = packages.length || 1;
+
+            const printWindow = window.open('', '_blank', 'width=800,height=700');
+            if (!printWindow) {
+                alert('Popup blocked. Allow popups to print the label.');
+                return;
+            }
+
+            printWindow.document.write('<!DOCTYPE html><html><head><title>Courier Label</title>');
+            printWindow.document.write('<style>' + courierLabelStyles + '@page{size:4in 6in;margin:0;}</style>');
+            printWindow.document.write('</head><body>');
+
+            // One 4x6 label per box, each marked "BOX X OF N". The page break is
+            // added BETWEEN labels so no trailing blank page results.
+            for (let i = 1; i <= boxCount; i++) {
+                printWindow.document.write(buildCourierLabelHtml(data, i, boxCount));
+                if (i < boxCount) {
+                    printWindow.document.write('<div style="page-break-after:always;"></div>');
+                }
+            }
+
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+
+            printWindow.onload = function() {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            };
+            if (printWindow.document.readyState === 'complete') {
+                printWindow.print();
+                printWindow.onafterprint = function() {
+                    printWindow.close();
+                };
+            }
+        }
+
         // Print Label function (outside document.ready so it's globally accessible)
         function printLabel() {
-            const modalBody = document.getElementById('printLabelBody');
             const sizeSelect = document.getElementById('printLabelSize');
             const labelSize = sizeSelect ? sizeSelect.value : 'a4';
             const is4x6 = labelSize === '4x6';
-            const content = modalBody.cloneNode(true);
+
+            // For the 4x6 size the courier label format is used, built from the
+            // shipment the user opened via openPrintLabel().
+            if (is4x6 && window.currentPrintInvoiceId && shipmentData[window.currentPrintInvoiceId]) {
+                // ---- 4x6 Courier label format ----
+                printCourierLabel4x6(window.currentPrintInvoiceId);
+                return;
+            }
+
             const printWindow = window.open('', '_blank', 'width=800,height=700');
+            if (!printWindow) {
+                alert('Popup blocked. Allow popups to print the label.');
+                return;
+            }
+
+            // ---- A4 (default) label format ----
+            const modalBody = document.getElementById('printLabelBody');
+            const content = modalBody.cloneNode(true);
             printWindow.document.write('<!DOCTYPE html><html><head><title>Print Label</title>');
             printWindow.document.write('<style>');
             // @page margin must stay 0 so the browser does not print its own
             // header/footer (date/time). Spacing is handled via body padding.
-            if (is4x6) {
-                printWindow.document.write('body{font-family:Arial,sans-serif;padding:3mm;color:#000;font-size:10px;}');
-                printWindow.document.write('table th,table td{padding:2px 3px;font-size:9px;}');
-                printWindow.document.write('@page{size:4in 6in;margin:0;}');
-            } else {
-                printWindow.document.write('body{font-family:Arial,sans-serif;padding:8mm;color:#000;font-size:12px;}');
-                printWindow.document.write('@page{size:A4;margin:0;}');
-            }
+            printWindow.document.write('body{font-family:Arial,sans-serif;padding:8mm;color:#000;font-size:12px;}');
+            printWindow.document.write('@page{size:A4;margin:0;}');
             printWindow.document.write('table{border-collapse:collapse;width:100%;margin-bottom:8px;}');
             printWindow.document.write('table th,table td{border:1px solid #333;padding:3px 5px;text-align:left;}');
             printWindow.document.write('table th{background:#eee;font-weight:bold;}');
@@ -3333,11 +3849,7 @@
             printWindow.document.write('.col-6{flex:1;border:1px solid #333;padding:8px;}');
             printWindow.document.write('hr{border:none;border-top:1px dashed #ccc;margin:8px 0;}');
             printWindow.document.write('svg{max-width:100%;height:auto;}');
-            if (!is4x6) {
-                printWindow.document.write('@media print{body{margin:0;padding:8mm;}}');
-            } else {
-                printWindow.document.write('@media print{body{margin:0;padding:3mm;}}');
-            }
+            printWindow.document.write('@media print{body{margin:0;padding:8mm;}}');
             printWindow.document.write('</style></head><body>');
             printWindow.document.write(content.innerHTML);
             printWindow.document.write('</body></html>');
