@@ -53,6 +53,7 @@ class Tracking extends Model
         return [
             'draft'              => 'Order Created',
             'ready'              => 'Payment Confirmed',
+            'ready_for_pickup'   => 'Ready for Pickup',
             'assigned_for_pickup'=> 'Assigned for Pickup',
             'confirm_pickup'     => 'Pickup Confirmed',
             'packed'             => 'Shipment Packed',

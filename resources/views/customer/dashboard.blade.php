@@ -5513,6 +5513,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                                         'ready' => ['label' => 'Ready', 'class' => 'bg-info'],
                                                         'packed' => ['label' => 'Packed', 'class' => 'bg-primary'],
                                                         'manifested' => ['label' => 'Manifested', 'class' => 'bg-primary'],
+                                                        'ready_for_pickup' => ['label' => 'Ready for Pickup', 'class' => 'bg-info'],
                                                         'received' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
                                                         'confirm_pickup' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
                                                         'assigned_for_pickup' => ['label' => 'In-Transit to Hub', 'class' => 'bg-warning text-dark'],
@@ -5721,6 +5722,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
         const statusColors = {
             draft: '#6c757d',
             ready: '#0d6efd',
+            ready_for_pickup: '#6f42c1',
             assigned_for_pickup: '#198754',
             packed: '#fd7e14',
             manifested: '#6610f2',

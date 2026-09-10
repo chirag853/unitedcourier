@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BulkUploadController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\CodController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\KycController;
 use App\Http\Controllers\PaymentWebhookController;
@@ -95,6 +96,12 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         // CRM Routes
     Route::get('/contacts', [AdminController::class, 'contacts'])->name('admin.contacts');
     Route::get('/companies', [AdminController::class, 'companies'])->name('admin.companies');
+    // Admin manifest views (used from admin/companies "Ready for Pickup" tab).
+    // These reuse the customer manifest detail/label/document pages but are
+    // admin-authenticated and not scoped to a single customer.
+    Route::get('/manifest/{manifestNumber}', [CustomerController::class, 'viewManifestDetail'])->name('admin.manifest-detail');
+    Route::get('/manifest/{manifestNumber}/label', [CustomerController::class, 'manifestLabel'])->name('admin.manifest-label');
+    Route::get('/manifest/{manifestNumber}/document', [CustomerController::class, 'manifestDocument'])->name('admin.manifest-document');
     Route::get('/all-customer', [AdminController::class, 'exportCustomers'])->name('admin.export-customers');
     Route::get('/all-customer/{customer}/view', [AdminController::class, 'exportCustomerView'])->name('admin.export-customers.view');
     Route::get('/all-customer/{customer}', [AdminController::class, 'exportCustomersDetail'])->name('admin.export-customers.detail');
@@ -105,6 +112,13 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');
+
+    // COD (Cash on Delivery) Routes
+    Route::get('/cod/create-order', [CodController::class, 'codCreateOrder'])->name('admin.cod.create-order');
+    Route::get('/cod/all-orders', [CodController::class, 'codAllOrders'])->name('admin.cod.all-orders');
+    Route::post('/cod/create-order', [CodController::class, 'codStoreOrder'])->name('admin.cod.store-order');
+    Route::post('/cod/ups-rate', [CodController::class, 'codUpsRate'])->name('admin.cod.ups-rate');
+    Route::get('/cod/zones-by-destination', [CodController::class, 'codZonesByDestination'])->name('admin.cod.zones-by-destination');
 
     // Create User (Admin Management) Routes
     Route::get('/create-user', [AdminController::class, 'createUser'])->name('admin.create-user');
@@ -680,6 +694,12 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
     Route::post('/manifest', [CustomerController::class, 'manifestShipment'])->name('manifest');
     Route::post('/bulk-manifest', [CustomerController::class, 'bulkManifestShipments'])->name('bulk-manifest');
     Route::post('/manifest-ship-global-fallback', [CustomerController::class, 'manifestWithShipGlobalFallback'])->name('manifest-ship-global-fallback');
+    Route::get('/manifest/{manifestNumber}', [CustomerController::class, 'viewManifestDetail'])->name('manifest-detail');
+    Route::get('/manifest/{manifestNumber}/label', [CustomerController::class, 'manifestLabel'])->name('manifest-label');
+    Route::get('/manifest/{manifestNumber}/document', [CustomerController::class, 'manifestDocument'])->name('manifest-document');
+    Route::post('/manifest/remove', [CustomerController::class, 'removeFromManifest'])->name('manifest-remove');
+    Route::post('/manifest/close', [CustomerController::class, 'closeManifest'])->name('manifest-close');
+    Route::post('/manifest/assign-pickup', [CustomerController::class, 'assignForPickup'])->name('manifest-assign-pickup');
     Route::post('/cancel-shipment-by-shipper', [CustomerController::class, 'cancelShipmentByShipperId'])->name('cancel-shipment-by-shipper');
     Route::get('/search-hs-codes', [CustomerController::class, 'searchHsCodes'])->name('search-hs-codes');
 });

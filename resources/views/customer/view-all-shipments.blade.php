@@ -521,7 +521,7 @@
             line-height: 1.35;
             flex-shrink: 0;
             margin-top: 2px;
-        }
+        } 
 
         .receiver-details-stack .receiver-label {
             font-weight: 600;
@@ -628,6 +628,63 @@
         .hawb-sub-value {
             color: #1f2937;
             min-width: 0;
+        }
+
+        /* ===== Pickup Date Options (Assign for Pickup modal) ===== */
+        .md-pickup-date-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            margin-bottom: 8px;
+        }
+
+        .md-pickup-date-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .md-pickup-date-option {
+            flex: 1 1 90px;
+            min-width: 90px;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: #fff;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+
+        .md-pickup-date-option:hover {
+            border-color: #2f66f3;
+            background: #eaf0fe;
+        }
+
+        .md-pickup-date-option.selected {
+            border-color: #2f66f3;
+            background: #eaf0fe;
+            box-shadow: 0 4px 12px rgba(47, 102, 243, .18);
+        }
+
+        .md-pickup-date-option .dp-label {
+            display: block;
+            font-weight: 700;
+            font-size: 12px;
+            color: #1e293b;
+        }
+
+        .md-pickup-date-option.selected .dp-label {
+            color: #2f66f3;
+        }
+
+        .md-pickup-date-option .dp-date {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
         }
     </style>
 </head>
@@ -753,7 +810,7 @@
                                     <label class="form-label">Status</label>
                                     <select name="status" class="form-select">
                                         <option value="all">All Statuses</option>
-                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                                        @foreach(['draft' => 'Draft', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'ready_for_pickup' => 'Ready for Pickup', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
                                             <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
                                         @endforeach
                                     </select>
@@ -777,7 +834,7 @@
                 <div class="card border-0 shadow-sm rounded-4 shipment-status-card">
                     <div class="card-body p-3">
                         <div class="shipment-status-filters" aria-label="Shipment status filters">
-                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
+                            @foreach(['all' => 'All Orders', 'draft' => 'Drafts', 'ready' => 'Ready', 'packed' => 'Packed', 'manifested' => 'Manifested', 'ready_for_pickup' => 'Ready for Pickup', 'assigned_for_pickup' => 'In-Transit to Hub', 'received' => 'Received', 'dispatched' => 'Dispatched', 'cancelled' => 'Cancelled', 'delivered' => 'Delivered', 'disputed' => 'Disputed', 'on_hold' => 'On Hold'] as $value => $label)
                                 <a href="{{ request()->fullUrlWithQuery(['status' => $value, 'page' => null]) }}"
                                    class="btn {{ request('status', 'all') === $value ? 'btn-primary' : 'btn-light' }} rounded-pill status-filter-btn"
                                    data-filter="{{ $value }}">
@@ -790,24 +847,151 @@
                 <!-- Shipments Table Card -->
                 <div class="card border shadow">
                     <div class="card-body">
+                        @php
+                            // These flags are needed by the JavaScript at the bottom of the page even
+                            // when the shipments table itself is empty, so they are computed here at the
+                            // top level (before the @if/@else that renders the table) rather than inside
+                            // the table-rendering branch.
+                            $selectedStatus = request('status');
+                            $manifestColumnLocked = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                        @endphp
                         @if($invoices->isEmpty())
                             <div class="text-center py-5">
                                 <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
                                 <p class="mt-3 text-muted">No shipments matched the selected filters.</p>
                                 <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-primary">Clear Filters</a>
                             </div>
+                        @elseif(in_array($selectedStatus, ['manifested', 'ready_for_pickup'], true))
+                            {{-- Manifested / Ready for Pickup tabs: grouped manifest table
+                                (one row per manifest number with all its shipments collapsed) --}}
+                            @if($manifestGroups->isEmpty())
+                                <div class="text-center py-5">
+                                    <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
+                                    <p class="mt-3 text-muted">{{ $selectedStatus === 'ready_for_pickup' ? 'No shipments ready for pickup found.' : 'No manifested shipments found.' }}</p>
+                                </div>
+                            @else
+                                <div class="table-responsive">
+                                    <table id="manifestGroupsTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Manifest Code</th>
+                                                <th>Order Date</th>
+                                                <th>Shipments</th>
+                                                <th>Total Value</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($manifestGroups as $index => $manifest)
+                                            <tr class="manifest-group-row">
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <a href="{{ route('customer.manifest-detail', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                       target="_blank"
+                                                       class="badge bg-success text-decoration-none manifest-link"
+                                                       title="Open manifest details in new tab"
+                                                       style="white-space:nowrap;">
+                                                        {{ $manifest->manifest_number }}
+                                                        <i class="ti ti-external-link ms-1" style="font-size:11px;"></i>
+                                                    </a>
+                                                </td>
+                                                <td>
+                                                    @if($manifest->manifest_created_at)
+                                                        <div style="white-space:nowrap;">{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') }}</div>
+                                                        <div class="text-muted" style="font-size:11px;white-space:nowrap;">{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('h:i A') }}</div>
+                                                    @else
+                                                        -
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td>
+                                                    @php
+                                                        $manifestStatusVal = (int) ($manifest->status ?? \App\Models\Manifest::STATUS_PICKUP);
+                                                        $manifestStatusLabel = \App\Models\Manifest::statusLabel($manifestStatusVal);
+                                                        $manifestStatusBadge = \App\Models\Manifest::statusBadgeClass($manifestStatusVal);
+                                                    @endphp
+                                                    <span class="badge {{ $manifestStatusBadge }}">
+                                                        {{ $manifestStatusLabel }} ({{ $manifestStatusVal }})
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <a href="{{ route('customer.manifest-detail', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                       target="_blank"
+                                                       class="btn btn-sm btn-outline-primary btn-icon"
+                                                       title="View Manifest Details">
+                                                        <i class="ti ti-eye"></i>
+                                                    </a>
+                                                    @if($manifestStatusVal === \App\Models\Manifest::STATUS_OPEN)
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-secondary btn-icon close-manifest-btn"
+                                                                title="Close Manifest"
+                                                                data-manifest-number="{{ $manifest->manifest_number }}">
+                                                            <i class="ti ti-lock"></i>
+                                                        </button>
+                                                    @elseif(in_array($manifestStatusVal, [\App\Models\Manifest::STATUS_CLOSE, \App\Models\Manifest::STATUS_PICKUP], true))
+                                                        <a href="{{ route('customer.manifest-label', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                           target="_blank"
+                                                           class="btn btn-sm btn-outline-success btn-icon"
+                                                           title="Print Manifest Label">
+                                                            <i class="ti ti-printer"></i>
+                                                        </a>
+                                                        <a href="{{ route('customer.manifest-document', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                           target="_blank"
+                                                           class="btn btn-sm btn-outline-info btn-icon"
+                                                           title="Download Manifest Document">
+                                                            <i class="ti ti-file-text"></i>
+                                                        </a>
+                                                        @if($manifestStatusVal === \App\Models\Manifest::STATUS_CLOSE)
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-primary btn-icon assign-pickup-btn"
+                                                                    title="Assign for Pickup"
+                                                                    data-manifest-number="{{ $manifest->manifest_number }}">
+                                                                <i class="ti ti-truck"></i>
+                                                            </button>
+                                                        @endif
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                            @endif
                         @else
                             @php
                                 $isDraftView = request('status') === 'draft';
-                                $selectedStatus = request('status');
                                 $isAllOrdersView = $selectedStatus === null || $selectedStatus === 'all';
                                 $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
                                 $showHawbSubInfo = $isDraftView || in_array($selectedStatus, ['ready', 'packed', 'manifested'], true);
-                                $postPackedStatuses = ['packed', 'manifested', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
+                                $postPackedStatuses = ['packed', 'manifested', 'ready_for_pickup', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
                                 $hideCurrencyColumn = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideIncotermsAndPayColumns = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hidePrintLabelColumn = $isAllOrdersView || $showActionColumn || in_array($selectedStatus, $postPackedStatuses, true);
-                                $hideManifestColumn = $isAllOrdersView || in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                // The Manifest column is only meaningful once a shipment has been manifested.
+                                // It is hidden entirely on the dedicated Draft/Ready/Packed tabs, and on the
+                                // All Orders view it is also hidden whenever no shipment on the current page
+                                // has progressed past 'packed' — so a page full of draft/ready/packed rows
+                                // never shows the Manifest column. When manifested rows exist, the column
+                                // stays visible and only those rows show a manifest number (the per-row
+                                // cell below is hidden for draft/ready/packed rows).
+                                $hasManifestedRows = $invoices->getCollection()->contains(function ($inv) {
+                                    if ($inv->status === 'cancelled') {
+                                        return false;
+                                    }
+                                    return $inv->shipperInfo && in_array($inv->shipperInfo->status, [
+                                        'manifested', 'ready_for_pickup', 'assigned_for_pickup', 'received', 'confirm_pickup',
+                                        'dispatched', 'delivered', 'disputed', 'on_hold',
+                                    ], true);
+                                });
+                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true) || ! $hasManifestedRows;
                                 $hideCancelColumn = $isAllOrdersView || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideTrackingColumn = $isDraftView || $selectedStatus === 'ready';
                             @endphp
@@ -835,11 +1019,11 @@
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Incoterms</th>
                                             <!-- <th>Reference No.</th> -->
                                             <th class="status-col">Status</th>
-                                            {{-- Print Label / Pay Now / Manifest columns merged into the Action column
+                                            {{-- Print Label / Pay Now columns merged into the Action column
                                             <th @class(['d-none' => $hidePrintLabelColumn])>Print Label</th>
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
-                                            <th @class(['d-none' => $hideManifestColumn])>Manifest</th>
                                             --}}
+                                            <th @class(['manifest-col', 'd-none' => $hideManifestColumn])>Manifest</th>
                                             <th class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
                                             {{-- Standalone Cancel column merged into Action column
                                             <th @class(['text-center', 'd-none' => $hideCancelColumn || $showActionColumn])>Cancel</th>
@@ -855,6 +1039,9 @@
                                             } elseif ($invoice->shipperInfo && $invoice->shipperInfo->status) {
                                                 $rowStatus = $invoice->shipperInfo->status;
                                             }
+                                            // Per-row manifest cell visibility: hidden for draft/ready/packed rows
+                                            // so only manifested shipments show a manifest number in All Orders view.
+                                            $hideManifestCell = in_array($rowStatus, ['draft', 'ready', 'packed'], true);
 
                                             $selectedRate = $invoice->shipperInfo
                                                 ? $invoice->shipperInfo->serviceRate
@@ -1051,6 +1238,7 @@
                                                         'ready' => 'badge bg-info',
                                                         'packed' => 'badge bg-primary',
                                                         'manifested' => 'badge bg-secondary',
+                                                        'ready_for_pickup' => 'badge bg-info',
                                                         'assigned_for_pickup' => 'badge bg-warning text-dark',
                                                         'received' => 'badge bg-info',
                                                         'confirm_pickup' => 'badge bg-warning text-dark',
@@ -1065,6 +1253,7 @@
                                                         'ready' => 'Ready for Packing',
                                                         'packed' => 'Packed',
                                                         'manifested' => 'Manifested',
+                                                        'ready_for_pickup' => 'Ready for Pickup',
                                                         'assigned_for_pickup' => 'In-Transit to Hub',
                                                         'received' => 'Received',
                                                         'confirm_pickup' => 'In-Transit to Hub',
@@ -1117,26 +1306,42 @@
                                                 @endif
                                             </td>
                                             --}}
-                                            {{-- Manifest column merged into Action column
-                                            <td @class(['text-center', 'manifest-col', 'd-none' => $hideManifestColumn])>
+                                            {{-- Manifest column — value sourced from the manifests table --}}
+                                            <td @class(['text-center', 'manifest-col', 'd-none' => $hideManifestColumn || $hideManifestCell])>
                                                 @php
-                                                    $isPacked = $invoice->shipperInfo && $invoice->shipperInfo->status === 'packed';
-                                                    $isManifested = $invoice->shipperInfo && $invoice->shipperInfo->status === 'manifested';
+                                                    $manifestRow = $invoice->shipperInfo ? $invoice->shipperInfo->manifest : null;
                                                 @endphp
-                                                @if($isPacked)
-                                                    <button class="btn btn-sm btn-outline-success manifest-single-btn"
-                                                            data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}"
-                                                            data-invoice-id="{{ $invoice->id }}"
-                                                            style="padding:4px 12px;font-size:13px;border-radius:4px;">
-                                                        <i class="ti ti-package-export me-1"></i>Manifest
-                                                    </button>
-                                                @elseif($isManifested)
-                                                    <span class="badge bg-success" style="">Manifested</span>
+                                                @if($manifestRow && $manifestRow->manifest_number)
+                                                    <div class="d-inline-flex flex-column align-items-center gap-1">
+                                                        <a href="{{ route('customer.manifest-detail', ['manifestNumber' => $manifestRow->manifest_number]) }}"
+                                                           target="_blank"
+                                                           class="badge bg-success text-decoration-none manifest-link"
+                                                           title="Open manifest details in new tab"
+                                                           style="white-space:nowrap;">
+                                                            {{ $manifestRow->manifest_number }}
+                                                            <i class="ti ti-external-link ms-1" style="font-size:11px;"></i>
+                                                        </a>
+                                                        @if(in_array($rowStatus, ['ready_for_pickup', 'assigned_for_pickup'], true))
+                                                            <div class="d-inline-flex align-items-center gap-1">
+                                                                <a href="{{ route('customer.manifest-label', ['manifestNumber' => $manifestRow->manifest_number]) }}"
+                                                                   target="_blank"
+                                                                   class="btn btn-sm btn-outline-success btn-icon"
+                                                                   title="Print Manifest Label">
+                                                                    <i class="ti ti-printer"></i>
+                                                                </a>
+                                                                <a href="{{ route('customer.manifest-document', ['manifestNumber' => $manifestRow->manifest_number]) }}"
+                                                                   target="_blank"
+                                                                   class="btn btn-sm btn-outline-info btn-icon"
+                                                                   title="Download Manifest Document">
+                                                                    <i class="ti ti-file-text"></i>
+                                                                </a>
+                                                            </div>
+                                                        @endif
+                                                    </div>
                                                 @else
                                                     <span class="text-muted" style="font-size:12px;">-</span>
                                                 @endif
                                             </td>
-                                            --}}
                                             <td class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>
                                                 <div class="d-inline-flex align-items-center gap-1">
                                                     @if($rowStatus === 'draft')
@@ -1329,6 +1534,10 @@
                             <span class="value" id="detailReferenceNumber">-</span>
                         </div>
                         <div class="detail-row">
+                            <span class="label">Manifest No.</span>
+                            <span class="value" id="detailManifestNumber">-</span>
+                        </div>
+                        <div class="detail-row">
                             <span class="label">Status</span>
                             <span class="value" id="detailStatus">-</span>
                         </div>
@@ -1513,6 +1722,63 @@
                 <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It</button>
                     <button type="button" class="btn btn-danger" id="confirmCancelBtn">Yes, Cancel Shipment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Manifest Confirm Modal -->
+    <div class="modal fade" id="closeManifestModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-lock me-2"></i>Close Manifest</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Are you sure you want to close manifest <strong id="closeManifestNumberRef"></strong>?</p>
+                    <p class="text-muted mt-2 mb-0" style="font-size:13px;">Once closed, shipments in this manifest can no longer be removed or modified.</p>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It Open</button>
+                    <button type="button" class="btn btn-dark" id="confirmCloseManifestBtn">
+                        <i class="ti ti-lock me-1"></i>Yes, Close Manifest
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign for Pickup Confirm Modal -->
+    <div class="modal fade" id="assignPickupModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-truck me-2"></i>Assign for Pickup</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Are you sure you want to assign manifest <strong id="assignPickupNumberRef"></strong> for pickup?</p>
+                    <p class="text-muted mt-2 mb-0" style="font-size:13px;">All shipments in this manifest will be scheduled for pickup by the courier team.</p>
+                    <div class="mt-3">
+                        <div class="md-pickup-date-label">Select Pickup Date</div>
+                        <div class="md-pickup-date-options" id="assignPickupDates">
+                            @foreach($pickupDateOptions ?? [] as $idx => $option)
+                                <div class="md-pickup-date-option{{ $idx === 0 ? ' selected' : '' }}"
+                                     data-value="{{ $option['value'] }}">
+                                    <span class="dp-label">{{ $option['label'] }}</span>
+                                    <span class="dp-date">{{ $option['display'] }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                        <input type="hidden" id="assignPickupDate" value="{{ ($pickupDateOptions[0]['value'] ?? '') }}">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It Closed</button>
+                    <button type="button" class="btn btn-primary" id="confirmAssignPickupBtn">
+                        <i class="ti ti-truck me-1"></i>Yes, Assign for Pickup
+                    </button>
                 </div>
             </div>
         </div>
@@ -1789,6 +2055,7 @@
         document.getElementById('detailInvoiceCurrency').textContent = data.invoice_currency || '-';
         document.getElementById('detailIncoterms').textContent = data.incoterms || '-';
         document.getElementById('detailReferenceNumber').textContent = data.reference_number || '-';
+        document.getElementById('detailManifestNumber').textContent = data.manifest_number || '-';
         document.getElementById('detailStatus').textContent = data.status || '-';
 
         // Shipper Info
@@ -1984,6 +2251,19 @@
 
             // Keep status counters mutable so AJAX status changes are reflected immediately.
             const liveStatusCounts = @json($statusCounts);
+
+            // The Manifest column is removed entirely on the dedicated Draft/Ready/Packed tabs.
+            // On the All Orders view it may start hidden (when no manifested rows exist on the
+            // current page) but must be revealed once a shipment is manifested in-place.
+            const manifestColumnLocked = @json($manifestColumnLocked);
+
+            // Reveal the Manifest column + a single row's manifest cell after a successful manifest.
+            // No-op on the Draft/Ready/Packed tabs where the column is permanently removed.
+            function revealManifestCell($row, manifestNumber) {
+                if (manifestColumnLocked) return;
+                $('#shipmentsTable th.manifest-col').removeClass('d-none');
+                $row.find('.manifest-col').removeClass('d-none').html('<span class="badge bg-success">' + manifestNumber + '</span>');
+            }
 
             function refreshStatusCounters() {
                 $('.status-filter-btn').each(function () {
@@ -2634,6 +2914,17 @@
                                     walletBalance = Number(manifestResponse.new_balance);
                                     $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
                                 }
+                                // Show the manifest number in the Manifest column (sourced from the manifests table).
+                                const pmNo = manifestResponse.manifest_number;
+                                if (pmNo) {
+                                    const $mRow = $('#invoice-row-' + item.invoice_id);
+                                    if ($mRow.length) {
+                                        revealManifestCell($mRow, pmNo);
+                                    }
+                                    if (shipmentData[item.invoice_id]) {
+                                        shipmentData[item.invoice_id].manifest_number = pmNo;
+                                    }
+                                }
                                 // Status Ready hi rehta hai, row already Ready mark ho chuki hai.
                             } else {
                                 failedManifests++;
@@ -2788,6 +3079,14 @@
                             // Update status badge
                             const $badge = $row.find('.shipment-status-badge');
                             $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                            // Show the manifest number in the Manifest column (sourced from the manifests table).
+                            const smNo = response.manifest_number;
+                            if (smNo) {
+                                revealManifestCell($row, smNo);
+                                if (shipmentData[invoiceId]) {
+                                    shipmentData[invoiceId].manifest_number = smNo;
+                                }
+                            }
                             // Remove Manifest + Pay Now buttons from the Action column (columns merged into Action)
                             $btn.remove();
                             $row.find('.pay-now-btn').remove();
@@ -2869,6 +3168,14 @@
                                     $row.attr('data-status', 'manifested');
                                     const $badge = $row.find('.shipment-status-badge');
                                     $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                                    // Show the manifest number in the Manifest column (sourced from the manifests table).
+                                    if (item.manifest_number) {
+                                        revealManifestCell($row, item.manifest_number);
+                                        const bmInvoiceId = $row.data('invoice-id');
+                                        if (bmInvoiceId && shipmentData[bmInvoiceId]) {
+                                            shipmentData[bmInvoiceId].manifest_number = item.manifest_number;
+                                        }
+                                    }
                                     $row.find('.manifest-single-btn, .pay-now-btn').remove();
                                 });
                             }
@@ -3095,6 +3402,14 @@
                                 $row.attr('data-status', 'manifested');
                                 var $badge = $row.find('.shipment-status-badge');
                                 $badge.removeClass().addClass('shipment-status-badge badge bg-secondary').text('Manifested');
+                                // Show the manifest number in the Manifest column (sourced from the manifests table).
+                                if (response.manifest_number) {
+                                    revealManifestCell($row, response.manifest_number);
+                                    var fbInvoiceId = $row.data('invoice-id');
+                                    if (fbInvoiceId && shipmentData[fbInvoiceId]) {
+                                        shipmentData[fbInvoiceId].manifest_number = response.manifest_number;
+                                    }
+                                }
                                 $row.find('.manifest-single-btn, .pay-now-btn').remove();
                             }
                             // Payment is cut ONLY after the manifest succeeds — update wallet from response.
@@ -3409,6 +3724,118 @@
                 };
 
                 processNext();
+            });
+
+            // =============================================
+            // MANIFEST: Close manifest button
+            // =============================================
+            let closeManifestNumber = null;
+
+            $(document).on('click', '.close-manifest-btn', function () {
+                const manifestNumber = $(this).data('manifest-number');
+
+                if (!manifestNumber) return;
+
+                closeManifestNumber = manifestNumber;
+                $('#closeManifestNumberRef').text(manifestNumber);
+                $('#closeManifestModal').modal('show');
+            });
+
+            $('#confirmCloseManifestBtn').on('click', function () {
+                const $btn = $(this);
+
+                if (!closeManifestNumber) return;
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Closing...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest/close") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        manifest_number: closeManifestNumber
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            $('#closeManifestModal').modal('hide');
+                            closeManifestNumber = null;
+                            $btn.prop('disabled', false).html('<i class="ti ti-lock me-1"></i>Yes, Close Manifest');
+                            showAlert('success', response.message);
+                            setTimeout(function () { window.location.reload(); }, 1200);
+                        } else {
+                            showAlert('danger', response.message || 'Unable to close manifest.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-lock me-1"></i>Yes, Close Manifest');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Unable to close manifest. Please try again.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-lock me-1"></i>Yes, Close Manifest');
+                    }
+                });
+            });
+
+            // =============================================
+            // MANIFEST: Assign for Pickup button
+            // =============================================
+            let assignPickupNumber = null;
+
+            $(document).on('click', '.md-pickup-date-option', function () {
+                const $opt = $(this);
+                $opt.closest('.modal').find('.md-pickup-date-option').removeClass('selected');
+                $opt.addClass('selected');
+                $opt.closest('.modal').find('input[type="hidden"]').val($opt.data('value'));
+            });
+
+            $(document).on('click', '.assign-pickup-btn', function () {
+                const manifestNumber = $(this).data('manifest-number');
+
+                if (!manifestNumber) return;
+
+                assignPickupNumber = manifestNumber;
+                $('#assignPickupNumberRef').text(manifestNumber);
+                $('#assignPickupModal').modal('show');
+            });
+
+            $('#confirmAssignPickupBtn').on('click', function () {
+                const $btn = $(this);
+
+                if (!assignPickupNumber) return;
+
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Assigning...');
+
+                $.ajax({
+                    url: '{{ url("/customer/manifest/assign-pickup") }}',
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        manifest_number: assignPickupNumber,
+                        pickup_date: $('#assignPickupDate').val()
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            $('#assignPickupModal').modal('hide');
+                            assignPickupNumber = null;
+                            $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i>Yes, Assign for Pickup');
+                            showAlert('success', response.message);
+                            setTimeout(function () { window.location.reload(); }, 1200);
+                        } else {
+                            showAlert('danger', response.message || 'Unable to assign manifest for pickup.');
+                            $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i>Yes, Assign for Pickup');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Unable to assign manifest for pickup. Please try again.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i>Yes, Assign for Pickup');
+                    }
+                });
             });
 
         });

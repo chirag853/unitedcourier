@@ -716,6 +716,7 @@
                                                             'packed' => 'bg-primary-subtle text-primary',
                                                             'draft' => 'bg-secondary-subtle text-secondary',
                                                             'ready' => 'bg-primary-subtle text-primary',
+                                                            'ready_for_pickup' => 'bg-info-subtle text-info',
                                                             'assigned_for_pickup' => 'bg-primary-subtle text-primary',
                                                         ];
                                                     @endphp
@@ -899,6 +900,7 @@
         const shipmentStatusOrder = [
             'draft',
             'ready',
+            'ready_for_pickup',
             'assigned_for_pickup',
             'confirm_pickup',
             'packed',
@@ -915,6 +917,7 @@
         const statusColors = {
             draft: '#6c757d',
             ready: '#0d6efd',
+            ready_for_pickup: '#6f42c1',
             assigned_for_pickup: '#198754',
             confirm_pickup: '#fd9f43',
             packed: '#fd7e14',

@@ -16,6 +16,7 @@ use App\Models\HomePageContent;
 use App\Models\HsHtsCode;
 use App\Models\KycDetail;
 use App\Models\KycDraft;
+use App\Models\Manifest;
 use App\Models\PackageDimension;
 use App\Models\PaymentOrder;
 use App\Models\ShipmentInvoice;
@@ -589,8 +590,8 @@ class CustomerController extends Controller
 
         // Calculate totals for stat cards
         $totalBooked = array_sum($statusCounts);
-        // "In-Transit to Hub" groups pickup-assigned and picked-up shipments.
-        $pickupPending = ($statusCounts['assigned_for_pickup'] ?? 0) + ($statusCounts['received'] ?? 0) + ($statusCounts['confirm_pickup'] ?? 0);
+        // "Ready for Pickup" + "In-Transit to Hub" (pickup-assigned and picked-up shipments).
+        $pickupPending = ($statusCounts['ready_for_pickup'] ?? 0) + ($statusCounts['assigned_for_pickup'] ?? 0) + ($statusCounts['received'] ?? 0) + ($statusCounts['confirm_pickup'] ?? 0);
         $outForDelivery = ($statusCounts['dispatched'] ?? 0) + ($statusCounts['ready_to_dispatch'] ?? 0);
         $delivered = $statusCounts['delivered'] ?? 0;
 
@@ -608,7 +609,7 @@ class CustomerController extends Controller
             ->pluck('count', 'status')
             ->toArray();
         $thisMonthBooked = array_sum($thisMonthStatusCounts);
-        $thisMonthPickupPending = ($thisMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($thisMonthStatusCounts['received'] ?? 0) + ($thisMonthStatusCounts['confirm_pickup'] ?? 0);
+        $thisMonthPickupPending = ($thisMonthStatusCounts['ready_for_pickup'] ?? 0) + ($thisMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($thisMonthStatusCounts['received'] ?? 0) + ($thisMonthStatusCounts['confirm_pickup'] ?? 0);
         $thisMonthOutForDelivery = ($thisMonthStatusCounts['dispatched'] ?? 0) + ($thisMonthStatusCounts['ready_to_dispatch'] ?? 0);
         $thisMonthDelivered = $thisMonthStatusCounts['delivered'] ?? 0;
 
@@ -620,7 +621,7 @@ class CustomerController extends Controller
             ->pluck('count', 'status')
             ->toArray();
         $lastMonthBooked = array_sum($lastMonthStatusCounts);
-        $lastMonthPickupPending = ($lastMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($lastMonthStatusCounts['received'] ?? 0) + ($lastMonthStatusCounts['confirm_pickup'] ?? 0);
+        $lastMonthPickupPending = ($lastMonthStatusCounts['ready_for_pickup'] ?? 0) + ($lastMonthStatusCounts['assigned_for_pickup'] ?? 0) + ($lastMonthStatusCounts['received'] ?? 0) + ($lastMonthStatusCounts['confirm_pickup'] ?? 0);
         $lastMonthOutForDelivery = ($lastMonthStatusCounts['dispatched'] ?? 0) + ($lastMonthStatusCounts['ready_to_dispatch'] ?? 0);
         $lastMonthDelivered = $lastMonthStatusCounts['delivered'] ?? 0;
 
@@ -5706,6 +5707,12 @@ class CustomerController extends Controller
             ->when($status && $status !== 'all', function ($q) use ($status) {
                 if ($status === 'cancelled') {
                     $q->where('status', 'cancelled');
+                } elseif ($status === 'ready_for_pickup') {
+                    // Shipments whose pickup date has been scheduled but the
+                    // carrier has not yet assigned a delivery person.
+                    $q->whereHas('shipperInfo', function ($shipperQuery) {
+                        $shipperQuery->where('status', 'ready_for_pickup');
+                    });
                 } elseif ($status === 'assigned_for_pickup' || $status === 'confirm_pickup') {
                     // Pickup-assigned and pickup-confirmed shipments are both
                     // shown together under "In-Transit to Hub". Hub-received
@@ -5726,7 +5733,10 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_price', 'updated_at');
+                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'total_price', 'updated_at');
+                },
+                'shipperInfo.manifest' => function ($q) {
+                    $q->select('id', 'shipper_id', 'manifest_number', 'status', 'created_at');
                 },
                 'shipperInfo.shipmentTracking' => function ($q) {
                     $q->select('id', 'shipper_id', 'shipment_identification_number', 'transportation_charges_currency', 'transportation_charges_amount', 'service_options_charges_currency', 'service_options_charges_amount', 'total_charges_currency', 'total_charges_amount', 'billing_weight_uom', 'billing_weight');
@@ -5748,7 +5758,7 @@ class CustomerController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        $statusCounts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'assigned_for_pickup' => 0, 'received' => 0, 'confirm_pickup' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
+        $statusCounts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0, 'ready_for_pickup' => 0, 'assigned_for_pickup' => 0, 'received' => 0, 'confirm_pickup' => 0, 'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0, 'disputed' => 0, 'on_hold' => 0];
         $countInvoices = ShipmentInvoice::whereHas('shipperInfo', function ($q) use ($customerId) {
             $q->where('customer_id', $customerId);
         })->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
@@ -5796,6 +5806,7 @@ class CustomerController extends Controller
             $shipper = $invoice->shipperInfo;
             $consignee = $shipper ? $shipper->consigneeInfo : null;
             $tracking = $shipper ? $shipper->shipmentTracking : null;
+            $manifest = $shipper ? $shipper->manifest : null;
             $packages = $shipper ? $shipper->packageDimensions : collect([]);
             $items = $invoice->invoiceItems;
             $selectedRate = $shipper ? $shipper->serviceRate : null;
@@ -5817,6 +5828,7 @@ class CustomerController extends Controller
                 $invoice->id => [
                     'shipper_id' => $shipper ? $shipper->id : null,
                     'awb_number' => $shipper ? $shipper->awb_number : null,
+                    'manifest_number' => $manifest ? $manifest->manifest_number : null,
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
@@ -5915,6 +5927,68 @@ class CustomerController extends Controller
                 ],
             ];
         });
+
+        // Build grouped manifest rows for the Manifested tab, mirroring the
+        // admin companies page. Multiple shipments can share one manifest
+        // number (bulk manifest batches), so group by manifest_number and
+        // show the manifest code, order date, shipment count, total value
+        // (customer charge incl. GST) and cost (base + fuel + surcharge).
+        $manifestGroups = collect([]);
+        // The Manifested tab and the Ready for Pickup tab both render the
+        // grouped manifest table: every shipment that shares a manifest
+        // number is collapsed into a single row so the customer sees the
+        // manifest as one unit (mirroring the manifest detail page).
+        if (in_array($status, ['manifested', 'ready_for_pickup'], true)) {
+            $manifestGroups = $invoices->getCollection()
+                ->filter(function ($invoice) {
+                    return $invoice->shipperInfo
+                        && $invoice->shipperInfo->manifest
+                        && ! empty($invoice->shipperInfo->manifest->manifest_number);
+                })
+                ->groupBy(function ($invoice) {
+                    return $invoice->shipperInfo->manifest->manifest_number;
+                })
+                ->map(function ($group, $manifestNumber) {
+                    $first = $group->first();
+
+                    return (object) [
+                        'manifest_number' => $manifestNumber,
+                        'manifest_created_at' => $first->shipperInfo->manifest->created_at ?? null,
+                        'status' => (int) ($first->shipperInfo->manifest->status ?? Manifest::STATUS_PICKUP),
+                        'shipment_count' => $group->count(),
+                        'total_value' => (float) $group->sum(function ($invoice) {
+                            return (float) ($invoice->shipperInfo->total_price ?? 0);
+                        }),
+                        'total_cost' => (float) $group->sum(function ($invoice) {
+                            return (float) ($invoice->shipperInfo->total_base_price ?? 0)
+                                + (float) ($invoice->shipperInfo->total_fuel_price ?? 0)
+                                + (float) ($invoice->shipperInfo->total_surcharge ?? 0);
+                        }),
+                        'shipments' => $group->map(function ($invoice) {
+                            $shipper = $invoice->shipperInfo;
+                            $consignee = $shipper ? $shipper->consigneeInfo : null;
+
+                            return [
+                                'awb_number' => $shipper->awb_number ?? 'N/A',
+                                'invoice_number' => $invoice->invoice_number ?? 'N/A',
+                                'from' => $shipper ? trim(($shipper->city ?? '-').', '.($shipper->state ?? '-')) : '-',
+                                'to' => $consignee ? trim(($consignee->city ?? '-').', '.($consignee->state ?? '-')) : '-',
+                                'consignee_name' => $consignee
+                                    ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A'))
+                                    : 'N/A',
+                                'amount' => (float) ($shipper->total_price ?? 0),
+                                'amount_formatted' => $shipper && $shipper->total_price
+                                    ? number_format((float) $shipper->total_price, 2).' '.($invoice->invoice_currency ?? '')
+                                    : 'N/A',
+                            ];
+                        })->values()->all(),
+                    ];
+                })
+                ->sortByDesc(function ($manifest) {
+                    return $manifest->manifest_created_at ? strtotime((string) $manifest->manifest_created_at) : 0;
+                })
+                ->values();
+        }
         DB::listen(function ($query) {
             logger()->info('SQL', [
                 'sql' => $query->sql,
@@ -5923,7 +5997,856 @@ class CustomerController extends Controller
             ]);
         });
 
-        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap'));
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap', 'manifestGroups'))
+            ->with('pickupDateOptions', $this->getPickupDateOptions());
+    }
+
+    /**
+     * Build the list of selectable pickup dates based on the current India time.
+     *
+     * Before 12:00 PM IST the customer may pick Today, Tomorrow or the day
+     * after; from 12:00 PM IST onwards Today is no longer available, so the
+     * options become Tomorrow, the day after and the day after that.
+     *
+     * @return array<int, array{label: string, value: string, display: string}>
+     */
+    private function getPickupDateOptions(): array
+    {
+        $now = \Carbon\Carbon::now('Asia/Kolkata');
+        $startOffset = $now->hour < 12 ? 0 : 1;
+        $labels = ['', '', '', ''];
+        $options = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            $date = $now->copy()->addDays($startOffset + $i);
+            $options[] = [
+                'label' => $labels[$startOffset + $i],
+                'value' => $date->format('Y-m-d'),
+                'display' => $date->format('D, j M'),
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Show all details for a single manifest. This page is opened in a new tab
+     * from the customer's View All Shipments page. A manifest may contain one
+     * or more shipments; bulk manifests share a single manifest number.
+     *
+     * @param string $manifestNumber
+     * @return \Illuminate\Contracts\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function viewManifestDetail($manifestNumber)
+    {
+        // Admin can open the same manifest detail page (used from admin/companies
+        // "Ready for Pickup" tab). Admin is not scoped to a single customer.
+        $isAdminView = auth()->guard('admin')->check();
+
+        if (! $isAdminView && ! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        // Load every manifest row sharing this manifest number for this customer
+        // (bulk manifests group multiple shipments under one manifest_number).
+        $manifestQuery = Manifest::with([
+            'shipper.consigneeInfo' => function ($q) {
+                $q->select(
+                    'id',
+                    'shipper_id',
+                    'consignee_name',
+                    'contact_person',
+                    'phone_number',
+                    'email',
+                    'address_line1',
+                    'address_line2',
+                    'address_line3',
+                    'city',
+                    'state',
+                    'zip_code',
+                    'delivery_destination',
+                    'origin_type'
+                );
+            },
+            'shipper.packageDimensions',
+            'shipper.shipmentTracking',
+            'shipper.invoices.invoiceItems',
+            'customer' => function ($q) {
+                $q->select('id', 'first_name', 'last_name', 'phone_number', 'email');
+            },
+        ])
+            ->where('manifest_number', $manifestNumber)
+            ->orderBy('created_at');
+
+        // Customer views are scoped to their own manifests only.
+        if (! $isAdminView) {
+            $manifestQuery->where('customer_id', $customerId);
+        }
+
+        $manifestRows = $manifestQuery->get();
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+
+        $shipments = $manifestRows->map(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+
+            $from = $shipper ? trim(($shipper->city ?? '-') . ', ' . ($shipper->state ?? '-')) : '-';
+            $to = $consignee ? trim(($consignee->city ?? '-') . ', ' . ($consignee->state ?? '-')) : '-';
+
+            // Package total weight: sum of chargeable weights, falling back to actual weight.
+            $totalWeight = 0.0;
+            if ($shipper) {
+                foreach ($shipper->packageDimensions as $pkg) {
+                    $totalWeight += (float) ($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+                }
+            }
+
+            // Order origin type: consignee origin_type "CSB V" / "CSB 5" => CSB5, otherwise CSB4.
+            $originType = strtoupper(trim((string) ($consignee->origin_type ?? '')));
+            $orderType = in_array($originType, ['CSB V', 'CSB 5'], true) ? 'CSB5' : 'CSB4';
+
+            // Consignee (ship-to) full delivery address.
+            $consigneeAddress = $consignee
+                ? trim(implode(', ', array_filter([
+                    $consignee->address_line1 ?? '',
+                    $consignee->address_line2 ?? '',
+                    $consignee->address_line3 ?? '',
+                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '')),
+                    $consignee->zip_code ?? '',
+                    $consignee->delivery_destination ?? '',
+                ])))
+                : '';
+
+            return [
+                'shipper_id' => $shipper ? (int) $shipper->id : null,
+                'awb_number' => $shipper ? ($shipper->awb_number ?? 'N/A') : 'N/A',
+                'invoice_number' => $invoice ? ($invoice->invoice_number ?? 'N/A') : 'N/A',
+                'shipper_company' => $shipper ? ($shipper->company_name ?: ($shipper->contact_person ?: 'N/A')) : 'N/A',
+                'consignee_name' => $consignee ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A')) : 'N/A',
+                'from' => $from,
+                'to' => $to,
+                'currency' => $invoice ? ($invoice->invoice_currency ?? '') : '',
+                'amount' => (float) ($shipper ? ($shipper->total_price ?? 0) : 0),
+                'amount_formatted' => $shipper && $shipper->total_price
+                    ? number_format((float) $shipper->total_price, 2) . ' ' . ($invoice->invoice_currency ?? '')
+                    : 'N/A',
+                'status' => $shipper ? ($shipper->status ?: 'N/A') : 'N/A',
+                'order_date' => $shipper && $shipper->created_at
+                    ? $shipper->created_at->format('d-m-Y h:i A')
+                    : 'N/A',
+                'order_type' => $orderType,
+                'total_weight' => $totalWeight > 0 ? number_format($totalWeight, 2) . ' kg' : '-',
+                'package_count' => $shipper ? $shipper->packageDimensions->count() : 0,
+                'address' => $consigneeAddress ?: '-',
+                'customer' => [
+                    'name' => trim(($manifest->customer->first_name ?? '') . ' ' . ($manifest->customer->last_name ?? '')),
+                    'phone' => $manifest->customer->phone_number ?? 'N/A',
+                    'email' => $manifest->customer->email ?? 'N/A',
+                ],
+            ];
+        })->values();
+
+        $currency = $shipments->pluck('currency')->filter()->first() ?? '';
+        $totalValue = (float) $shipments->sum('amount');
+        $totalCost = (float) $manifestRows->sum(function ($manifest) {
+            $shipper = $manifest->shipper;
+            if (! $shipper) {
+                return 0;
+            }
+            return (float) $shipper->total_base_price
+                + (float) $shipper->total_fuel_price
+                + (float) $shipper->total_surcharge;
+        });
+
+        // Shipment detail data for the "View" modal (JS-friendly), keyed by shipper_id.
+        // Mirrors the structure used on the view-all-shipments page so the same modal
+        // rendering approach can be reused.
+        $shipmentDetails = $manifestRows->mapWithKeys(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $tracking = $shipper ? $shipper->shipmentTracking : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+            $packages = $shipper ? $shipper->packageDimensions : collect([]);
+
+            $displayAmount = $shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : round((float) $items->sum('amount'), 2);
+
+            $orderDate = $shipper && $shipper->created_at
+                ? $shipper->created_at->format('d-m-Y h:i A')
+                : null;
+
+            if (! $shipper || ! $shipper->id) {
+                return [];
+            }
+
+            return [
+                (int) $shipper->id => [
+                    'shipper_id' => (int) $shipper->id,
+                    'awb_number' => $shipper->awb_number ?? null,
+                    'manifest_number' => $manifest->manifest_number,
+                    'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+                    'invoice_number' => $invoice ? ($invoice->invoice_number ?? null) : null,
+                    'invoice_date' => $invoice && $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
+                    'invoice_amount' => $invoice ? number_format((float) $items->sum('amount'), 2) : null,
+                    'invoice_currency' => $invoice ? ($invoice->invoice_currency ?? null) : null,
+                    'incoterms' => $invoice ? ($invoice->incoterms ?? null) : null,
+                    'reference_number' => $invoice ? ($invoice->reference_number ?? null) : null,
+                    'status' => $shipper->status ?: 'draft',
+                    'order_date' => $orderDate,
+                    'customer' => [
+                        'name' => trim(($manifest->customer->first_name ?? '') . ' ' . ($manifest->customer->last_name ?? '')),
+                        'phone' => $manifest->customer->phone_number ?? null,
+                        'email' => $manifest->customer->email ?? null,
+                    ],
+                    'ship_from' => $shipper
+                        ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India')
+                        : null,
+                    'ship_to' => $consignee
+                        ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? ''))
+                        : null,
+                    'shipper' => $shipper ? [
+                        'company' => $shipper->company_name,
+                        'contact' => $shipper->contact_person,
+                        'phone' => $shipper->phone_number,
+                        'email' => $shipper->email,
+                        'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
+                        'address_line1' => $shipper->address_line1,
+                        'address_line2' => $shipper->address_line2,
+                        'address_line3' => $shipper->address_line3,
+                        'kyc_number' => $shipper->kyc_number,
+                        'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                    ] : null,
+                    'consignee' => $consignee ? [
+                        'name' => $consignee->consignee_name,
+                        'contact' => $consignee->contact_person,
+                        'phone' => $consignee->phone_number,
+                        'email' => $consignee->email,
+                        'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
+                        'address_line1' => $consignee->address_line1,
+                        'address_line2' => $consignee->address_line2,
+                        'address_line3' => $consignee->address_line3,
+                        'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                    ] : null,
+                    'destination' => $consignee ? $consignee->delivery_destination : null,
+                    'origin_type' => $consignee ? $consignee->origin_type : null,
+                    'shipping_method' => $shipper ? $shipper->shipping_method : null,
+                    'packages' => $packages->map(function ($pkg, $idx) {
+                        return [
+                            'index' => $idx + 1,
+                            'weight' => $pkg->actual_weight_kg,
+                            'length' => $pkg->length_cm,
+                            'width' => $pkg->width_cm,
+                            'height' => $pkg->height_cm,
+                            'volumetric' => $pkg->volumetric_weight,
+                            'chargeable' => $pkg->chargeable_weight,
+                        ];
+                    })->values()->toArray(),
+                    'items' => $items->map(function ($item) {
+                        $qty = $item->qty ?? 0;
+                        $rate = $item->unit_rate ?? 0;
+                        $igstAmt = $item->igst_amount ?? 0;
+                        $baseAmount = $qty * $rate;
+                        $amount = $item->amount ?? ($baseAmount + $igstAmt);
+
+                        return [
+                            'box_no' => $item->box_no,
+                            'description' => $item->description,
+                            'hs_code' => $item->hs_code,
+                            'hts_code' => $item->hts_code,
+                            'unit_type' => $item->unit_type,
+                            'qty' => $qty,
+                            'unit_rate' => $rate,
+                            'igst_percentage' => $item->igst_percentage ?? 0,
+                            'igst_amount' => number_format($igstAmt, 2),
+                            'amount' => number_format($amount, 2),
+                        ];
+                    })->values()->toArray(),
+                    'items_total' => number_format($displayAmount, 2),
+                    'price_breakdown' => $shipper ? [
+                        'base' => $shipper->total_base_price !== null ? (float) $shipper->total_base_price : ($shipper->base_price !== null ? (float) $shipper->base_price : null),
+                        'fuel' => $shipper->total_fuel_price !== null ? (float) $shipper->total_fuel_price : ($shipper->fuel_price !== null ? (float) $shipper->fuel_price : null),
+                        'surcharge' => $shipper->total_surcharge !== null ? (float) $shipper->total_surcharge : ($shipper->surcharge_total !== null ? (float) $shipper->surcharge_total : null),
+                        'gst' => $shipper->gst_amount !== null ? (float) $shipper->gst_amount : null,
+                        'total' => (float) $displayAmount,
+                    ] : null,
+                    'charges' => $shipper ? [
+                        'transport' => $shipper->total_base_price !== null
+                            ? 'INR ' . number_format((float) $shipper->total_base_price, 2)
+                            : ($shipper->base_price !== null ? 'INR ' . number_format((float) $shipper->base_price, 2) : null),
+                        'service_options' => $shipper->total_fuel_price !== null
+                            ? 'INR ' . number_format((float) $shipper->total_fuel_price, 2)
+                            : ($shipper->fuel_price !== null ? 'INR ' . number_format((float) $shipper->fuel_price, 2) : null),
+                        'surcharge' => $shipper->total_surcharge !== null
+                            ? 'INR ' . number_format((float) $shipper->total_surcharge, 2)
+                            : ($shipper->surcharge_total !== null ? 'INR ' . number_format((float) $shipper->surcharge_total, 2) : null),
+                        'gst' => $shipper->gst_amount !== null
+                            ? 'INR ' . number_format((float) $shipper->gst_amount, 2)
+                            : null,
+                        'total' => $shipper->total_price !== null && (float) $shipper->total_price > 0
+                            ? 'INR ' . number_format((float) $shipper->total_price, 2)
+                            : null,
+                        'billing_weight' => $tracking && $tracking->billing_weight
+                            ? trim(($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'))
+                            : null,
+                    ] : null,
+                ],
+            ];
+        })->all();
+
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'manifest_created_at' => $firstManifest->created_at,
+            'customer_name' => trim(($firstManifest->customer->first_name ?? '') . ' ' . ($firstManifest->customer->last_name ?? '')),
+            'shipment_count' => $shipments->count(),
+            'total_value' => $totalValue,
+            'total_cost' => $totalCost,
+            'currency' => $currency,
+            'status' => (int) ($firstManifest->status ?? Manifest::STATUS_OPEN),
+            'shipments' => $shipments,
+        ];
+
+        return view('customer.manifest-detail', compact('manifest', 'shipmentDetails'))
+            ->with('pickupDateOptions', $this->getPickupDateOptions())
+            ->with('isAdminView', $isAdminView);
+    }
+
+    /**
+     * Load every manifest row sharing a manifest number for the current
+     * customer, with all relations needed to print manifest labels and
+     * manifest documents (shipper, consignee, packages, tracking, invoice
+     * items and the owning customer).
+     *
+     * @param  string  $manifestNumber
+     * @param  int  $customerId
+     * @return \Illuminate\Database\Eloquent\Collection<int, Manifest>
+     */
+    private function loadManifestRowsForCustomer(string $manifestNumber, int $customerId, bool $isAdminView = false)
+    {
+        $query = Manifest::with([
+            'shipper.consigneeInfo' => function ($q) {
+                $q->select(
+                    'id',
+                    'shipper_id',
+                    'consignee_name',
+                    'contact_person',
+                    'phone_number',
+                    'email',
+                    'address_line1',
+                    'address_line2',
+                    'address_line3',
+                    'city',
+                    'state',
+                    'zip_code',
+                    'delivery_destination',
+                    'origin_type'
+                );
+            },
+            'shipper.packageDimensions',
+            'shipper.shipmentTracking',
+            'shipper.invoices.invoiceItems',
+            'customer' => function ($q) {
+                $q->select('id', 'first_name', 'last_name', 'phone_number', 'email');
+            },
+        ])
+            ->where('manifest_number', $manifestNumber)
+            ->orderBy('created_at');
+
+        // Admin can load any manifest (not scoped to one customer).
+        if (! $isAdminView) {
+            $query->where('customer_id', $customerId);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * Print the manifest label(s).
+     *
+     * Renders a print-only page containing one shipping label per shipment in
+     * the manifest (460px label cards). Every label follows the UWC shipping
+     * label format: company/service header, Code128 barcode (AWB number),
+     * delivery address, product table, second barcode, date and sender &
+     * return details. Each label is separated by a page break so it prints on
+     * its own sticker sheet.
+     *
+     * @param  string  $manifestNumber
+     * @return \Illuminate\Contracts\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function manifestLabel($manifestNumber)
+    {
+        // Admin can print labels for any manifest (used from admin manifest detail).
+        $isAdminView = auth()->guard('admin')->check();
+
+        if (! $isAdminView && ! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $manifestRows = $this->loadManifestRowsForCustomer((string) $manifestNumber, $customerId, $isAdminView);
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+
+        // Build a single summary label for the whole manifest. The product
+        // table always shows "Assorted Goods" with the total shipment count
+        // and the combined declared value of every shipment in the manifest.
+        $shipmentCount = $manifestRows->count();
+        $totalValue = 0;
+        $service = 'DIRECT';
+        $senderCompany = 'UWC COURIERS PVT LTD';
+        $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
+        $senderPhone = '8130470109';
+
+        foreach ($manifestRows as $manifest) {
+            $shipper = $manifest->shipper;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+
+            $displayAmount = $shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : round((float) $items->sum('amount'), 2);
+
+            $totalValue += (float) $displayAmount;
+
+            if ($shipper) {
+                $service = strtoupper(trim((string) ($shipper->shipping_method ?: $service)));
+                $senderCompany = ($shipper->company_name ?: $shipper->contact_person) ?: $senderCompany;
+
+                $shipperAddress = trim(implode(', ', array_filter([
+                    $shipper->address_line1 ?? '',
+                    $shipper->address_line2 ?? '',
+                    $shipper->address_line3 ?? '',
+                    trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                ])));
+
+                if ($shipperAddress !== '') {
+                    $senderAddress = $shipperAddress;
+                }
+
+                if ($shipper->phone_number) {
+                    $senderPhone = $shipper->phone_number;
+                }
+            }
+        }
+
+        // Single delivery block: show the consignee when there is exactly one
+        // shipment, otherwise indicate multiple destinations.
+        $deliveryCompany = 'Multiple Destinations';
+        $deliveryAddress = $shipmentCount . ' shipments in this manifest';
+        $deliveryPhone = '';
+
+        if ($shipmentCount === 1) {
+            $firstShipper = $manifestRows->first()->shipper;
+            $consignee = $firstShipper ? $firstShipper->consigneeInfo : null;
+
+            if ($consignee) {
+                $deliveryCompany = $consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A');
+                $deliveryAddress = trim(implode(', ', array_filter([
+                    $consignee->address_line1 ?? '',
+                    $consignee->address_line2 ?? '',
+                    $consignee->address_line3 ?? '',
+                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                    $consignee->delivery_destination ?? '',
+                ])));
+                $deliveryAddress = $deliveryAddress !== '' ? $deliveryAddress : '-';
+                $deliveryPhone = $consignee->phone_number ?? '';
+            }
+        }
+
+        $labels = [[
+            'manifest_number' => $firstManifest->manifest_number,
+            'awb_number' => $firstManifest->manifest_number,
+            'service' => $service,
+            'sender_company' => $senderCompany,
+            'sender_address' => $senderAddress,
+            'sender_phone' => $senderPhone,
+            'delivery_company' => $deliveryCompany,
+            'delivery_address' => $deliveryAddress,
+            'delivery_phone' => $deliveryPhone,
+            'items' => [[
+                'description' => 'Assorted Goods',
+                'qty' => $shipmentCount,
+                'unit_type' => 'shipment(s)',
+                'amount' => $totalValue,
+            ]],
+            'items_total' => number_format($totalValue, 2),
+            'date' => now('Asia/Kolkata')->format('Y-m-d H:i:s'),
+        ]];
+
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'shipment_count' => $shipmentCount,
+            'customer_name' => trim(($firstManifest->customer->first_name ?? '') . ' ' . ($firstManifest->customer->last_name ?? '')),
+            'total_value' => $totalValue,
+        ];
+
+        return view('customer.manifest-label', compact('manifest', 'labels'));
+    }
+
+    /**
+     * Print the manifest document.
+     *
+     * Renders a print-only A4 summary sheet for the whole manifest: header
+     * with company branding and the manifest number barcode, manifest meta
+     * (created date, pickup date, customer, status), a table of every
+     * shipment in the manifest (AWB, from/to, consignee, items, weight,
+     * amount) with totals, and the sender & return details block.
+     *
+     * @param  string  $manifestNumber
+     * @return \Illuminate\Contracts\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function manifestDocument($manifestNumber)
+    {
+        // Admin can print the manifest document for any manifest (used from
+        // admin/companies "Ready for Pickup" tab).
+        $isAdminView = auth()->guard('admin')->check();
+
+        if (! $isAdminView && ! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $manifestRows = $this->loadManifestRowsForCustomer((string) $manifestNumber, $customerId, $isAdminView);
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+        $customer = $firstManifest->customer;
+
+        $shipments = $manifestRows->map(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+
+            $totalWeight = 0.0;
+            if ($shipper) {
+                foreach ($shipper->packageDimensions as $pkg) {
+                    $totalWeight += (float) ($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+                }
+            }
+
+            return [
+                'awb_number' => $shipper ? ($shipper->awb_number ?? 'N/A') : 'N/A',
+                'invoice_number' => $invoice ? ($invoice->invoice_number ?? 'N/A') : 'N/A',
+                'shipper_company' => $shipper ? ($shipper->company_name ?: ($shipper->contact_person ?: 'N/A')) : 'N/A',
+                'consignee_name' => $consignee ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A')) : 'N/A',
+                'from' => $shipper ? trim(($shipper->city ?? '-') . ', ' . ($shipper->state ?? '-')) : '-',
+                'to' => $consignee ? trim(($consignee->city ?? '-') . ', ' . ($consignee->state ?? '-')) : '-',
+                'delivery_destination' => $consignee ? ($consignee->delivery_destination ?? '') : '',
+                'package_count' => $shipper ? $shipper->packageDimensions->count() : 0,
+                'total_weight' => $totalWeight > 0 ? number_format($totalWeight, 2) . ' kg' : '-',
+                'currency' => $invoice ? ($invoice->invoice_currency ?? '') : '',
+                'amount' => (float) ($shipper ? ($shipper->total_price ?? 0) : 0),
+                'items' => $items->map(function ($item) {
+                    $qty = (float) ($item->qty ?? 0);
+                    $rate = (float) ($item->unit_rate ?? 0);
+                    $igstAmt = (float) ($item->igst_amount ?? 0);
+                    $baseAmount = $qty * $rate;
+                    $amount = $item->amount ?? ($baseAmount + $igstAmt);
+
+                    return [
+                        'description' => $item->description ?: 'Item',
+                        'qty' => $qty,
+                        'amount' => (float) $amount,
+                    ];
+                })->values()->all(),
+            ];
+        })->values();
+
+        $currency = $shipments->pluck('currency')->filter()->first() ?? '';
+        $totalValue = (float) $shipments->sum('amount');
+        $totalCost = (float) $manifestRows->sum(function ($manifest) {
+            $shipper = $manifest->shipper;
+            if (! $shipper) {
+                return 0;
+            }
+            return (float) $shipper->total_base_price
+                + (float) $shipper->total_fuel_price
+                + (float) $shipper->total_surcharge;
+        });
+
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'manifest_created_at' => $firstManifest->created_at,
+            'pickup_date' => $firstManifest->pickup_date,
+            'status' => (int) ($firstManifest->status ?? Manifest::STATUS_OPEN),
+            'customer_name' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+            'customer_phone' => $customer->phone_number ?? '',
+            'shipment_count' => $shipments->count(),
+            'total_value' => $totalValue,
+            'total_cost' => $totalCost,
+            'currency' => $currency,
+            'shipments' => $shipments,
+        ];
+
+        return view('customer.manifest-document', compact('manifest'));
+    }
+
+    /**
+     * Remove a single shipment from a manifest.
+     *
+     * Deletes the Manifest row for the given shipper and moves the shipment
+     * back to 'packed' so it can be re-manifested later.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function removeFromManifest(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $shipperId  = (int) $request->input('shipper_id');
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if (! $shipperId || $manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $manifest = Manifest::query()
+            ->where('shipper_id', $shipperId)
+            ->where('customer_id', $customerId)
+            ->where('manifest_number', $manifestNumber)
+            ->first();
+
+        if (! $manifest) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest record not found for this shipment.',
+            ], 404);
+        }
+
+        $shipper = ShipperInfo::find($shipperId);
+
+        if (! $shipper) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shipment not found.',
+            ], 404);
+        }
+
+        $awbNumber = $shipper->awb_number;
+        $manifestNumberRemoved = $manifest->manifest_number;
+
+        $manifest->delete();
+
+        $shipper->status = 'packed';
+        $shipper->save();
+
+        ShipmentLog::logStatus(
+            $shipperId,
+            $awbNumber,
+            'packed',
+            'manifested',
+            'Shipment removed from manifest '.$manifestNumberRemoved.' and moved back to Packed.',
+            $customerId,
+            'customer'
+        );
+
+        \Log::info('Shipment #'.$shipperId.' (AWB '.$awbNumber.') removed from manifest '.$manifestNumberRemoved.' by customer #'.$customerId.' → status back to packed.');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Shipment removed from manifest '.$manifestNumberRemoved.' and moved back to Packed.',
+        ]);
+    }
+
+    /**
+     * Close a manifest (set its status to Close).
+     *
+     * All manifest rows sharing the given manifest number for the current
+     * customer are marked as closed. Closing a manifest is the terminal
+     * customer action — the shipments are locked and no further changes
+     * (remove/manifest) are allowed on it.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function closeManifest(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if ($manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $rows = Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->where('customer_id', $customerId)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest not found.',
+            ], 404);
+        }
+
+        $alreadyClosed = $rows->every(function ($row) {
+            return (int) $row->status === Manifest::STATUS_CLOSE;
+        });
+
+        if ($alreadyClosed) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This manifest is already closed.',
+            ], 422);
+        }
+
+        Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->where('customer_id', $customerId)
+            ->update(['status' => Manifest::STATUS_CLOSE]);
+
+        \Log::info('Manifest '.$manifestNumber.' closed by customer #'.$customerId.' ('.$rows->count().' manifest rows).');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Manifest '.$manifestNumber.' has been closed successfully.',
+        ]);
+    }
+
+    /**
+     * Assign a closed manifest for pickup.
+     *
+     * Marks every manifest row sharing the given manifest number for the
+     * current customer as Pickup (4) and stores the requested pickup date.
+     * Each underlying shipment (shipper_info) is also moved to
+     * 'ready_for_pickup' so the shipment lifecycle reflects that the
+     * customer has scheduled a pickup but the carrier has not yet assigned
+     * a delivery person (that later step moves it to 'assigned_for_pickup').
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function assignForPickup(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $customerId = (int) auth()->guard('customer')->id();
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if ($manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $pickupDate = trim((string) $request->input('pickup_date'));
+
+        if ($pickupDate !== '') {
+            try {
+                \Carbon\Carbon::parse($pickupDate)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid pickup date selected.',
+                ], 422);
+            }
+        }
+
+        $rows = Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->where('customer_id', $customerId)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest not found.',
+            ], 404);
+        }
+
+        $alreadyAssigned = $rows->every(function ($row) {
+            return (int) $row->status === Manifest::STATUS_PICKUP;
+        });
+
+        if ($alreadyAssigned) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This manifest is already assigned for pickup.',
+            ], 422);
+        }
+
+        Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->where('customer_id', $customerId)
+            ->update([
+                'status' => Manifest::STATUS_PICKUP,
+                'pickup_date' => $pickupDate !== '' ? \Carbon\Carbon::parse($pickupDate)->format('Y-m-d') : null,
+            ]);
+
+        $updatedShippers = 0;
+        foreach ($rows as $row) {
+            $shipper = ShipperInfo::find($row->shipper_id);
+            if (! $shipper || $shipper->status === 'assigned_for_pickup') {
+                continue;
+            }
+
+            $oldStatus = $shipper->status;
+            $shipper->status = 'ready_for_pickup';
+            $shipper->save();
+
+            ShipmentLog::logStatus(
+                $shipper->id,
+                $shipper->awb_number,
+                'ready_for_pickup',
+                $oldStatus ?: 'manifested',
+                'Manifest '.$manifestNumber.' assigned for pickup.',
+                $customerId,
+                'customer'
+            );
+
+            $updatedShippers++;
+        }
+
+        \Log::info('Manifest '.$manifestNumber.' assigned for pickup by customer #'.$customerId.' ('.$rows->count().' manifest rows, '.$updatedShippers.' shipments marked ready for pickup).');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Manifest '.$manifestNumber.' has been assigned for pickup.',
+        ]);
     }
 
     /**
@@ -6917,6 +7840,10 @@ class CustomerController extends Controller
                     $createShipmentExisting = CreateShipment::where('shipper_id', $shipper->id)->first();
                     $shipper->status = 'manifested';
                     $shipper->save();
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
+
                     Tracking::firstOrCreate(
                         ['shipper_id' => $shipper->id, 'status' => 'manifested'],
                         [
@@ -6941,6 +7868,7 @@ class CustomerController extends Controller
                         'message' => 'Already manifested on payment. Status moved to Manifested.',
                         'tracking_number' => $existingTracking->shipment_identification_number,
                         'shipper_id' => $shipperId,
+                        'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                         'already_manifested' => true,
                     ]);
                 }
@@ -7038,6 +7966,7 @@ class CustomerController extends Controller
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'ShipUniversal',
                     'shipuniversal_response' => $apiResponse,
                     'request_payload' => $shipUniversalResult['request_payload'] ?? null,
@@ -7062,6 +7991,9 @@ class CustomerController extends Controller
                     ], 422);
                 }
 
+                // Create a manifest record from the manifests table
+                $this->createManifestRecord($shipper->id, $customerId);
+
                 // Payment is cut only AFTER the manifest succeeds.
                 $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
                 $chargeNote = $chargeResult['charged']
@@ -7074,6 +8006,7 @@ class CustomerController extends Controller
                     'tracking_number' => $primusResult['tracking_number'],
                     'label_url' => $primusResult['label'] ?? null,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'Primus',
                     'request_payload' => $primusResult['payload'] ?? null,
                     'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7148,6 +8081,9 @@ class CustomerController extends Controller
                     );
 
                     \Log::info('Shipment manifested via Overseas Logistic: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Overseas Logistic manifest: '.$e->getMessage());
                     $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
@@ -7167,6 +8103,7 @@ class CustomerController extends Controller
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'Overseas Logistic',
                     'overseas_response' => $apiResponse,
                     'request_payload' => $overseasResult['request_payload'] ?? null,
@@ -7246,6 +8183,9 @@ class CustomerController extends Controller
                     ]);
 
                     \Log::info('Shipment manifested via PostShipping: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for PostShipping manifest: '.$e->getMessage());
                     $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
@@ -7265,6 +8205,7 @@ class CustomerController extends Controller
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'PostShipping',
                     'postshipping_response' => $apiResponse,
                     'request_payload' => $postShippingResult['request_payload'] ?? null,
@@ -7348,6 +8289,9 @@ class CustomerController extends Controller
                     ]);
 
                     \Log::info('Shipment manifested via Flying Tigers: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Flying Tigers manifest: '.$e->getMessage());
                     $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
@@ -7367,6 +8311,7 @@ class CustomerController extends Controller
                     'tracking_number' => $trackingNumber,
                     'label_url' => $labelUrl,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'Flying Tigers',
                     'flyingtigers_response' => $apiResponse,
                     'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7449,6 +8394,9 @@ class CustomerController extends Controller
                     ]);
 
                     \Log::info('Shipment manifested via Ship Global: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for Ship Global manifest: '.$e->getMessage());
                     $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
@@ -7467,6 +8415,7 @@ class CustomerController extends Controller
                     'message' => 'Shipment manifested successfully via Ship Global!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'Ship Global',
                     'ship_global_response' => $apiResponse,
                     'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7555,6 +8504,9 @@ class CustomerController extends Controller
                     );
 
                     \Log::info('Shipment manifested via UPS: '.($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $customerId);
                 } catch (\Exception $e) {
                     \Log::error('Failed to store shipment tracking for manifest: '.$e->getMessage());
                     $this->revertReadyToDraftOnManifestFailure($shipper, $customerId, $previousStatus);
@@ -7573,6 +8525,7 @@ class CustomerController extends Controller
                     'message' => 'Shipment manifested successfully via UPS!'.$chargeNote,
                     'tracking_number' => $trackingNumber,
                     'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                     'network' => 'UPS',
                     'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
                     'new_balance' => $chargeResult['new_balance'],
@@ -7609,6 +8562,11 @@ class CustomerController extends Controller
                 'failed' => [],
                 'total' => count($shipperIds),
             ];
+
+            // Bulk manifest: ALL selected shipments share ONE manifest number.
+            // Generate it once before the loop and reuse it for every successful
+            // shipment in the batch (single manifest flow keeps unique numbers).
+            $bulkManifestNumber = Manifest::generateManifestNumber();
 
             foreach ($shipperIds as $shipperId) {
                 try {
@@ -7679,7 +8637,9 @@ class CustomerController extends Controller
                             $apiResponse,
                             $trackingNumber,
                             $labelUrl,
-                            true
+                            true,
+                            'manifested',
+                            $bulkManifestNumber
                         );
 
                         // Payment is cut only AFTER the manifest succeeds.
@@ -7689,6 +8649,7 @@ class CustomerController extends Controller
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'ShipUniversal',
                             'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7714,6 +8675,10 @@ class CustomerController extends Controller
                             continue;
                         }
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Payment is cut only AFTER the manifest succeeds.
                         $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
 
@@ -7721,6 +8686,7 @@ class CustomerController extends Controller
                             'shipper_id' => $shipperId,
                             'tracking_number' => $primusResult['tracking_number'],
                             'label_url' => $primusResult['label'] ?? null,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'Primus',
                             'request_payload' => $primusResult['payload'] ?? null,
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7774,6 +8740,10 @@ class CustomerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Create tracking record for manifested status
                         $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
                         Tracking::create([
@@ -7792,6 +8762,7 @@ class CustomerController extends Controller
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'Overseas Logistic',
                             'request_payload' => $overseasResult['request_payload'] ?? null,
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7846,6 +8817,10 @@ class CustomerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Create tracking record for manifested status
                         $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
                         Tracking::create([
@@ -7864,6 +8839,7 @@ class CustomerController extends Controller
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'PostShipping',
                             'request_payload' => $postShippingResult['request_payload'] ?? null,
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
@@ -7938,6 +8914,10 @@ class CustomerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Create tracking record for manifested status
                         $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
                         Tracking::create([
@@ -7956,6 +8936,7 @@ class CustomerController extends Controller
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
                             'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'Flying Tigers',
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
                             'new_balance' => $chargeResult['new_balance'],
@@ -8029,6 +9010,10 @@ class CustomerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Create tracking record for manifested status
                         $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
                         Tracking::create([
@@ -8046,6 +9031,7 @@ class CustomerController extends Controller
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'Ship Global',
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
                             'new_balance' => $chargeResult['new_balance'],
@@ -8112,6 +9098,10 @@ class CustomerController extends Controller
                         $shipper->status = 'manifested';
                         $shipper->save();
 
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $customerId, $bulkManifestNumber);
+
                         // Create tracking record for manifested status
                         Tracking::create([
                             'awb_number' => $shipper->awb_number,
@@ -8128,6 +9118,7 @@ class CustomerController extends Controller
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
                             'tracking_number' => $trackingNumber,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                             'network' => 'UPS',
                             'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
                             'new_balance' => $chargeResult['new_balance'],
@@ -9921,7 +10912,8 @@ class CustomerController extends Controller
         $trackingNumber,
         $labelUrl,
         $isBulk = false,
-        $targetStatus = 'manifested'
+        $targetStatus = 'manifested',
+        ?string $manifestNumber = null
     ) {
         $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
@@ -9961,6 +10953,10 @@ class CustomerController extends Controller
             ]
         );
 
+        // Create a manifest record from the manifests table
+        // (bulk flow shares a single manifest number across the whole batch)
+        $this->createManifestRecord($shipper->id, $customerId, $manifestNumber);
+
         ShipmentLog::logStatus(
             $shipper->id,
             $shipper->awb_number,
@@ -9972,6 +10968,30 @@ class CustomerController extends Controller
             $customerId,
             'customer'
         );
+    }
+
+    /**
+     * Create a manifest record for a successfully manifested shipment.
+     *
+     * Uses the existing record when the same shipper is manifested again
+     * (e.g. Confirm Payment flow) so a duplicate manifest is never created.
+     *
+     * @param int         $shipperId
+     * @param int         $customerId
+     * @param string|null $manifestNumber When provided (bulk manifest flow) the
+     *                                    shipment joins an existing batch that
+     *                                    shares this single manifest number.
+     * @return \App\Models\Manifest
+     */
+    private function createManifestRecord(int $shipperId, int $customerId, ?string $manifestNumber = null)
+    {
+        $manifest = Manifest::where('shipper_id', $shipperId)->first();
+
+        if ($manifest) {
+            return $manifest;
+        }
+
+        return Manifest::createForShipper($shipperId, $customerId, $manifestNumber);
     }
 
     /**
@@ -11916,6 +12936,9 @@ class CustomerController extends Controller
             $shipper->status = 'manifested';
             $shipper->save();
 
+            // Create a manifest record from the manifests table
+            $this->createManifestRecord($shipper->id, $customerId);
+
             // Create tracking record for manifested status
             Tracking::create([
                 'awb_number' => $shipper->awb_number,
@@ -12025,6 +13048,7 @@ class CustomerController extends Controller
             'message' => $message,
             'tracking_number' => $trackingNumber,
             'shipper_id' => $shipper->id,
+            'manifest_number' => Manifest::where('shipper_id', $shipper->id)->value('manifest_number'),
             'network' => 'Ship Global (Fallback)',
             'is_address_error' => true,
             'classic_rate' => $classicTotal,

@@ -236,6 +236,20 @@
                             </ul>
                         </li>
                         @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('cod'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/cod/*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-cash"></i><span>Manage COD</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.cod.create-order') }}"
+                                        class="{{ request()->is('admin/cod/create-order') ? 'active' : '' }}">Create Order</a></li>
+                                <li><a href="{{ route('admin.cod.all-orders') }}"
+                                        class="{{ request()->is('admin/cod/all-orders') ? 'active' : '' }}">All Order</a></li>
+                            </ul>
+                        </li>
+                        @endif
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"

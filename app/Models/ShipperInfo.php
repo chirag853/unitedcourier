@@ -43,6 +43,7 @@ class ShipperInfo extends Model
         'total_fuel_price',
         'total_surcharge',
         'total_price',
+        'shipment_type',
     ];
 
     protected $casts = [
@@ -123,5 +124,21 @@ class ShipperInfo extends Model
     public function trackingRecords()
     {
         return $this->hasMany(Tracking::class, 'shipper_id');
+    }
+
+    /**
+     * Get the manifest record for this shipper.
+     */
+    public function manifest()
+    {
+        return $this->hasOne(Manifest::class, 'shipper_id');
+    }
+
+    /**
+     * Get the bill-to record for this shipper.
+     */
+    public function billTo()
+    {
+        return $this->hasOne(BillTo::class, 'shipper_id');
     }
 }

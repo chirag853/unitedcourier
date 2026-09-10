@@ -4,24 +4,38 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use App\Models\Admin;
 use App\Models\BusinessCategory;
+use App\Models\ConsigneeInfo;
+use App\Models\CourierRate;
+use App\Models\CourierService;
+use App\Models\CreateShipment;
 use App\Models\CsbForm;
-use App\Models\NetworkOffice;
-use App\Models\ShipmentInvoice;
+use App\Models\CsbInformation;
 use App\Models\Customer;
+use App\Models\Destination;
 use App\Models\ExporterCustomer;
 use App\Models\KycDetail;
+use App\Models\NetworkOffice;
+use App\Models\PackageDimension;
+use App\Models\ShipmentInvoice;
+use App\Models\ShipmentInvoiceItem;
+use App\Models\ShipmentLog;
 use App\Models\ShipperInfo;
+use App\Models\SurCharge;
 use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Models\Zone;
 use App\Notifications\DeliveryAssignedNotification;
+use App\Services\AdomantraApiClient;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 
@@ -278,7 +292,7 @@ class AdminController extends Controller
             ->whereBetween('created_at', [$startDate, $endDate])
             ->sum('amount');
 
-        $inTransitStatuses = ['assigned_for_pickup', 'confirm_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
+        $inTransitStatuses = ['ready_for_pickup', 'assigned_for_pickup', 'confirm_pickup', 'packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'received'];
         $periodInTransit = collect($inTransitStatuses)->sum(fn ($status) => $shipmentStatusCounts[$status] ?? 0);
 
         $totalPeriodShipments = array_sum($shipmentStatusCounts);
@@ -793,6 +807,7 @@ class AdminController extends Controller
                 ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
                 ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
                 ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+                ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
                 ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
                 ->where('shipper_info.status', $status)
                 ->select(
@@ -816,6 +831,12 @@ class AdminController extends Controller
                     'shipper_info.pincode as shipper_pincode',
                     'shipper_info.awb_number',
                     'shipper_info.total_price as shipper_total_price',
+                    'shipper_info.total_base_price as shipper_total_base_price',
+                    'shipper_info.total_fuel_price as shipper_total_fuel_price',
+                    'shipper_info.total_surcharge as shipper_total_surcharge',
+                    'manifests.manifest_number',
+                    'manifests.created_at as manifest_created_at',
+                    'manifests.pickup_date',
                     'customers.id as customer_id',
                     'customers.first_name',
                     'customers.last_name',
@@ -835,9 +856,103 @@ class AdminController extends Controller
 
         // Fetch shipments by status for each tab
         $manifestedShipments = $baseQuery('manifested');
+
+        // Group manifested shipments by manifest number so each manifest shows
+        // its code, order date, shipment count, total value and total cost.
+        $manifestGroups = collect($manifestedShipments)
+            ->filter(function ($s) {
+                return ! empty($s->manifest_number);
+            })
+            ->groupBy('manifest_number')
+            ->map(function ($shipments, $manifestNumber) {
+                $first = $shipments->first();
+
+                return (object) [
+                    'manifest_number' => $manifestNumber,
+                    'manifest_created_at' => $first->manifest_created_at ?? null,
+                    'shipment_count' => $shipments->count(),
+                    'total_value' => (float) $shipments->sum('shipper_total_price'),
+                    'total_cost' => (float) $shipments->sum(function ($s) {
+                        return (float) $s->shipper_total_base_price
+                            + (float) $s->shipper_total_fuel_price
+                            + (float) $s->shipper_total_surcharge;
+                    }),
+                    'shipments' => $shipments->map(function ($s) {
+                        $customerName = trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? ''));
+                        $from = trim(($s->shipper_city ?? '-') . ', ' . ($s->shipper_state ?? '-'));
+                        $to = trim(($s->consignee_city ?? '-') . ', ' . ($s->consignee_state ?? '-'));
+
+                        return [
+                            'awb_number' => $s->awb_number ?? 'N/A',
+                            'invoice_number' => $s->invoice_number ?? 'N/A',
+                            'customer_name' => $customerName ?: 'N/A',
+                            'consignee_name' => $s->consignee_name ?: ($s->consignee_contact ?: 'N/A'),
+                            'from' => $from,
+                            'to' => $to,
+                            'amount' => (float) ($s->shipper_total_price ?? 0),
+                            'amount_formatted' => $s->shipper_total_price
+                                ? number_format((float) $s->shipper_total_price, 2) . ' ' . ($s->invoice_currency ?? '')
+                                : 'N/A',
+                        ];
+                    })->values()->all(),
+                ];
+            })
+            ->sortByDesc('manifest_created_at')
+            ->values();
+
+        $readyForPickupShipments = $baseQuery('ready_for_pickup');
         $assignedForPickupShipments = $baseQuery('assigned_for_pickup');
         $printLabelShipments = $baseQuery('dispatched');
         $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
+
+        // Group ready-for-pickup shipments by manifest number so the tab shows
+        // one row per manifest (same as the Manifested tab). Each child keeps
+        // the fields needed by the Assign Pickup modal.
+        $readyForPickupManifestGroups = collect($readyForPickupShipments)
+            ->filter(function ($s) {
+                return ! empty($s->manifest_number);
+            })
+            ->groupBy('manifest_number')
+            ->map(function ($shipments, $manifestNumber) {
+                $first = $shipments->first();
+
+                return (object) [
+                    'manifest_number' => $manifestNumber,
+                    'manifest_created_at' => $first->manifest_created_at ?? null,
+                    'pickup_date' => $first->pickup_date ?? null,
+                    'shipment_count' => $shipments->count(),
+                    'total_value' => (float) $shipments->sum('shipper_total_price'),
+                    'total_cost' => (float) $shipments->sum(function ($s) {
+                        return (float) $s->shipper_total_base_price
+                            + (float) $s->shipper_total_fuel_price
+                            + (float) $s->shipper_total_surcharge;
+                    }),
+                    'shipments' => $shipments->map(function ($s) {
+                        $customerName = trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? ''));
+                        $from = trim(($s->shipper_city ?? '-') . ', ' . ($s->shipper_state ?? '-'));
+                        $to = trim(($s->consignee_city ?? '-') . ', ' . ($s->consignee_state ?? '-'));
+
+                        return [
+                            'id' => $s->id,
+                            'delivery_type' => $s->delivery_type,
+                            'assigned_delivery_person' => $s->assigned_delivery_person,
+                            'awb_number' => $s->awb_number ?? 'N/A',
+                            'pickup_date' => $s->pickup_date,
+                            'invoice_number' => $s->invoice_number ?? 'N/A',
+                            'customer_name' => $customerName ?: 'N/A',
+                            'consignee_name' => $s->consignee_name ?: ($s->consignee_contact ?: 'N/A'),
+                            'from' => $from,
+                            'to' => $to,
+                            'amount' => (float) ($s->shipper_total_price ?? 0),
+                            'amount_formatted' => $s->shipper_total_price
+                                ? number_format((float) $s->shipper_total_price, 2) . ' ' . ($s->invoice_currency ?? '')
+                                : 'N/A',
+                        ];
+                    })->values()->all(),
+                ];
+            })
+            ->sortByDesc('manifest_created_at')
+            ->values();
 
         // Fetch delivery persons where type = 'Delivery_person'
         $deliveryPersons = Admin::where('type', 'Delivery_person')
@@ -845,7 +960,7 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('manifestedShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons'));
+        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons'));
     }
 
     /**
@@ -1782,10 +1897,6 @@ class AdminController extends Controller
     {
         return view('admin.create-shipment');
     }
-
-
-    
-
 
     public function csb5Form()
     {

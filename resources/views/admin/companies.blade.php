@@ -141,6 +141,7 @@
             border-radius: 10px;
             overflow: hidden;
             background: #fff;
+            padding:15px;
         }
         .table-scroll-wrap .dataTables_wrapper {
             padding: 0;
@@ -379,7 +380,13 @@
                         <li class="nav-item" role="presentation">
                             <button class="nav-link active" id="manifested-tab" data-bs-toggle="tab" data-bs-target="#manifestedPane" type="button" role="tab" aria-controls="manifestedPane" aria-selected="true">
                                 <i class="ti ti-package me-1"></i> Manifested
-                                <span class="badge bg-primary">{{ count($manifestedShipments) }}</span>
+                                <span class="badge bg-primary">{{ count($manifestGroups) }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="readyforpickup-tab" data-bs-toggle="tab" data-bs-target="#readyforpickupPane" type="button" role="tab" aria-controls="readyforpickupPane" aria-selected="false">
+                                <i class="ti ti-calendar-event me-1"></i> Ready for Pickup
+                                <span class="badge" style="background:#6f42c1;color:#fff;">{{ count($readyForPickupShipments) }}</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
@@ -423,87 +430,36 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
-                                                <th>AWB Number</th>
-                                                <th>From / To</th>
-                                                <th>Customer Name</th>
-                                                <th>Shipper Company</th>
-                                                <th>Consignee</th>
-                                                <th>Invoice No.</th>
-                                                <th>Amount</th>
-                                                <th>Status</th>
-                                                <th>Created</th>
-                                                <th>Action</th>
+                                                <th>Manifest Code</th>
+                                                <th>Order Date</th>
+                                                <th>Shipments</th>
+                                                <th>Total Value</th>
+                                                <th>Cost</th>
+                                                <th>Shipments Detail</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @foreach($manifestedShipments as $index => $shipment)
-                                            <tr>
+                                            @foreach($manifestGroups as $index => $manifest)
+                                            <tr class="manifest-group-row">
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
-                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
-                                                </td>
-                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
-                                                    @php
-                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
-                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
-                                                    @endphp
-                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
-                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
-                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
-                                                        </div>
-                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
-                                                            <span class="shipment-route-line" aria-hidden="true"></span>
-                                                            <span class="shipment-route-plane">
-                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
-                                                            </span>
-                                                        </div>
-                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
-                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
-                                                        </div>
-                                                    </div>
+                                                    <span class="badge bg-dark" style="font-size:12px;">{{ $manifest->manifest_number ?? 'N/A' }}</span>
                                                 </td>
                                                 <td>
-                                                    <span class="customer-name-link" title="Click to view details">
-                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
-                                                    </span>
-                                                </td>
-                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
-                                                    @php
-                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
-                                                    @endphp
-                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
-                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
-                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
-                                                        @endif
-                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
-                                                        @if($shipment->consignee_zip)
-                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
-                                                <td>
-                                                    @if($shipment->shipper_total_price)
-                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
-                                                    @else
-                                                        N/A
-                                                    @endif
+                                                    {{ $manifest->manifest_created_at ? \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') : '-' }}
                                                 </td>
                                                 <td>
-                                                    @if($shipment->status === 'cancelled')
-                                                        <span class="status-cancelled">Cancelled</span>
-                                                    @else
-                                                        <span class="status-active">Manifested</span>
-                                                    @endif
+                                                    <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
                                                 </td>
-                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
-                                                <td class="table-actions">
-                                                    <a href="javascript:void(0);" class="btn btn-sm btn-outline-warning btn-icon" title="Assign Pickup" onclick="openAssignDelivery({{ $shipment->id }}, '{{ $shipment->delivery_type ?? '' }}', {{ $shipment->assigned_delivery_person ?? 'null' }}, '{{ $shipment->awb_number ?? '' }}')">
-                                                        <i class="ti ti-truck-delivery"></i>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td style="color:#dc2626;">
+                                                    {{ number_format($manifest->total_cost, 2) }}
+                                                </td>
+                                                <td>
+                                                    <a href="javascript:void(0);" class="btn btn-sm btn-outline-primary btn-icon manifest-toggle" data-index="{{ $index }}" title="View Shipments">
+                                                        <i class="ti ti-chevron-down"></i>
                                                     </a>
                                                 </td>
                                             </tr>
@@ -511,10 +467,170 @@
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <!-- Hidden templates for expandable shipment details (used by DataTables child rows) -->
+                                @foreach($manifestGroups as $index => $manifest)
+                                <template id="manifest-child-{{ $index }}">
+                                    <div class="p-3">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>AWB Number</th>
+                                                    <th>From / To</th>
+                                                    <th>Customer Name</th>
+                                                    <th>Consignee</th>
+                                                    <th>Invoice No.</th>
+                                                    <th>Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($manifest->shipments as $shipment)
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge bg-dark">{{ $shipment['awb_number'] }}</span>
+                                                    </td>
+                                                    <td style="font-size:12px;white-space:normal;">
+                                                        <div>{{ $shipment['from'] }}</div>
+                                                        <div class="text-muted"><i class="ti ti-arrow-right"></i> {{ $shipment['to'] }}</div>
+                                                    </td>
+                                                    <td>{{ $shipment['customer_name'] }}</td>
+                                                    <td>{{ $shipment['consignee_name'] }}</td>
+                                                    <td>{{ $shipment['invoice_number'] }}</td>
+                                                    <td>{{ $shipment['amount_formatted'] }}</td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                                @endforeach
                             </div>
                         </div>
 
-                        <!-- ===== TAB 2: Assigned for Pickup ===== -->
+                        <!-- ===== TAB 2: Ready for Pickup =====
+                             Grouped by manifest number (one row per manifest, shipments
+                             collapsed). "View" opens the manifest detail page in a new tab.
+                             Each collapsed child keeps the Assign Pickup icon. -->
+                        <div class="tab-pane fade" id="readyforpickupPane" role="tabpanel" aria-labelledby="readyforpickup-tab">
+                            <div class="card-body">
+                                <div class="table-scroll-wrap">
+                                    <table id="readyforpickupTable" class="table table-bordered table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Manifest Code</th>
+                                                <th>Order Date</th>
+                                                <th>Shipments</th>
+                                                <th>Total Value</th>
+                                                <th>Pickup Date</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @forelse($readyForPickupManifestGroups as $index => $manifest)
+                                            <tr class="manifest-group-row">
+                                                <td>{{ $index + 1 }}</td>
+                                                <td>
+                                                    <span class="badge bg-dark" style="font-size:12px;">{{ $manifest->manifest_number ?? 'N/A' }}</span>
+                                                </td>
+                                                <td>
+                                                    {{ $manifest->manifest_created_at ? \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') : '-' }}
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
+                                                </td>
+                                                <td class="table-actions">
+                                                    @php $firstShipment = $manifest->shipments[0] ?? null; @endphp
+                                                    @if($firstShipment)
+                                                    <button class="btn btn-sm btn-outline-primary btn-icon" title="Assign Pickup"
+                                                            onclick="openAssignDelivery({{ $firstShipment['id'] }}, '{{ $firstShipment['delivery_type'] ?? '' }}', {{ $firstShipment['assigned_delivery_person'] ?? 'null' }}, '{{ $firstShipment['awb_number'] }}')">
+                                                        <i class="ti ti-truck-delivery"></i>
+                                                    </button>
+                                                    @endif
+                                                    <a href="{{ route('admin.manifest-detail', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                       target="_blank"
+                                                       class="btn btn-sm btn-outline-secondary btn-icon"
+                                                       title="View Manifest Details">
+                                                        <i class="ti ti-eye"></i>
+                                                    </a>
+                                                    <!-- <a href="javascript:void(0);" class="btn btn-sm btn-outline-secondary btn-icon manifest-rfp-toggle" data-index="{{ $index }}" title="View Shipments">
+                                                        <i class="ti ti-chevron-down"></i>
+                                                    </a> -->
+                                                </td>
+                                            </tr>
+                                            @empty
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted py-4">No shipments are ready for pickup yet.</td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Hidden templates for expandable shipment details (DataTables child rows) -->
+                                @forelse($readyForPickupManifestGroups as $index => $manifest)
+                                <template id="manifest-rfp-child-{{ $index }}">
+                                    <div class="p-3">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>AWB Number</th>
+                                                    <th>From / To</th>
+                                                    <th>Customer Name</th>
+                                                    <th>Consignee</th>
+                                                    <th>Invoice No.</th>
+                                                    <th>Amount</th>
+                                                    <th>Pickup Date</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($manifest->shipments as $shipment)
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge bg-dark">{{ $shipment['awb_number'] }}</span>
+                                                    </td>
+                                                    <td style="font-size:12px;white-space:normal;">
+                                                        <div>{{ $shipment['from'] }}</div>
+                                                        <div class="text-muted"><i class="ti ti-arrow-right"></i> {{ $shipment['to'] }}</div>
+                                                    </td>
+                                                    <td>{{ $shipment['customer_name'] }}</td>
+                                                    <td>{{ $shipment['consignee_name'] }}</td>
+                                                    <td>{{ $shipment['invoice_number'] }}</td>
+                                                    <td>{{ $shipment['amount_formatted'] }}</td>
+                                                    <td>
+                                                        @if(!empty($shipment['pickup_date']))
+                                                            <span class="badge" style="background:#6f42c1;color:#fff;white-space:nowrap;">
+                                                                <i class="ti ti-calendar-event me-1"></i>{{ \Carbon\Carbon::parse($shipment['pickup_date'])->format('d-m-Y') }}
+                                                            </span>
+                                                        @else
+                                                            <span class="text-muted">N/A</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="table-actions">
+                                                        <button class="btn btn-sm btn-outline-primary btn-icon" title="Assign Pickup"
+                                                                onclick="openAssignDelivery({{ $shipment['id'] }}, '{{ $shipment['delivery_type'] ?? '' }}', {{ $shipment['assigned_delivery_person'] ?? 'null' }}, '{{ $shipment['awb_number'] }}')">
+                                                            <i class="ti ti-truck-delivery"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                                @empty
+                                @endforelse
+                            </div>
+                        </div>
+
+                        <!-- ===== TAB 3: Assigned for Pickup ===== -->
                         <div class="tab-pane fade" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
@@ -1038,20 +1154,85 @@
     <script data-cfasync="false">
         $(document).ready(function() {
             // Initialize DataTables for each tab
-            $('#manifestedTable').DataTable({
+            const manifestedDt = $('#manifestedTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
                 scrollX: true,
                 scrollY: '60vh',
                 scrollCollapse: true,
+                columnDefs: [
+                    { orderable: false, targets: 6 }
+                ],
                 language: {
                     emptyTable: "No manifested shipments found",
-                    info: "Showing _START_ to _END_ of _TOTAL_ shipments",
-                    infoEmpty: "Showing 0 to 0 of 0 shipments",
-                    infoFiltered: "(filtered from _MAX_ total shipments)",
-                    lengthMenu: "Show _MENU_ shipments",
+                    info: "Showing _START_ to _END_ of _TOTAL_ manifests",
+                    infoEmpty: "Showing 0 to 0 of 0 manifests",
+                    infoFiltered: "(filtered from _MAX_ total manifests)",
+                    lengthMenu: "Show _MENU_ manifests",
                     search: "Search:",
-                    zeroRecords: "No matching shipments found"
+                    zeroRecords: "No matching manifests found"
+                }
+            });
+
+            // Expand / collapse manifest shipment details (DataTables child rows)
+            $('#manifestedTable tbody').on('click', '.manifest-toggle', function (e) {
+                e.stopPropagation();
+                const tr = $(this).closest('tr');
+                const index = $(this).data('index');
+                const row = manifestedDt.row(tr);
+                const icon = $(this).find('i');
+
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
+                } else {
+                    const template = document.getElementById('manifest-child-' + index);
+                    const content = template ? template.innerHTML : '<div class="p-3">No details available.</div>';
+                    row.child(content).show();
+                    tr.addClass('shown');
+                    icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
+                }
+            });
+
+            const readyforpickupDt = $('#readyforpickupTable').DataTable({
+                order: [[0, 'asc']],
+                pageLength: 25,
+                scrollX: true,
+                scrollY: '60vh',
+                scrollCollapse: true,
+                columnDefs: [
+                    { orderable: false, targets: 6 }
+                ],
+                language: {
+                    emptyTable: "No shipments ready for pickup",
+                    info: "Showing _START_ to _END_ of _TOTAL_ manifests",
+                    infoEmpty: "Showing 0 to 0 of 0 manifests",
+                    infoFiltered: "(filtered from _MAX_ total manifests)",
+                    lengthMenu: "Show _MENU_ manifests",
+                    search: "Search:",
+                    zeroRecords: "No matching manifests found"
+                }
+            });
+
+            // Expand / collapse ready-for-pickup manifest shipment details (DataTables child rows)
+            $('#readyforpickupTable tbody').on('click', '.manifest-rfp-toggle', function (e) {
+                e.stopPropagation();
+                const tr = $(this).closest('tr');
+                const index = $(this).data('index');
+                const row = readyforpickupDt.row(tr);
+                const icon = $(this).find('i');
+
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
+                } else {
+                    const template = document.getElementById('manifest-rfp-child-' + index);
+                    const content = template ? template.innerHTML : '<div class="p-3">No details available.</div>';
+                    row.child(content).show();
+                    tr.addClass('shown');
+                    icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
                 }
             });
 
@@ -1110,6 +1291,7 @@
             $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
                 const targetId = $(e.target).attr('data-bs-target');
                 const tableId = targetId === '#manifestedPane' ? 'manifestedTable'
+                              : targetId === '#readyforpickupPane' ? 'readyforpickupTable'
                               : targetId === '#assignedPane' ? 'assignedTable'
                               : targetId === '#printlabelPane' ? 'printlabelTable'
                               : 'readytodispatchTable';

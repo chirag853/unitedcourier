@@ -66,7 +66,7 @@
 
 
                                 <li class="submenu">
-                                    <a href="javascript:void(0);" class="{{ request()->routeIs('customer.exporter-customers*', 'customer.create-shipment*', 'customer.bulk-upload*', 'customer.view-all-shipments') ? 'active subdrop' : '' }}">
+                                    <a href="javascript:void(0);" class="{{ request()->routeIs('customer.exporter-customers*', 'customer.create-shipment*', 'customer.bulk-upload*', 'customer.view-all-shipments', 'customer.manifest-detail') ? 'active subdrop' : '' }}">
                                         <i class="ti ti-dashboard"></i><span>Orders</span><span
                                             class="menu-arrow"></span>
                                     </a>
@@ -77,7 +77,7 @@
                                         @endif
                                         <li><a href="{{ url('/customer/create-shipment') }}" class="{{ request()->routeIs('customer.create-shipment*') ? 'active' : '' }}">Create Order</a></li>
                                         <li><a href="{{ url('/customer/bulk-upload') }}" class="{{ request()->routeIs('customer.bulk-upload*') ? 'active' : '' }}">Bulk Upload</a></li>
-                                        <li><a href="{{ url('/customer/view-all-shipments') }}" class="{{ request()->routeIs('customer.view-all-shipments') ? 'active' : '' }}">View All Order</a></li>
+                                        <li><a href="{{ url('/customer/view-all-shipments') }}" class="{{ request()->routeIs('customer.view-all-shipments', 'customer.manifest-detail') ? 'active' : '' }}">View All Order</a></li>
                                     </ul>
                                 </li>
                                 <!-- <li class="submenu">
