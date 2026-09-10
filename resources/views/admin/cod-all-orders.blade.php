@@ -59,6 +59,7 @@
             white-space: nowrap;
         }
         .status-badge-draft { background-color: #fff3cd; color: #856404; }
+        .status-badge-manifested { background-color: #cfe2ff; color: #084298; }
         .status-badge-cod { background-color: #d4edda; color: #155724; }
         .status-badge-other { background-color: #e2e3e5; color: #383d41; }
         .dataTables_wrapper .dataTables_length,
@@ -117,7 +118,7 @@
 
             <!-- Count Cards -->
             <div class="row g-3 mb-4">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <a href="{{ route('admin.cod.all-orders', ['status' => 'all']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-primary bg-opacity-10 text-primary"><i class="ti ti-package"></i></div>
                         <div>
@@ -126,7 +127,7 @@
                         </div>
                     </a>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <a href="{{ route('admin.cod.all-orders', ['status' => 'draft']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-warning bg-opacity-10 text-warning"><i class="ti ti-file-draft"></i></div>
                         <div>
@@ -135,7 +136,16 @@
                         </div>
                     </a>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <a href="{{ route('admin.cod.all-orders', ['status' => 'manifested']) }}" class="cod-count-card bg-white w-100">
+                        <div class="cod-count-icon bg-info bg-opacity-10 text-info"><i class="ti ti-clipboard-check"></i></div>
+                        <div>
+                            <div class="cod-count-num">{{ $counts['manifested'] ?? 0 }}</div>
+                            <div class="cod-count-label">Manifested</div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3">
                     <a href="{{ route('admin.cod.all-orders', ['status' => 'cod']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-success bg-opacity-10 text-success"><i class="ti ti-currency-rupee"></i></div>
                         <div>
@@ -192,10 +202,12 @@
                                     <td>{{ $order->manifest_number ?? '—' }}</td>
                                     <td>
                                         @php
-                                            $displayStatus = $order->invoice_status ?? $order->shipper_status ?? 'unknown';
+                                            $displayStatus = $order->shipper_status ?? $order->invoice_status ?? 'unknown';
                                         @endphp
                                         @if($displayStatus === 'draft')
                                             <span class="status-badge status-badge-draft">Draft</span>
+                                        @elseif($displayStatus === 'manifested')
+                                            <span class="status-badge status-badge-manifested">Manifested</span>
                                         @elseif($displayStatus === 'cod')
                                             <span class="status-badge status-badge-cod">COD</span>
                                         @else

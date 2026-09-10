@@ -29,5 +29,18 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // A CSRF/session-expiry (419) on an AJAX request must return JSON so the
+        // front-end can show a meaningful message and ask the user to reload,
+        // instead of the plain HTML "Page Expired" page that breaks fetch().
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your session has expired. Please reload the page and try again.',
+                    'errors' => ['session' => ['Your session has expired. Please reload the page and try again.']],
+                ], 419);
+            }
+
+            return null;
+        });
     })->create();

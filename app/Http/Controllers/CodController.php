@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -17,10 +18,13 @@ use App\Models\CreateShipment;
 use App\Models\CsbInformation;
 use App\Models\Customer;
 use App\Models\Destination;
+use App\Models\Manifest;
 use App\Models\PackageDimension;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\ShipmentLog;
+use App\Models\ShipmentRemark;
+use App\Models\ShipmentTracking;
 use App\Models\ShipperInfo;
 use App\Models\SurCharge;
 use App\Models\Tracking;
@@ -95,6 +99,7 @@ class CodController extends Controller
     public function codStoreOrder(Request $request, AdomantraApiClient $adomantra)
     {
         $transactionStarted = false;
+        $carrierErrorRaw = null;
 
         try {
             $admin = auth()->guard('admin')->user();
@@ -179,6 +184,10 @@ class CodController extends Controller
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
                 'reference_number' => 'nullable|string|max:100',
+
+                // Remark
+                'entry_remark' => 'nullable|string|max:1000',
+                'finance_remark' => 'nullable|string|max:1000',
 
                 // invoice items
                 'items.*.box_no' => 'nullable|integer',
@@ -725,16 +734,28 @@ class CodController extends Controller
                 'total_fuel_price' => $fuelPrice,
                 'total_surcharge' => $surchargeTotal,
                 'total_price' => $totalPrice,
-                'status' => 'draft',
+                'status' => 'manifested',
                 'shipment_type' => 2,
             ]);
 
             $shipperId = $shipper->id;
 
+            // Store the shipment remark (entry remark captured at creation time,
+            // finance remark can be filled later by the finance team).
+            ShipmentRemark::create([
+                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
+                'shipper_id' => $shipperId,
+                'entry_remark' => $validatedData['entry_remark'] ?? null,
+                'finance_remark' => $validatedData['finance_remark'] ?? null,
+            ]);
+
             // Store Bill To info
             BillTo::create([
                 'shipper_id' => $shipperId,
                 'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                'biller_name' => $validatedData['biller_name']
+                    ?? $validatedData['shipper_contact_person']
+                    ?? null,
             ]);
 
             // Store Consignee Info
@@ -840,9 +861,13 @@ class CodController extends Controller
                 \Log::info('No COD order items data received');
             }
 
-            // Store into create_shipment table
+            // Store into create_shipment table.
+            // create_shipment.customer_id is NOT NULL (no default) — the admin COD
+            // flow has no authenticated customer, so store the selected exporter
+            // customer id when one was chosen, otherwise 0 (the admin "default
+            // rates" sentinel already used throughout this flow).
             $createShipment = CreateShipment::create([
-                'customer_id' => null,
+                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
                 'shipper_id' => $shipperId,
                 'awb_number' => $awbNumber,
                 'delivery_destination' => $validatedData['delivery_destination'],
@@ -888,31 +913,113 @@ class CodController extends Controller
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
                 'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
-                'status' => 'draft',
+                'status' => 'manifested',
                 'oversize_charge' => $oversizeCharge,
                 'handling_charge' => $handlingCharge,
             ]);
 
-            // Create initial tracking record for the shipment
+            // Create initial tracking record for the shipment.
+            // A COD order is auto-manifested on creation, so the first tracking
+            // entry reflects the manifested status rather than a draft.
             Tracking::create([
                 'awb_number' => $awbNumber,
                 'shipper_id' => $shipper->id,
                 'shipping_id' => $createShipment->id,
                 'uwc_id' => $awbNumber,
-                'title' => Tracking::getTitleForStatus('draft'),
-                'status' => 'draft',
+                'title' => Tracking::getTitleForStatus('manifested'),
+                'status' => 'manifested',
             ]);
 
-            // Log the draft status change
+            // Log the manifested status change
             ShipmentLog::logStatus(
                 $shipper->id,
                 $awbNumber,
-                'draft',
+                'manifested',
                 null,
-                'COD order created (draft)',
-                null,
+                'COD order created (manifested)',
+                $validatedData['selected_exporter_customer_id'] ?? null,
                 'admin'
             );
+
+            // Create the manifest record so the COD order shows up under the
+            // Manifested tab with a manifest number, exactly like the customer
+            // manifest flow does for regular shipments.
+            Manifest::createForShipper(
+                $shipper->id,
+                (int) ($validatedData['selected_exporter_customer_id'] ?? 0)
+            );
+
+            // ============================================================
+            // Carrier API call (UPS Ship API) at creation time.
+            // The COD flow only offers UPS courier services, so the selected
+            // service's carrier API is called right here — while the DB
+            // transaction is still open. The shipment is only committed if
+            // the carrier accepts it; otherwise everything rolls back and the
+            // UPS error (with raw response) is surfaced to the admin.
+            // ============================================================
+            $carrierTrackingNumber = null;
+            $upsPayloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+
+            if (! $upsPayloadResult['success']) {
+                Log::error('COD order: failed to build UPS payload.', [
+                    'awb_number' => $awbNumber,
+                    'message' => $upsPayloadResult['message'] ?? 'Unknown error',
+                ]);
+                throw new \RuntimeException($upsPayloadResult['message'] ?? 'Unable to build the UPS shipment payload.');
+            }
+
+            $upsResult = $this->callUpsShipApiInternal($upsPayloadResult['payload']);
+
+            if (! $upsResult['success']) {
+                Log::error('COD order rejected by UPS Ship API.', [
+                    'awb_number' => $awbNumber,
+                    'message' => $upsResult['message'] ?? 'Unknown UPS error',
+                    'raw_response' => $upsResult['rawResponse'] ?? null,
+                ]);
+
+                $carrierErrorRaw = $upsResult['rawResponse'] ?? null;
+
+                throw new \RuntimeException(
+                    'UPS Shipment Failed: '.($upsResult['message'] ?? 'Unknown UPS error')
+                );
+            }
+
+            // UPS accepted the shipment — persist the carrier tracking data
+            // so the COD order carries the real UPS tracking number.
+            $shipmentResponse = $upsResult['shipmentResponse'];
+            $carrierTrackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                ?? null;
+
+            ShipmentTracking::updateOrCreate(
+                ['shipper_id' => $shipper->id],
+                [
+                    'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                    'create_shipment_id' => $createShipment->id,
+                    'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                    'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                    'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                    'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                    'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                    'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                    'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                    'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                    'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                    'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                    'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                    'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                    'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                    'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                    'raw_response' => $shipmentResponse,
+                    'status' => 'created',
+                ]
+            );
+
+            Log::info('COD order accepted by UPS Ship API.', [
+                'admin_id' => $admin->id,
+                'awb_number' => $awbNumber,
+                'carrier_tracking_number' => $carrierTrackingNumber,
+            ]);
 
             $adomantraPayload = $this->buildAdomantraOrderPayload(
                 $validatedData,
@@ -950,7 +1057,7 @@ class CodController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'COD order created successfully!',
-                'tracking_number' => $awbNumber,
+                'tracking_number' => $carrierTrackingNumber ?? $awbNumber,
                 'data' => [
                     'create_shipment_id' => $createShipment->id,
                     'shipper_id' => $shipper->id,
@@ -961,6 +1068,8 @@ class CodController extends Controller
                     'invoice_id' => $invoice->id,
                     'oversize_charge' => (float) $oversizeCharge,
                     'handling_charge' => (float) $handlingCharge,
+                    'carrier_tracking_number' => $carrierTrackingNumber,
+                    'ups_response' => $shipmentResponse,
                     'adomantra' => $adomantraResponse,
                 ],
             ], 200);
@@ -982,18 +1091,21 @@ class CodController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
             ], 422);
-        } catch (\RuntimeException $e) {
+        } catch (QueryException $e) {
+            // Local database failure (e.g. NOT NULL / constraint violation).
+            // This is NOT a carrier submission problem, so it must not be
+            // reported as one. Roll back and show a database-specific error.
             if ($transactionStarted) {
                 DB::rollBack();
                 $transactionStarted = false;
             }
 
-            Log::error('Adomantra COD order submission failed.', [
+            Log::error('COD order database failure.', [
                 'awb_number' => $awbNumber ?? null,
                 'exception' => $e->getMessage(),
             ]);
 
-            $message = 'The COD order could not be submitted to the carrier. No shipment was saved. Please try again.';
+            $message = 'Unable to save the COD order because of a database error. No shipment was saved. Please try again.';
 
             if (! $request->expectsJson()) {
                 return back()
@@ -1004,6 +1116,31 @@ class CodController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => $message,
+            ], 500);
+        } catch (\RuntimeException $e) {
+            if ($transactionStarted) {
+                DB::rollBack();
+                $transactionStarted = false;
+            }
+
+            Log::error('COD order carrier submission failed.', [
+                'awb_number' => $awbNumber ?? null,
+                'exception' => $e->getMessage(),
+                'raw_response' => $carrierErrorRaw,
+            ]);
+
+            $message = 'The COD order could not be submitted to the carrier. No shipment was saved. '.$e->getMessage();
+
+            if (! $request->expectsJson()) {
+                return back()
+                    ->withInput()
+                    ->with('error', $message);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'rawResponse' => $carrierErrorRaw,
             ], 502);
         } catch (\Exception $e) {
             if ($transactionStarted) {
@@ -1075,9 +1212,10 @@ class CodController extends Controller
         }
 
         $counts = [
-            'all'      => $query->count(),
-            'draft'    => $query->where('shipper_status', 'draft')->count(),
-            'cod'      => $query->where('invoice_status', 'cod')->count(),
+            'all'        => $query->count(),
+            'draft'      => $query->where('shipper_status', 'draft')->count(),
+            'manifested' => $query->where('shipper_status', 'manifested')->count(),
+            'cod'        => $query->where('invoice_status', 'cod')->count(),
         ];
 
         return view('admin.cod-all-orders', [
@@ -2296,5 +2434,591 @@ class CodController extends Controller
                 ];
             })->values(),
         ], 200);
+    }
+
+    // ====================================================================
+    // UPS Ship API helpers (ported from CustomerController so the COD flow
+    // can call the selected service's carrier API at creation time).
+    // ====================================================================
+
+    /**
+     * Obtain a cached UPS OAuth token for the Ship API.
+     */
+    private function getUpsShipAccessToken()
+    {
+        $cacheKey = 'ups_ship_access_token';
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        $clientId = 'GSTEuQdy5XHnWalxGQECH4yhSqJAiydVNjho6AkPGn1ZwMYX';
+        $clientSecret = 'fVuQ8CMYIzxpABWkZFcOM3AyW0x4i1zo7mwiZk7gyLjpD1IWawoCXa3OXWNfVjao';
+        $tokenUrl = 'https://onlinetools.ups.com/security/v1/oauth/token';
+
+        $response = Http::withBasicAuth($clientId, $clientSecret)
+            ->asForm()
+            ->post($tokenUrl, ['grant_type' => 'client_credentials']);
+
+        if (! $response->successful()) {
+            Log::error('UPS Ship token error: '.$response->body());
+
+            throw new \Exception('Unable to retrieve UPS Ship access token');
+        }
+
+        $data = $response->json();
+
+        if (empty($data['access_token'])) {
+            Log::error('UPS Ship token missing access_token: '.$response->body());
+
+            throw new \Exception('UPS Ship access token not found in response');
+        }
+
+        $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : 3600;
+        $ttl = max(60, $expiresIn - 60);
+        Cache::put($cacheKey, $data['access_token'], $ttl);
+
+        return $data['access_token'];
+    }
+
+    /**
+     * Build the UPS ShipRequest payload from DB records for a COD shipper.
+     * Reads ShipperInfo, ConsigneeInfo and PackageDimension from the DB
+     * (already created inside the transaction) instead of the form data.
+     */
+    private function buildUpsShipPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (! $consignee) {
+            Log::warning('buildUpsShipPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        // Resolve the shipping method and the courier service.
+        $shippingMethod = $shipper->shipping_method;
+        if (! $shippingMethod) {
+            $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
+            if ($createShipmentMethod) {
+                $shippingMethod = $createShipmentMethod;
+            }
+        }
+
+        if (! $shippingMethod) {
+            $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
+                ->whereNotNull('shipping_method')
+                ->value('shipping_method');
+            if ($pkgMethod) {
+                $shippingMethod = $pkgMethod;
+            }
+        }
+
+        if (! $shippingMethod) {
+            $defaultService = CourierService::orderBy('id', 'asc')->first();
+            if ($defaultService) {
+                $shippingMethod = $defaultService->method;
+                Log::warning('buildUpsShipPayloadFromDb: ALL sources null for shipper #'.$shipper->id.' — defaulting to first CourierService: "'.$shippingMethod.'"');
+            }
+        }
+
+        if (! $shippingMethod) {
+            return ['success' => false, 'message' => 'Shipping method is not set for this shipment. Please edit the shipment and select a shipping method.'];
+        }
+
+        if (! $shipper->shipping_method) {
+            $shipper->shipping_method = $shippingMethod;
+            $shipper->save();
+            Log::info('buildUpsShipPayloadFromDb: Persisted shipping_method to shipper_info #'.$shipper->id.' → "'.$shippingMethod.'"');
+        }
+
+        $service = $this->findCourierService($shippingMethod, $shipper->id);
+
+        if (! $service) {
+            return ['success' => false, 'message' => 'No matching courier service found for shipping method: "'.$shippingMethod.'".'];
+        }
+
+        $packagesData = [];
+        foreach ($shipper->packageDimensions as $pkg) {
+            $packagesData[] = [
+                'actual_weight_kg' => $pkg->actual_weight_kg,
+                'length_cm' => $pkg->length_cm,
+                'width_cm' => $pkg->width_cm,
+                'height_cm' => $pkg->height_cm,
+            ];
+        }
+
+        $validatedData = [
+            'consignee_name' => $consignee->consignee_name,
+            'consignee_phone_number' => $consignee->phone_number,
+            'consignee_address_line1' => $consignee->address_line1,
+            'consignee_address_line2' => $consignee->address_line2,
+            'consignee_address_line3' => $consignee->address_line3,
+            'consignee_city' => $consignee->city,
+            'consignee_state' => $consignee->state ?? '',
+            'consignee_zip_code' => $consignee->zip_code,
+            'delivery_destination' => $consignee->delivery_destination,
+            'packages' => $packagesData,
+        ];
+
+        $upsPayload = $this->buildUpsShipPayload($validatedData, $service);
+
+        return ['success' => true, 'payload' => $upsPayload];
+    }
+
+    /**
+     * Build UPS Ship API payload from validated data and service info.
+     */
+    private function buildUpsShipPayload($validatedData, $service)
+    {
+        $shipperName = 'SANDEEP KAPUR';
+        $shipperAttentionName = 'United';
+        $shipperCompanyDisplayableName = 'UWC';
+        $shipperPhone = '6466741258';
+
+        $serviceWeight = $service->weight ?? 'LBS';
+        $shipperNumber = 'X19700';
+
+        $shipperAddressLine = '218 WEST 37 STREET 6TH FLOOR';
+        $shipperCity = 'NEW YORK';
+        $shipperState = 'NY';
+        $shipperPostal = '10018';
+        $shipperCountry = 'US';
+
+        $consigneeName = $validatedData['consignee_name'];
+        $consigneePhone = $validatedData['consignee_phone_number'];
+        $consigneeAddressLines = [];
+        if (! empty($validatedData['consignee_address_line1'])) {
+            $consigneeAddressLines[] = $validatedData['consignee_address_line1'];
+        }
+        if (! empty($validatedData['consignee_address_line2'])) {
+            $consigneeAddressLines[] = $validatedData['consignee_address_line2'];
+        }
+        if (! empty($validatedData['consignee_address_line3'])) {
+            $consigneeAddressLines[] = $validatedData['consignee_address_line3'];
+        }
+        $consigneeCity = $validatedData['consignee_city'];
+        $consigneeState = $validatedData['consignee_state'] ?? '';
+        $consigneePostal = $validatedData['consignee_zip_code'];
+        $destCountry = $this->getCountryCodeFromDestination($validatedData['delivery_destination']);
+
+        $serviceCode = $service->scode;
+        $serviceDescription = $this->getServiceDescriptionFromMethod($service->method);
+
+        $weightUnit = 'LBS';
+
+        if ($serviceWeight === 'OZS') {
+            $serviceCode = $service->scode;
+            $weightUnit = 'OZS';
+        } elseif ($serviceWeight === 'OZS/LBS') {
+            $maxWeightKg = 0;
+            $preScanRows = $validatedData['packages'] ?? [];
+            foreach ($preScanRows as $pkgData) {
+                $w = floatval($pkgData['actual_weight_kg'] ?? 0);
+
+                if ($w > $maxWeightKg) {
+                    $maxWeightKg = $w;
+                }
+            }
+            $maxWeightLbs = $maxWeightKg * 2.205;
+            if ($maxWeightLbs > 0 && $maxWeightLbs < 1) {
+                $serviceCode = '92';
+                $weightUnit = 'OZS';
+                $serviceDescription = 'Ground Saver Less than 1 lb';
+            } else {
+                $serviceCode = '93';
+                $weightUnit = 'LBS';
+                $serviceDescription = 'Ground Saver 1 lbs or grater';
+            }
+        }
+
+        $packages = [];
+        $packageRows = $validatedData['packages'] ?? [];
+        foreach ($packageRows as $pkgData) {
+            $weightKg = $pkgData['actual_weight_kg'] ?? null;
+            if (! $weightKg || $weightKg <= 0) {
+                continue;
+            }
+
+            $convertedWeight = $weightUnit === 'OZS'
+                ? round($weightKg * 35.274, 2)
+                : round($weightKg * 2.20462, 2);
+
+            $pkg = [
+                'Description' => 'Documents',
+                'Packaging' => ['Code' => '02'],
+                'ReferenceNumber' => [
+                    [
+                        'Code' => '9S',
+                        'Value' => 'ORDER12345',
+                    ],
+                ],
+                'PackageWeight' => [
+                    'UnitOfMeasurement' => ['Code' => $weightUnit],
+                    'Weight' => (string) $convertedWeight,
+                ],
+            ];
+
+            $lengthCm = $pkgData['length_cm'] ?? null;
+            $widthCm = $pkgData['width_cm'] ?? null;
+            $heightCm = $pkgData['height_cm'] ?? null;
+
+            if ($lengthCm && $widthCm && $heightCm) {
+                $pkg['Dimensions'] = [
+                    'UnitOfMeasurement' => ['Code' => 'IN'],
+                    'Length' => (string) $lengthCm,
+                    'Width' => (string) $widthCm,
+                    'Height' => (string) $heightCm,
+                ];
+            } else {
+                $pkg['Dimensions'] = [
+                    'UnitOfMeasurement' => ['Code' => 'IN'],
+                    'Length' => '10',
+                    'Width' => '8',
+                    'Height' => '4',
+                ];
+            }
+
+            $packages[] = $pkg;
+        }
+
+        if (empty($packages)) {
+            $fallbackWeight = $weightUnit === 'OZS' ? '176.37' : '11.02';
+            $packages[] = [
+                'Description' => 'Documents',
+                'ReferenceNumber' => [
+                    [
+                        'Code' => '9S',
+                        'Value' => 'ORDER12345',
+                    ],
+                ],
+                'Packaging' => ['Code' => '02'],
+                'PackageWeight' => [
+                    'UnitOfMeasurement' => ['Code' => $weightUnit],
+                    'Weight' => $fallbackWeight,
+                ],
+                'Dimensions' => [
+                    'UnitOfMeasurement' => ['Code' => 'IN'],
+                    'Length' => '10',
+                    'Width' => '8',
+                    'Height' => '4',
+                ],
+            ];
+        }
+
+        $payload = [
+            'ShipmentRequest' => [
+                'Request' => [
+                    'RequestOption' => 'validate',
+                    'TransactionReference' => [
+                        'CustomerContext' => 'ORDER-12345',
+                    ],
+                ],
+                'Shipment' => [
+                    'Shipper' => [
+                        'Name' => $shipperName,
+                        'AttentionName' => $shipperAttentionName,
+                        'CompanyDisplayableName' => $shipperCompanyDisplayableName,
+                        'Phone' => ['Number' => $shipperPhone],
+                        'ShipperNumber' => $shipperNumber,
+                        'Address' => [
+                            'AddressLine' => $shipperAddressLine,
+                            'City' => $shipperCity,
+                            'StateProvinceCode' => $shipperState,
+                            'PostalCode' => $shipperPostal,
+                            'CountryCode' => $shipperCountry,
+                        ],
+                    ],
+                    'ShipFrom' => [
+                        'Name' => $shipperName,
+                        'AttentionName' => $shipperAttentionName,
+                        'Phone' => ['Number' => $shipperPhone],
+                        'Address' => [
+                            'AddressLine' => [$shipperAddressLine],
+                            'City' => $shipperCity,
+                            'StateProvinceCode' => $shipperState,
+                            'PostalCode' => $shipperPostal,
+                            'CountryCode' => $shipperCountry,
+                        ],
+                    ],
+                    'ShipTo' => [
+                        'Name' => $consigneeName,
+                        'AttentionName' => $consigneeName,
+                        'Phone' => ['Number' => $consigneePhone],
+                        'Address' => [
+                            'AddressLine' => ! empty($consigneeAddressLines) ? $consigneeAddressLines : ['Receiver Address'],
+                            'City' => $consigneeCity,
+                            'StateProvinceCode' => $consigneeState,
+                            'PostalCode' => $consigneePostal,
+                            'CountryCode' => $destCountry,
+                        ],
+                    ],
+                    'PaymentInformation' => [
+                        'ShipmentCharge' => [
+                            'Type' => '01',
+                            'BillShipper' => [
+                                'AccountNumber' => $shipperNumber,
+                            ],
+                        ],
+                    ],
+                    'Service' => [
+                        'Code' => $serviceCode,
+                        'Description' => $serviceDescription,
+                    ],
+                    'Package' => $packages,
+                ],
+                'LabelSpecification' => [
+                    'LabelImageFormat' => ['Code' => 'PDF'],
+                ],
+            ],
+        ];
+
+        return $payload;
+    }
+
+    /**
+     * Call the UPS Ship API directly (internal method).
+     * Returns ['success' => bool, 'shipmentResponse' => array] or
+     * ['success' => false, 'message' => string, 'rawResponse' => mixed].
+     */
+    private function callUpsShipApiInternal($payload)
+    {
+        try {
+            Log::info('UPS Ship payload (internal): '.substr(json_encode($payload), 0, 2000));
+
+            try {
+                $token = $this->getUpsShipAccessToken();
+            } catch (\Exception $e) {
+                return [
+                    'success' => false,
+                    'message' => 'Failed to obtain UPS Ship access token: '.$e->getMessage(),
+                ];
+            }
+
+            $ch = curl_init('https://onlinetools.ups.com/api/shipments/v2403/ship');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Authorization: Bearer '.$token,
+                    'transId: '.uniqid('ship_', true),
+                    'transactionSrc: unitedcourier',
+                ],
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                Log::error('UPS Ship cURL error (internal): '.$curlError);
+
+                return [
+                    'success' => false,
+                    'message' => 'UPS Ship API connection error: '.$curlError,
+                ];
+            }
+
+            $decoded = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::warning('UPS Ship returned non-JSON response. HTTP: '.$httpCode.' Body: '.$response);
+
+                return [
+                    'success' => false,
+                    'message' => 'UPS Ship returned non-JSON response',
+                    'rawResponse' => $response,
+                ];
+            }
+
+            Log::info('UPS Ship response HTTP: '.$httpCode.' Body: '.substr($response, 0, 2000));
+
+            if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['ShipmentResponse'])) {
+                return [
+                    'success' => true,
+                    'shipmentResponse' => $decoded['ShipmentResponse'],
+                ];
+            }
+
+            $errorMessage = 'Failed to create UPS shipment';
+            if (isset($decoded['response']['errors'][0]['message'])) {
+                $errorMessage = $decoded['response']['errors'][0]['message'];
+            } elseif (isset($decoded['ShipmentResponse']['Response']['Error'][0]['ErrorDescription'])) {
+                $errorMessage = $decoded['ShipmentResponse']['Response']['Error'][0]['ErrorDescription'];
+            } elseif (isset($decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'])) {
+                $errorMessage = $decoded['Fault']['detail']['Errors']['ErrorDetail']['PrimaryErrorCode']['ErrorDescription'];
+            }
+
+            return [
+                'success' => false,
+                'message' => $errorMessage,
+                'rawResponse' => $decoded,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Server error: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Map delivery_destination text to ISO country code.
+     */
+    private function getCountryCodeFromDestination($dest)
+    {
+        $map = [
+            'US- United State of America' => 'US',
+            'India' => 'IN',
+            'UK - United Kingdom' => 'GB',
+            'China' => 'CN',
+            'Russia' => 'RU',
+            'Srilanka' => 'LK',
+        ];
+
+        return $map[$dest] ?? 'US';
+    }
+
+    /**
+     * Map courier service method name to UPS service description.
+     */
+    private function getServiceDescriptionFromMethod($method)
+    {
+        $methodUpper = strtoupper($method);
+        $descMap = [
+            'UNITED MY DELIVERY' => 'Ground',
+            'UNITED AIR PREMIUM' => 'Next Day Air',
+            'UNITED GRD PREMIUM' => '2nd Day Air',
+            'UNITED AIR EXPRESS' => 'Worldwide Express',
+            'UNITED PRIOR POST' => 'Standard',
+            'UNITED ECO POST' => 'Saver',
+            'UNITED MY PICKUP' => 'Ground',
+            'DDP AIREXPRESS' => 'Worldwide Express',
+            'DDU AIREXPRESS' => 'Worldwide Express',
+        ];
+
+        foreach ($descMap as $key => $desc) {
+            if (str_contains($methodUpper, $key)) {
+                return $desc;
+            }
+        }
+
+        return 'Ground';
+    }
+
+    /**
+     * Multi-tier CourierService lookup from a shipping method string.
+     */
+    private function findCourierService($shippingMethod, $shipperId)
+    {
+        // Tier 1: Exact match
+        $service = CourierService::where('method', $shippingMethod)->first();
+        if ($service) {
+            return $service;
+        }
+
+        // Tier 2: Case-insensitive exact match
+        $service = CourierService::whereRaw('LOWER(method) = ?', [strtolower($shippingMethod)])->first();
+        if ($service) {
+            return $service;
+        }
+
+        $methodUpper = strtoupper($shippingMethod);
+        $allServices = CourierService::all();
+
+        // Tier 3: str_contains partial match (both directions)
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            if (str_contains($svcUpper, $methodUpper) || str_contains($methodUpper, $svcUpper)) {
+                return $svc;
+            }
+        }
+
+        // Tier 4: Word-by-word normalized match with abbreviation detection.
+        $formWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $methodUpper));
+        $formWords = array_values(array_filter($formWords, function ($w) {
+            return strlen($w) > 0;
+        }));
+
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            $svcWords = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', $svcUpper));
+            $svcWords = array_values(array_filter($svcWords, function ($w) {
+                return strlen($w) > 0;
+            }));
+
+            if (empty($formWords) || empty($svcWords)) {
+                continue;
+            }
+
+            $matchedCount = 0;
+            $unmatchedLongWords = 0;
+            foreach ($formWords as $fw) {
+                $found = false;
+                foreach ($svcWords as $sw) {
+                    if ($fw === $sw || str_contains($fw, $sw) || str_contains($sw, $fw)) {
+                        $found = true;
+                        break;
+                    }
+                    $shorter = strlen($fw) <= strlen($sw) ? $fw : $sw;
+                    $longer = strlen($fw) > strlen($sw) ? $fw : $sw;
+                    if (strlen($shorter) >= 2 && strlen($shorter) <= 3 && strlen($longer) >= 4) {
+                        if ($this->isAbbreviationOf($shorter, $longer)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                }
+                if ($found) {
+                    $matchedCount++;
+                } elseif (strlen($fw) >= 4) {
+                    $unmatchedLongWords++;
+                }
+            }
+
+            $totalWords = count($formWords);
+            if ($unmatchedLongWords === 0 && $matchedCount > 0 && ($matchedCount / $totalWords) >= 0.5) {
+                return $svc;
+            }
+        }
+
+        // Tier 5: Collapsed-string match (remove all spaces and non-alphanumeric)
+        $collapsedForm = preg_replace('/[^A-Za-z0-9]/', '', $methodUpper);
+        foreach ($allServices as $svc) {
+            $svcUpper = strtoupper($svc->method);
+            $collapsedSvc = preg_replace('/[^A-Za-z0-9]/', '', $svcUpper);
+            if (str_contains($collapsedForm, $collapsedSvc) || str_contains($collapsedSvc, $collapsedForm)) {
+                return $svc;
+            }
+        }
+
+        $availableMethods = CourierService::pluck('method')->toArray();
+        Log::warning('findCourierService: No match for "'.$shippingMethod.'" (shipper #'.$shipperId.'). Available methods: '.implode(', ', $availableMethods));
+
+        return null;
+    }
+
+    /**
+     * Check if a short string (2-3 chars) is an abbreviation of a longer string.
+     */
+    private function isAbbreviationOf($short, $long)
+    {
+        $shortLen = strlen($short);
+        $longLen = strlen($long);
+        if ($shortLen > $longLen) {
+            return false;
+        }
+
+        $si = 0;
+        for ($li = 0; $li < $longLen && $si < $shortLen; $li++) {
+            if ($short[$si] === $long[$li]) {
+                $si++;
+            }
+        }
+
+        return $si === $shortLen;
     }
 }

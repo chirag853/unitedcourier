@@ -21,6 +21,7 @@ class BillTo extends Model
     protected $fillable = [
         'shipper_id',
         'customer_id',
+        'biller_name',
     ];
 
     /**

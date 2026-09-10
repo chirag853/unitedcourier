@@ -8215,6 +8215,17 @@
                                                                         <!-- JS populates rate cards here -->
                                                                     </div>
                                                                     <div id="upsRateError" class="alert alert-danger mt-3 d-none"></div>
+                                                                    <div class="col-md-6 mb-3">
+                                                            <label for="entry_remark" class="form-label">Entry Remark</label>
+                                                            <textarea class="form-control @error('entry_remark') is-invalid @enderror"
+                                                                id="entry_remark" name="entry_remark" rows="4"
+                                                                maxlength="1000"
+                                                                placeholder="Enter shipment / entry remark">{{ old('entry_remark') }}</textarea>
+                                                            @error('entry_remark')
+                                                                <div class="invalid-feedback">{{ $message }}</div>
+                                                            @enderror
+                                                            <small class="text-muted">This remark is saved along with the COD order.</small>
+                                                        </div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -8885,6 +8896,19 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Remark -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light fw-bold">
+                            <i class="ti ti-notes me-1"></i> Remark
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6"><strong>Entry Remark:</strong> <span id="preview_entry_remark">-</span></div>
+                                <div class="col-md-6"><strong>Finance Remark:</strong> <span id="preview_finance_remark">-</span></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer d-flex justify-content-between">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">
@@ -9361,21 +9385,8 @@
                                     </div>
                                     <div class="col-lg-6">
                                         <div class="row h-100 align-items-center">
-                                            <div class="col-md-7">
-                                                <div class="price-section">
-                                                    <div class="price-container">
-                                                        <div class="price-amount">
-                                                            <span class="price-symbol">₹</span> ${totalPrice.toFixed(2)}
-                                                        </div>
-                                                        <div class="tax-info">
-                                                            <i class="fas fa-check-circle"></i>
-                                                            All taxes included
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-5">
-                                                <div class="action-container d-flex align-items-center justify-content-between">
+                                            <div class="col-md-12">
+                                                <div class="action-container d-flex align-items-center justify-content-end">
                                                     <div class="form-check m-0 d-flex align-items-center">
                                                         <input type="radio" name="rate_select" value="${r.service_id}"
                                                             class="form-check-input me-2 service-radio"
@@ -9392,10 +9403,6 @@
                                                             Select
                                                         </label>
                                                     </div>
-                                                    <button class="breakdown-toggle btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#breakdown-${idx}" aria-expanded="false" aria-controls="breakdown-${idx}">
-                                                        <span>break price</span>
-                                                        <i class="fas fa-chevron-down chevron ms-1"></i>
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -10114,7 +10121,15 @@
             if (sameAsCustomer) {
                 sameAsCustomer.checked = false;
             }
+            // Lock the fields that were auto-filled from the selected customer,
+            // but keep any field that is still EMPTY editable so the admin can
+            // fill in the missing shipper details before creating the order.
             setShipperFieldsLocked(fieldNames, true);
+            fieldNames.forEach(function (name) {
+                if (String(selectedCustomer[name] ?? '').trim() === '') {
+                    setShipperFieldsLocked([name], false);
+                }
+            });
 
             // Offer the selected customer's saved addresses so the user can choose
             // which one populates the Shipper address fields.
@@ -10397,7 +10412,7 @@
     <script>
     // Handle form submission
     document.addEventListener('DOMContentLoaded', function() {
-        const forms = document.querySelectorAll('form[action*="create-shipment"]');
+        const forms = document.querySelectorAll('form[action*="create-shipment"], form[action*="cod/create-order"]');
 
         function formatFieldName(field) {
             return field
@@ -10855,6 +10870,10 @@
             document.getElementById('preview_invoice_currency').textContent = getSelectVal('invoice_currency');
             document.getElementById('preview_reference_number').textContent = getVal('reference_number');
 
+            // Remark
+            document.getElementById('preview_entry_remark').textContent = getVal('entry_remark') || '-';
+            document.getElementById('preview_finance_remark').textContent = getVal('finance_remark') || '-';
+
             // Invoice Items
             // IGST columns only show for CSB V shipments (reuse originTypeValue declared above)
             const isCsb5 = originTypeValue === 'CSB V';
@@ -11148,7 +11167,22 @@
                     return;
                 }
 // Submit form via AJAX - controller handles UPS payload + API call + DB storage
+// Always sync the form's CSRF token with the current meta tag value before
+// building FormData. This guards against a stale token (e.g. one previously
+// restored from localStorage) causing a "CSRF token mismatch" on submit.
+const csrfMetaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+let csrfFormInput = form.querySelector('input[name="_token"]');
+if (!csrfFormInput) {
+    csrfFormInput = document.createElement('input');
+    csrfFormInput.type = 'hidden';
+    csrfFormInput.name = '_token';
+    form.appendChild(csrfFormInput);
+}
+if (csrfMetaToken) {
+    csrfFormInput.value = csrfMetaToken;
+}
 const formData = new FormData(form);
+formData.set('_token', csrfFormInput.value);
 formData.append('service_id', serviceId);
                 // Append oversize charge (₹21,000) if an oversize package was confirmed
                 formData.append('oversize_charge', oversizeCharge || 0);
@@ -11310,7 +11344,7 @@ if (rateRadio && rateRadio.dataset.rate) {
 
         // Get all form elements in the main create-shipment form
         function getMainForm() {
-            return document.querySelector('form[action*="create-shipment"]');
+            return document.querySelector('form[action*="create-shipment"], form[action*="cod/create-order"]');
         }
 
         // Serialize all form fields (text, select, radio, checkbox, textarea) to a plain object
@@ -11321,6 +11355,11 @@ if (rateRadio && rateRadio.dataset.rate) {
             const data = {};
             const formData = new FormData(form);
             for (const [key, value] of formData.entries()) {
+                // Never persist the CSRF token: it is session-bound and becomes
+                // stale, which causes "CSRF token mismatch" on the next submit.
+                if (key === '_token') {
+                    continue;
+                }
                 // Handle multiple values with same name (e.g., checkboxes)
                 if (data.hasOwnProperty(key)) {
                     if (!Array.isArray(data[key])) {
@@ -11475,6 +11514,12 @@ if (rateRadio && rateRadio.dataset.rate) {
             Object.keys(data).forEach(function(name) {
                 const value = data[name];
                 const escaped = escapeAttr(name);
+
+                // Never restore the CSRF token from storage: it is session-bound
+                // and a stale value causes "CSRF token mismatch" on submit.
+                if (name === '_token') {
+                    return;
+                }
 
                 // For radio buttons: check the matching one
                 const radio = form.querySelector('input[type="radio"][name="' + escaped +
