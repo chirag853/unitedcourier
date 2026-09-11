@@ -117,8 +117,10 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/cod/create-order', [CodController::class, 'codCreateOrder'])->name('admin.cod.create-order');
     Route::get('/cod/all-orders', [CodController::class, 'codAllOrders'])->name('admin.cod.all-orders');
     Route::post('/cod/create-order', [CodController::class, 'codStoreOrder'])->name('admin.cod.store-order');
+    Route::post('/cod/close-order', [CodController::class, 'codCloseOrder'])->name('admin.cod.close-order');
     Route::post('/cod/ups-rate', [CodController::class, 'codUpsRate'])->name('admin.cod.ups-rate');
     Route::get('/cod/zones-by-destination', [CodController::class, 'codZonesByDestination'])->name('admin.cod.zones-by-destination');
+    Route::get('/cod/services-by-destination', [CodController::class, 'codServicesByDestination'])->name('admin.cod.services-by-destination');
 
     // Create User (Admin Management) Routes
     Route::get('/create-user', [AdminController::class, 'createUser'])->name('admin.create-user');

@@ -475,7 +475,23 @@ class CodController extends Controller
             // <select> dropdown is empty but a DDP/DDU radio button was selected.
             // The JS sends 'service_id' alongside FormData.
             $serviceId = $request->input('service_id');
-            if (empty($validatedData['shipping_method']) && $serviceId) {
+            // SELF is a static frontend-only option (no courier_services row,
+            // no carrier API call, zero price). Detect it before any
+            // service/rate lookup so the order is saved with
+            // shipper_info.shipping_method = 'SELF'.
+            $isSelfService = is_string($serviceId)
+                ? strtoupper(trim($serviceId)) === 'SELF'
+                : false;
+            if (! $isSelfService && strtoupper(trim((string) ($validatedData['shipping_method'] ?? ''))) === 'SELF') {
+                $isSelfService = true;
+            }
+            if ($isSelfService) {
+                $validatedData['shipping_method'] = 'SELF';
+                $validatedData['service_rate_id'] = null;
+                $serviceId = null;
+            }
+            $courierService = null;
+            if (! $isSelfService && empty($validatedData['shipping_method']) && $serviceId) {
                 $courierService = CourierService::find($serviceId);
                 if ($courierService) {
                     $validatedData['shipping_method'] = $courierService->method;
@@ -486,7 +502,8 @@ class CodController extends Controller
             // Ensure we have a service_id (courier_services.id) to persist on the
             // shipper_info row. Prefer the value sent by the frontend; otherwise
             // resolve it from the (possibly just-resolved) shipping_method.
-            if (! $serviceId && ! empty($validatedData['shipping_method'])) {
+            // Skipped for SELF (no courier_services row).
+            if (! $isSelfService && ! $serviceId && ! empty($validatedData['shipping_method'])) {
                 $resolvedService = CourierService::whereRaw('LOWER(method) = ?', [strtolower($validatedData['shipping_method'])])->first();
                 if ($resolvedService) {
                     $serviceId = $resolvedService->id;
@@ -495,8 +512,9 @@ class CodController extends Controller
 
             // Resolve the selected rate from server-owned records. The admin flow
             // uses the shared default rates only (customer_id = 0).
+            // Skipped for SELF (zero price, no courier rate row).
             $courierRate = null;
-            if (! empty($validatedData['service_rate_id'])) {
+            if (! $isSelfService && ! empty($validatedData['service_rate_id'])) {
                 $courierRate = CourierRate::whereKey((int) $validatedData['service_rate_id'])
                     ->whereIn('customer_id', [0])
                     ->with('service')
@@ -734,7 +752,7 @@ class CodController extends Controller
                 'total_fuel_price' => $fuelPrice,
                 'total_surcharge' => $surchargeTotal,
                 'total_price' => $totalPrice,
-                'status' => 'manifested',
+                'status' => 'received',
                 'shipment_type' => 2,
             ]);
 
@@ -956,8 +974,13 @@ class CodController extends Controller
             // transaction is still open. The shipment is only committed if
             // the carrier accepts it; otherwise everything rolls back and the
             // UPS error (with raw response) is surfaced to the admin.
+            // Skipped entirely for SELF (static option): no carrier accepts
+            // it, the order is saved with zero price and the generated AWB.
             // ============================================================
             $carrierTrackingNumber = null;
+            $shipmentResponse = null;
+            $adomantraResponse = null;
+            if (! $isSelfService) {
             $upsPayloadResult = $this->buildUpsShipPayloadFromDb($shipper);
 
             if (! $upsPayloadResult['success']) {
@@ -1046,6 +1069,12 @@ class CodController extends Controller
                 'admin_id' => $admin->id,
                 'awb_number' => $awbNumber,
             ]);
+            } else {
+                Log::info('SELF COD order created (no carrier API).', [
+                    'admin_id' => $admin->id,
+                    'awb_number' => $awbNumber,
+                ]);
+            }
 
             DB::commit();
             $transactionStarted = false;
@@ -1058,6 +1087,7 @@ class CodController extends Controller
                 'success' => true,
                 'message' => 'COD order created successfully!',
                 'tracking_number' => $carrierTrackingNumber ?? $awbNumber,
+                'is_self' => $isSelfService,
                 'data' => [
                     'create_shipment_id' => $createShipment->id,
                     'shipper_id' => $shipper->id,
@@ -1173,55 +1203,139 @@ class CodController extends Controller
      */
     public function codAllOrders(Request $request)
     {
-        $status = $request->query('status');
+        $type = $request->query('type', $request->query('status', 'all'));
 
-        $query = DB::table('shipment_invoice')
-            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
-            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
-            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
-            ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
-            ->where('shipper_info.shipment_type', 2)
-            ->select(
-                'shipment_invoice.id',
-                'shipment_invoice.invoice_number',
-                'shipment_invoice.invoice_date',
-                'shipment_invoice.invoice_amount',
-                'shipment_invoice.status as invoice_status',
-                'shipment_invoice.delivery_type',
-                'shipment_invoice.created_at as order_created_at',
-                'shipper_info.id as shipper_id',
-                'shipper_info.awb_number',
-                'shipper_info.company_name',
-                'shipper_info.contact_person as shipper_contact',
-                'shipper_info.phone_number as shipper_phone',
-                'shipper_info.city as shipper_city',
-                'shipper_info.status as shipper_status',
-                'manifests.manifest_number',
-                'customers.first_name',
-                'customers.last_name',
-                'consignee_info.consignee_name',
-                'consignee_info.city as consignee_city'
-            )
-            ->orderBy('shipment_invoice.created_at', 'desc')
-            ->get();
+        // The FOC tile lists free-of-cost orders (shipment_type = 3) on this
+        // same page; every other view stays scoped to COD (shipment_type = 2).
+        $isFocView = $type === 'foc';
+        $isDeliveredView = $type === 'delivered';
 
-        if ($status && $status !== 'all') {
-            $query = $query->filter(function ($row) use ($status) {
-                return $row->shipper_status === $status || $row->invoice_status === $status;
-            })->values();
-        }
-
-        $counts = [
-            'all'        => $query->count(),
-            'draft'      => $query->where('shipper_status', 'draft')->count(),
-            'manifested' => $query->where('shipper_status', 'manifested')->count(),
-            'cod'        => $query->where('invoice_status', 'cod')->count(),
+        $withRelations = [
+            'shipperInfo.consigneeInfo',
+            'shipperInfo.packageDimensions',
+            'shipperInfo.manifest',
+            'shipperInfo.shipmentRemark',
         ];
 
+        // Main list query
+        $query = ShipmentInvoice::with($withRelations);
+
+        if ($isDeliveredView) {
+            // Delivered tile: shipper_info.status = delivered (COD + FOC dono)
+            $query->whereHas('shipperInfo', function ($shipper) {
+                $shipper->where('status', 'delivered');
+            });
+        } else {
+            $shipmentType = $isFocView ? 3 : 2;
+            $query->whereHas('shipperInfo', function ($shipper) use ($shipmentType) {
+                $shipper->where('shipment_type', $shipmentType);
+            });
+
+            // 'all' aur 'cod' me koi extra filter nahi
+            if (! $isFocView && in_array($type, ['draft', 'manifested'], true)) {
+                $query->whereHas('shipperInfo', function ($shipper) use ($type) {
+                    $shipper->where('status', $type);
+                });
+            }
+        }
+
+        $invoices = $query->orderBy('created_at', 'desc')->paginate(25)->withQueryString();
+
+        $allCod = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('shipment_type', 2);
+        })->count();
+
+        $draftCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('shipment_type', 2)->where('status', 'draft');
+        })->count();
+
+        $manifestedCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('shipment_type', 2)->where('status', 'manifested');
+        })->count();
+
+        $focCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('shipment_type', 3);
+        })->count();
+
+        $deliveredCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('status', 'delivered');
+        })->count();
+
+        $counts = [
+            'all' => $allCod,
+            'draft' => $draftCount,
+            'manifested' => $manifestedCount,
+            'cod' => $allCod,
+            'foc' => $focCount,
+            'delivered' => $deliveredCount,
+        ];
+
+        // Customer names
+        $customerIds = $invoices->getCollection()
+            ->map(function ($invoice) {
+                return $invoice->shipperInfo?->customer_id;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $customerNames = [];
+        if (! empty($customerIds)) {
+            $customers = Customer::whereIn('id', $customerIds)->get(['id', 'first_name', 'last_name']);
+            foreach ($customers as $customer) {
+                $customerNames[$customer->id] = trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? ''));
+            }
+        }
+
         return view('admin.cod-all-orders', [
-            'orders' => $query,
+            'invoices' => $invoices,
             'counts' => $counts,
-            'status' => $status,
+            'status' => $type,
+            'type' => $type,
+            'isFocView' => $isFocView,
+            'customerNames' => $customerNames,
+        ]);
+    }
+
+    /**
+     * Close Order modal se COD/FOC save karo.
+     * foc => shipper_info.shipment_type = 3, cod => 2 + status = delivered. Remark finance_remark me save hota hai.
+     */
+    public function codCloseOrder(Request $request)
+    {
+        $validated = $request->validate([
+            'invoice_id' => 'required|integer|exists:shipment_invoice,id',
+            'shipper_id' => 'nullable|integer|exists:shipper_info,id',
+            'order_type' => 'required|in:cod,foc',
+            'remark' => 'nullable|string|max:1000',
+        ]);
+
+        $invoice = ShipmentInvoice::findOrFail($validated['invoice_id']);
+        $shipperId = $validated['shipper_id'] ?? $invoice->shipper_id;
+
+        $shipper = ShipperInfo::findOrFail($shipperId);
+
+        $shipper->shipment_type = $validated['order_type'] === 'foc' ? 3 : 2;
+        $shipper->status = 'delivered';
+        $shipper->save();
+
+        $remark = trim((string) ($validated['remark'] ?? ''));
+
+        $shipmentRemark = ShipmentRemark::firstOrNew(['shipper_id' => $shipper->id]);
+        if ($shipmentRemark->exists === false) {
+            $shipmentRemark->customer_id = $shipper->customer_id ?? 0;
+        }
+        // Close Order modal se bhara remark hamesha finance_remark me jayega
+        if ($remark !== '') {
+            $shipmentRemark->finance_remark = $remark;
+        }
+        $shipmentRemark->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order closed as ' . strtoupper($validated['order_type']),
+            'shipment_type' => $shipper->shipment_type,
         ]);
     }
 
@@ -1760,6 +1874,54 @@ class CodController extends Controller
     }
 
     /**
+     * Find the courier rate row for one box: exact weight-band match first,
+     * nearest configured band as fallback (by distance to the band edges).
+     *
+     * Returns [rateRow|null, isFallback]. Only when the service has no rates
+     * at all for the zone scope does it return [null, false] — so services
+     * are never hidden merely because of the entered weight.
+     */
+    private function findCodBoxRate(int $serviceId, $destinationCountry, $zoneNumber, float $weight): array
+    {
+        $exact = \DB::select(
+            'SELECT cr.*, cs.country, cs.service_code, cs.method
+                FROM courier_rates cr
+                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                WHERE cr.customer_id = 0
+                AND cr.service_id = ?
+                AND cs.country = ?
+                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
+                ORDER BY cr.zone_no DESC, cr.wt_range_start
+                LIMIT 1',
+            [$serviceId, $destinationCountry, $zoneNumber, $weight]
+        );
+
+        if (! empty($exact)) {
+            return [$exact[0], false];
+        }
+
+        $nearest = \DB::select(
+            'SELECT cr.*, cs.country, cs.service_code, cs.method
+                FROM courier_rates cr
+                INNER JOIN courier_services cs ON cr.service_id = cs.id
+                WHERE cr.customer_id = 0
+                AND cr.service_id = ?
+                AND cs.country = ?
+                AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
+                ORDER BY LEAST(ABS(? - cr.wt_range_start), ABS(? - cr.wt_range_end)), cr.wt_range_start
+                LIMIT 1',
+            [$serviceId, $destinationCountry, $zoneNumber, $weight, $weight]
+        );
+
+        if (! empty($nearest)) {
+            return [$nearest[0], true];
+        }
+
+        return [null, false];
+    }
+
+    /**
      * Proxy UPS Rate API call for the admin COD create-order page.
      *
      * Mirrors CustomerController::getUpsRate() exactly (same box-wise
@@ -1782,7 +1944,6 @@ class CodController extends Controller
         $consigneeZipCode = $request->consignee_zip_code;
         $deliveryDestination = $request->delivery_destination;
         $packageWeights = $request->package_weights;
-        $isMultiPackage = is_array($packageWeights) ? count($packageWeights) : 1;
 
         // 3. Weight validation
         if ($totalWeight <= 0) {
@@ -1888,8 +2049,11 @@ class CodController extends Controller
 
         foreach ($services as $key => $service) {
 
-            // ========== SPECIAL CASE: US Multi-package with United Ground Premium ==========
-            if ($destinationCountry === 'US' && strtolower($service->method) == 'united ground premium') {
+            // ========== US: box-wise rate for EVERY UPS service ==========
+            // All country services must appear in the rate result for any
+            // package count or weight. Services with no matching rate band
+            // are reconciled below as unavailable (non-selectable) cards.
+            if ($destinationCountry === 'US') {
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -1898,26 +2062,25 @@ class CodController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
                     $pkgWt = floatval($pkgWt);
 
-                    $boxRate = \DB::select(
-                        'SELECT cr.*, cs.country, cs.service_code, cs.method
-                            FROM courier_rates cr
-                            INNER JOIN courier_services cs ON cr.service_id = cs.id
-                            WHERE cr.customer_id = 0
-                            AND cr.service_id = ?
-                            AND cs.country = ?
-                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                            ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1',
-                        [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    // Exact weight-band match first, nearest configured band as
+                    // fallback — so a service is never hidden just because the
+                    // weight falls outside its configured bands.
+                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
+                        (int) $service->id,
+                        $destinationCountry,
+                        $zoneNumber,
+                        $pkgWt
                     );
+                    if ($boxFallback) {
+                        $usedFallback = true;
+                    }
 
                     if (! empty($boxRate)) {
-                        $boxRate = $boxRate[0];
                         if ($firstMatchedRate === null) {
                             $firstMatchedRate = $boxRate;
                         }
@@ -1985,105 +2148,7 @@ class CodController extends Controller
                     'total_fuel_price' => $combinedFuel,
                     'total_surcharge' => $combinedSurcharge,
                     'is_multi_package' => true,
-                    'box_breakdown' => $boxBreakdown,
-                ];
-            }
-
-            if ($destinationCountry === 'US' && $isMultiPackage <= 1 && strtolower($service->method) != 'united ground premium') {
-                $boxBreakdown = [];
-                $combinedBase = 0;
-                $combinedFuel = 0;
-                $combinedGst = 0;
-                $combinedSurcharge = 0;
-                $surchargeList = [];
-                $firstMatchedRate = null;
-                $allBoxesMatched = true;
-
-                foreach ($packageWeights as $index => $pkgWt) {
-                    $pkgWt = floatval($pkgWt) ?: 1;
-
-                    $boxRate = \DB::select(
-                        'SELECT cr.*, cs.country, cs.service_code, cs.method
-                FROM courier_rates cr
-                INNER JOIN courier_services cs ON cr.service_id = cs.id
-                WHERE cr.customer_id = 0
-                AND cr.service_id = ?
-                AND cs.country = ?
-                AND (cr.zone_no = ? OR cr.zone_no IS NULL OR cr.zone_no = 0)
-                AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                ORDER BY cr.zone_no DESC, cr.wt_range_start
-                LIMIT 1',
-                        [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
-                    );
-
-                    if (! empty($boxRate)) {
-                        $boxRate = $boxRate[0];
-                        if ($firstMatchedRate === null) {
-                            $firstMatchedRate = $boxRate;
-                        }
-
-                        $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0
-                            ? floatval($boxRate->fuel_charge)
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
-
-                        $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-                        if (! empty($boxSurchargeIds)) {
-                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-                                $surchargeList[$s->id] = [
-                                    'name' => $s->name,
-                                    'code' => $s->code,
-                                    'price' => (float) $s->price,
-                                ];
-                            }
-                        }
-
-                        $boxBreakdown[] = [
-                            'box' => $index + 1,
-                            'weight' => $pkgWt,
-                            'base' => $base,
-                            'fuel' => $fuel,
-                            'surcharge' => $boxSurcharge,
-                            'total' => $base + $fuel + $boxSurcharge,
-                        ];
-
-                        $combinedBase += $base;
-                        $combinedFuel += $fuel;
-                        $combinedSurcharge += $boxSurcharge;
-                    }
-                }
-
-                $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
-                $fixedGst = $firstMatchedRate ? (float) $firstMatchedRate->gst_amount : 0;
-                $combinedGst = $fixedGst > 0
-                    ? $fixedGst
-                    : (($combinedBase + $combinedFuel + $combinedSurcharge) * $gstPctForTotal / 100);
-
-                $allRates[] = [
-                    'rate_id' => $firstMatchedRate ? $firstMatchedRate->id : null,
-                    'service_id' => $service->id,
-                    'method' => $service->method,
-                    'method_display' => $service->method.' '.$service->tat,
-                    'network' => $service->network,
-                    'method_code' => $service->method_code,
-                    'tat' => $service->tat,
-                    'delivery_days' => $service->tat,
-                    'scode' => $service->scode,
-                    'consigneeState' => $consigneeState,
-                    'zone_no' => $zoneNumber,
-                    'pkg_wt' => $pkgWt,
-                    'price' => $combinedBase,
-                    'fuel_charge' => $combinedFuel,
-                    'fuel_percentage' => 0,
-                    'gst_percentage' => $gstPctForTotal,
-                    'gst_amount' => $combinedGst,
-                    'surcharge_total' => $combinedSurcharge,
-                    'surcharges' => array_values($surchargeList),
-                    'total_base_price' => $combinedBase,
-                    'total_fuel_price' => $combinedFuel,
-                    'total_surcharge' => $combinedSurcharge,
-                    'is_multi_package' => true,
+                    'is_fallback' => $usedFallback ?? false,
                     'box_breakdown' => $boxBreakdown,
                 ];
             }
@@ -2097,26 +2162,25 @@ class CodController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
                     $pkgWt = floatval($pkgWt);
 
-                    $boxRate = \DB::select(
-                        'SELECT cr.*, cs.country, cs.service_code, cs.method
-                            FROM courier_rates cr
-                            INNER JOIN courier_services cs ON cr.service_id = cs.id
-                            WHERE cr.customer_id = 0
-                            AND cr.service_id = ?
-                            AND cs.country = ?
-                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                            ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1',
-                        [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    // Exact weight-band match first, nearest configured band as
+                    // fallback — so a service is never hidden just because the
+                    // weight falls outside its configured bands.
+                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
+                        (int) $service->id,
+                        $destinationCountry,
+                        $zoneNumber,
+                        $pkgWt
                     );
+                    if ($boxFallback) {
+                        $usedFallback = true;
+                    }
 
                     if (! empty($boxRate)) {
-                        $boxRate = $boxRate[0];
                         if ($firstMatchedRate === null) {
                             $firstMatchedRate = $boxRate;
                         }
@@ -2183,6 +2247,7 @@ class CodController extends Controller
                     'total_fuel_price' => $combinedFuel,
                     'total_surcharge' => $combinedSurcharge,
                     'is_multi_package' => true,
+                    'is_fallback' => $usedFallback ?? false,
                     'box_breakdown' => $boxBreakdown,
                 ];
             }
@@ -2201,26 +2266,25 @@ class CodController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
                     $pkgWt = floatval($pkgWt);
 
-                    $boxRate = \DB::select(
-                        'SELECT cr.*, cs.country, cs.service_code, cs.method
-                            FROM courier_rates cr
-                            INNER JOIN courier_services cs ON cr.service_id = cs.id
-                            WHERE cr.customer_id = 0
-                            AND cr.service_id = ?
-                            AND cs.country = ?
-                            AND (cr.zone_no = ? OR (cr.zone_no IS NULL OR cr.zone_no = 0))
-                            AND ? BETWEEN cr.wt_range_start AND cr.wt_range_end
-                            ORDER BY cr.zone_no DESC, cr.wt_range_start
-                            LIMIT 1',
-                        [$service->id, $destinationCountry, $zoneNumber, $pkgWt]
+                    // Exact weight-band match first, nearest configured band as
+                    // fallback — so a service is never hidden just because the
+                    // weight falls outside its configured bands.
+                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
+                        (int) $service->id,
+                        $destinationCountry,
+                        $zoneNumber,
+                        $pkgWt
                     );
+                    if ($boxFallback) {
+                        $usedFallback = true;
+                    }
 
                     if (! empty($boxRate)) {
-                        $boxRate = $boxRate[0];
                         if ($firstMatchedRate === null) {
                             $firstMatchedRate = $boxRate;
                         }
@@ -2287,20 +2351,96 @@ class CodController extends Controller
                     'total_fuel_price' => $combinedFuel,
                     'total_surcharge' => $combinedSurcharge,
                     'is_multi_package' => true,
+                    'is_fallback' => $usedFallback ?? false,
                     'box_breakdown' => $boxBreakdown,
                 ];
             }
 
         }// end foreach
 
-        // Filter out rate cards whose total price (base + fuel + gst) is 0.
-        $allRates = array_values(array_filter($allRates, function ($r) {
+        // Country-wise reconciliation: every service of the destination must
+        // appear in the rate result, even when no rate band matches the given
+        // weight/zone (e.g. US weights above a service's max band, the 6-10kg
+        // gap, or services like UPS SAVER with no rates at all). Such services
+        // are appended as non-selectable "unavailable" cards instead of being
+        // hidden, so the admin always sees the full country service list.
+        $ratedServiceIds = [];
+        foreach ($allRates as $rated) {
+            if (isset($rated['service_id'])) {
+                $ratedServiceIds[(int) $rated['service_id']] = true;
+            }
+        }
+        $weightList = is_array($packageWeights) ? array_values($packageWeights) : [];
+        $weightText = ! empty($weightList)
+            ? implode(' + ', array_map(function ($w) {
+                return number_format((float) $w, 2).' kg';
+            }, $weightList))
+            : number_format((float) $totalWeight, 2).' kg';
+        foreach ($services as $service) {
+            if (isset($ratedServiceIds[(int) $service->id])) {
+                continue;
+            }
+            $allRates[] = [
+                'rate_id' => null,
+                'service_id' => $service->id,
+                'method' => $service->method,
+                'method_display' => $service->method.' '.$service->tat,
+                'network' => $service->network,
+                'method_code' => $service->method_code,
+                'tat' => $service->tat,
+                'delivery_days' => $service->tat,
+                'scode' => $service->scode,
+                'consigneeState' => $consigneeState,
+                'zone_no' => $zoneNumber,
+                'zone_name' => $zoneName ?? null,
+                'zone_code' => $zoneCode ?? null,
+                'pkg_wt' => $totalWeight,
+                'price' => 0,
+                'fuel_charge' => 0,
+                'fuel_percentage' => 0,
+                'gst_percentage' => 0,
+                'gst_amount' => 0,
+                'surcharge_total' => 0,
+                'surcharges' => [],
+                'total_base_price' => 0,
+                'total_fuel_price' => 0,
+                'total_surcharge' => 0,
+                'is_multi_package' => count($weightList) > 1,
+                'box_breakdown' => [],
+                'available' => false,
+                'unavailable_reason' => 'No rate configured for '.$weightText.' in this zone.',
+            ];
+        }
+
+        // Zero-total priced cards (no box matched any rate band) become
+        // unavailable (country-list) cards instead of being hidden.
+        // Unavailable cards are always kept.
+        $allRates = array_values(array_map(function ($r) use ($weightText) {
+            if (isset($r['available']) && $r['available'] === false) {
+                return $r;
+            }
             $base = floatval($r['price'] ?? 0);
             $fuel = floatval($r['fuel_charge'] ?? 0);
             $gst = floatval($r['gst_amount'] ?? 0);
 
-            return ($base + $fuel + $gst) > 0;
-        }));
+            if (($base + $fuel + $gst) <= 0) {
+                $r['available'] = false;
+                $r['unavailable_reason'] = 'No rate configured for '.$weightText.' in this zone.';
+                $r['box_breakdown'] = [];
+            } else {
+                $r['available'] = true;
+            }
+
+            return $r;
+        }, $allRates));
+
+        // Unavailable cards sort last so priced services stay on top.
+        usort($allRates, function ($a, $b) {
+            $ua = (isset($a['available']) && $a['available'] === false) ? 1 : 0;
+            $ub = (isset($b['available']) && $b['available'] === false) ? 1 : 0;
+
+            return $ua <=> $ub;
+        });
 
         // Attach consistent selected-zone metadata to every card.
         $allRates = array_map(function ($rate) use ($zoneNumber, $zoneName, $zoneCode) {
@@ -2312,7 +2452,11 @@ class CodController extends Controller
         }, $allRates);
 
         // Attach surcharge breakdown to every rate card.
+        // Unavailable cards keep their empty surcharge list.
         $allRates = array_map(function ($rate) {
+            if (isset($rate['available']) && $rate['available'] === false) {
+                return $rate;
+            }
             $surcharges = $rate['surcharges'] ?? collect();
             $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
             $cr = ! empty($rate['rate_id']) ? CourierRate::find((int) $rate['rate_id']) : null;
@@ -2431,6 +2575,77 @@ class CodController extends Controller
                 return [
                     'zone_code' => $z->zone_code,
                     'zone_name' => $z->zone_name,
+                ];
+            })->values(),
+        ], 200);
+    }
+
+    /**
+     * Return the country-wise courier services for a destination for the
+     * admin COD create-order page — WITHOUT any weight filtering.
+     *
+     * The frontend calls this as soon as the Delivery Destination is
+     * selected, so the admin sees which services exist for that country
+     * (e.g. US shows only the UPS services) before entering weights or
+     * clicking Calculate Rate. Same UPS-only rule as codUpsRate().
+     */
+    public function codServicesByDestination(Request $request)
+    {
+        $destinationId = $request->query('destination_id', $request->query('delivery_destination'));
+
+        $destination = null;
+        if ($destinationId && ctype_digit((string) $destinationId)) {
+            $destination = Destination::find((int) $destinationId);
+        } elseif ($destinationId) {
+            $destinationValue = trim((string) $destinationId);
+            $destination = Destination::where(function ($query) use ($destinationValue) {
+                $query->whereRaw('UPPER(name) = ?', [strtoupper($destinationValue)])
+                    ->orWhereRaw('UPPER(code) = ?', [strtoupper($destinationValue)]);
+            })->first();
+        }
+
+        if (! $destination) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please select a valid delivery destination.',
+                'destination' => null,
+                'destination_country' => null,
+                'services' => [],
+            ], 200);
+        }
+
+        // Resolve via the human-readable destination NAME first (same path
+        // codUpsRate() uses), so the country matches courier_services.country
+        // (e.g. 'US', not 'USA'). Numeric-id lookup is only a fallback.
+        $destinationCountry = $this->resolveDestinationCountry($destination->name)
+            ?? $this->resolveDestinationCountry($destination->id);
+
+        $services = CourierService::where('country', $destinationCountry)
+            ->where('status', 1)
+            ->where(function ($query) {
+                $query->whereRaw('LOWER(api_provider) = ?', ['ups'])
+                    ->orWhereRaw('LOWER(network) = ?', ['ups']);
+            })
+            ->orderBy('method')
+            ->get(['id', 'country', 'method', 'network', 'tat', 'method_code', 'service_code']);
+
+        return response()->json([
+            'success' => true,
+            'destination' => [
+                'id' => $destination->id,
+                'name' => $destination->name,
+                'code' => $destination->code,
+                'country_code' => $destination->country_code,
+            ],
+            'destination_country' => $destinationCountry,
+            'services' => $services->map(function ($s) {
+                return [
+                    'service_id' => $s->id,
+                    'method' => $s->method,
+                    'network' => $s->network,
+                    'tat' => $s->tat,
+                    'method_code' => $s->method_code,
+                    'service_code' => $s->service_code,
                 ];
             })->values(),
         ], 200);

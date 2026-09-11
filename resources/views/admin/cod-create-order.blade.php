@@ -8191,43 +8191,42 @@
                                             <div class="accordion-collapse collapse" id="rate-calc"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
-                                                    
-                                                    <!-- Rate Result (card/list layout) -->
+                                                    <!-- Country-wise services (no weight filter).
+                                                         Filled as soon as Delivery Destination is selected. -->
+                                                    <!-- <div id="countryServiceWrap" class="alert alert-light border mb-3" style="display:none;">
+                                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                            <div class="fw-semibold small" id="countryServiceTitle">Available services</div>
+                                                            <span class="badge bg-secondary" id="countryServiceCount"></span>
+                                                        </div>
+                                                        <div id="countryServiceList" class="d-flex flex-wrap gap-2 mt-2"></div>
+                                                        <div class="text-muted small mt-1">Country select karte hi services dikhti hain — weight se filter nahi hoti. SELF static option rate list me sabse upar milta hai.</div>
+                                                    </div> -->
+                                                    <!-- Rate Result (list layout, no outer card) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
                                                         <div class="col-12">
-                                                            <div class="card border">
-                                                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                                                                    <h6 class="mb-0">Rate Result</h6>
-                                                                    <span class="badge bg-success" id="rateStatusBadge">Success</span>
-                                                                </div>
-                                                                <div class="card-body">
+                                                            <!-- <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div> -->
 
 
-                                                                    <!-- <div id="rateCustomerInfo" class="alert alert-info mb-3" style="display:none;"></div> -->
-
-
-                                                                    <!-- <div class="d-flex align-items-center gap-2 mb-3 text-muted small fw-semibold">
-                                                                        <span class="ms-1">Method</span>
-                                                                        <span class="ms-auto">Delivery Days</span>
-                                                                        <span class="ms-3">Price</span>
-                                                                    </div> -->
-                                                                    <div id="upsRateCardList">
-                                                                        <!-- JS populates rate cards here -->
-                                                                    </div>
-                                                                    <div id="upsRateError" class="alert alert-danger mt-3 d-none"></div>
-                                                                    <div class="col-md-6 mb-3">
-                                                            <label for="entry_remark" class="form-label">Entry Remark</label>
-                                                            <textarea class="form-control @error('entry_remark') is-invalid @enderror"
-                                                                id="entry_remark" name="entry_remark" rows="4"
-                                                                maxlength="1000"
-                                                                placeholder="Enter shipment / entry remark">{{ old('entry_remark') }}</textarea>
-                                                            @error('entry_remark')
-                                                                <div class="invalid-feedback">{{ $message }}</div>
-                                                            @enderror
-                                                            <small class="text-muted">This remark is saved along with the COD order.</small>
-                                                        </div>
-                                                                </div>
+                                                            <!-- <div class="d-flex align-items-center gap-2 mb-3 text-muted small fw-semibold">
+                                                                <span class="ms-1">Method</span>
+                                                                <span class="ms-auto">Delivery Days</span>
+                                                                <span class="ms-3">Price</span>
+                                                            </div> -->
+                                                            <div id="upsRateCardList">
+                                                                <!-- JS populates rate cards here -->
                                                             </div>
+                                                            <div id="upsRateError" class="alert alert-danger mt-3 d-none"></div>
+                                                            <div class="col-md-12 mb-3">
+                                                    <label for="entry_remark" class="form-label">Remark <span style="color:red">*</span></label>
+                                                    <textarea class="form-control @error('entry_remark') is-invalid @enderror"
+                                                        id="entry_remark" name="entry_remark" rows="4"
+                                                        maxlength="1000"
+                                                        placeholder="Enter shipment / entry remark">{{ old('entry_remark') }}</textarea>
+                                                    @error('entry_remark')
+                                                        <div class="invalid-feedback">{{ $message }}</div>
+                                                    @enderror
+                                                    <small class="text-muted">This remark is saved along with the COD order.</small>
+                                                </div>
                                                         </div>
                                                     </div>
                                                     <style>
@@ -8861,38 +8860,12 @@
                     <!-- Shipping Method / Rate -->
                     <div class="card mb-3">
                         <div class="card-header bg-light fw-bold">
-                            <i class="ti ti-coin me-1"></i> Shipping Rate
+                            <i class="ti ti-coin me-1"></i> Shipment Delivery
                         </div>
                         <div class="card-body">
                             <div class="row mb-3">
-                                <div class="col-12"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span> <span id="preview_selected_tat"></span> </div>
+                                <div class="col-12"><span id="preview_selected_method"></span> <span id="preview_selected_tat"></span> </div>
                                 <div class="col-12 d-none"><strong>Network:</strong> <span id="preview_selected_network"></span></div>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-sm mb-0" style="max-width: 400px;">
-                                    <tbody>
-                                        <tr>
-                                            <td class="fw-semibold">Base Price</td>
-                                            <td class="text-end" id="preview_base_price">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold text-warning">Fuel Surcharge</td>
-                                            <td class="text-end text-warning" id="preview_fuel_charge">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold text-purple">GST</td>
-                                            <td class="text-end text-purple" id="preview_gst_amount">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold">Surcharges</td>
-                                            <td class="text-end" id="preview_surcharge_amount">-</td>
-                                        </tr>
-                                        <tr class="table-primary fw-bold">
-                                            <td>Total</td>
-                                            <td class="text-end" id="preview_rate_total">-</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
                     </div>
@@ -8904,8 +8877,7 @@
                         </div>
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-6"><strong>Entry Remark:</strong> <span id="preview_entry_remark">-</span></div>
-                                <div class="col-md-6"><strong>Finance Remark:</strong> <span id="preview_finance_remark">-</span></div>
+                                <div class="col-md-6"><span id="preview_entry_remark">-</span></div>
                             </div>
                         </div>
                     </div>
@@ -9330,6 +9302,10 @@
                 if (data.all_rates && data.all_rates.length > 0) {
                     // Helper function to render a single rate card
                     function renderRateCard(r, idx, isChecked) {
+                        // NOTE: rate se selection block nahi hoti — har country
+                        // service selectable hai. Jiss service ka rate band na
+                        // mile woh ₹0.00 ke saath dikhta hai (backend usko list
+                        // me sabse neeche rakhta hai).
                         const checked = isChecked ? 'checked' : '';
                         const selectedClass = isChecked ? ' selected' : '';
 
@@ -9527,10 +9503,7 @@
                     // here. Without rendering this group those rates never show on the
                     // frontend even though the API returns them.
                     if (zoneGroups['general']) {
-                        cardsHtml += `<div class="zone-group mb-4">
-                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
-                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
-                            </div>`;
+                        cardsHtml += ``;
                         zoneGroups['general'].forEach(function(r) {
                             const isChecked = globalIndex === 0;
                             cardsHtml += renderRateCard(r, globalIndex, isChecked);
@@ -9553,6 +9526,8 @@
                 } else {
                     cardsHtml = '<div class="text-center text-muted py-4">No rates found. Please check consignee state and package weights.</div>';
                 }
+                // Static SELF option stays on top regardless of weight-based rates.
+                cardsHtml = (window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '') + cardsHtml;
                 cardList.innerHTML = cardsHtml;
 
                 // Attach click handlers to rate cards (excluding breakdown toggle)
@@ -9561,9 +9536,9 @@
                         // Don't intercept clicks on breakdown toggle, radio, or collapse elements
                         if (e.target.closest('.breakdown-toggle') || e.target.closest('.accordion-collapse') || e.target.tagName === 'INPUT') return;
 
-                        // Select the radio inside this card
+                        // Select the radio inside this card (skip disabled/unavailable)
                         const radio = this.querySelector('input[name="rate_select"]');
-                        if (radio) {
+                        if (radio && !radio.disabled) {
                             radio.checked = true;
                             radio.dispatchEvent(new Event('change', { bubbles: true }));
                         }
@@ -9577,6 +9552,7 @@
                 // Radio change handlers for selected state
                 cardList.querySelectorAll('input[name="rate_select"]').forEach(function(radio) {
                     radio.addEventListener('change', function() {
+                        if (this.disabled) return;
                         if (this.checked) {
                             cardList.querySelectorAll('.rate-comparison-card').forEach(c => c.classList.remove('selected'));
                             const card = this.closest('.rate-comparison-card');
@@ -9585,32 +9561,145 @@
                     });
                 });
             } else {
-                cardList.innerHTML = '';
-                errorDiv.textContent = data.message || 'Failed to get rate';
+                cardList.innerHTML = window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '';
+                errorDiv.textContent = (data.message || 'Failed to get rate') + ' — SELF (static) is still available above.';
                 errorDiv.classList.remove('d-none');
-                // Disable Preview Order button when rate calculation fails.
+                // SELF static option stays selectable, so keep Preview enabled.
                 const previewBtnFail = document.getElementById('previewOrderBtn');
-                if (previewBtnFail) previewBtnFail.disabled = true;
+                if (previewBtnFail) previewBtnFail.disabled = false;
             }
         })
         .catch(err => {
             console.error('Rate error:', err);
-            cardList.innerHTML = '';
-            errorDiv.textContent = 'Network error. Please try again.';
+            cardList.innerHTML = window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '';
+            errorDiv.textContent = 'Network error. Please try again. — SELF (static) is still available above.';
             errorDiv.classList.remove('d-none');
             resultDiv.style.display = 'block';
             if (statusBadge) {
                 statusBadge.textContent = 'Error';
                 statusBadge.className = 'badge bg-danger';
             }
-            // Disable Preview Order button on network error.
+            // SELF static option stays selectable, so keep Preview enabled.
             const previewBtnErr = document.getElementById('previewOrderBtn');
-            if (previewBtnErr) previewBtnErr.disabled = true;
+            if (previewBtnErr) previewBtnErr.disabled = false;
         })
         .finally(() => {
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ti ti-calculator me-1"></i> Next';
+            }
+        });
+    }
+
+    // ===== COD: SELF static option + country-wise service list (no weight filter) =====
+    window.codEscapeHtml = window.codEscapeHtml || function(str) {
+        return String(str ?? '').replace(/[&<>"']/g, function(c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+        });
+    };
+
+    // Static SELF card (manual/self delivery, zero price, no carrier API).
+    // Shown at the top of the rate list — both after Calculate Rate and as
+    // soon as a delivery destination (country) is selected. Clicking it saves
+    // shipper_info.shipping_method = 'SELF' on submit.
+    window.getSelfServiceCardHTML = window.getSelfServiceCardHTML || function(isChecked) {
+        const checked = isChecked ? 'checked' : '';
+        const selectedClass = isChecked ? ' selected' : '';
+        const rateData = JSON.stringify({base:'0.00',fuel:'0.00',gst:'0.00',surcharge:'0.00',surcharges:[],demand:'0.00',remote:'0.00',oversize:'0.00',goGreen:'0.00',misc:'',miscAmount:'0.00',total:'0.00'});
+        return '<div class="rate-comparison-card' + selectedClass + '" data-service-id="SELF" style="border-style:dashed;">'
+            + '<div class="rate-comparison-card-body"><div class="row g-3 align-items-center">'
+            + '<div class="col-lg-6"><div class="carrier-badge">'
+            + '<div class="carrier-logo-container" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important;"><span class="text-white fw-bold fs-15">SELF</span></div>'
+            + '<div class="service-info"><div class="service-title">SELF</div>'
+            // + '<div class="service-tat" style="font-weight:bold;font-size:14px;">Manual / Self Delivery</div>'
+            // + '<div class="service-zone" style="font-size:12px;color:#666;">No carrier API &bull; Rate &#8377;0.00</div>'
+            // + '<span class="status-badge">Static</span>'
+            + '</div></div></div>'
+            + '<div class="col-lg-6"><div class="row h-100 align-items-center"><div class="col-md-12">'
+            + '<div class="action-container d-flex align-items-center justify-content-end gap-3">'
+            // + '<div class="price-amount">&#8377; 0.00</div>'
+            + '<div class="form-check m-0 d-flex align-items-center">'
+            + '<input type="radio" name="rate_select" value="SELF" class="form-check-input me-2 service-radio" data-method="SELF" data-network="SELF" data-tat="Manual" data-method_code="SELF" data-price="0" data-rate-id="" data-rate=\'' + rateData + '\' id="service_SELF" ' + checked + '>'
+            + '<label class="form-check-label small fw-semibold" for="service_SELF">Select</label>'
+            + '</div></div></div></div></div>'
+            + '</div></div></div>';
+    };
+
+    // Ensure the SELF card exists at the top of the rate list (used when the
+    // country is selected but Calculate Rate has not run yet).
+    window.ensureSelfCardInList = window.ensureSelfCardInList || function() {
+        const resultDiv = document.getElementById('upsRateResult');
+        const cardList = document.getElementById('upsRateCardList');
+        const errorDiv = document.getElementById('upsRateError');
+        const statusBadge = document.getElementById('rateStatusBadge');
+        if (!resultDiv || !cardList) return;
+        if (cardList.querySelector('[data-service-id="SELF"]')) return;
+        resultDiv.style.display = 'block';
+        if (statusBadge) { statusBadge.textContent = 'Success'; statusBadge.className = 'badge bg-success'; }
+        if (errorDiv) errorDiv.classList.add('d-none');
+        cardList.insertAdjacentHTML('afterbegin', window.getSelfServiceCardHTML(false));
+        const previewBtn = document.getElementById('previewOrderBtn');
+        if (previewBtn) previewBtn.disabled = false;
+    };
+
+    // Country-wise services (WITHOUT weight filtering). Called as soon as the
+    // Delivery Destination changes — e.g. US shows only the UPS services.
+    window.loadCodCountryServices = window.loadCodCountryServices || function() {
+        const destSelect = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
+        const wrap = document.getElementById('countryServiceWrap');
+        const list = document.getElementById('countryServiceList');
+        const title = document.getElementById('countryServiceTitle');
+        const count = document.getElementById('countryServiceCount');
+        if (!destSelect || !wrap || !list) return;
+        const destId = destSelect.value || '';
+        if (!destId) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
+        const esc = window.codEscapeHtml;
+        fetch('{{ route("admin.cod.services-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data || !data.success) { wrap.style.display = 'none'; return; }
+            wrap.style.display = 'block';
+            const destName = (data.destination && data.destination.name) || '';
+            title.textContent = 'Available services for ' + destName + (data.destination_country ? ' (' + data.destination_country + ')' : '');
+            const services = data.services || [];
+            count.textContent = services.length + ' UPS + SELF';
+            let html = '';
+            services.forEach(function(s) {
+                html += '<span class="badge bg-primary-subtle text-primary border" style="font-size:12px;padding:6px 10px;">'
+                    + esc(s.method)
+                    + ' <span class="text-muted">(' + esc(s.network || '');
+                if (s.tat) html += ' &bull; ' + esc(s.tat);
+                html += ')</span></span>';
+            });
+            html += '<span class="badge bg-dark-subtle text-dark border" style="font-size:12px;padding:6px 10px;">SELF <span class="text-muted">(Static &bull; Manual &bull; &#8377;0)</span></span>';
+            list.innerHTML = html;
+            // Make SELF clickable right away, without waiting for Calculate Rate.
+            window.ensureSelfCardInList();
+        })
+        .catch(function() { /* keep previous list */ });
+    };
+
+    // Delegated click/change handlers so dynamically added cards (SELF and
+    // country pre-list) behave like the Calculate-Rate cards.
+    if (!window.codRateCardDelegationBound) {
+        window.codRateCardDelegationBound = true;
+        document.addEventListener('click', function(e) {
+            const card = e.target && e.target.closest ? e.target.closest('#upsRateCardList .rate-comparison-card') : null;
+            if (!card) return;
+            if (e.target.closest('.breakdown-toggle') || e.target.closest('.accordion-collapse') || e.target.tagName === 'INPUT') return;
+            const radio = card.querySelector('input[name="rate_select"]');
+            if (radio && radio.disabled) return;
+            if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+            document.querySelectorAll('#upsRateCardList .rate-comparison-card').forEach(function(c) { c.classList.remove('selected'); });
+            card.classList.add('selected');
+        });
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.name === 'rate_select' && !e.target.disabled && e.target.closest && e.target.closest('#upsRateCardList')) {
+                document.querySelectorAll('#upsRateCardList .rate-comparison-card').forEach(function(c) { c.classList.remove('selected'); });
+                const card = e.target.closest('.rate-comparison-card');
+                if (card) card.classList.add('selected');
             }
         });
     }
@@ -9624,6 +9713,13 @@
                 e.preventDefault();
                 calculateRate();
             });
+        }
+        // Country-wise service list (no weight filter) on destination change.
+        const destSelect = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
+        if (destSelect) {
+            destSelect.addEventListener('change', window.loadCodCountryServices);
+            if (window.jQuery) jQuery(destSelect).on('change', window.loadCodCountryServices);
+            if (destSelect.value) window.loadCodCountryServices();
         }
     });
 
@@ -10811,7 +10907,13 @@
                 document.getElementById('preview_delivery_destination').textContent = destDisplay;
             }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
-            document.getElementById('preview_shipping_method').textContent = getSelectVal('shipping_method');
+            // Prefer the selected rate card's method (covers SELF); fall back
+            // to the hidden shipping_method select for older flows.
+            (function() {
+                const selRate = form.querySelector('input[name="rate_select"]:checked');
+                const rateMethod = selRate ? (selRate.dataset.method || selRate.value || '') : '';
+                document.getElementById('preview_shipping_method').textContent = rateMethod || getSelectVal('shipping_method');
+            })();
 
             // Package Dimensions
             const packagesContainer = document.getElementById('preview_packages_container');
@@ -10872,7 +10974,6 @@
 
             // Remark
             document.getElementById('preview_entry_remark').textContent = getVal('entry_remark') || '-';
-            document.getElementById('preview_finance_remark').textContent = getVal('finance_remark') || '-';
 
             // Invoice Items
             // IGST columns only show for CSB V shipments (reuse originTypeValue declared above)
@@ -10925,18 +11026,6 @@
             document.getElementById('preview_selected_tat').textContent = selectedTat;
             document.getElementById('preview_selected_method').textContent = selectedMethod;
             document.getElementById('preview_selected_network').textContent = selectedNetwork;
-
-            let rateData = { base: '0.00', fuel: '0.00', gst: '0.00', surcharge: '0.00', total: '0.00' };
-            if (selectedRateRadio && selectedRateRadio.dataset.rate) {
-                try {
-                    rateData = JSON.parse(selectedRateRadio.dataset.rate);
-                } catch(e) {}
-            }
-            document.getElementById('preview_base_price').textContent = 'INR ' + parseFloat(rateData.base).toFixed(2);
-            document.getElementById('preview_fuel_charge').textContent = 'INR ' + parseFloat(rateData.fuel).toFixed(2);
-            document.getElementById('preview_gst_amount').textContent = 'INR ' + parseFloat(rateData.gst).toFixed(2);
-            document.getElementById('preview_surcharge_amount').textContent = 'INR ' + parseFloat(rateData.surcharge || 0).toFixed(2);
-            document.getElementById('preview_rate_total').textContent = 'INR ' + parseFloat(rateData.total).toFixed(2);
 
             // Show the modal
             const previewModal = new bootstrap.Modal(document.getElementById('previewOrderModal'));
@@ -11184,6 +11273,13 @@ if (csrfMetaToken) {
 const formData = new FormData(form);
 formData.set('_token', csrfFormInput.value);
 formData.append('service_id', serviceId);
+// SELF static option: save shipper_info.shipping_method = 'SELF' with zero
+// price and no carrier API (backend skips UPS/Adomantra for SELF).
+if (rateRadio && (rateRadio.value || '').toUpperCase() === 'SELF') {
+    formData.set('service_id', 'SELF');
+    formData.set('shipping_method', 'SELF');
+    formData.delete('service_rate_id');
+}
                 // Append oversize charge (₹21,000) if an oversize package was confirmed
                 formData.append('oversize_charge', oversizeCharge || 0);
                 // Append handling charge (₹5,000) for United Ground Premium if actual wt > 22kg
@@ -11229,7 +11325,8 @@ if (rateRadio && rateRadio.dataset.rate) {
                         const trackingNumber = data.tracking_number || '';
                         let successHtml = '<p>' + data.message + '</p>';
                         if (trackingNumber) {
-                            successHtml += '<p><strong>UPS Tracking Number:</strong> ' + trackingNumber + '</p>';
+                            const trackLabel = data.is_self ? 'AWB Number' : 'UPS Tracking Number';
+                            successHtml += '<p><strong>' + trackLabel + ':</strong> ' + trackingNumber + '</p>';
                         }
                         Swal.fire({
                             icon: 'success',

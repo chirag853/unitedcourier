@@ -141,4 +141,12 @@ class ShipperInfo extends Model
     {
         return $this->hasOne(BillTo::class, 'shipper_id');
     }
+
+    /**
+     * Get the remark record for this shipper.
+     */
+    public function shipmentRemark()
+    {
+        return $this->hasOne(ShipmentRemark::class, 'shipper_id');
+    }
 }
