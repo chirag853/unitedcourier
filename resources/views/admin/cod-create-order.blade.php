@@ -8894,6 +8894,40 @@
         </div>
     </div>
     <!-- /Preview Order Modal -->
+    <!-- Fullscreen loader: shown while the COD order is being created
+         (UPS + Adomantra APIs can take several seconds). Blocks any
+         further clicks until the "Shipment Created!" popup appears. -->
+    <style>
+        .cod-submit-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            background: rgba(15, 23, 42, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .cod-submit-loader-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 32px 48px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+        }
+        body.cod-submitting {
+            cursor: progress;
+        }
+    </style>
+    <div id="codSubmitLoader" class="cod-submit-loader d-none">
+        <div class="cod-submit-loader-box">
+            <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="fw-bold mt-3">Creating Shipment...</div>
+            <div class="text-muted small mt-1">Please wait while we create your shipment.<br>Do not refresh or close this page.</div>
+        </div>
+    </div>
     <!-- success modal -->
     <div class="modal fade" id="create_success">
         <div class="modal-dialog modal-dialog-centered modal-sm rounded-0">
@@ -10807,6 +10841,10 @@
                 addError(rateTarget, 'Calculate and select a shipping method before creating the shipment.', 'rate-calc');
             }
 
+            requireFields([
+                { name: 'entry_remark', label: 'Remark' }
+            ], 'rate-calc');
+
             if (errors.length) {
                 const firstError = errors[0];
                 focusShipmentField(firstError.element, firstError.accordionId);
@@ -11035,10 +11073,17 @@
 
         // ===== Preview "Create Now" Button Handler =====
         document.getElementById('previewCreateNowBtn').addEventListener('click', function() {
+            // Double-click guard: one click adds one modal-hide listener;
+            // without this, rapid clicks queue multiple submits.
+            if (this.disabled) {
+                return;
+            }
+            this.disabled = true;
             const form = document.getElementById('shipmentForm');
             if (!window.validateShipmentForm(form)) {
                 const previewModal = bootstrap.Modal.getInstance(document.getElementById('previewOrderModal'));
                 if (previewModal) previewModal.hide();
+                this.disabled = false;
                 return;
             }
 
@@ -11061,9 +11106,42 @@
         });
         // ===== /Preview "Create Now" Button Handler =====
 
+        // ===== COD submit loader =====
+        // Shows a fullscreen blocking loader + disables Preview / Create Now
+        // buttons while the order request is in flight, so the admin cannot
+        // double-submit during the slow UPS + Adomantra API calls. The loader
+        // stays until the "Shipment Created!" (or error) popup appears.
+        window.setCodSubmitting = function(isSubmitting) {
+            const loader = document.getElementById('codSubmitLoader');
+            if (loader) loader.classList.toggle('d-none', !isSubmitting);
+            document.body.classList.toggle('cod-submitting', !!isSubmitting);
+            const previewBtn = document.getElementById('previewOrderBtn');
+            if (previewBtn) {
+                if (isSubmitting) {
+                    previewBtn.dataset.prevDisabled = previewBtn.disabled ? '1' : '';
+                    previewBtn.disabled = true;
+                } else if (previewBtn.dataset.prevDisabled !== '1') {
+                    previewBtn.disabled = false;
+                }
+            }
+            const createNowBtn = document.getElementById('previewCreateNowBtn');
+            if (createNowBtn) {
+                if (isSubmitting) {
+                    createNowBtn.disabled = true;
+                } else {
+                    createNowBtn.disabled = false;
+                }
+            }
+        };
+
         forms.forEach(function(form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
+                // Ignore duplicate submits (e.g. Enter key) while a creation
+                // request is already in flight.
+                if (form.dataset.submitting === '1') {
+                    return;
+                }
                 const submitButton = form.querySelector('button[type="submit"]');
                 if (!submitButton) {
                     return;
@@ -11231,6 +11309,10 @@
                 // Show loading state
                 submitButton.disabled = true;
                 submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                // Mark in-flight + show fullscreen loader and disable
+                // Preview / Create Now buttons until the request finishes.
+                form.dataset.submitting = '1';
+                if (window.setCodSubmitting) window.setCodSubmitting(true);
 
                 // Get selected service_id from rate table radio button (preferred)
                 // or fall back to the old ddp_shipping_method radio
@@ -11364,7 +11446,10 @@ if (rateRadio && rateRadio.dataset.rate) {
                     });
                 })
                 .finally(() => {
-                    // Reset button state
+                    // Reset button state + hide fullscreen loader (this runs
+                    // after the "Shipment Created!"/error popup is shown).
+                    form.dataset.submitting = '';
+                    if (window.setCodSubmitting) window.setCodSubmitting(false);
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalText;
                 });

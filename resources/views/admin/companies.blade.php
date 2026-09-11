@@ -527,7 +527,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @forelse($readyForPickupManifestGroups as $index => $manifest)
+                                            @foreach($readyForPickupManifestGroups as $index => $manifest)
                                             <tr class="manifest-group-row">
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
@@ -564,17 +564,13 @@
                                                     </a> -->
                                                 </td>
                                             </tr>
-                                            @empty
-                                            <tr>
-                                                <td colspan="7" class="text-center text-muted py-4">No shipments are ready for pickup yet.</td>
-                                            </tr>
-                                            @endforelse
+                                            @endforeach
                                         </tbody>
                                     </table>
                                 </div>
 
                                 <!-- Hidden templates for expandable shipment details (DataTables child rows) -->
-                                @forelse($readyForPickupManifestGroups as $index => $manifest)
+                                @foreach($readyForPickupManifestGroups as $index => $manifest)
                                 <template id="manifest-rfp-child-{{ $index }}">
                                     <div class="p-3">
                                         <table class="table table-sm table-bordered mb-0">
@@ -625,8 +621,7 @@
                                         </table>
                                     </div>
                                 </template>
-                                @empty
-                                @endforelse
+                                @endforeach
                             </div>
                         </div>
 
@@ -1202,7 +1197,8 @@
                 scrollY: '60vh',
                 scrollCollapse: true,
                 columnDefs: [
-                    { orderable: false, targets: 6 }
+                    { orderable: false, targets: 6 },
+                    { defaultContent: '-', targets: '_all' }
                 ],
                 language: {
                     emptyTable: "No shipments ready for pickup",

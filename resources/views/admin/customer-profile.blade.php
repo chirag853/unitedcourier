@@ -2399,7 +2399,7 @@
                         <div class="alert alert-info py-2 small mb-0 d-none" id="rw-result"></div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         <button type="submit" class="btn btn-primary" id="rw-submit-btn"><i class="ti ti-plus me-1"></i>Recharge</button>
                     </div>
                 </form>

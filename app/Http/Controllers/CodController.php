@@ -44,8 +44,11 @@ class CodController extends Controller
     {
         $customer = null;
         $csbForm = null;
-        // Only enabled services (status = 1) are offered.
-        $courierServices = CourierService::where('status', 1)->get();
+        // Only enabled UPS services (api_provider = 'UPS') are offered on
+        // the admin COD create-order page.
+        $courierServices = CourierService::where('status', 1)
+            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
+            ->get();
         // The same zone (name + code) is stored once per service, so the raw
         // query returns duplicates. Deduplicate here so the initial consignee
         // state dropdown does not show the same state/zipcode multiple times.
@@ -186,7 +189,7 @@ class CodController extends Controller
                 'reference_number' => 'nullable|string|max:100',
 
                 // Remark
-                'entry_remark' => 'nullable|string|max:1000',
+                'entry_remark' => 'required|string|max:1000',
                 'finance_remark' => 'nullable|string|max:1000',
 
                 // invoice items
@@ -536,6 +539,19 @@ class CodController extends Controller
                 $courierService = $courierRate->service;
                 if ($courierService && empty($validatedData['shipping_method'])) {
                     $validatedData['shipping_method'] = $courierService->method;
+                }
+            }
+
+            // COD create-order allows only UPS services (api_provider = 'UPS').
+            // SELF is allowed (static frontend-only option, no service row).
+            if (! $isSelfService && $serviceId) {
+                $checkService = ($courierService && (int) $courierService->id === (int) $serviceId)
+                    ? $courierService
+                    : CourierService::find($serviceId);
+                if ($checkService && strtolower(trim((string) $checkService->api_provider)) !== 'ups') {
+                    throw ValidationException::withMessages([
+                        'service_id' => 'Only UPS services are allowed on the COD create-order page.',
+                    ]);
                 }
             }
 
@@ -1340,11 +1356,14 @@ class CodController extends Controller
     }
 
     /**
-     * Generate a unique AWB number for COD orders (UWCCOD + yymmdd + serial).
+     * Generate a unique AWB number for COD orders.
+     * Same format as the customer create-shipment page:
+     * UWC + YYMMDD + 5-digit serial (resets daily).
+     * Example: UWC26060200001
      */
     private function generateCodAwbNumber()
     {
-        $prefix = 'UWCCOD';
+        $prefix = 'UWC';
         $datePart = now()->format('ymd');
 
         $todayPrefix = $prefix.$datePart;
@@ -1922,6 +1941,104 @@ class CodController extends Controller
     }
 
     /**
+     * In-memory version of findCodBoxRate(): matches one box weight against
+     * PRELOADED rate rows (same zone scope + weight-band rules, same ordering).
+     *
+     * Lets codUpsRate() serve every service x every box from a single bulk
+     * query instead of 2 SQL queries per box per service.
+     *
+     * @param  array  $serviceRates  Raw courier_rates rows (stdClass) for one service.
+     * @return array  [rateRow|null, isFallback]
+     */
+    private function matchCodBoxRate(array $serviceRates, $zoneNumber, float $weight): array
+    {
+        $exactCandidates = [];
+        $zoneCandidates = [];
+
+        foreach ($serviceRates as $row) {
+            $zoneNo = $row->zone_no ?? null;
+            $zoneMatch = ($zoneNo === null
+                || (int) $zoneNo === 0
+                || ($zoneNumber !== null && (int) $zoneNo === (int) $zoneNumber));
+
+            if (! $zoneMatch) {
+                continue;
+            }
+
+            $zoneCandidates[] = $row;
+
+            $start = (float) ($row->wt_range_start ?? 0);
+            $end = (float) ($row->wt_range_end ?? 0);
+            if ($weight >= $start && $weight <= $end) {
+                $exactCandidates[] = $row;
+            }
+        }
+
+        if (! empty($exactCandidates)) {
+            // Same as SQL: ORDER BY cr.zone_no DESC, cr.wt_range_start
+            // (NULL sorts last in DESC, matching MySQL behaviour).
+            // Trailing id tie-break keeps the pick deterministic where the
+            // old SQL had no defined order (fully tied rows).
+            usort($exactCandidates, function ($a, $b) {
+                $zoneA = ($a->zone_no ?? null) === null ? -1 : (int) $a->zone_no;
+                $zoneB = ($b->zone_no ?? null) === null ? -1 : (int) $b->zone_no;
+                if ($zoneA !== $zoneB) {
+                    return $zoneB <=> $zoneA;
+                }
+                $startCmp = (float) ($a->wt_range_start ?? 0) <=> (float) ($b->wt_range_start ?? 0);
+                if ($startCmp !== 0) {
+                    return $startCmp;
+                }
+
+                return (int) ($a->id ?? 0) <=> (int) ($b->id ?? 0);
+            });
+
+            return [$exactCandidates[0], false];
+        }
+
+        if (! empty($zoneCandidates)) {
+            // Same as SQL: ORDER BY LEAST(ABS(w - start), ABS(w - end)), wt_range_start.
+            // The old SQL had no defined order for fully tied rows (e.g. the
+            // same band configured under both zone_no = 0 and a specific
+            // zone) — MySQL returned either row unpredictably. Tie-break here
+            // deterministically towards the zone-specific row (consistent with
+            // the exact-match zone_no DESC preference), then by id.
+            usort($zoneCandidates, function ($a, $b) use ($weight, $zoneNumber) {
+                $distA = min(
+                    abs($weight - (float) ($a->wt_range_start ?? 0)),
+                    abs($weight - (float) ($a->wt_range_end ?? 0))
+                );
+                $distB = min(
+                    abs($weight - (float) ($b->wt_range_start ?? 0)),
+                    abs($weight - (float) ($b->wt_range_end ?? 0))
+                );
+                if ($distA != $distB) {
+                    return $distA <=> $distB;
+                }
+                $startCmp = (float) ($a->wt_range_start ?? 0) <=> (float) ($b->wt_range_start ?? 0);
+                if ($startCmp !== 0) {
+                    return $startCmp;
+                }
+                $rankA = ($a->zone_no ?? null) === null
+                    ? 0
+                    : (($zoneNumber !== null && (int) $a->zone_no === (int) $zoneNumber) ? 2 : 1);
+                $rankB = ($b->zone_no ?? null) === null
+                    ? 0
+                    : (($zoneNumber !== null && (int) $b->zone_no === (int) $zoneNumber) ? 2 : 1);
+                if ($rankA !== $rankB) {
+                    return $rankB <=> $rankA;
+                }
+
+                return (int) ($a->id ?? 0) <=> (int) ($b->id ?? 0);
+            });
+
+            return [$zoneCandidates[0], true];
+        }
+
+        return [null, false];
+    }
+
+    /**
      * Proxy UPS Rate API call for the admin COD create-order page.
      *
      * Mirrors CustomerController::getUpsRate() exactly (same box-wise
@@ -2027,14 +2144,11 @@ class CodController extends Controller
         $zoneCode = $zone?->zone_code;
 
         // 5. Get services
-        // 5. Get services - ONLY UPS services (network = 'UPS' or api_provider = 'ups')
+        // 5. Get services - ONLY services with api_provider = 'UPS'
         // are offered on the admin COD create-order page.
         $services = CourierService::where('country', $destinationCountry)
             ->where('status', 1)
-            ->where(function ($query) {
-                $query->whereRaw('LOWER(api_provider) = ?', ['ups'])
-                    ->orWhereRaw('LOWER(network) = ?', ['ups']);
-            })
+            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
             ->get();
 
         if (empty($services)) {
@@ -2047,7 +2161,51 @@ class CodController extends Controller
         // 6. Process rates - SINGLE LOOP (default rates only, customer_id = 0)
         $allRates = [];
 
+        // Non-array package weights (missing input) behave like zero boxes,
+        // same as before, but without foreach() warnings in the logs.
+        if (! is_array($packageWeights)) {
+            $packageWeights = [];
+        }
+
+        // PERF: bulk-fetch every candidate rate row for all services in ONE
+        // query (same filters findCodBoxRate() applied per box), then match
+        // each box in memory. Previously this was 2 SQL queries per box per
+        // service (+2 surcharge queries per box), i.e. dozens of queries.
+        $serviceIds = $services->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $preloadedRates = empty($serviceIds)
+            ? collect()
+            : \DB::table('courier_rates as cr')
+                ->join('courier_services as cs', 'cr.service_id', '=', 'cs.id')
+                ->where('cr.customer_id', 0)
+                ->whereIn('cr.service_id', $serviceIds)
+                ->where('cs.country', $destinationCountry)
+                ->where(function ($query) use ($zoneNumber) {
+                    $query->where('cr.zone_no', $zoneNumber)
+                        ->orWhereNull('cr.zone_no')
+                        ->orWhere('cr.zone_no', 0);
+                })
+                ->select('cr.*')
+                ->get();
+
+        $ratesByService = [];
+        $allSurchargeIds = [];
+        foreach ($preloadedRates as $rateRow) {
+            $ratesByService[(int) $rateRow->service_id][] = $rateRow;
+            foreach ($this->normalizeSurchargeIds($rateRow->surcharge_id ?? null) as $surchargeId) {
+                $allSurchargeIds[$surchargeId] = true;
+            }
+        }
+
+        // PERF: load every surcharge referenced by the candidate rates ONCE
+        // instead of sum()+get() per box per service.
+        $surchargeMap = empty($allSurchargeIds)
+            ? []
+            : SurCharge::whereIn('id', array_keys($allSurchargeIds))->get()->keyBy('id')->all();
+
         foreach ($services as $key => $service) {
+            // Preloaded rows for this service (bulk-fetched above — the
+            // per-box matching below runs fully in memory, no SQL).
+            $serviceRates = $ratesByService[(int) $service->id] ?? [];
 
             // ========== US: box-wise rate for EVERY UPS service ==========
             // All country services must appear in the rate result for any
@@ -2070,12 +2228,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
-                        (int) $service->id,
-                        $destinationCountry,
-                        $zoneNumber,
-                        $pkgWt
-                    );
+                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2091,13 +2244,15 @@ class CodController extends Controller
                             : ($base * floatval($boxRate->fuel_percentage) / 100);
 
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-                        if (! empty($boxSurchargeIds)) {
-                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-                                $surchargeList[$s->id] = [
-                                    'name' => $s->name,
-                                    'code' => $s->code,
-                                    'price' => (float) $s->price,
+                        $boxSurcharge = 0.0;
+                        foreach ($boxSurchargeIds as $surchargeId) {
+                            if (isset($surchargeMap[$surchargeId])) {
+                                $surcharge = $surchargeMap[$surchargeId];
+                                $boxSurcharge += (float) $surcharge->price;
+                                $surchargeList[$surcharge->id] = [
+                                    'name' => $surcharge->name,
+                                    'code' => $surcharge->code,
+                                    'price' => (float) $surcharge->price,
                                 ];
                             }
                         }
@@ -2170,12 +2325,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
-                        (int) $service->id,
-                        $destinationCountry,
-                        $zoneNumber,
-                        $pkgWt
-                    );
+                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2191,13 +2341,15 @@ class CodController extends Controller
                             : ($base * floatval($boxRate->fuel_percentage) / 100);
 
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-                        if (! empty($boxSurchargeIds)) {
-                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-                                $surchargeList[$s->id] = [
-                                    'name' => $s->name,
-                                    'code' => $s->code,
-                                    'price' => (float) $s->price,
+                        $boxSurcharge = 0.0;
+                        foreach ($boxSurchargeIds as $surchargeId) {
+                            if (isset($surchargeMap[$surchargeId])) {
+                                $surcharge = $surchargeMap[$surchargeId];
+                                $boxSurcharge += (float) $surcharge->price;
+                                $surchargeList[$surcharge->id] = [
+                                    'name' => $surcharge->name,
+                                    'code' => $surcharge->code,
+                                    'price' => (float) $surcharge->price,
                                 ];
                             }
                         }
@@ -2274,12 +2426,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->findCodBoxRate(
-                        (int) $service->id,
-                        $destinationCountry,
-                        $zoneNumber,
-                        $pkgWt
-                    );
+                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2295,13 +2442,15 @@ class CodController extends Controller
                             : ($base * floatval($boxRate->fuel_percentage) / 100);
 
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
-                        $boxSurcharge = (float) SurCharge::whereIn('id', $boxSurchargeIds)->sum('price');
-                        if (! empty($boxSurchargeIds)) {
-                            foreach (SurCharge::whereIn('id', $boxSurchargeIds)->get() as $s) {
-                                $surchargeList[$s->id] = [
-                                    'name' => $s->name,
-                                    'code' => $s->code,
-                                    'price' => (float) $s->price,
+                        $boxSurcharge = 0.0;
+                        foreach ($boxSurchargeIds as $surchargeId) {
+                            if (isset($surchargeMap[$surchargeId])) {
+                                $surcharge = $surchargeMap[$surchargeId];
+                                $boxSurcharge += (float) $surcharge->price;
+                                $surchargeList[$surcharge->id] = [
+                                    'name' => $surcharge->name,
+                                    'code' => $surcharge->code,
+                                    'price' => (float) $surcharge->price,
                                 ];
                             }
                         }
@@ -2453,22 +2602,48 @@ class CodController extends Controller
 
         // Attach surcharge breakdown to every rate card.
         // Unavailable cards keep their empty surcharge list.
-        $allRates = array_map(function ($rate) {
+        // PERF: rate models are preloaded in ONE query (no CourierRate::find
+        // per card) and surcharges come from the preloaded $surchargeMap
+        // (no per-card queries). Math mirrors CourierRate::surcharge_amount
+        // / surchargeModels() exactly.
+        $neededRateIds = [];
+        foreach ($allRates as $ratedCard) {
+            if (! empty($ratedCard['rate_id'])) {
+                $neededRateIds[(int) $ratedCard['rate_id']] = true;
+            }
+        }
+        $rateModelsById = empty($neededRateIds)
+            ? []
+            : CourierRate::whereIn('id', array_keys($neededRateIds))->get()->keyBy('id')->all();
+
+        $allRates = array_map(function ($rate) use ($rateModelsById, $surchargeMap) {
             if (isset($rate['available']) && $rate['available'] === false) {
                 return $rate;
             }
             $surcharges = $rate['surcharges'] ?? collect();
             $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
-            $cr = ! empty($rate['rate_id']) ? CourierRate::find((int) $rate['rate_id']) : null;
+            $cr = ! empty($rate['rate_id']) ? ($rateModelsById[(int) $rate['rate_id']] ?? null) : null;
             if ($cr && $surchargeTotal <= 0) {
-                $surchargeTotal = $cr->surcharge_amount;
-                $surcharges = $cr->surchargeModels()->map(function ($s) {
-                    return [
-                        'name' => $s->name,
-                        'code' => $s->code,
-                        'price' => (float) $s->price,
-                    ];
-                })->values();
+                // Same ids the surcharge_amount accessor / surchargeModels()
+                // would resolve (Eloquent 'array' cast aware).
+                $castIds = $cr->surcharge_id;
+                $modelSurchargeIds = is_array($castIds)
+                    ? array_values(array_filter(array_map('intval', $castIds)))
+                    : [];
+                $surchargeTotal = 0.0;
+                $surcharges = [];
+                foreach ($modelSurchargeIds as $modelSurchargeId) {
+                    if (isset($surchargeMap[$modelSurchargeId])) {
+                        $surchargeModel = $surchargeMap[$modelSurchargeId];
+                        $surchargeTotal += (float) $surchargeModel->price;
+                        $surcharges[] = [
+                            'name' => $surchargeModel->name,
+                            'code' => $surchargeModel->code,
+                            'price' => (float) $surchargeModel->price,
+                        ];
+                    }
+                }
+                $surchargeTotal = round($surchargeTotal, 2);
                 if ($surchargeTotal > 0 && (float) $cr->gst_amount <= 0 && (float) $cr->gst_percentage > 0) {
                     $rate['gst_amount'] = ((float) ($rate['gst_amount'] ?? 0))
                         + ($surchargeTotal * (float) $cr->gst_percentage / 100);
@@ -2622,10 +2797,7 @@ class CodController extends Controller
 
         $services = CourierService::where('country', $destinationCountry)
             ->where('status', 1)
-            ->where(function ($query) {
-                $query->whereRaw('LOWER(api_provider) = ?', ['ups'])
-                    ->orWhereRaw('LOWER(network) = ?', ['ups']);
-            })
+            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
             ->orderBy('method')
             ->get(['id', 'country', 'method', 'network', 'tat', 'method_code', 'service_code']);
 
