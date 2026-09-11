@@ -8478,7 +8478,7 @@
             </div>
             <!-- End Content -->
             <!-- Start Footer -->
-            <footer class="footer d-block d-md-flex justify-content-between text-md-start text-center">
+            <!-- <footer class="footer d-block d-md-flex justify-content-between text-md-start text-center">
                 <p class="mb-md-0 mb-1">Copyright &copy; <script data-cfasync="false"
                         src="../../cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
                     <script type="5d3b6c488f778ded9171c76c-text/javascript">
@@ -8490,7 +8490,7 @@
                     <a href="javascript:void(0);">Terms</a>
                     <a href="javascript:void(0);">Contact Us</a>
                 </div>
-            </footer>
+            </footer> -->
             <!-- End Footer -->
         </div>
         <!-- ========================
