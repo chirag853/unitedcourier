@@ -31,21 +31,21 @@ use App\Models\Tracking;
 use App\Models\Zone;
 use App\Services\AdomantraApiClient;
 
-class CodController extends Controller
+class PrepaidController extends Controller
 {
     /**
-     * Show the "Create COD Order" form.
+     * Show the "Create Prepaid Order" form.
      *
      * Mirrors the customer create-shipment page exactly (same fields and
      * validation), but with no logged-in customer: default rates only,
      * no saved exporters and no CSB pre-fill.
      */
-    public function codCreateOrder()
+    public function prepaidCreateOrder()
     {
         $customer = null;
         $csbForm = null;
         // Only enabled UPS services (api_provider = 'UPS') are offered on
-        // the admin COD create-order page.
+        // the admin Prepaid create-order page.
         $courierServices = CourierService::where('status', 1)
             ->whereRaw('LOWER(api_provider) = ?', ['ups'])
             ->get();
@@ -58,12 +58,12 @@ class CodController extends Controller
                 return strtolower(trim((string) $zone->zone_code)) . '|' . strtolower(trim((string) $zone->zone_name));
             })
             ->values();
-        $destinations = Destination::where('is_active', true)->orderBy('name')->where('id','1')->get();
+        $destinations = Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = true;
         // Customers with an approved KYC and an active status can be selected as
-        // the COD order shipper. Each entry shows whether the customer is CSB 4
+        // the Prepaid order shipper. Each entry shows whether the customer is CSB 4
         // (csb_status = 1) or CSB 5 (csb_status = 2).
-        $codCustomers = Customer::query()
+        $prepaidCustomers = Customer::query()
             ->where('status', 1)
             ->whereHas('kycDetail', function ($query) {
                 $query->where('kyc_status', 'approved');
@@ -73,33 +73,33 @@ class CodController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        return view('admin.cod-create-order', compact(
+        return view('admin.prepaid-create-order', compact(
             'customer',
             'csbForm',
             'courierServices',
             'zones',
             'destinations',
             'canCreateShipment',
-            'codCustomers'
+            'prepaidCustomers'
         ));
     }
 
     /**
-     * Store a new COD order (shipment_type = 2).
+     * Store a new Prepaid order (shipment_type = 5).
      *
      * Mirrors the customer create-shipment flow (storeShipment) exactly:
      * same validation, same per-box re-pricing, same tracking/logging and
      * the same Adomantra submission. Differences for the admin flow:
      *   - no authenticated customer (default rates only, customer_id = 0)
      *   - shipper customer_id is null / shipment_type is forced to 2
-     *   - COD AWB numbers are generated (generateCodAwbNumber)
+     *   - Prepaid AWB numbers are generated (generatePrepaidAwbNumber)
      *   - the shipment invoice keeps status "draft" + delivery_type "DDU"
-     *     so codAllOrders() lists it correctly
+     *     so prepaidAllOrders() lists it correctly
      *   - tracking/shipment-log entries are performed by "admin"
      *   - the JSON success payload includes a top-level "tracking_number"
      *     (the generated AWB) which the admin page displays after submit
      */
-    public function codStoreOrder(Request $request, AdomantraApiClient $adomantra)
+    public function prepaidStoreOrder(Request $request, AdomantraApiClient $adomantra)
     {
         $transactionStarted = false;
         $carrierErrorRaw = null;
@@ -498,7 +498,7 @@ class CodController extends Controller
                 $courierService = CourierService::find($serviceId);
                 if ($courierService) {
                     $validatedData['shipping_method'] = $courierService->method;
-                    \Log::info('codStoreOrder: Resolved shipping_method from service_id #'.$serviceId.' → "'.$courierService->method.'"');
+                    \Log::info('prepaidStoreOrder: Resolved shipping_method from service_id #'.$serviceId.' → "'.$courierService->method.'"');
                 }
             }
 
@@ -542,7 +542,7 @@ class CodController extends Controller
                 }
             }
 
-            // COD create-order allows only UPS services (api_provider = 'UPS').
+            // Prepaid create-order allows only UPS services (api_provider = 'UPS').
             // SELF is allowed (static frontend-only option, no service row).
             if (! $isSelfService && $serviceId) {
                 $checkService = ($courierService && (int) $courierService->id === (int) $serviceId)
@@ -550,7 +550,7 @@ class CodController extends Controller
                     : CourierService::find($serviceId);
                 if ($checkService && strtolower(trim((string) $checkService->api_provider)) !== 'ups') {
                     throw ValidationException::withMessages([
-                        'service_id' => 'Only UPS services are allowed on the COD create-order page.',
+                        'service_id' => 'Only UPS services are allowed on the Prepaid create-order page.',
                     ]);
                 }
             }
@@ -644,7 +644,7 @@ class CodController extends Controller
             $transactionStarted = true;
 
             // Store Shipper Info
-            $awbNumber = $this->generateCodAwbNumber();
+            $awbNumber = $this->generatePrepaidAwbNumber();
 
             // Re-price every box from server-owned courier rates. The selected
             // rate supplies the service and zone; each box is matched by its
@@ -769,7 +769,7 @@ class CodController extends Controller
                 'total_surcharge' => $surchargeTotal,
                 'total_price' => $totalPrice,
                 'status' => 'received',
-                'shipment_type' => 2,
+                'shipment_type' => 5,
             ]);
 
             $shipperId = $shipper->id;
@@ -853,7 +853,7 @@ class CodController extends Controller
             ]);
 
             // Store Shipment Invoice
-            $invoiceNumber = $this->generateCodInvoiceNumber();
+            $invoiceNumber = $this->generatePrepaidInvoiceNumber();
             $invoice = ShipmentInvoice::create([
                 'shipper_id' => $shipperId,
                 'invoice_number' => $invoiceNumber,
@@ -867,7 +867,7 @@ class CodController extends Controller
             ]);
 
             // Store Invoice Items
-            \Log::info('COD order items data received:', $validatedData['items'] ?? []);
+            \Log::info('Prepaid order items data received:', $validatedData['items'] ?? []);
             if (isset($validatedData['items']) && is_array($validatedData['items'])) {
                 foreach ($validatedData['items'] as $item) {
                     // Map box_no to package_dimension_id (box_no 1 = packageIds[0], box_no 2 = packageIds[1], etc.)
@@ -892,11 +892,11 @@ class CodController extends Controller
                     ]);
                 }
             } else {
-                \Log::info('No COD order items data received');
+                \Log::info('No Prepaid order items data received');
             }
 
             // Store into create_shipment table.
-            // create_shipment.customer_id is NOT NULL (no default) — the admin COD
+            // create_shipment.customer_id is NOT NULL (no default) — the admin Prepaid
             // flow has no authenticated customer, so store the selected exporter
             // customer id when one was chosen, otherwise 0 (the admin "default
             // rates" sentinel already used throughout this flow).
@@ -953,7 +953,7 @@ class CodController extends Controller
             ]);
 
             // Create initial tracking record for the shipment.
-            // A COD order is auto-manifested on creation, so the first tracking
+            // A Prepaid order is auto-manifested on creation, so the first tracking
             // entry reflects the manifested status rather than a draft.
             Tracking::create([
                 'awb_number' => $awbNumber,
@@ -970,12 +970,12 @@ class CodController extends Controller
                 $awbNumber,
                 'manifested',
                 null,
-                'COD order created (manifested)',
+                'Prepaid order created (manifested)',
                 $validatedData['selected_exporter_customer_id'] ?? null,
                 'admin'
             );
 
-            // Create the manifest record so the COD order shows up under the
+            // Create the manifest record so the Prepaid order shows up under the
             // Manifested tab with a manifest number, exactly like the customer
             // manifest flow does for regular shipments.
             Manifest::createForShipper(
@@ -985,7 +985,7 @@ class CodController extends Controller
 
             // ============================================================
             // Carrier API call (UPS Ship API) at creation time.
-            // The COD flow only offers UPS courier services, so the selected
+            // The Prepaid flow only offers UPS courier services, so the selected
             // service's carrier API is called right here — while the DB
             // transaction is still open. The shipment is only committed if
             // the carrier accepts it; otherwise everything rolls back and the
@@ -1000,7 +1000,7 @@ class CodController extends Controller
             $upsPayloadResult = $this->buildUpsShipPayloadFromDb($shipper);
 
             if (! $upsPayloadResult['success']) {
-                Log::error('COD order: failed to build UPS payload.', [
+                Log::error('Prepaid order: failed to build UPS payload.', [
                     'awb_number' => $awbNumber,
                     'message' => $upsPayloadResult['message'] ?? 'Unknown error',
                 ]);
@@ -1010,7 +1010,7 @@ class CodController extends Controller
             $upsResult = $this->callUpsShipApiInternal($upsPayloadResult['payload']);
 
             if (! $upsResult['success']) {
-                Log::error('COD order rejected by UPS Ship API.', [
+                Log::error('Prepaid order rejected by UPS Ship API.', [
                     'awb_number' => $awbNumber,
                     'message' => $upsResult['message'] ?? 'Unknown UPS error',
                     'raw_response' => $upsResult['rawResponse'] ?? null,
@@ -1024,7 +1024,7 @@ class CodController extends Controller
             }
 
             // UPS accepted the shipment — persist the carrier tracking data
-            // so the COD order carries the real UPS tracking number.
+            // so the Prepaid order carries the real UPS tracking number.
             $shipmentResponse = $upsResult['shipmentResponse'];
             $carrierTrackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
                 ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
@@ -1054,7 +1054,7 @@ class CodController extends Controller
                 ]
             );
 
-            Log::info('COD order accepted by UPS Ship API.', [
+            Log::info('Prepaid order accepted by UPS Ship API.', [
                 'admin_id' => $admin->id,
                 'awb_number' => $awbNumber,
                 'carrier_tracking_number' => $carrierTrackingNumber,
@@ -1073,7 +1073,7 @@ class CodController extends Controller
             // Debug the exact payload generated when Create Now is submitted.
             // This is intentionally server-side so the vendor contract is not
             // exposed through browser-side code or a public debug response.
-            Log::info('Adomantra COD order payload generated.', [
+            Log::info('Adomantra Prepaid order payload generated.', [
                 'admin_id' => $admin->id,
                 'awb_number' => $awbNumber,
                 'payload' => $adomantraPayload,
@@ -1081,12 +1081,12 @@ class CodController extends Controller
 
             $adomantraResponse = $adomantra->createOrder($adomantraPayload);
 
-            Log::info('Adomantra COD order created.', [
+            Log::info('Adomantra Prepaid order created.', [
                 'admin_id' => $admin->id,
                 'awb_number' => $awbNumber,
             ]);
             } else {
-                Log::info('SELF COD order created (no carrier API).', [
+                Log::info('SELF Prepaid order created (no carrier API).', [
                     'admin_id' => $admin->id,
                     'awb_number' => $awbNumber,
                 ]);
@@ -1096,12 +1096,12 @@ class CodController extends Controller
             $transactionStarted = false;
 
             if (! $request->expectsJson()) {
-                return back()->with('success', 'COD order created successfully!');
+                return back()->with('success', 'Prepaid order created successfully!');
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'COD order created successfully!',
+                'message' => 'Prepaid order created successfully!',
                 'tracking_number' => $carrierTrackingNumber ?? $awbNumber,
                 'is_self' => $isSelfService,
                 'data' => [
@@ -1146,12 +1146,12 @@ class CodController extends Controller
                 $transactionStarted = false;
             }
 
-            Log::error('COD order database failure.', [
+            Log::error('Prepaid order database failure.', [
                 'awb_number' => $awbNumber ?? null,
                 'exception' => $e->getMessage(),
             ]);
 
-            $message = 'Unable to save the COD order because of a database error. No shipment was saved. Please try again.';
+            $message = 'Unable to save the Prepaid order because of a database error. No shipment was saved. Please try again.';
 
             if (! $request->expectsJson()) {
                 return back()
@@ -1169,13 +1169,13 @@ class CodController extends Controller
                 $transactionStarted = false;
             }
 
-            Log::error('COD order carrier submission failed.', [
+            Log::error('Prepaid order carrier submission failed.', [
                 'awb_number' => $awbNumber ?? null,
                 'exception' => $e->getMessage(),
                 'raw_response' => $carrierErrorRaw,
             ]);
 
-            $message = 'The COD order could not be submitted to the carrier. No shipment was saved. '.$e->getMessage();
+            $message = 'The Prepaid order could not be submitted to the carrier. No shipment was saved. '.$e->getMessage();
 
             if (! $request->expectsJson()) {
                 return back()
@@ -1194,12 +1194,12 @@ class CodController extends Controller
                 $transactionStarted = false;
             }
 
-            Log::error('COD order creation failed.', [
+            Log::error('Prepaid order creation failed.', [
                 'awb_number' => $awbNumber ?? null,
                 'exception' => $e->getMessage(),
             ]);
 
-            $message = 'Failed to create COD order. Please try again.';
+            $message = 'Failed to create Prepaid order. Please try again.';
 
             if (! $request->expectsJson()) {
                 return back()
@@ -1215,15 +1215,12 @@ class CodController extends Controller
     }
 
     /**
-     * List all COD orders (shipment_type = 2).
+     * List all Prepaid orders (shipment_type = 5).
      */
-    public function codAllOrders(Request $request)
+    public function prepaidAllOrders(Request $request)
     {
         $type = $request->query('type', $request->query('status', 'all'));
 
-        // The FOC tile lists free-of-cost orders (shipment_type = 3) on this
-        // same page; every other view stays scoped to COD (shipment_type = 2).
-        $isFocView = $type === 'foc';
         $isDeliveredView = $type === 'delivered';
 
         $withRelations = [
@@ -1234,22 +1231,21 @@ class CodController extends Controller
             'shipperInfo.shipmentTracking',
         ];
 
-        // Main list query
+        // Main list query - always scoped to Prepaid (shipment_type = 5).
         $query = ShipmentInvoice::with($withRelations);
 
         if ($isDeliveredView) {
-            // Delivered tile: shipper_info.status = delivered (COD + FOC dono)
+            // Delivered tile: prepaid orders with shipper_info.status = delivered.
             $query->whereHas('shipperInfo', function ($shipper) {
-                $shipper->where('status', 'delivered');
+                $shipper->where('shipment_type', 5)->where('status', 'delivered');
             });
         } else {
-            $shipmentType = $isFocView ? 3 : 2;
-            $query->whereHas('shipperInfo', function ($shipper) use ($shipmentType) {
-                $shipper->where('shipment_type', $shipmentType);
+            $query->whereHas('shipperInfo', function ($shipper) {
+                $shipper->where('shipment_type', 5);
             });
 
-            // 'all' aur 'cod' me koi extra filter nahi
-            if (! $isFocView && in_array($type, ['draft', 'manifested'], true)) {
+            // 'all' aur 'prepaid' me koi extra filter nahi
+            if (in_array($type, ['draft', 'manifested'], true)) {
                 $query->whereHas('shipperInfo', function ($shipper) use ($type) {
                     $shipper->where('status', $type);
                 });
@@ -1258,32 +1254,27 @@ class CodController extends Controller
 
         $invoices = $query->orderBy('created_at', 'desc')->paginate(25)->withQueryString();
 
-        $allCod = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 2);
+        $allPrepaid = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
+            $shipper->where('shipment_type', 5);
         })->count();
 
         $draftCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 2)->where('status', 'draft');
+            $shipper->where('shipment_type', 5)->where('status', 'draft');
         })->count();
 
         $manifestedCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 2)->where('status', 'manifested');
-        })->count();
-
-        $focCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 3);
+            $shipper->where('shipment_type', 5)->where('status', 'manifested');
         })->count();
 
         $deliveredCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('status', 'delivered');
+            $shipper->where('shipment_type', 5)->where('status', 'delivered');
         })->count();
 
         $counts = [
-            'all' => $allCod,
+            'all' => $allPrepaid,
             'draft' => $draftCount,
             'manifested' => $manifestedCount,
-            'cod' => $allCod,
-            'foc' => $focCount,
+            'prepaid' => $allPrepaid,
             'delivered' => $deliveredCount,
         ];
 
@@ -1305,12 +1296,11 @@ class CodController extends Controller
             }
         }
 
-        return view('admin.cod-all-orders', [
+        return view('admin.prepaid-all-orders', [
             'invoices' => $invoices,
             'counts' => $counts,
             'status' => $type,
             'type' => $type,
-            'isFocView' => $isFocView,
             'customerNames' => $customerNames,
         ]);
     }
@@ -1322,7 +1312,7 @@ class CodController extends Controller
      * $shipmentDetails entries so the admin modal renders the identical
      * "Shipment Details" layout as the manifest-detail page.
      */
-    public function codShipmentDetail($shipperId)
+    public function prepaidShipmentDetail($shipperId)
     {
         $shipper = ShipperInfo::with([
             'consigneeInfo',
@@ -1409,7 +1399,7 @@ class CodController extends Controller
             'destination' => $consignee ? $consignee->delivery_destination : null,
             'origin_type' => $consignee ? $consignee->origin_type : null,
             'shipping_method' => $shipper->shipping_method,
-            'service' => $this->resolveCodShipmentService($shipper),
+            'service' => $this->resolvePrepaidShipmentService($shipper),
             'packages' => $packages->map(function ($pkg, $idx) {
                 return [
                     'index' => $idx + 1,
@@ -1455,7 +1445,7 @@ class CodController extends Controller
      * Prefers the stored rate chain (service_rate_id -> service), then the
      * stored service_id, then a method-name match. Returns null when unknown.
      */
-    private function resolveCodShipmentService($shipper): ?array
+    private function resolvePrepaidShipmentService($shipper): ?array
     {
         $service = $shipper->serviceRate?->service;
 
@@ -1481,15 +1471,14 @@ class CodController extends Controller
     }
 
     /**
-     * Close Order modal se COD/FOC save karo.
-     * foc => shipper_info.shipment_type = 3, cod => 2 + status = delivered. Remark finance_remark me save hota hai.
+     * Close Order modal se Prepaid order close karo.
+     * shipment_type = 5 rehta hai, status = delivered. Remark finance_remark me save hota hai.
      */
-    public function codCloseOrder(Request $request)
+    public function prepaidCloseOrder(Request $request)
     {
         $validated = $request->validate([
             'invoice_id' => 'required|integer|exists:shipment_invoice,id',
             'shipper_id' => 'nullable|integer|exists:shipper_info,id',
-            'order_type' => 'required|in:cod,foc',
             'remark' => 'nullable|string|max:1000',
         ]);
 
@@ -1498,8 +1487,8 @@ class CodController extends Controller
 
         $shipper = ShipperInfo::findOrFail($shipperId);
 
-        $shipper->shipment_type = $validated['order_type'] === 'foc' ? 3 : 2;
-        $shipper->status = 'cod_close';
+        $shipper->shipment_type = 5;
+        $shipper->status = 'delivered';
         $shipper->save();
 
         $remark = trim((string) ($validated['remark'] ?? ''));
@@ -1516,18 +1505,18 @@ class CodController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Order closed as ' . strtoupper($validated['order_type']),
+            'message' => 'Order closed as DELIVERED',
             'shipment_type' => $shipper->shipment_type,
         ]);
     }
 
     /**
-     * Generate a unique AWB number for COD orders.
+     * Generate a unique AWB number for Prepaid orders.
      * Same format as the customer create-shipment page:
      * UWC + YYMMDD + 5-digit serial (resets daily).
      * Example: UWC26060200001
      */
-    private function generateCodAwbNumber()
+    private function generatePrepaidAwbNumber()
     {
         $prefix = 'UWC';
         $datePart = now()->format('ymd');
@@ -1548,11 +1537,11 @@ class CodController extends Controller
     }
 
     /**
-     * Generate a unique invoice number for COD orders.
+     * Generate a unique invoice number for Prepaid orders.
      */
-    private function generateCodInvoiceNumber()
+    private function generatePrepaidInvoiceNumber()
     {
-        return 'INV-COD-'.now()->format('ymdHis').'-'.random_int(1000, 9999);
+        return 'INV-PREPAID-'.now()->format('ymdHis').'-'.random_int(1000, 9999);
     }
 
     // ============================================================
@@ -1562,7 +1551,7 @@ class CodController extends Controller
     // ============================================================
 
     /**
-     * Build the Adomantra order payload for a COD order.
+     * Build the Adomantra order payload for a Prepaid order.
      *
      * Mirrors CustomerController::buildAdomantraOrderPayload() exactly, but
      * accepts an Admin instead of a Customer: the sender name and account
@@ -2066,7 +2055,7 @@ class CodController extends Controller
      * at all for the zone scope does it return [null, false] — so services
      * are never hidden merely because of the entered weight.
      */
-    private function findCodBoxRate(int $serviceId, $destinationCountry, $zoneNumber, float $weight): array
+    private function findPrepaidBoxRate(int $serviceId, $destinationCountry, $zoneNumber, float $weight): array
     {
         $exact = \DB::select(
             'SELECT cr.*, cs.country, cs.service_code, cs.method
@@ -2107,16 +2096,16 @@ class CodController extends Controller
     }
 
     /**
-     * In-memory version of findCodBoxRate(): matches one box weight against
+     * In-memory version of findPrepaidBoxRate(): matches one box weight against
      * PRELOADED rate rows (same zone scope + weight-band rules, same ordering).
      *
-     * Lets codUpsRate() serve every service x every box from a single bulk
+     * Lets prepaidUpsRate() serve every service x every box from a single bulk
      * query instead of 2 SQL queries per box per service.
      *
      * @param  array  $serviceRates  Raw courier_rates rows (stdClass) for one service.
      * @return array  [rateRow|null, isFallback]
      */
-    private function matchCodBoxRate(array $serviceRates, $zoneNumber, float $weight): array
+    private function matchPrepaidBoxRate(array $serviceRates, $zoneNumber, float $weight): array
     {
         $exactCandidates = [];
         $zoneCandidates = [];
@@ -2205,7 +2194,7 @@ class CodController extends Controller
     }
 
     /**
-     * Proxy UPS Rate API call for the admin COD create-order page.
+     * Proxy UPS Rate API call for the admin Prepaid create-order page.
      *
      * Mirrors CustomerController::getUpsRate() exactly (same box-wise
      * calculation, zone resolution and response shape) with these admin
@@ -2215,7 +2204,7 @@ class CodController extends Controller
      *   - the response key is `zone` (not `selected_zone`) because the admin
      *     blade reads data.zone
      */
-    public function codUpsRate(Request $request)
+    public function prepaidUpsRate(Request $request)
     {
         // 1. Get logged-in admin
         $admin = auth()->guard('admin')->user();
@@ -2311,7 +2300,7 @@ class CodController extends Controller
 
         // 5. Get services
         // 5. Get services - ONLY services with api_provider = 'UPS'
-        // are offered on the admin COD create-order page.
+        // are offered on the admin Prepaid create-order page.
         $services = CourierService::where('country', $destinationCountry)
             ->where('status', 1)
             ->whereRaw('LOWER(api_provider) = ?', ['ups'])
@@ -2334,7 +2323,7 @@ class CodController extends Controller
         }
 
         // PERF: bulk-fetch every candidate rate row for all services in ONE
-        // query (same filters findCodBoxRate() applied per box), then match
+        // query (same filters findPrepaidBoxRate() applied per box), then match
         // each box in memory. Previously this was 2 SQL queries per box per
         // service (+2 surcharge queries per box), i.e. dozens of queries.
         $serviceIds = $services->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -2394,7 +2383,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2491,7 +2480,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2592,7 +2581,7 @@ class CodController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchCodBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2844,13 +2833,13 @@ class CodController extends Controller
     }
 
     /**
-     * Return the zones for a destination for the admin COD create-order page.
+     * Return the zones for a destination for the admin Prepaid create-order page.
      *
      * Verbatim copy of CustomerController::getZonesByDestination() minus the
      * customer guard (the admin route is already protected by the admin
      * middleware).
      */
-    public function codZonesByDestination(Request $request)
+    public function prepaidZonesByDestination(Request $request)
     {
         $destinationId = $request->query('destination_id');
 
@@ -2923,14 +2912,14 @@ class CodController extends Controller
 
     /**
      * Return the country-wise courier services for a destination for the
-     * admin COD create-order page — WITHOUT any weight filtering.
+     * admin Prepaid create-order page — WITHOUT any weight filtering.
      *
      * The frontend calls this as soon as the Delivery Destination is
      * selected, so the admin sees which services exist for that country
      * (e.g. US shows only the UPS services) before entering weights or
-     * clicking Calculate Rate. Same UPS-only rule as codUpsRate().
+     * clicking Calculate Rate. Same UPS-only rule as prepaidUpsRate().
      */
-    public function codServicesByDestination(Request $request)
+    public function prepaidServicesByDestination(Request $request)
     {
         $destinationId = $request->query('destination_id', $request->query('delivery_destination'));
 
@@ -2956,7 +2945,7 @@ class CodController extends Controller
         }
 
         // Resolve via the human-readable destination NAME first (same path
-        // codUpsRate() uses), so the country matches courier_services.country
+        // prepaidUpsRate() uses), so the country matches courier_services.country
         // (e.g. 'US', not 'USA'). Numeric-id lookup is only a fallback.
         $destinationCountry = $this->resolveDestinationCountry($destination->name)
             ?? $this->resolveDestinationCountry($destination->id);

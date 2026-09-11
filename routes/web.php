@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BulkUploadController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CodController;
+use App\Http\Controllers\PrepaidController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\KycController;
 use App\Http\Controllers\PaymentWebhookController;
@@ -121,6 +122,17 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/cod/ups-rate', [CodController::class, 'codUpsRate'])->name('admin.cod.ups-rate');
     Route::get('/cod/zones-by-destination', [CodController::class, 'codZonesByDestination'])->name('admin.cod.zones-by-destination');
     Route::get('/cod/services-by-destination', [CodController::class, 'codServicesByDestination'])->name('admin.cod.services-by-destination');
+
+    // Prepaid (same flow as COD, shipment_type = 5, no Bill To step)
+    Route::get('/prepaid/create-order', [PrepaidController::class, 'prepaidCreateOrder'])->name('admin.prepaid.create-order');
+    Route::get('/prepaid/all-orders', [PrepaidController::class, 'prepaidAllOrders'])->name('admin.prepaid.all-orders');
+    Route::post('/prepaid/create-order', [PrepaidController::class, 'prepaidStoreOrder'])->name('admin.prepaid.store-order');
+    Route::post('/prepaid/close-order', [PrepaidController::class, 'prepaidCloseOrder'])->name('admin.prepaid.close-order');
+    Route::post('/prepaid/ups-rate', [PrepaidController::class, 'prepaidUpsRate'])->name('admin.prepaid.ups-rate');
+    Route::get('/prepaid/zones-by-destination', [PrepaidController::class, 'prepaidZonesByDestination'])->name('admin.prepaid.zones-by-destination');
+    Route::get('/prepaid/services-by-destination', [PrepaidController::class, 'prepaidServicesByDestination'])->name('admin.prepaid.services-by-destination');
+    Route::get('/prepaid/shipment/{shipperId}', [PrepaidController::class, 'prepaidShipmentDetail'])->name('admin.prepaid.shipment-detail');
+    Route::get('/cod/shipment/{shipperId}', [CodController::class, 'codShipmentDetail'])->name('admin.cod.shipment-detail');
 
     // Create User (Admin Management) Routes
     Route::get('/create-user', [AdminController::class, 'createUser'])->name('admin.create-user');

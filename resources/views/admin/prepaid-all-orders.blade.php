@@ -3,10 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Admin Panel | UWC - All COD Orders</title>
+    <title>Admin Panel | UWC - All Prepaid Orders</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="View all Cash on Delivery (COD) orders for United Courier">
-    <meta name="keywords" content="COD, cash on delivery, orders, courier, logistics">
+    <meta name="description" content="View all Prepaid orders for United Courier">
+    <meta name="keywords" content="prepaid, orders, courier, logistics">
     <meta name="robots" content="index, follow">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="shortcut icon" href="{{ asset('assets/img/favicon.png') }}">
@@ -418,18 +418,18 @@
 
             <!-- <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
                 <div>
-                    <h4 class="mb-1"><i class="ti ti-cash me-1"></i>All COD Orders</h4>
+                    <h4 class="mb-1"><i class="ti ti-wallet me-1"></i>All Prepaid Orders</h4>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb mb-0 p-0">
                             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="javascript:void(0);">Manage COD</a></li>
-                            <li class="breadcrumb-item active" aria-current="page">All Order</li>
+                            <li class="breadcrumb-item"><a href="javascript:void(0);">Manage Prepaid</a></li>
+                            <li class="breadcrumb-item active" aria-current="page">All Prepaid Orders</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
-                    <a href="{{ route('admin.cod.create-order') }}" class="btn btn-primary">
-                        <i class="ti ti-plus me-1"></i>Create Order
+                    <a href="{{ route('admin.prepaid.create-order') }}" class="btn btn-primary">
+                        <i class="ti ti-plus me-1"></i>Create Prepaid Order
                     </a>
                 </div>
             </div> -->
@@ -437,7 +437,7 @@
             <!-- Count Cards -->
             <div class="row g-3 mb-4">
                 <div class="col-sm-6 col-md">
-                    <a href="{{ route('admin.cod.all-orders', ['type' => 'all']) }}" class="cod-count-card bg-white w-100">
+                    <a href="{{ route('admin.prepaid.all-orders', ['type' => 'all']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-primary bg-opacity-10 text-primary"><i class="ti ti-package"></i></div>
                         <div>
                             <div class="cod-count-num">{{ $counts['all'] ?? 0 }}</div>
@@ -446,25 +446,16 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-md">
-                    <a href="{{ route('admin.cod.all-orders', ['type' => 'cod']) }}" class="cod-count-card bg-white w-100">
+                    <a href="{{ route('admin.prepaid.all-orders', ['type' => 'prepaid']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-success bg-opacity-10 text-success"><i class="ti ti-currency-rupee"></i></div>
                         <div>
-                            <div class="cod-count-num">{{ $counts['cod'] ?? 0 }}</div>
-                            <div class="cod-count-label">COD</div>
+                            <div class="cod-count-num">{{ $counts['prepaid'] ?? 0 }}</div>
+                            <div class="cod-count-label">Prepaid</div>
                         </div>
                     </a>
                 </div>
                 <div class="col-sm-6 col-md">
-                    <a href="{{ route('admin.cod.all-orders', ['type' => 'foc']) }}" class="cod-count-card bg-white w-100">
-                        <div class="cod-count-icon bg-dark bg-opacity-10 text-dark"><i class="ti ti-gift"></i></div>
-                        <div>
-                            <div class="cod-count-num">{{ $counts['foc'] ?? 0 }}</div>
-                            <div class="cod-count-label">FOC</div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-md">
-                    <a href="{{ route('admin.cod.all-orders', ['type' => 'delivered']) }}" class="cod-count-card bg-white w-100">
+                    <a href="{{ route('admin.prepaid.all-orders', ['type' => 'delivered']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-info bg-opacity-10 text-info"><i class="ti ti-truck"></i></div>
                         <div>
                             <div class="cod-count-num">{{ $counts['delivered'] ?? 0 }}</div>
@@ -480,8 +471,8 @@
                     @if($invoices->isEmpty())
                         <div class="text-center py-5">
                             <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
-                            <p class="mt-3 text-muted">No COD orders matched the selected filter.</p>
-                            <a href="{{ route('admin.cod.all-orders') }}" class="btn btn-primary">Clear Filters</a>
+                            <p class="mt-3 text-muted">No prepaid orders matched the selected filter.</p>
+                            <a href="{{ route('admin.prepaid.all-orders') }}" class="btn btn-primary">Clear Filters</a>
                         </div>
                     @else
                         <div class="table-responsive shipments-table-scroll">
@@ -685,7 +676,7 @@
                                                         class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
                                                         title="View Details"
                                                         aria-label="View Details"
-                                                        onclick="openCodShipmentModal({{ $invoice->shipper_id }}, this)"
+                                                        onclick="openPrepaidShipmentModal({{ $invoice->shipper_id }}, this)"
                                                         style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                         <i class="ti ti-eye" aria-hidden="true"></i>
                                                      </button>
@@ -693,7 +684,7 @@
                                                              class="btn btn-sm btn-outline-info d-inline-flex align-items-center justify-content-center"
                                                              title="Print Label"
                                                             aria-label="Print Label"
-                                                            onclick="codDirectPrint({{ $invoice->id }}, {{ $invoice->shipper_id }}, {{ strtoupper($shipper?->shipping_method ?? '') === 'SELF' ? 'true' : 'false' }})"
+                                                            onclick="prepaidDirectPrint({{ $invoice->id }}, {{ $invoice->shipper_id }}, {{ strtoupper($shipper?->shipping_method ?? '') === 'SELF' ? 'true' : 'false' }})"
                                                             style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                         <i class="ti ti-printer" aria-hidden="true"></i>
                                                     </button>
@@ -721,7 +712,7 @@
                                 Showing {{ $invoices->firstItem() }} to {{ $invoices->lastItem() }} of {{ $invoices->total() }} orders
                             </div>
                             @if ($invoices->hasPages())
-                                <nav aria-label="COD order pages">
+                                <nav aria-label="Prepaid order pages">
                                     <ul class="pagination shipment-pagination">
                                         <li class="page-item {{ $invoices->onFirstPage() ? 'disabled' : '' }}">
                                             <a class="page-link"
@@ -768,16 +759,6 @@
                 <div class="modal-body">
                     <label for="closeRemarkText" class="form-label">Remark</label>
                     <textarea class="form-control" id="closeRemarkText" rows="4" placeholder="Enter remark..."></textarea>
-                    <div class="d-flex gap-4 mt-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="closeOrderType" id="closeOrderTypeCod" value="cod" checked>
-                            <label class="form-check-label" for="closeOrderTypeCod">COD</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="closeOrderType" id="closeOrderTypeFoc" value="foc">
-                            <label class="form-check-label" for="closeOrderTypeFoc">FOC</label>
-                        </div>
-                    </div>
                     <div class="text-danger small mt-2 d-none" id="closeRemarkError"></div>
                 </div>
                 <div class="modal-footer">
@@ -813,7 +794,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary d-none" id="printLabelPrintBtn" onclick="triggerCodPdfPrint()">
+                    <button type="button" class="btn btn-primary d-none" id="printLabelPrintBtn" onclick="triggerPrepaidPdfPrint()">
                         <i class="ti ti-printer me-1"></i> Print Label
                     </button>
                 </div>
@@ -1062,12 +1043,12 @@
     <script type="text/javascript">
         /**
          * Open the Shipment Details modal (same layout as the manifest-detail
-         * page) for one COD shipment. Detail is fetched via AJAX, then the
+         * page) for one prepaid shipment. Detail is fetched via AJAX, then the
          * modal is filled and shown.
          * @param {number} shipperId
          * @param {HTMLElement} btn - clicked View button (loading state)
          */
-        function openCodShipmentModal(shipperId, btn) {
+        function openPrepaidShipmentModal(shipperId, btn) {
             if (!shipperId) {
                 return;
             }
@@ -1083,7 +1064,7 @@
                 }
             };
 
-            const urlTemplate = '{{ route("admin.cod.shipment-detail", ["shipperId" => "__S__"]) }}';
+            const urlTemplate = '{{ route("admin.prepaid.shipment-detail", ["shipperId" => "__S__"]) }}';
             $.ajax({
                 url: urlTemplate.replace('__S__', encodeURIComponent(shipperId)),
                 type: 'GET',
@@ -1260,7 +1241,7 @@
         }
 
         // ===== 4x6 custom courier label (same format as customer packed tab) =====
-        const codCourierLabelStyles =
+        const prepaidCourierLabelStyles =
             '*{box-sizing:border-box;}' +
             'html,body{margin:0;padding:0;background:#fff;}' +
             'body{padding:10px;font-family:Arial,Helvetica,sans-serif;color:#111;}' +
@@ -1293,7 +1274,7 @@
             '@media print{html,body{padding:0;} .label{width:100%;height:6in;margin:0;}}' +
             '@media (max-width:480px){body{padding:3px;} .label{width:100%;height:auto;min-height:576px;}}';
 
-        function codGetDestinationCountryCode(destination) {
+        function prepaidGetDestinationCountryCode(destination) {
             if (!destination) return 'INTL';
             const dest = String(destination);
             const map = {
@@ -1316,14 +1297,14 @@
             return m ? m[1].toUpperCase() : dest.toUpperCase();
         }
 
-        function codGetDestinationDs(destination) {
+        function prepaidGetDestinationDs(destination) {
             if (!destination) return '-';
             const dest = String(destination);
             const m = dest.match(/^([A-Z]{2})[\s-]/);
             return m ? m[1].toUpperCase() : dest.slice(0, 4).toUpperCase();
         }
 
-        function codBuildCourierLabelHtml(data, boxIndex, boxCount) {
+        function prepaidBuildCourierLabelHtml(data, boxIndex, boxCount) {
             const shipper = data.shipper || {};
             const consignee = data.consignee || {};
             const items = Array.isArray(data.items) ? data.items : [];
@@ -1361,8 +1342,8 @@
             const service = data.service || {};
             const network = service.api_provider || data.api_provider || (data.shipping_method || '-');
             const serviceCode = service.service_code || data.service_code || '-';
-            const country = codGetDestinationCountryCode(data.destination);
-            const ds = codGetDestinationDs(data.destination);
+            const country = prepaidGetDestinationCountryCode(data.destination);
+            const ds = prepaidGetDestinationDs(data.destination);
 
             const labelHtml =
                 '<div class="label">' +
@@ -1431,7 +1412,7 @@
          * @param {number} shipperId
          * @param {HTMLElement} btn - clicked button (loading state)
          */
-        function printCodCustomLabel(shipperId, btn) {
+        function printPrepaidCustomLabel(shipperId, btn) {
             if (!shipperId) {
                 return;
             }
@@ -1451,7 +1432,7 @@
                 }
             };
 
-            const urlTemplate = '{{ route("admin.cod.shipment-detail", ["shipperId" => "__S__"]) }}';
+            const urlTemplate = '{{ route("admin.prepaid.shipment-detail", ["shipperId" => "__S__"]) }}';
             $.ajax({
                 url: urlTemplate.replace('__S__', encodeURIComponent(shipperId)),
                 type: 'GET',
@@ -1470,10 +1451,10 @@
                     const packages = Array.isArray(data.packages) ? data.packages : [];
                     const boxCount = packages.length || 1;
                     let html = '<!DOCTYPE html><html><head><title>Custom Label - ' + (data.awb_number || '') + '</title><style>' +
-                        codCourierLabelStyles + '@page{size:4in 6in;margin:0;}' +
+                        prepaidCourierLabelStyles + '@page{size:4in 6in;margin:0;}' +
                         '</style></head><body>';
                     for (let b = 1; b <= boxCount; b++) {
-                        html += codBuildCourierLabelHtml(data, b, boxCount);
+                        html += prepaidBuildCourierLabelHtml(data, b, boxCount);
                         if (b < boxCount) {
                             html += '<div style="page-break-after:always;"></div>';
                         }
@@ -1513,11 +1494,11 @@
          * @param {number} shipperId - shipper ID (custom label)
          * @param {boolean} isSelf - whether the shipment is SELF service
          */
-        function codDirectPrint(invoiceId, shipperId, isSelf) {
+        function prepaidDirectPrint(invoiceId, shipperId, isSelf) {
             if (isSelf) {
-                printCodCustomLabel(shipperId, null);
+                printPrepaidCustomLabel(shipperId, null);
             } else {
-                printCodLabel(invoiceId);
+                printPrepaidLabel(invoiceId);
             }
         }
 
@@ -1526,7 +1507,7 @@
          * label via admin.generate-label) and displays it in the modal.
          * @param {number} shipmentId - The shipment_invoice ID
          */
-        function printCodLabel(shipmentId) {
+        function printPrepaidLabel(shipmentId) {
             $('#printLabelLoading').removeClass('d-none');
             $('#printLabelError').addClass('d-none');
             $('#printLabelPdfFrame').css('display', 'none');
@@ -1555,7 +1536,7 @@
                         $('#printLabelPdfFrame').attr('src', blobUrl).css('display', 'block');
                         $('#printLabelPrintBtn').removeClass('d-none');
 
-                        window._codLabelPdfBlobUrl = blobUrl;
+                        window._prepaidLabelPdfBlobUrl = blobUrl;
                     } else {
                         $('#printLabelLoading').addClass('d-none');
                         $('#printLabelError').removeClass('d-none');
@@ -1577,9 +1558,9 @@
         /**
          * Trigger browser print for the PDF label.
          */
-        function triggerCodPdfPrint() {
-            if (window._codLabelPdfBlobUrl) {
-                const printWindow = window.open(window._codLabelPdfBlobUrl, '_blank');
+        function triggerPrepaidPdfPrint() {
+            if (window._prepaidLabelPdfBlobUrl) {
+                const printWindow = window.open(window._prepaidLabelPdfBlobUrl, '_blank');
                 if (printWindow) {
                     printWindow.onload = function() {
                         setTimeout(function() {
@@ -1593,9 +1574,9 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Revoke the blob URL to free memory when the modal closes.
             $('#printLabelModal').on('hidden.bs.modal', function() {
-                if (window._codLabelPdfBlobUrl) {
-                    URL.revokeObjectURL(window._codLabelPdfBlobUrl);
-                    window._codLabelPdfBlobUrl = null;
+                if (window._prepaidLabelPdfBlobUrl) {
+                    URL.revokeObjectURL(window._prepaidLabelPdfBlobUrl);
+                    window._prepaidLabelPdfBlobUrl = null;
                 }
                 $('#printLabelLoading').addClass('d-none');
                 $('#printLabelError').addClass('d-none');
@@ -1610,7 +1591,6 @@
             var closeRemarkAwbNumber = document.getElementById('closeRemarkAwbNumber');
             var closeRemarkError = document.getElementById('closeRemarkError');
             var closeRemarkSaveBtn = document.getElementById('closeRemarkSaveBtn');
-            var closeOrderTypeCod = document.getElementById('closeOrderTypeCod');
             var currentInvoiceId = null;
             var currentShipperId = null;
 
@@ -1625,9 +1605,6 @@
                     if (closeRemarkText) {
                         closeRemarkText.value = '';
                     }
-                    if (closeOrderTypeCod) {
-                        closeOrderTypeCod.checked = true;
-                    }
                     if (closeRemarkError) {
                         closeRemarkError.classList.add('d-none');
                         closeRemarkError.textContent = '';
@@ -1638,8 +1615,6 @@
             if (closeRemarkSaveBtn) {
                 closeRemarkSaveBtn.addEventListener('click', function () {
                     var remark = closeRemarkText ? closeRemarkText.value.trim() : '';
-                    var orderType = document.querySelector('input[name="closeOrderType"]:checked');
-                    orderType = orderType ? orderType.value : 'cod';
 
                     if (!currentInvoiceId) {
                         return;
@@ -1648,7 +1623,7 @@
                     closeRemarkSaveBtn.disabled = true;
                     closeRemarkSaveBtn.textContent = 'Saving...';
 
-                    fetch("{{ route('admin.cod.close-order') }}", {
+                    fetch("{{ route('admin.prepaid.close-order') }}", {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1658,7 +1633,6 @@
                         body: JSON.stringify({
                             invoice_id: currentInvoiceId,
                             shipper_id: currentShipperId,
-                            order_type: orderType,
                             remark: remark
                         })
                     })

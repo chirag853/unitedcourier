@@ -5733,7 +5733,7 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'total_price', 'updated_at');
+                    $q->select('id', 'awb_number', 'shipping_method', 'shipment_type', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'total_price', 'updated_at');
                 },
                 'shipperInfo.manifest' => function ($q) {
                     $q->select('id', 'shipper_id', 'manifest_number', 'status', 'created_at');

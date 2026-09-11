@@ -6,7 +6,7 @@
     <!-- Meta Tags -->
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>COD Create Order | Admin</title>
+    <title>Prepaid Create Order | Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
    
@@ -302,7 +302,7 @@
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-9">
-                                <form id="shipmentForm" action="{{ route('admin.cod.store-order') }}" method="POST" novalidate>
+                                <form id="shipmentForm" action="{{ route('admin.prepaid.store-order') }}" method="POST" novalidate>
                                     @csrf
                                     <div class="accordion accordion-bordered" id="main_accordion">
                                         <!-- Basic Info -->
@@ -396,22 +396,22 @@
                                                             <small class="text-muted d-block mb-1">(Only KYC-approved, active customers are listed. Selecting one fills Shipper Info automatically.)</small>
                                                             <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
                                                                 <option value="" data-csb-color="#212529" data-initial-visible="1">Enter shipper details manually</option>
-                                                                @foreach($codCustomers as $codCustomer)
+                                                                @foreach($prepaidCustomers as $prepaidCustomer)
                                                                     @php
-                                                                        $isCsbV = (int) $codCustomer->csb_status === 2;
+                                                                        $isCsbV = (int) $prepaidCustomer->csb_status === 2;
                                                                         $csbLabel = $isCsbV ? 'CSB 5' : 'CSB 4';
                                                                         $csbColor = $isCsbV ? '#198754' : '#dc3545';
-                                                                        $customerDisplayName = trim(($codCustomer->first_name ?? '') . ' ' . ($codCustomer->last_name ?? ''));
+                                                                        $customerDisplayName = trim(($prepaidCustomer->first_name ?? '') . ' ' . ($prepaidCustomer->last_name ?? ''));
                                                                     @endphp
                                                                     <option
-                                                                        value="{{ $codCustomer->id }}"
+                                                                        value="{{ $prepaidCustomer->id }}"
                                                                         data-csb-color="{{ $csbColor }}"
                                                                         data-csb-label="{{ $csbLabel }}"
                                                                         data-initial-visible="{{ $loop->iteration <= 10 ? '1' : '0' }}"
                                                                         style="color: {{ $csbColor }}; font-weight: 600;"
-                                                                        {{ old('selected_exporter_customer_id') == $codCustomer->id ? 'selected' : '' }}
+                                                                        {{ old('selected_exporter_customer_id') == $prepaidCustomer->id ? 'selected' : '' }}
                                                                     >
-                                                                        {{ $customerDisplayName }} — {{ $codCustomer->phone_number }} — {{ $csbLabel }}
+                                                                        {{ $customerDisplayName }} — {{ $prepaidCustomer->phone_number }} — {{ $csbLabel }}
                                                                     </option>
                                                                 @endforeach
                                                             </select>
@@ -7105,9 +7105,9 @@
                                         <div class="accordion-item border-top rounded mb-3">
                                             <div class="accordion-header">
                                                 <a href="#" class="accordion-button accordion-custom-button rounded"
-                                                    data-bs-toggle="collapse" data-bs-target="#social">
-                                                    <span class="avatar avatar-md rounded me-1">4</span>
-                                                    Package Dimension
+                                                     data-bs-toggle="collapse" data-bs-target="#social">
+                                                     <span class="avatar avatar-md rounded me-1">4</span>
+                                                     Package Dimension
                                                 </a>
                                             </div>
                                             <div class="accordion-collapse collapse" id="social"
@@ -8226,7 +8226,7 @@
                                                     @error('entry_remark')
                                                         <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
-                                                    <small class="text-muted">This remark is saved along with the COD order.</small>
+                                                    <small class="text-muted">This remark is saved along with the Prepaid order.</small>
                                                 </div>
                                                         </div>
                                                     </div>
@@ -8895,11 +8895,11 @@
         </div>
     </div>
     <!-- /Preview Order Modal -->
-    <!-- Fullscreen loader: shown while the COD order is being created
+    <!-- Fullscreen loader: shown while the Prepaid order is being created
          (UPS + Adomantra APIs can take several seconds). Blocks any
          further clicks until the "Shipment Created!" popup appears. -->
     <style>
-        .cod-submit-loader {
+        .prepaid-submit-loader {
             position: fixed;
             inset: 0;
             z-index: 2000;
@@ -8908,7 +8908,7 @@
             align-items: center;
             justify-content: center;
         }
-        .cod-submit-loader-box {
+        .prepaid-submit-loader-box {
             background: #fff;
             border-radius: 12px;
             padding: 32px 48px;
@@ -8916,12 +8916,12 @@
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             max-width: 90%;
         }
-        body.cod-submitting {
+        body.prepaid-submitting {
             cursor: progress;
         }
     </style>
-    <div id="codSubmitLoader" class="cod-submit-loader d-none">
-        <div class="cod-submit-loader-box">
+    <div id="codSubmitLoader" class="prepaid-submit-loader d-none">
+        <div class="prepaid-submit-loader-box">
             <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;">
                 <span class="visually-hidden">Loading...</span>
             </div>
@@ -9286,7 +9286,7 @@
         }
 
         // Always send empty service_id to get rates for ALL services
-        fetch('{{ route("admin.cod.ups-rate") }}', {
+        fetch('{{ route("admin.prepaid.ups-rate") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -9626,7 +9626,7 @@
         });
     }
 
-    // ===== COD: SELF static option + country-wise service list (no weight filter) =====
+    // ===== Prepaid: SELF static option + country-wise service list (no weight filter) =====
     window.codEscapeHtml = window.codEscapeHtml || function(str) {
         return String(str ?? '').replace(/[&<>"']/g, function(c) {
             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -9679,7 +9679,7 @@
 
     // Country-wise services (WITHOUT weight filtering). Called as soon as the
     // Delivery Destination changes — e.g. US shows only the UPS services.
-    window.loadCodCountryServices = window.loadCodCountryServices || function() {
+    window.loadPrepaidCountryServices = window.loadPrepaidCountryServices || function() {
         const destSelect = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
         const wrap = document.getElementById('countryServiceWrap');
         const list = document.getElementById('countryServiceList');
@@ -9689,7 +9689,7 @@
         const destId = destSelect.value || '';
         if (!destId) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
         const esc = window.codEscapeHtml;
-        fetch('{{ route("admin.cod.services-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
+        fetch('{{ route("admin.prepaid.services-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(res) { return res.json(); })
@@ -9752,9 +9752,9 @@
         // Country-wise service list (no weight filter) on destination change.
         const destSelect = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
         if (destSelect) {
-            destSelect.addEventListener('change', window.loadCodCountryServices);
-            if (window.jQuery) jQuery(destSelect).on('change', window.loadCodCountryServices);
-            if (destSelect.value) window.loadCodCountryServices();
+            destSelect.addEventListener('change', window.loadPrepaidCountryServices);
+            if (window.jQuery) jQuery(destSelect).on('change', window.loadPrepaidCountryServices);
+            if (destSelect.value) window.loadPrepaidCountryServices();
         }
     });
 
@@ -9894,10 +9894,10 @@
                 ? ($csbForPrefill->bank_account_number ?? '')
                 : '',
         ];
-        $exporterCustomerPrefill = $codCustomers->mapWithKeys(function ($codCustomer) {
-            $kyc = $codCustomer->kycDetail;
-            $csb = $codCustomer->csbForm;
-            $isCsbV = (int) $codCustomer->csb_status === 2;
+        $exporterCustomerPrefill = $prepaidCustomers->mapWithKeys(function ($prepaidCustomer) {
+            $kyc = $prepaidCustomer->kycDetail;
+            $csb = $prepaidCustomer->csbForm;
+            $isCsbV = (int) $prepaidCustomer->csb_status === 2;
 
             $customerGstNumber = collect([
                 $csb?->gst_certificate_number,
@@ -9915,10 +9915,10 @@
                 : ($customerAadharNumber !== '' ? 'Aadhar Card' : ($customerPanNumber !== '' ? 'PAN Card' : ''));
             $customerKycNumber = $customerGstNumber
                 ?: ($customerAadharNumber ?: $customerPanNumber);
-            $customerName = trim(($codCustomer->first_name ?? '') . ' ' . ($codCustomer->last_name ?? ''));
+            $customerName = trim(($prepaidCustomer->first_name ?? '') . ' ' . ($prepaidCustomer->last_name ?? ''));
 
             return [
-                $codCustomer->id => [
+                $prepaidCustomer->id => [
                     'shipper_company_names' => $kyc?->organization_name ?? $customerName,
                     'shipper_contact_person' => $customerName,
                     'shipper_address_line1' => $kyc?->billing_address ?? '',
@@ -9927,8 +9927,8 @@
                     'shipper_pincode' => '',
                     'shipper_city' => '',
                     'shipper_state' => '',
-                    'shipper_phone_number' => $codCustomer->phone_number ?? '',
-                    'shipper_emails' => $codCustomer->email ?? '',
+                    'shipper_phone_number' => $prepaidCustomer->phone_number ?? '',
+                    'shipper_emails' => $prepaidCustomer->email ?? '',
                     'shipper_email_opt_out' => '',
                     'shipper_kyc_type' => $customerKycType,
                     'shipper_kyc_number' => $customerKycNumber,
@@ -10560,7 +10560,7 @@
     <script>
     // Handle form submission
     document.addEventListener('DOMContentLoaded', function() {
-        const forms = document.querySelectorAll('form[action*="create-shipment"], form[action*="cod/create-order"]');
+        const forms = document.querySelectorAll('form[action*="create-shipment"], form[action*="prepaid/create-order"]');
 
         function formatFieldName(field) {
             return field
@@ -11124,15 +11124,15 @@
         });
         // ===== /Preview "Create Now" Button Handler =====
 
-        // ===== COD submit loader =====
+        // ===== Prepaid submit loader =====
         // Shows a fullscreen blocking loader + disables Preview / Create Now
         // buttons while the order request is in flight, so the admin cannot
         // double-submit during the slow UPS + Adomantra API calls. The loader
         // stays until the "Shipment Created!" (or error) popup appears.
-        window.setCodSubmitting = function(isSubmitting) {
+        window.setPrepaidSubmitting = function(isSubmitting) {
             const loader = document.getElementById('codSubmitLoader');
             if (loader) loader.classList.toggle('d-none', !isSubmitting);
-            document.body.classList.toggle('cod-submitting', !!isSubmitting);
+            document.body.classList.toggle('prepaid-submitting', !!isSubmitting);
             const previewBtn = document.getElementById('previewOrderBtn');
             if (previewBtn) {
                 if (isSubmitting) {
@@ -11330,7 +11330,7 @@
                 // Mark in-flight + show fullscreen loader and disable
                 // Preview / Create Now buttons until the request finishes.
                 form.dataset.submitting = '1';
-                if (window.setCodSubmitting) window.setCodSubmitting(true);
+                if (window.setPrepaidSubmitting) window.setPrepaidSubmitting(true);
 
                 // Get selected service_id from rate table radio button (preferred)
                 // or fall back to the old ddp_shipping_method radio
@@ -11467,7 +11467,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                     // Reset button state + hide fullscreen loader (this runs
                     // after the "Shipment Created!"/error popup is shown).
                     form.dataset.submitting = '';
-                    if (window.setCodSubmitting) window.setCodSubmitting(false);
+                    if (window.setPrepaidSubmitting) window.setPrepaidSubmitting(false);
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalText;
                 });
@@ -11539,12 +11539,12 @@ if (rateRadio && rateRadio.dataset.rate) {
     // - Cleared on successful form submit via AJAX
     // ============================================================
     (function() {
-        const STORAGE_KEY = 'create_shipment_form_data';
+        const STORAGE_KEY = 'prepaid_create_order_form_data';
         const HAS_SERVER_OLD_INPUT = @json(session()->hasOldInput());
 
         // Get all form elements in the main create-shipment form
         function getMainForm() {
-            return document.querySelector('form[action*="create-shipment"], form[action*="cod/create-order"]');
+            return document.querySelector('form[action*="create-shipment"], form[action*="prepaid/create-order"]');
         }
 
         // Serialize all form fields (text, select, radio, checkbox, textarea) to a plain object
@@ -12553,7 +12553,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                 return;
             }
 
-            fetch('{{ route("admin.cod.zones-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
+            fetch('{{ route("admin.prepaid.zones-by-destination") }}?destination_id=' + encodeURIComponent(destId), {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
             })
             .then(function(res) { return res.json(); })

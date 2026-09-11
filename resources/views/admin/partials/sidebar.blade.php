@@ -250,6 +250,23 @@
                             </ul>
                         </li>
                         @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('prepaid'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/prepaid/*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-wallet"></i><span>Manage Prepaid</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.prepaid.create-order') }}"
+                                        class="{{ request()->is('admin/prepaid/create-order') ? 'active' : '' }}">Create Prepaid Order</a></li>
+                                <li><a href="{{ route('admin.prepaid.all-orders') }}"
+                                        class="{{ request()->is('admin/prepaid/all-orders') ? 'active' : '' }}">All Prepaid Orders</a></li>
+                            </ul>
+                        </li>
+                        @endif
+
+                        
+
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"

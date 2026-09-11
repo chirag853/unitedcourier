@@ -71,6 +71,11 @@ class Admin extends Authenticatable
                 'icon' => 'ti-cash',
                 'routes' => ['cod/*'],
             ],
+            'prepaid' => [
+                'label' => 'Manage Prepaid',
+                'icon' => 'ti-wallet',
+                'routes' => ['prepaid/*'],
+            ],
             'manage_rate' => [
                 'label' => 'Manage Rate',
                 'icon' => 'ti-currency-rupee',

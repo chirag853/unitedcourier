@@ -1043,6 +1043,15 @@
                                             // so only manifested shipments show a manifest number in All Orders view.
                                             $hideManifestCell = in_array($rowStatus, ['draft', 'ready', 'packed'], true);
 
+                                            // All tabs: COD / FOC / preparing (ready) rows show neither
+                                            // print label nor manifest number - just "-".
+                                            // NOTE: shipment_type must stay in the shipperInfo select list
+                                            // in viewAllShipments(), otherwise it reads null here.
+                                            // Types: 1=general, 2=cod, 3=foc, 4=prepare.
+                                            $shipmentTypeId = (int) ($invoice->shipperInfo?->shipment_type ?? 0);
+                                            $isCodFocShipment = in_array($shipmentTypeId, [2, 3, 4], true) || $invoice->status === 'cod';
+                                            $hideCodFocPrintManifest = $isCodFocShipment || $rowStatus === 'ready';
+
                                             $selectedRate = $invoice->shipperInfo
                                                 ? $invoice->shipperInfo->serviceRate
                                                 : null;
@@ -1054,7 +1063,7 @@
                                                     ? $selectedRate->inclusive_total
                                                     : round((float) $invoice->invoiceItems->sum('amount'), 2));
                                         @endphp
-                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" data-invoice-id="{{ $invoice->id }}" data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}">
+                                        <tr id="invoice-row-{{ $invoice->id }}" data-status="{{ $rowStatus }}" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" data-invoice-id="{{ $invoice->id }}" data-shipment-type="{{ $invoice->shipperInfo?->shipment_type ?? '' }}" data-amount="{{ number_format($shipmentAmount, 2, '.', '') }}">
                                             <td class="text-center sticky-col col-1">
                                                 <input type="checkbox" class="shipment-checkbox bulk-manifest-checkbox" data-shipper-id="{{ $invoice->shipperInfo ? $invoice->shipperInfo->id : '' }}" style="display:none;">
                                             </td>
@@ -1311,7 +1320,7 @@
                                                 @php
                                                     $manifestRow = $invoice->shipperInfo ? $invoice->shipperInfo->manifest : null;
                                                 @endphp
-                                                @if($manifestRow && $manifestRow->manifest_number)
+                                                @if($manifestRow && $manifestRow->manifest_number && empty($hideCodFocPrintManifest))
                                                     <div class="d-inline-flex flex-column align-items-center gap-1">
                                                         <a href="{{ route('customer.manifest-detail', ['manifestNumber' => $manifestRow->manifest_number]) }}"
                                                            target="_blank"
@@ -1356,14 +1365,18 @@
                                                             <i class="ti ti-credit-card" aria-hidden="true"></i>
                                                         </button>
                                                     @elseif($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
-                                                        <button type="button"
-                                                                class="btn btn-sm btn-outline-primary print-label-btn d-inline-flex align-items-center justify-content-center"
-                                                                data-invoice-id="{{ $invoice->id }}"
-                                                                title="Print Label or Invoice"
-                                                                aria-label="Print Label or Invoice"
-                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
-                                                            <i class="ti ti-printer" aria-hidden="true"></i>
-                                                        </button>
+                                                        @if(!empty($hideCodFocPrintManifest))
+                                                            <span class="text-muted" style="font-size:12px;">-</span>
+                                                        @else
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-primary print-label-btn d-inline-flex align-items-center justify-content-center"
+                                                                    data-invoice-id="{{ $invoice->id }}"
+                                                                    title="Print Label or Invoice"
+                                                                    aria-label="Print Label or Invoice"
+                                                                    style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                                <i class="ti ti-printer" aria-hidden="true"></i>
+                                                            </button>
+                                                        @endif
                                                     @endif
                                                     @if($rowStatus === 'packed')
                                                         <button type="button"
@@ -2055,7 +2068,12 @@
         document.getElementById('detailInvoiceCurrency').textContent = data.invoice_currency || '-';
         document.getElementById('detailIncoterms').textContent = data.incoterms || '-';
         document.getElementById('detailReferenceNumber').textContent = data.reference_number || '-';
-        document.getElementById('detailManifestNumber').textContent = data.manifest_number || '-';
+        // COD / FOC / prepare rows never show a manifest number - just "-".
+        // Types: 1=general, 2=cod, 3=foc, 4=prepare.
+        const detailRow = document.querySelector('#invoice-row-' + invoiceId);
+        const detailShipmentType = detailRow ? String(detailRow.dataset.shipmentType || '') : '';
+        const hideDetailManifest = (detailShipmentType === '2' || detailShipmentType === '3' || detailShipmentType === '4');
+        document.getElementById('detailManifestNumber').textContent = hideDetailManifest ? '-' : (data.manifest_number || '-');
         document.getElementById('detailStatus').textContent = data.status || '-';
 
         // Shipper Info
@@ -3666,9 +3684,19 @@
             });
 
             $('#bulkPackedPrintBtn').on('click', function () {
-                const rows = getSelectedRowsByStatus('packed');
+                let rows = getSelectedRowsByStatus('packed');
                 if (!rows.length) {
                     showAlert('warning', 'Please select at least one Packed shipment to print.');
+                    return;
+                }
+
+                // COD / FOC / prepare rows have no printable label - skip them.
+                rows = rows.filter(function () {
+                    const t = String($(this).data('shipment-type') || '');
+                    return t !== '2' && t !== '3' && t !== '4';
+                });
+                if (!rows.length) {
+                    showAlert('warning', 'Selected shipments are COD/FOC/prepare orders. Print label is not available for them.');
                     return;
                 }
 
