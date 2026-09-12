@@ -1043,14 +1043,14 @@
                                             // so only manifested shipments show a manifest number in All Orders view.
                                             $hideManifestCell = in_array($rowStatus, ['draft', 'ready', 'packed'], true);
 
-                                            // All tabs: COD / FOC / preparing (ready) rows show neither
-                                            // print label nor manifest number - just "-".
+                                            // All tabs: COD / FOC / prepare rows (shipment_type 2/3/4)
+                                            // show neither print label nor manifest number - just "-".
                                             // NOTE: shipment_type must stay in the shipperInfo select list
                                             // in viewAllShipments(), otherwise it reads null here.
                                             // Types: 1=general, 2=cod, 3=foc, 4=prepare.
                                             $shipmentTypeId = (int) ($invoice->shipperInfo?->shipment_type ?? 0);
                                             $isCodFocShipment = in_array($shipmentTypeId, [2, 3, 4], true) || $invoice->status === 'cod';
-                                            $hideCodFocPrintManifest = $isCodFocShipment || $rowStatus === 'ready';
+                                            $hideCodFocPrintManifest = $isCodFocShipment;
 
                                             $selectedRate = $invoice->shipperInfo
                                                 ? $invoice->shipperInfo->serviceRate

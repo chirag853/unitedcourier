@@ -1269,6 +1269,75 @@ class AdminController extends Controller
      * - Ship Global (response_status_description = "Ship Global order created"): Extract pdf_base64 → PDF
      * Fallback: Generate label via Dompdf if no tracking record exists.
      */
+    /**
+     * Resolve a stored carrier label into base64 PDF bytes.
+     *
+     * Accepts either a carrier-hosted label URL (downloaded server-side) or
+     * an already-base64-encoded payload. Images are wrapped into a PDF so
+     * the print modal always receives a PDF. Returns null when the value
+     * cannot be turned into a PDF (caller falls back to the Dompdf label).
+     */
+    private function fetchCarrierLabelPdf($value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+        if ($value === '' || strlen($value) > 6 * 1024 * 1024) {
+            return null;
+        }
+
+        // Carrier-hosted URL: download it (http/https only, 30s cap, 5MB cap).
+        if (preg_match('#^https?://#i', $value)) {
+            try {
+                $response = Http::timeout(30)->get($value);
+                if (! $response->successful()) {
+                    return null;
+                }
+                $body = (string) $response->body();
+                if ($body === '' || strlen($body) > 5 * 1024 * 1024) {
+                    return null;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Carrier label download failed: '.$e->getMessage());
+
+                return null;
+            }
+        } else {
+            // Assume base64 payload.
+            $body = base64_decode($value, true);
+            if ($body === false || $body === '') {
+                return null;
+            }
+        }
+
+        // Already a PDF — return base64 as-is.
+        if (str_starts_with($body, '%PDF-')) {
+            return base64_encode($body);
+        }
+
+        // Common image formats — embed into a PDF like the UPS GIF path.
+        $mimeType = null;
+        if (str_starts_with($body, "\x89PNG")) {
+            $mimeType = 'image/png';
+        } elseif (str_starts_with($body, 'GIF8')) {
+            $mimeType = 'image/gif';
+        } elseif (str_starts_with($body, "\xFF\xD8\xFF")) {
+            $mimeType = 'image/jpeg';
+        }
+
+        if ($mimeType === null) {
+            return null;
+        }
+
+        $html = '<html><body style="margin:0;padding:0;"><img src="data:'.$mimeType.';base64,'.base64_encode($body).'" style="width:100%;height:auto;"></body></html>';
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
+        $pdf->setPaper([0, 0, 400, 600], 'portrait');
+
+        return base64_encode($pdf->output());
+    }
+
     public function generateLabel(Request $request)
     {
         try {
@@ -1291,80 +1360,118 @@ class AdminController extends Controller
             // Look up shipment_tracking record for this shipper
             $trackingRecord = \App\Models\ShipmentTracking::where('shipper_id', $shipperId)->first();
 
-            // Try to extract label from shipment_tracking raw_response
+            // Try to extract label from shipment_tracking raw_response.
+            // Every stored carrier format is attempted in order, so the print
+            // button always returns the actual carrier label saved in
+            // shipment_tracking (Dompdf fallback only when none is stored).
             if ($trackingRecord && $trackingRecord->raw_response) {
                 $rawResponse = $trackingRecord->raw_response;
                 $statusDescription = $trackingRecord->response_status_description;
                 $pdfBase64 = null;
 
-                // UPS case: response_status_description contains "success"
-                if (stripos($statusDescription, 'success') !== false) {
-                    // Extract GraphicImage from raw_response
-                    $packageResults = null;
+                $packageResults = null;
 
-                    // Try ShipmentResults.PackageResults path in raw_response
-                    if (isset($rawResponse['ShipmentResults']['PackageResults'])) {
-                        $packageResults = $rawResponse['ShipmentResults']['PackageResults'];
-                    } elseif (isset($rawResponse['PackageResults'])) {
-                        $packageResults = $rawResponse['PackageResults'];
-                    } elseif ($trackingRecord->package_results) {
-                        $packageResults = $trackingRecord->package_results;
+                // Try ShipmentResults.PackageResults path in raw_response
+                if (isset($rawResponse['ShipmentResults']['PackageResults'])) {
+                    $packageResults = $rawResponse['ShipmentResults']['PackageResults'];
+                } elseif (isset($rawResponse['PackageResults'])) {
+                    $packageResults = $rawResponse['PackageResults'];
+                } elseif ($trackingRecord->package_results) {
+                    $packageResults = $trackingRecord->package_results;
+                }
+
+                $firstPkg = is_array($packageResults) && isset($packageResults[0]) ? $packageResults[0] : $packageResults;
+
+                // Attempt 1: UPS GraphicImage (newer UPS Ship API + older formats).
+                if ($firstPkg) {
+                    $graphicImage = null;
+                    $labelFormat = null;
+
+                    // Try ShippingLabel key (newer UPS Ship API format)
+                    if (isset($firstPkg['ShippingLabel'])) {
+                        $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                        $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+                    } elseif (isset($firstPkg['LabelImage'])) {
+                        // Older/different UPS response format
+                        $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                        $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
                     }
 
-                    if ($packageResults) {
-                        $firstPkg = is_array($packageResults) && isset($packageResults[0]) ? $packageResults[0] : $packageResults;
+                    if ($graphicImage) {
+                        if ($labelFormat === 'PDF') {
+                            // GraphicImage is already base64-encoded PDF — return directly
+                            $pdfBase64 = $graphicImage;
+                        } else {
+                            // GraphicImage is base64-encoded image (GIF/SPL/EPL etc.)
+                            // Convert to PDF by embedding the image in a Dompdf HTML template
+                            $mimeType = strtolower($labelFormat);
+                            // Map common UPS format codes to MIME types
+                            $mimeMap = [
+                                'gif'  => 'image/gif',
+                                'png'  => 'image/png',
+                                'jpg'  => 'image/jpeg',
+                                'jpeg' => 'image/jpeg',
+                                'pdf'  => 'application/pdf',
+                                'spl'  => 'application/pdf',
+                                'epl'  => 'application/pdf',
+                                'zpl'  => 'application/pdf',
+                            ];
+                            $mimeType = $mimeMap[$mimeType] ?? 'image/gif';
 
-                        $graphicImage = null;
-                        $labelFormat = null;
+                            $imageBase64Src = 'data:' . $mimeType . ';base64,' . $graphicImage;
 
-                        // Try ShippingLabel key (newer UPS Ship API format)
-                        if (isset($firstPkg['ShippingLabel'])) {
-                            $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
-                            $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
-                        } elseif (isset($firstPkg['LabelImage'])) {
-                            // Older/different UPS response format
-                            $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
-                            $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
-                        }
-
-                        if ($graphicImage) {
-                            if ($labelFormat === 'PDF') {
-                                // GraphicImage is already base64-encoded PDF — return directly
-                                $pdfBase64 = $graphicImage;
-                            } else {
-                                // GraphicImage is base64-encoded image (GIF/SPL/EPL etc.)
-                                // Convert to PDF by embedding the image in a Dompdf HTML template
-                                $mimeType = strtolower($labelFormat);
-                                // Map common UPS format codes to MIME types
-                                $mimeMap = [
-                                    'gif'  => 'image/gif',
-                                    'png'  => 'image/png',
-                                    'jpg'  => 'image/jpeg',
-                                    'jpeg' => 'image/jpeg',
-                                    'pdf'  => 'application/pdf',
-                                    'spl'  => 'application/pdf',
-                                    'epl'  => 'application/pdf',
-                                    'zpl'  => 'application/pdf',
-                                ];
-                                $mimeType = $mimeMap[$mimeType] ?? 'image/gif';
-
-                                $imageBase64Src = 'data:' . $mimeType . ';base64,' . $graphicImage;
-
-                                $html = '<html><body style="margin:0;padding:0;"><img src="' . $imageBase64Src . '" style="width:100%;height:auto;"></body></html>';
-                                $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
-                                $pdf->setPaper([0, 0, 400, 600], 'portrait');
-                                $pdfBase64 = base64_encode($pdf->output());
-                            }
+                            $html = '<html><body style="margin:0;padding:0;"><img src="' . $imageBase64Src . '" style="width:100%;height:auto;"></body></html>';
+                            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
+                            $pdf->setPaper([0, 0, 400, 600], 'portrait');
+                            $pdfBase64 = base64_encode($pdf->output());
                         }
                     }
                 }
-                // Ship Global case: response_status_description = "Ship Global order created"
-                elseif (stripos($statusDescription, 'Ship Global') !== false) {
-                    // Extract pdf_base64 from raw_response
+
+                // Attempt 2: Ship Global pdf_base64.
+                if (empty($pdfBase64)) {
                     if (isset($rawResponse['data']['pdf_base64'])) {
                         $pdfBase64 = $rawResponse['data']['pdf_base64'];
                     } elseif (isset($rawResponse['pdf_base64'])) {
                         $pdfBase64 = $rawResponse['pdf_base64'];
+                    }
+                }
+
+                // Attempt 3: Direct carrier label URL
+                // (Overseas / PostShipping / Flying Tigers store LabelURL;
+                // Overseas also stores the 4x6 BoxLabelURL, preferred first).
+                // BoxLabelURL is also read straight from raw_response so
+                // orders created before BoxLabelURL storage (or with an
+                // unreadable package_results value) still print 4x6.
+                if (empty($pdfBase64)) {
+                    $labelUrl = null;
+                    if (is_array($firstPkg)) {
+                        $labelUrl = $firstPkg['BoxLabelURL'] ?? null;
+                    }
+                    if (empty($labelUrl) && is_array($rawResponse)) {
+                        foreach (['Data', 'data'] as $dataKey) {
+                            $awbBlock = $rawResponse[$dataKey]['Airwaybill'] ?? null;
+                            if (is_array($awbBlock)) {
+                                $labelUrl = $awbBlock['BoxlabelUrl'] ?? $awbBlock['BoxLabelURL'] ?? null;
+                                if (! empty($labelUrl)) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (empty($labelUrl) && is_array($firstPkg)) {
+                        $labelUrl = $firstPkg['LabelURL'] ?? null;
+                    }
+                    if ($labelUrl) {
+                        $pdfBase64 = $this->fetchCarrierLabelPdf($labelUrl);
+                    }
+                }
+
+                // Attempt 4: Base64 PDF stored directly (Primus stores PDF).
+                if (empty($pdfBase64)) {
+                    $storedPdf = is_array($firstPkg) ? ($firstPkg['PDF'] ?? null) : null;
+                    if (is_string($storedPdf) && $storedPdf !== '') {
+                        $pdfBase64 = $this->fetchCarrierLabelPdf($storedPdf);
                     }
                 }
 

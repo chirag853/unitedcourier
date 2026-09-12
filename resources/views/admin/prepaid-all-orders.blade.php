@@ -455,11 +455,11 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-md">
-                    <a href="{{ route('admin.prepaid.all-orders', ['type' => 'delivered']) }}" class="cod-count-card bg-white w-100">
+                    <a href="{{ route('admin.prepaid.all-orders', ['type' => 'prepaid_close']) }}" class="cod-count-card bg-white w-100">
                         <div class="cod-count-icon bg-info bg-opacity-10 text-info"><i class="ti ti-truck"></i></div>
                         <div>
-                            <div class="cod-count-num">{{ $counts['delivered'] ?? 0 }}</div>
-                            <div class="cod-count-label">Delivered</div>
+                            <div class="cod-count-num">{{ $counts['prepaid_close'] ?? $counts['delivered'] ?? 0 }}</div>
+                            <div class="cod-count-label">Prepaid Close</div>
                         </div>
                     </a>
                 </div>
@@ -504,7 +504,8 @@
                                             'manifested' => 'badge bg-secondary',
                                             'cod' => 'badge bg-success',
                                             'cancelled' => 'badge bg-danger',
-                                            'delivered' => 'badge bg-success',
+                                            'delivered' => 'badge bg-dark',
+                                            'prepaid_close' => 'badge bg-dark',
                                             'cod_close' => 'badge bg-dark',
                                         ];
                                         $statusLabelMap = [
@@ -512,7 +513,8 @@
                                             'manifested' => 'Manifested',
                                             'cod' => 'COD Collected',
                                             'cancelled' => 'Cancelled',
-                                            'delivered' => 'Delivered',
+                                            'delivered' => 'Prepaid Close',
+                                            'prepaid_close' => 'Prepaid Close',
                                             'cod_close' => 'COD Closed',
                                         ];
                                     @endphp

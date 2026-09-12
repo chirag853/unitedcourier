@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Models\Admin;
 use App\Models\BillTo;
@@ -28,8 +30,12 @@ use App\Models\ShipmentTracking;
 use App\Models\ShipperInfo;
 use App\Models\SurCharge;
 use App\Models\Tracking;
+use App\Models\Wallet;
+use App\Models\WalletTransaction;
 use App\Models\Zone;
 use App\Services\AdomantraApiClient;
+use App\Services\PrimusShipmentService;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PrepaidController extends Controller
 {
@@ -44,11 +50,8 @@ class PrepaidController extends Controller
     {
         $customer = null;
         $csbForm = null;
-        // Only enabled UPS services (api_provider = 'UPS') are offered on
-        // the admin Prepaid create-order page.
-        $courierServices = CourierService::where('status', 1)
-            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
-            ->get();
+        // All enabled services are offered (same as customer create-shipment).
+        $courierServices = CourierService::where('status', 1)->get();
         // The same zone (name + code) is stored once per service, so the raw
         // query returns duplicates. Deduplicate here so the initial consignee
         // state dropdown does not show the same state/zipcode multiple times.
@@ -61,12 +64,19 @@ class PrepaidController extends Controller
         $destinations = Destination::where('is_active', true)->orderBy('name')->get();
         $canCreateShipment = true;
         // Customers with an approved KYC and an active status can be selected as
-        // the Prepaid order shipper. Each entry shows whether the customer is CSB 4
-        // (csb_status = 1) or CSB 5 (csb_status = 2).
+        // the Prepaid order shipper. Only customers recharged in cash
+        // (wallet_transactions.recharge_type = 'cash') are listed. Each entry
+        // shows whether the customer is CSB 4 (csb_status = 1) or CSB 5 (csb_status = 2).
         $prepaidCustomers = Customer::query()
             ->where('status', 1)
             ->whereHas('kycDetail', function ($query) {
                 $query->where('kyc_status', 'approved');
+            })
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('wallet_transactions')
+                    ->whereColumn('wallet_transactions.customer_id', 'customers.id')
+                    ->whereRaw('LOWER(wallet_transactions.recharge_type) = ?', ['cash']);
             })
             ->with(['kycDetail', 'csbForm'])
             ->orderBy('first_name')
@@ -513,13 +523,16 @@ class PrepaidController extends Controller
                 }
             }
 
-            // Resolve the selected rate from server-owned records. The admin flow
-            // uses the shared default rates only (customer_id = 0).
+            // Resolve the selected rate from server-owned records. Like the
+            // customer create-shipment page, the exporter's own rates are
+            // accepted first, then the shared default rates (customer_id = 0).
             // Skipped for SELF (zero price, no courier rate row).
+            $exporterCustomerId = (int) ($validatedData['selected_exporter_customer_id'] ?? 0);
+            $rateOwnerIds = $exporterCustomerId > 0 ? [$exporterCustomerId, 0] : [0];
             $courierRate = null;
             if (! $isSelfService && ! empty($validatedData['service_rate_id'])) {
                 $courierRate = CourierRate::whereKey((int) $validatedData['service_rate_id'])
-                    ->whereIn('customer_id', [0])
+                    ->whereIn('customer_id', $rateOwnerIds)
                     ->with('service')
                     ->first();
 
@@ -542,18 +555,9 @@ class PrepaidController extends Controller
                 }
             }
 
-            // Prepaid create-order allows only UPS services (api_provider = 'UPS').
-            // SELF is allowed (static frontend-only option, no service row).
-            if (! $isSelfService && $serviceId) {
-                $checkService = ($courierService && (int) $courierService->id === (int) $serviceId)
-                    ? $courierService
-                    : CourierService::find($serviceId);
-                if ($checkService && strtolower(trim((string) $checkService->api_provider)) !== 'ups') {
-                    throw ValidationException::withMessages([
-                        'service_id' => 'Only UPS services are allowed on the Prepaid create-order page.',
-                    ]);
-                }
-            }
+            // Any enabled courier service may be selected (same as the
+            // customer create-shipment page). SELF is allowed (static
+            // frontend-only option, no service row).
 
             // ------------------------------------------------------------
             // SHIPPER STATE — MAX 2 WORDS VALIDATION
@@ -694,7 +698,10 @@ class PrepaidController extends Controller
                     (float) ($packageData['volumetric_weight'] ?? 0),
                     (float) ($packageData['chargeable_weight'] ?? 0)
                 );
-                $boxRate = $findBoxRate(0, $chargeableWeight)
+                // Exporter's own rate band first (same as create-shipment),
+                // then the shared default band.
+                $boxRate = ($exporterCustomerId > 0 ? $findBoxRate($exporterCustomerId, $chargeableWeight) : null)
+                    ?: $findBoxRate(0, $chargeableWeight)
                     ?: $courierRate;
 
                 if (! $boxRate) {
@@ -769,7 +776,7 @@ class PrepaidController extends Controller
                 'total_surcharge' => $surchargeTotal,
                 'total_price' => $totalPrice,
                 'status' => 'received',
-                'shipment_type' => 5,
+                'shipment_type' => 4,
             ]);
 
             $shipperId = $shipper->id;
@@ -984,12 +991,14 @@ class PrepaidController extends Controller
             );
 
             // ============================================================
-            // Carrier API call (UPS Ship API) at creation time.
-            // The Prepaid flow only offers UPS courier services, so the selected
-            // service's carrier API is called right here — while the DB
+            // Carrier API call at creation time (Create Now button).
+            // The SELECTED service's own carrier API is booked — same
+            // per-service routing as manifest-time in the customer flow
+            // (shipuniversal / primus / overseas / postshipping /
+            // flyingtigers / shipglobal / UPS default) — while the DB
             // transaction is still open. The shipment is only committed if
-            // the carrier accepts it; otherwise everything rolls back and the
-            // UPS error (with raw response) is surfaced to the admin.
+            // the carrier accepts it; otherwise everything rolls back and
+            // the carrier error is surfaced to the admin.
             // Skipped entirely for SELF (static option): no carrier accepts
             // it, the order is saved with zero price and the generated AWB.
             // ============================================================
@@ -997,69 +1006,21 @@ class PrepaidController extends Controller
             $shipmentResponse = null;
             $adomantraResponse = null;
             if (! $isSelfService) {
-            $upsPayloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                $carrierResult = $this->bookPrepaidCarrierAtCreation($shipper, (int) $admin->id);
 
-            if (! $upsPayloadResult['success']) {
-                Log::error('Prepaid order: failed to build UPS payload.', [
-                    'awb_number' => $awbNumber,
-                    'message' => $upsPayloadResult['message'] ?? 'Unknown error',
-                ]);
-                throw new \RuntimeException($upsPayloadResult['message'] ?? 'Unable to build the UPS shipment payload.');
+                if (empty($carrierResult['success'])) {
+                    $carrierErrorRaw = $carrierResult['rawResponse'] ?? null;
+
+                    throw new \RuntimeException(
+                        $carrierResult['message'] ?? 'Carrier booking failed.'
+                    );
+                }
+
+                $carrierTrackingNumber = $carrierResult['tracking_number'] ?? null;
+                $shipmentResponse = $carrierResult['shipment_response'] ?? null;
             }
 
-            $upsResult = $this->callUpsShipApiInternal($upsPayloadResult['payload']);
-
-            if (! $upsResult['success']) {
-                Log::error('Prepaid order rejected by UPS Ship API.', [
-                    'awb_number' => $awbNumber,
-                    'message' => $upsResult['message'] ?? 'Unknown UPS error',
-                    'raw_response' => $upsResult['rawResponse'] ?? null,
-                ]);
-
-                $carrierErrorRaw = $upsResult['rawResponse'] ?? null;
-
-                throw new \RuntimeException(
-                    'UPS Shipment Failed: '.($upsResult['message'] ?? 'Unknown UPS error')
-                );
-            }
-
-            // UPS accepted the shipment — persist the carrier tracking data
-            // so the Prepaid order carries the real UPS tracking number.
-            $shipmentResponse = $upsResult['shipmentResponse'];
-            $carrierTrackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
-                ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
-                ?? null;
-
-            ShipmentTracking::updateOrCreate(
-                ['shipper_id' => $shipper->id],
-                [
-                    'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
-                    'create_shipment_id' => $createShipment->id,
-                    'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
-                    'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
-                    'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
-                    'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
-                    'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
-                    'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
-                    'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
-                    'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
-                    'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
-                    'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
-                    'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
-                    'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
-                    'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
-                    'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
-                    'raw_response' => $shipmentResponse,
-                    'status' => 'created',
-                ]
-            );
-
-            Log::info('Prepaid order accepted by UPS Ship API.', [
-                'admin_id' => $admin->id,
-                'awb_number' => $awbNumber,
-                'carrier_tracking_number' => $carrierTrackingNumber,
-            ]);
-
+            if (! $isSelfService) {
             $adomantraPayload = $this->buildAdomantraOrderPayload(
                 $validatedData,
                 $admin,
@@ -1081,6 +1042,11 @@ class PrepaidController extends Controller
 
             $adomantraResponse = $adomantra->createOrder($adomantraPayload);
 
+            $this->logPrepaidApiCall('adomantra', $adomantraPayload, $adomantraResponse, [
+                'stage' => 'response',
+                'admin_id' => $admin->id,
+                'awb_number' => $awbNumber,
+            ]);
             Log::info('Adomantra Prepaid order created.', [
                 'admin_id' => $admin->id,
                 'awb_number' => $awbNumber,
@@ -1090,6 +1056,23 @@ class PrepaidController extends Controller
                     'admin_id' => $admin->id,
                     'awb_number' => $awbNumber,
                 ]);
+            }
+
+            // Every prepaid order keeps a shipment_tracking row (UPS bookings
+            // fill in the carrier response via updateOrCreate above; SELF and
+            // non-UPS orders keep this base row) so tracking/label lookups
+            // always find one. customer_id is NOT NULL + FK constrained, so a
+            // row is only possible when an exporter customer was selected.
+            $trackingCustomerId = $validatedData['selected_exporter_customer_id'] ?? $shipper->customer_id ?? null;
+            if ($trackingCustomerId) {
+                ShipmentTracking::firstOrCreate(
+                    ['shipper_id' => $shipper->id],
+                    [
+                        'customer_id' => $trackingCustomerId,
+                        'create_shipment_id' => $createShipment->id,
+                        'status' => 'created',
+                    ]
+                );
             }
 
             DB::commit();
@@ -1221,7 +1204,7 @@ class PrepaidController extends Controller
     {
         $type = $request->query('type', $request->query('status', 'all'));
 
-        $isDeliveredView = $type === 'delivered';
+        $isClosedView = in_array($type, ['prepaid_close', 'delivered'], true);
 
         $withRelations = [
             'shipperInfo.consigneeInfo',
@@ -1234,14 +1217,15 @@ class PrepaidController extends Controller
         // Main list query - always scoped to Prepaid (shipment_type = 5).
         $query = ShipmentInvoice::with($withRelations);
 
-        if ($isDeliveredView) {
-            // Delivered tile: prepaid orders with shipper_info.status = delivered.
+        if ($isClosedView) {
+            // Prepaid Close tile: prepaid orders closed via Close button (status = prepaid_close).
+            // 'delivered' ko BC ke liye rakha hai + purane close orders (jo delivered me save the) bhi dikhen.
             $query->whereHas('shipperInfo', function ($shipper) {
-                $shipper->where('shipment_type', 5)->where('status', 'delivered');
+                $shipper->where('shipment_type', 4)->whereIn('status', ['prepaid_close', 'delivered']);
             });
         } else {
             $query->whereHas('shipperInfo', function ($shipper) {
-                $shipper->where('shipment_type', 5);
+                $shipper->where('shipment_type', 4);
             });
 
             // 'all' aur 'prepaid' me koi extra filter nahi
@@ -1255,19 +1239,19 @@ class PrepaidController extends Controller
         $invoices = $query->orderBy('created_at', 'desc')->paginate(25)->withQueryString();
 
         $allPrepaid = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 5);
+            $shipper->where('shipment_type', 4);
         })->count();
 
         $draftCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 5)->where('status', 'draft');
+            $shipper->where('shipment_type', 4)->where('status', 'draft');
         })->count();
 
         $manifestedCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 5)->where('status', 'manifested');
+            $shipper->where('shipment_type', 4)->where('status', 'manifested');
         })->count();
 
         $deliveredCount = ShipmentInvoice::whereHas('shipperInfo', function ($shipper) {
-            $shipper->where('shipment_type', 5)->where('status', 'delivered');
+            $shipper->where('shipment_type', 4)->whereIn('status', ['prepaid_close', 'delivered']);
         })->count();
 
         $counts = [
@@ -1275,6 +1259,7 @@ class PrepaidController extends Controller
             'draft' => $draftCount,
             'manifested' => $manifestedCount,
             'prepaid' => $allPrepaid,
+            'prepaid_close' => $deliveredCount,
             'delivered' => $deliveredCount,
         ];
 
@@ -1472,7 +1457,7 @@ class PrepaidController extends Controller
 
     /**
      * Close Order modal se Prepaid order close karo.
-     * shipment_type = 5 rehta hai, status = delivered. Remark finance_remark me save hota hai.
+     * shipment_type = 4 rehta hai, status = prepaid_close. Remark finance_remark me save hota hai.
      */
     public function prepaidCloseOrder(Request $request)
     {
@@ -1487,8 +1472,8 @@ class PrepaidController extends Controller
 
         $shipper = ShipperInfo::findOrFail($shipperId);
 
-        $shipper->shipment_type = 5;
-        $shipper->status = 'delivered';
+        $shipper->shipment_type = 4;
+        $shipper->status = 'prepaid_close';
         $shipper->save();
 
         $remark = trim((string) ($validated['remark'] ?? ''));
@@ -1505,7 +1490,7 @@ class PrepaidController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Order closed as DELIVERED',
+            'message' => 'Order closed as PREPAID_CLOSE',
             'shipment_type' => $shipper->shipment_type,
         ]);
     }
@@ -1946,6 +1931,105 @@ class PrepaidController extends Controller
     }
 
     /**
+     * Country code => known name variants (ISO codes, display names, aliases).
+     *
+     * courier_services.country stores a MIX of both (e.g. 'DE' and 'Germany',
+     * 'US' and 'USA'), so country-wise matching must accept every variant of
+     * the selected destination — otherwise that country's services never show.
+     */
+    private function prepaidCountryVariantMap(): array
+    {
+        return [
+            'US' => ['USA', 'UNITED STATES', 'UNITED STATES OF AMERICA', 'US- UNITED STATE OF AMERICA'],
+            'UK' => ['GB', 'UNITED KINGDOM', 'GREAT BRITAIN', 'UK - UNITED KINGDOM'],
+            'CA' => ['CANADA'],
+            'AUS' => ['AU', 'AUSTRALIA'],
+            'UAE' => ['AE', 'ARE', 'UNITED ARAB EMIRATES', 'DUBAI'],
+            'NZ' => ['NZL', 'NEW ZEALAND'],
+            'SG' => ['SGP', 'SINGAPORE'],
+            'MY' => ['MYS', 'MALAYSIA'],
+            'DE' => ['DEU', 'GERMANY'],
+            'BD' => ['BGD', 'BANGLADESH'],
+            'ZW' => ['ZWE', 'ZIMBABWE'],
+        ];
+    }
+
+    /**
+     * Canonical country code for any known variant (case-insensitive).
+     * Unknown values pass through unchanged.
+     */
+    private function canonicalPrepaidCountry($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $upper = strtoupper(trim((string) $value));
+        if ($upper === '') {
+            return null;
+        }
+
+        foreach ($this->prepaidCountryVariantMap() as $code => $variants) {
+            if ($upper === $code) {
+                return $code;
+            }
+            foreach ($variants as $variant) {
+                if ($upper === $variant) {
+                    return $code;
+                }
+            }
+        }
+
+        return trim((string) $value);
+    }
+
+    /**
+     * Every courier_services.country value that belongs to the selected
+     * destination (canonical code + destination record fields + variants),
+     * for country-wise service/rate matching.
+     */
+    private function prepaidCountryAliases($destinationCountry, $destination = null): array
+    {
+        $aliases = [];
+
+        if ($destination) {
+            foreach (['country_code', 'code', 'name'] as $attr) {
+                $value = trim((string) ($destination->{$attr} ?? ''));
+                if ($value !== '') {
+                    $aliases[] = $value;
+                }
+            }
+        }
+
+        if ($destinationCountry !== null && trim((string) $destinationCountry) !== '') {
+            $aliases[] = trim((string) $destinationCountry);
+        }
+
+        $map = $this->prepaidCountryVariantMap();
+        $expanded = $aliases;
+        foreach ($aliases as $alias) {
+            $canonical = $this->canonicalPrepaidCountry($alias);
+            if ($canonical !== null) {
+                $expanded[] = $canonical;
+                foreach ($map[$canonical] ?? [] as $variant) {
+                    $expanded[] = $variant;
+                }
+            }
+        }
+
+        // Unique case-insensitively (MySQL matching is case-insensitive anyway).
+        $unique = [];
+        foreach ($expanded as $value) {
+            $key = strtolower(trim((string) $value));
+            if ($key !== '' && ! isset($unique[$key])) {
+                $unique[$key] = trim((string) $value);
+            }
+        }
+
+        return array_values($unique);
+    }
+
+    /**
      * Determine if a shipping method should be routed to the Flying Tigers API.
      * Triggered for UNITED ECO POST shipments.
      *
@@ -2096,19 +2180,39 @@ class PrepaidController extends Controller
     }
 
     /**
-     * In-memory version of findPrepaidBoxRate(): matches one box weight against
-     * PRELOADED rate rows (same zone scope + weight-band rules, same ordering).
+     * In-memory box matcher (same rules as create-shipment's getUpsRate()):
+     * exact weight-band match, exporter's own rates first, then the shared
+     * default rates (customer_id = 0). Same zone scope + ordering as the
+     * customer SQL (zone_no DESC, wt_range_start).
      *
      * Lets prepaidUpsRate() serve every service x every box from a single bulk
      * query instead of 2 SQL queries per box per service.
      *
      * @param  array  $serviceRates  Raw courier_rates rows (stdClass) for one service.
-     * @return array  [rateRow|null, isFallback]
+     * @return array  [rateRow|null, isFallback(always false, kept for shape)]
      */
-    private function matchPrepaidBoxRate(array $serviceRates, $zoneNumber, float $weight): array
+    private function matchPrepaidBoxRate(array $serviceRates, $zoneNumber, float $weight, int $rateCustomerId = 0): array
     {
-        $exactCandidates = [];
-        $zoneCandidates = [];
+        $exactCustomer = [];
+        $exactDefault = [];
+
+        $sortExact = function ($a, $b) {
+            // Same as SQL: ORDER BY cr.zone_no DESC, cr.wt_range_start
+            // (NULL sorts last in DESC, matching MySQL behaviour).
+            // Trailing id tie-break keeps the pick deterministic where the
+            // old SQL had no defined order (fully tied rows).
+            $zoneA = ($a->zone_no ?? null) === null ? -1 : (int) $a->zone_no;
+            $zoneB = ($b->zone_no ?? null) === null ? -1 : (int) $b->zone_no;
+            if ($zoneA !== $zoneB) {
+                return $zoneB <=> $zoneA;
+            }
+            $startCmp = (float) ($a->wt_range_start ?? 0) <=> (float) ($b->wt_range_start ?? 0);
+            if ($startCmp !== 0) {
+                return $startCmp;
+            }
+
+            return (int) ($a->id ?? 0) <=> (int) ($b->id ?? 0);
+        };
 
         foreach ($serviceRates as $row) {
             $zoneNo = $row->zone_no ?? null;
@@ -2120,74 +2224,29 @@ class PrepaidController extends Controller
                 continue;
             }
 
-            $zoneCandidates[] = $row;
-
             $start = (float) ($row->wt_range_start ?? 0);
             $end = (float) ($row->wt_range_end ?? 0);
-            if ($weight >= $start && $weight <= $end) {
-                $exactCandidates[] = $row;
+            if ($weight < $start || $weight > $end) {
+                continue;
+            }
+
+            if ($rateCustomerId > 0 && (int) ($row->customer_id ?? 0) === $rateCustomerId) {
+                $exactCustomer[] = $row;
+            } elseif ((int) ($row->customer_id ?? 0) === 0) {
+                $exactDefault[] = $row;
             }
         }
 
-        if (! empty($exactCandidates)) {
-            // Same as SQL: ORDER BY cr.zone_no DESC, cr.wt_range_start
-            // (NULL sorts last in DESC, matching MySQL behaviour).
-            // Trailing id tie-break keeps the pick deterministic where the
-            // old SQL had no defined order (fully tied rows).
-            usort($exactCandidates, function ($a, $b) {
-                $zoneA = ($a->zone_no ?? null) === null ? -1 : (int) $a->zone_no;
-                $zoneB = ($b->zone_no ?? null) === null ? -1 : (int) $b->zone_no;
-                if ($zoneA !== $zoneB) {
-                    return $zoneB <=> $zoneA;
-                }
-                $startCmp = (float) ($a->wt_range_start ?? 0) <=> (float) ($b->wt_range_start ?? 0);
-                if ($startCmp !== 0) {
-                    return $startCmp;
-                }
+        if (! empty($exactCustomer)) {
+            usort($exactCustomer, $sortExact);
 
-                return (int) ($a->id ?? 0) <=> (int) ($b->id ?? 0);
-            });
-
-            return [$exactCandidates[0], false];
+            return [$exactCustomer[0], false];
         }
 
-        if (! empty($zoneCandidates)) {
-            // Same as SQL: ORDER BY LEAST(ABS(w - start), ABS(w - end)), wt_range_start.
-            // The old SQL had no defined order for fully tied rows (e.g. the
-            // same band configured under both zone_no = 0 and a specific
-            // zone) — MySQL returned either row unpredictably. Tie-break here
-            // deterministically towards the zone-specific row (consistent with
-            // the exact-match zone_no DESC preference), then by id.
-            usort($zoneCandidates, function ($a, $b) use ($weight, $zoneNumber) {
-                $distA = min(
-                    abs($weight - (float) ($a->wt_range_start ?? 0)),
-                    abs($weight - (float) ($a->wt_range_end ?? 0))
-                );
-                $distB = min(
-                    abs($weight - (float) ($b->wt_range_start ?? 0)),
-                    abs($weight - (float) ($b->wt_range_end ?? 0))
-                );
-                if ($distA != $distB) {
-                    return $distA <=> $distB;
-                }
-                $startCmp = (float) ($a->wt_range_start ?? 0) <=> (float) ($b->wt_range_start ?? 0);
-                if ($startCmp !== 0) {
-                    return $startCmp;
-                }
-                $rankA = ($a->zone_no ?? null) === null
-                    ? 0
-                    : (($zoneNumber !== null && (int) $a->zone_no === (int) $zoneNumber) ? 2 : 1);
-                $rankB = ($b->zone_no ?? null) === null
-                    ? 0
-                    : (($zoneNumber !== null && (int) $b->zone_no === (int) $zoneNumber) ? 2 : 1);
-                if ($rankA !== $rankB) {
-                    return $rankB <=> $rankA;
-                }
+        if (! empty($exactDefault)) {
+            usort($exactDefault, $sortExact);
 
-                return (int) ($a->id ?? 0) <=> (int) ($b->id ?? 0);
-            });
-
-            return [$zoneCandidates[0], true];
+            return [$exactDefault[0], false];
         }
 
         return [null, false];
@@ -2199,8 +2258,8 @@ class PrepaidController extends Controller
      * Mirrors CustomerController::getUpsRate() exactly (same box-wise
      * calculation, zone resolution and response shape) with these admin
      * differences:
-     *   - uses the logged-in admin for customer_name
-     *   - customer_exists is always false (default rates only, customer_id = 0)
+     *   - rates use the selected exporter customer's own rates first
+     *     (like create-shipment), falling back to default rates
      *   - the response key is `zone` (not `selected_zone`) because the admin
      *     blade reads data.zone
      */
@@ -2216,13 +2275,23 @@ class PrepaidController extends Controller
         $consigneeZipCode = $request->consignee_zip_code;
         $deliveryDestination = $request->delivery_destination;
         $packageWeights = $request->package_weights;
+        // Selected exporter customer: their own rates apply first (same as
+        // create-shipment), shared default rates (customer_id = 0) otherwise.
+        $rateCustomerId = (int) ($request->input('selected_exporter_customer_id') ?? 0);
+        $rateCustomerIds = $rateCustomerId > 0 ? [$rateCustomerId, 0] : [0];
+        $rateCustomer = $rateCustomerId > 0
+            ? Customer::select('id', 'first_name', 'last_name')->find($rateCustomerId)
+            : null;
+        $rateCustomerName = $rateCustomer
+            ? trim(($rateCustomer->first_name ?? '') . ' ' . ($rateCustomer->last_name ?? ''))
+            : $adminName;
 
         // 3. Weight validation
         if ($totalWeight <= 0) {
             return response()->json([
                 'success' => true,
                 'customer_exists' => false,
-                'customer_name' => $adminName,
+                'customer_name' => $rateCustomerName,
                 'all_rates' => [],
                 'message' => 'Please enter Actual Weight greater than 0 to view rates.',
             ]);
@@ -2241,6 +2310,15 @@ class PrepaidController extends Controller
             })->first();
         }
 
+        // Country-wise matching: courier_services.country stores a mix of ISO
+        // codes and full names (e.g. 'DE' and 'Germany'), so match every
+        // variant of the selected destination — only that country's services
+        // may appear. $rateCountry is the canonical code for the rate logic.
+        $countryAliases = $this->prepaidCountryAliases($destinationCountry, $destination);
+        $rateCountry = $this->canonicalPrepaidCountry(
+            ($destination ? ($destination->country_code ?: $destination->code) : null) ?: $destinationCountry
+        );
+
         $zone = null;
         if (! empty($consigneeState)) {
             $stateValue = trim((string) $consigneeState);
@@ -2254,7 +2332,7 @@ class PrepaidController extends Controller
                 'SHARJAH' => 'SH',
                 'UMM AL QUWAIN' => 'UQ',
             ];
-            if ($destinationCountry === 'UAE' && isset($uaeEmirateCodes[strtoupper($stateValue)])) {
+            if ($rateCountry === 'UAE' && isset($uaeEmirateCodes[strtoupper($stateValue)])) {
                 $stateAliases[] = $uaeEmirateCodes[strtoupper($stateValue)];
             }
 
@@ -2299,11 +2377,10 @@ class PrepaidController extends Controller
         $zoneCode = $zone?->zone_code;
 
         // 5. Get services
-        // 5. Get services - ONLY services with api_provider = 'UPS'
-        // are offered on the admin Prepaid create-order page.
-        $services = CourierService::where('country', $destinationCountry)
+        // 5. Get services - ALL enabled services of the selected country
+        // (same as the customer create-shipment page).
+        $services = CourierService::whereIn('country', $countryAliases)
             ->where('status', 1)
-            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
             ->get();
 
         if (empty($services)) {
@@ -2313,8 +2390,9 @@ class PrepaidController extends Controller
             ], 404);
         }
 
-        // 6. Process rates - SINGLE LOOP (default rates only, customer_id = 0)
+        // 6. Process rates - SINGLE LOOP (exporter rates first, default fallback)
         $allRates = [];
+        $isMultiPackageCount = is_array($packageWeights) ? count($packageWeights) : 1;
 
         // Non-array package weights (missing input) behave like zero boxes,
         // same as before, but without foreach() warnings in the logs.
@@ -2323,17 +2401,17 @@ class PrepaidController extends Controller
         }
 
         // PERF: bulk-fetch every candidate rate row for all services in ONE
-        // query (same filters findPrepaidBoxRate() applied per box), then match
-        // each box in memory. Previously this was 2 SQL queries per box per
-        // service (+2 surcharge queries per box), i.e. dozens of queries.
+        // query — the exporter's own rates plus the shared default rates
+        // (same customer-first, default-fallback order as create-shipment) —
+        // then match each box in memory.
         $serviceIds = $services->pluck('id')->map(fn ($id) => (int) $id)->all();
         $preloadedRates = empty($serviceIds)
             ? collect()
             : \DB::table('courier_rates as cr')
                 ->join('courier_services as cs', 'cr.service_id', '=', 'cs.id')
-                ->where('cr.customer_id', 0)
+                ->whereIn('cr.customer_id', $rateCustomerIds)
                 ->whereIn('cr.service_id', $serviceIds)
-                ->where('cs.country', $destinationCountry)
+                ->whereIn('cs.country', $countryAliases)
                 ->where(function ($query) use ($zoneNumber) {
                     $query->where('cr.zone_no', $zoneNumber)
                         ->orWhereNull('cr.zone_no')
@@ -2362,11 +2440,14 @@ class PrepaidController extends Controller
             // per-box matching below runs fully in memory, no SQL).
             $serviceRates = $ratesByService[(int) $service->id] ?? [];
 
-            // ========== US: box-wise rate for EVERY UPS service ==========
-            // All country services must appear in the rate result for any
-            // package count or weight. Services with no matching rate band
-            // are reconciled below as unavailable (non-selectable) cards.
-            if ($destinationCountry === 'US') {
+            // ========== US: box-wise rate ==========
+            // Same as create-shipment: multi-package US orders only price
+            // United Ground Premium per box; other US services are priced
+            // box-wise only for single-package orders.
+            if ($rateCountry === 'US' && $isMultiPackageCount > 1 && strtolower($service->method ?? '') !== 'united ground premium') {
+                continue;
+            }
+            if ($rateCountry === 'US') {
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -2383,7 +2464,7 @@ class PrepaidController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2463,7 +2544,7 @@ class PrepaidController extends Controller
                 ];
             }
 
-            if ($destinationCountry === 'UK') {
+            if ($rateCountry === 'UK') {
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -2480,7 +2561,7 @@ class PrepaidController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2564,7 +2645,7 @@ class PrepaidController extends Controller
             // rates). The query below is fully parameterized by
             // $destinationCountry, so adding 'AUS' here makes the
             // ARAMEX GPX ALL IN service rates resolve correctly.
-            if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE' || $destinationCountry === 'BD' || $destinationCountry === 'ZW') {
+            if ($rateCountry === 'CA' || $rateCountry === 'AUS' || $rateCountry === 'NZ' || $rateCountry === 'UAE' || $rateCountry === 'SG' || $rateCountry === 'MY' || $rateCountry === 'DE' || $rateCountry === 'BD' || $rateCountry === 'ZW') {
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -2581,7 +2662,7 @@ class PrepaidController extends Controller
                     // Exact weight-band match first, nearest configured band as
                     // fallback — so a service is never hidden just because the
                     // weight falls outside its configured bands.
-                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt);
+                    [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
                     }
@@ -2662,89 +2743,30 @@ class PrepaidController extends Controller
 
         }// end foreach
 
-        // Country-wise reconciliation: every service of the destination must
-        // appear in the rate result, even when no rate band matches the given
-        // weight/zone (e.g. US weights above a service's max band, the 6-10kg
-        // gap, or services like UPS SAVER with no rates at all). Such services
-        // are appended as non-selectable "unavailable" cards instead of being
-        // hidden, so the admin always sees the full country service list.
-        $ratedServiceIds = [];
-        foreach ($allRates as $rated) {
-            if (isset($rated['service_id'])) {
-                $ratedServiceIds[(int) $rated['service_id']] = true;
-            }
-        }
-        $weightList = is_array($packageWeights) ? array_values($packageWeights) : [];
-        $weightText = ! empty($weightList)
-            ? implode(' + ', array_map(function ($w) {
-                return number_format((float) $w, 2).' kg';
-            }, $weightList))
-            : number_format((float) $totalWeight, 2).' kg';
-        foreach ($services as $service) {
-            if (isset($ratedServiceIds[(int) $service->id])) {
-                continue;
-            }
-            $allRates[] = [
-                'rate_id' => null,
-                'service_id' => $service->id,
-                'method' => $service->method,
-                'method_display' => $service->method.' '.$service->tat,
-                'network' => $service->network,
-                'method_code' => $service->method_code,
-                'tat' => $service->tat,
-                'delivery_days' => $service->tat,
-                'scode' => $service->scode,
-                'consigneeState' => $consigneeState,
-                'zone_no' => $zoneNumber,
-                'zone_name' => $zoneName ?? null,
-                'zone_code' => $zoneCode ?? null,
-                'pkg_wt' => $totalWeight,
-                'price' => 0,
-                'fuel_charge' => 0,
-                'fuel_percentage' => 0,
-                'gst_percentage' => 0,
-                'gst_amount' => 0,
-                'surcharge_total' => 0,
-                'surcharges' => [],
-                'total_base_price' => 0,
-                'total_fuel_price' => 0,
-                'total_surcharge' => 0,
-                'is_multi_package' => count($weightList) > 1,
-                'box_breakdown' => [],
-                'available' => false,
-                'unavailable_reason' => 'No rate configured for '.$weightText.' in this zone.',
-            ];
-        }
-
-        // Zero-total priced cards (no box matched any rate band) become
-        // unavailable (country-list) cards instead of being hidden.
-        // Unavailable cards are always kept.
-        $allRates = array_values(array_map(function ($r) use ($weightText) {
-            if (isset($r['available']) && $r['available'] === false) {
-                return $r;
-            }
+        // Filter out rate cards whose total price (base + fuel + gst) is 0.
+        // When no rate row matches the weight/zone the combined amounts stay
+        // 0 and the card would otherwise show "₹0.00" — hidden from the rate
+        // list, exactly like the customer create-shipment page.
+        $allRates = array_values(array_filter($allRates, function ($r) {
             $base = floatval($r['price'] ?? 0);
             $fuel = floatval($r['fuel_charge'] ?? 0);
             $gst = floatval($r['gst_amount'] ?? 0);
 
-            if (($base + $fuel + $gst) <= 0) {
-                $r['available'] = false;
-                $r['unavailable_reason'] = 'No rate configured for '.$weightText.' in this zone.';
-                $r['box_breakdown'] = [];
-            } else {
-                $r['available'] = true;
+            return ($base + $fuel + $gst) > 0;
+        }));
+
+        // Whether any priced card used the exporter's own (custom) rates.
+        $rateCustomerById = [];
+        foreach ($preloadedRates as $rateRow) {
+            $rateCustomerById[(int) $rateRow->id] = (int) ($rateRow->customer_id ?? 0);
+        }
+        $usedCustomRates = false;
+        foreach ($allRates as $rated) {
+            if (! empty($rated['rate_id']) && ($rateCustomerById[(int) $rated['rate_id']] ?? 0) !== 0) {
+                $usedCustomRates = true;
+                break;
             }
-
-            return $r;
-        }, $allRates));
-
-        // Unavailable cards sort last so priced services stay on top.
-        usort($allRates, function ($a, $b) {
-            $ua = (isset($a['available']) && $a['available'] === false) ? 1 : 0;
-            $ub = (isset($b['available']) && $b['available'] === false) ? 1 : 0;
-
-            return $ua <=> $ub;
-        });
+        }
 
         // Attach consistent selected-zone metadata to every card.
         $allRates = array_map(function ($rate) use ($zoneNumber, $zoneName, $zoneCode) {
@@ -2756,7 +2778,6 @@ class PrepaidController extends Controller
         }, $allRates);
 
         // Attach surcharge breakdown to every rate card.
-        // Unavailable cards keep their empty surcharge list.
         // PERF: rate models are preloaded in ONE query (no CourierRate::find
         // per card) and surcharges come from the preloaded $surchargeMap
         // (no per-card queries). Math mirrors CourierRate::surcharge_amount
@@ -2772,9 +2793,6 @@ class PrepaidController extends Controller
             : CourierRate::whereIn('id', array_keys($neededRateIds))->get()->keyBy('id')->all();
 
         $allRates = array_map(function ($rate) use ($rateModelsById, $surchargeMap) {
-            if (isset($rate['available']) && $rate['available'] === false) {
-                return $rate;
-            }
             $surcharges = $rate['surcharges'] ?? collect();
             $surchargeTotal = (float) ($rate['surcharge_total'] ?? 0);
             $cr = ! empty($rate['rate_id']) ? ($rateModelsById[(int) $rate['rate_id']] ?? null) : null;
@@ -2814,8 +2832,8 @@ class PrepaidController extends Controller
         $response = [
             'success' => true,
 
-            'customer_exists' => false,
-            'customer_name' => $adminName,
+            'customer_exists' => $usedCustomRates,
+            'customer_name' => $rateCustomerName,
             'zone' => $zone ? [
                 'zone_id' => $zone->id,
                 'zone_number' => $zone->zone_number_testing,
@@ -2950,9 +2968,13 @@ class PrepaidController extends Controller
         $destinationCountry = $this->resolveDestinationCountry($destination->name)
             ?? $this->resolveDestinationCountry($destination->id);
 
-        $services = CourierService::where('country', $destinationCountry)
+        // Country-wise matching (codes + names, e.g. 'DE' and 'Germany'):
+        // all enabled services of this destination are listed (same as
+        // the customer create-shipment page).
+        $countryAliases = $this->prepaidCountryAliases($destinationCountry, $destination);
+
+        $services = CourierService::whereIn('country', $countryAliases)
             ->where('status', 1)
-            ->whereRaw('LOWER(api_provider) = ?', ['ups'])
             ->orderBy('method')
             ->get(['id', 'country', 'method', 'network', 'tat', 'method_code', 'service_code']);
 
@@ -3317,6 +3339,51 @@ class PrepaidController extends Controller
     }
 
     /**
+     * Log one side (request or response) of an external vendor API call made
+     * for a prepaid order. Base64 label blobs (GraphicImage / pdf_base64 /
+     * LabelImage) are redacted to their byte size and oversized payloads are
+     * truncated, so the log stays readable. Find entries in
+     * storage/logs/laravel.log by searching for "PREPAID-API".
+     */
+    private function logPrepaidApiCall(string $api, $request, $response, array $meta = []): void
+    {
+        $redact = function ($value) use (&$redact) {
+            if (is_array($value)) {
+                $out = [];
+                foreach ($value as $key => $item) {
+                    if (is_string($key) && preg_match('/graphicimage|pdf_base64|labelimage/i', (string) $key) && is_string($item)) {
+                        $out[$key] = '[BASE64 len=' . strlen($item) . ']';
+                    } else {
+                        $out[$key] = $redact($item);
+                    }
+                }
+
+                return $out;
+            }
+            if (is_string($value) && strlen($value) > 2000) {
+                return substr($value, 0, 2000) . '...[TRUNCATED total=' . strlen($value) . ']';
+            }
+
+            return $value;
+        };
+
+        $context = $meta;
+        if ($request !== null) {
+            $context['request'] = $redact($request);
+        }
+        if ($response !== null) {
+            $context['response'] = $redact($response);
+        }
+
+        $json = json_encode($context);
+        if ($json !== false && strlen($json) > 20000) {
+            $context['response'] = '[TRUNCATED total=' . strlen($json) . ']';
+        }
+
+        Log::info('PREPAID-API ' . $api, $context);
+    }
+
+    /**
      * Call the UPS Ship API directly (internal method).
      * Returns ['success' => bool, 'shipmentResponse' => array] or
      * ['success' => false, 'message' => string, 'rawResponse' => mixed].
@@ -3324,7 +3391,7 @@ class PrepaidController extends Controller
     private function callUpsShipApiInternal($payload)
     {
         try {
-            Log::info('UPS Ship payload (internal): '.substr(json_encode($payload), 0, 2000));
+            $this->logPrepaidApiCall('ups-ship', $payload, null, ['stage' => 'request']);
 
             try {
                 $token = $this->getUpsShipAccessToken();
@@ -3377,6 +3444,7 @@ class PrepaidController extends Controller
             }
 
             Log::info('UPS Ship response HTTP: '.$httpCode.' Body: '.substr($response, 0, 2000));
+            $this->logPrepaidApiCall('ups-ship', null, $decoded ?? $response, ['stage' => 'response', 'http_code' => $httpCode]);
 
             if ($httpCode >= 200 && $httpCode < 300 && isset($decoded['ShipmentResponse'])) {
                 return [
@@ -3562,5 +3630,6610 @@ class PrepaidController extends Controller
         }
 
         return $si === $shortLen;
+    }
+
+    // ====================================================================
+    // Prepaid manifest APIs (mirrors the customer manifest APIs in
+    // CustomerController so admin prepaid orders support the same pack /
+    // manifest / label / document / close / pickup flows).
+    // Differences: admin guard (no customer login), prepaid shippers only
+    // (shipment_type = 5), audit entries performed by "admin", and wallet
+    // operations use the shipper's exporter customer when one exists.
+    // ====================================================================
+
+    public function prepaidMarkPacked(Request $request)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $adminId = (int) auth()->guard('admin')->id();
+
+        $validator = Validator::make($request->all(), [
+            'shipper_id' => ['required', 'integer'],
+            'custom_label' => ['required', 'string', 'max:1000000'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+
+        if (! ShipperInfo::whereKey($validated['shipper_id'])->where('shipment_type', 5)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
+        }
+
+        $labelPath = null;
+        $labelUrl = null;
+        $packedShipper = null;
+        $failureStage = 'database_transaction';
+
+        try {
+            $packedShipper = DB::transaction(function () use (
+                $validated,
+                &$labelPath,
+                &$labelUrl,
+                &$failureStage
+            ) {
+                $shipper = ShipperInfo::whereKey($validated['shipper_id'])
+                    ->where('shipment_type', 5)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($shipper->status !== 'ready') {
+                    throw new \DomainException('Shipment is not in Ready status.');
+                }
+
+                $failureStage = 'pdf_storage';
+                [$labelPath, $labelUrl] = $this->storeCustomLabelFile(
+                    $shipper,
+                    $validated['custom_label']
+                );
+
+                $failureStage = 'shipment_update';
+                $shipper->custom_label = $labelUrl;
+                $shipper->status = 'packed';
+                $shipper->save();
+
+                $failureStage = 'complete';
+
+                return $shipper;
+            });
+        } catch (\DomainException $e) {
+            $this->deleteCustomLabelFile($labelPath);
+
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $this->deleteCustomLabelFile($labelPath);
+            $errorReference = (string) Str::uuid();
+
+            Log::error('Prepaid custom label persistence failed.', [
+                'error_reference' => $errorReference,
+                'failure_stage' => $failureStage,
+                'shipper_id' => $validated['shipper_id'],
+                'admin_id' => $adminId,
+                'public_file_path' => $labelPath,
+                'public_directory' => public_path('uploads/custom_labels'),
+                'exception_class' => $e::class,
+                'exception_message' => $e->getMessage(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to save the custom label. The shipment remains ready. Reference: '.$errorReference,
+                'error_reference' => $errorReference,
+            ], 500);
+        }
+
+        $this->recordPrepaidPackedShipmentAudit($packedShipper, $adminId);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Custom label PDF stored and status updated to Packed.',
+            'custom_label_url' => $labelUrl,
+        ]);
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function storeCustomLabelFile(ShipperInfo $shipper, string $labelHtml): array
+    {
+        $name = Str::slug((string) $shipper->awb_number) ?: 'shipment-'.$shipper->id;
+        $timestamp = now('Asia/Kolkata')->format('Ymd-His');
+        $filename = $name.'-'.$timestamp.'.pdf';
+        $document = $this->buildCustomLabelDocument($shipper, $labelHtml);
+        $publicDirectory = public_path('uploads/custom_labels');
+        $publicPath = $publicDirectory.DIRECTORY_SEPARATOR.$filename;
+
+        if (! is_dir($publicDirectory)
+            && ! mkdir($publicDirectory, 0775, true)
+            && ! is_dir($publicDirectory)) {
+            throw new \RuntimeException('Unable to create the public custom label directory.');
+        }
+
+        if (! is_writable($publicDirectory)) {
+            throw new \RuntimeException('The public custom label directory is not writable.');
+        }
+
+        $destination = null;
+        $publicFileCreated = false;
+        $stored = false;
+
+        try {
+            $pdfBytes = Pdf::loadHTML($document)->output();
+
+            if (! is_string($pdfBytes) || $pdfBytes === '') {
+                throw new \RuntimeException('The custom label PDF was not generated correctly.');
+            }
+
+            $expectedBytes = strlen($pdfBytes);
+            $destination = fopen($publicPath, 'xb');
+            if ($destination === false) {
+                throw new \RuntimeException('Unable to create the custom label PDF in the public directory.');
+            }
+
+            $publicFileCreated = true;
+            $bytesWritten = 0;
+            while ($bytesWritten < $expectedBytes) {
+                $written = fwrite($destination, substr($pdfBytes, $bytesWritten));
+
+                if ($written === false || $written === 0) {
+                    throw new \RuntimeException('Unable to write the custom label PDF to the public directory.');
+                }
+
+                $bytesWritten += $written;
+            }
+
+            if (! fflush($destination)) {
+                throw new \RuntimeException('Unable to flush the custom label PDF to the public directory.');
+            }
+
+            fclose($destination);
+            $destination = null;
+            clearstatcache(true, $publicPath);
+            $storedBytes = is_file($publicPath) ? filesize($publicPath) : false;
+
+            if (! is_readable($publicPath) || $storedBytes !== $expectedBytes) {
+                throw new \RuntimeException('The custom label PDF was not stored correctly in the public directory.');
+            }
+
+            $stored = true;
+
+            return [$publicPath, asset('uploads/custom_labels/'.$filename)];
+        } finally {
+            if (is_resource($destination)) {
+                fclose($destination);
+            }
+
+            if ($publicFileCreated && ! $stored && is_file($publicPath)) {
+                @unlink($publicPath);
+            }
+        }
+    }
+
+    private function buildCustomLabelDocument(ShipperInfo $shipper, string $labelHtml): string
+    {
+        $awbNumber = htmlspecialchars((string) ($shipper->awb_number ?: $shipper->id), ENT_QUOTES, 'UTF-8');
+
+        return '<!DOCTYPE html>'.PHP_EOL
+            .'<html lang="en"><head><meta charset="UTF-8">'
+            .'<meta name="viewport" content="width=device-width, initial-scale=1">'
+            .'<title>Shipping Label '.$awbNumber.'</title>'
+            .'<style>html,body{margin:0;padding:0;background:#fff;color:#000}'
+            .'body{font-family:Arial,sans-serif}.custom-label-document{box-sizing:border-box;width:100%}'
+            .'@media print{@page{margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>'
+            .'</head><body><main class="custom-label-document">'
+            .$labelHtml
+            .'</main></body></html>';
+    }
+
+    private function deleteCustomLabelFile(?string $path): void
+    {
+        if ($path === null) {
+            return;
+        }
+
+        $directory = realpath(public_path('uploads/custom_labels'));
+        $file = realpath($path);
+
+        if ($directory === false || $file === false || ! is_file($file)) {
+            return;
+        }
+
+        $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        if (! str_starts_with($file, $directoryPrefix)) {
+            Log::warning('Refused to remove a file outside the public custom label directory.', [
+                'public_file_path' => $path,
+            ]);
+
+            return;
+        }
+
+        if (! @unlink($file)) {
+            Log::warning('Unable to remove a custom label file.', [
+                'public_file_path' => $file,
+            ]);
+        }
+    }
+
+    private function recordPrepaidPackedShipmentAudit(ShipperInfo $shipper, int $adminId): void
+    {
+        $customerId = (int) ($shipper->customer_id ?? 0);
+
+        try {
+            $shippingId = CreateShipment::where('shipper_id', $shipper->id)->value('id');
+
+            Tracking::firstOrCreate(
+                ['shipper_id' => $shipper->id, 'status' => 'packed'],
+                [
+                    'awb_number' => $shipper->awb_number,
+                    'shipping_id' => $shippingId,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('packed'),
+                ]
+            );
+        } catch (\Throwable $e) {
+            $this->logPrepaidPackedShipmentAuditFailure('tracking_insert', $shipper, $adminId, $e);
+        }
+
+        try {
+            ShipmentLog::firstOrCreate(
+                ['shipper_id' => $shipper->id, 'status' => 'packed'],
+                [
+                    'customer_id' => $customerId,
+                    'awb_number' => $shipper->awb_number,
+                    'previous_status' => 'ready',
+                    'title' => Tracking::getTitleForStatus('packed'),
+                    'description' => 'Prepaid shipment marked as packed and custom label URL stored.',
+                    'performed_by' => 'admin',
+                    'created_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            $this->logPrepaidPackedShipmentAuditFailure('shipment_log_insert', $shipper, $adminId, $e);
+        }
+    }
+
+    private function logPrepaidPackedShipmentAuditFailure(
+        string $stage,
+        ShipperInfo $shipper,
+        int $adminId,
+        \Throwable $exception
+    ): void {
+        Log::error('Prepaid packed shipment audit record failed after the shipment was saved.', [
+            'failure_stage' => $stage,
+            'shipper_id' => $shipper->id,
+            'admin_id' => $adminId,
+            'exception_class' => $exception::class,
+            'exception_message' => $exception->getMessage(),
+            'exception_file' => $exception->getFile(),
+            'exception_line' => $exception->getLine(),
+        ]);
+    }
+
+    /**
+     * Fetch the shipping label (base64 graphic image) for a prepaid shipment
+     * on demand. Restricted to prepaid shippers (shipment_type = 5).
+     */
+    public function prepaidGetShipmentLabel($invoiceId)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $invoice = ShipmentInvoice::where('id', $invoiceId)
+            ->whereHas('shipperInfo', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->with('shipperInfo.shipmentTracking')
+            ->first();
+
+        if (! $invoice || ! $invoice->shipperInfo || ! $invoice->shipperInfo->shipmentTracking) {
+            return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
+        }
+
+        $tracking = $invoice->shipperInfo->shipmentTracking;
+        $pkgResults = $tracking->package_results;
+        $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
+
+        $labelFormat = null;
+        $graphicImage = null;
+        if (isset($firstPkg['ShippingLabel'])) {
+            $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+            $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
+        } elseif (isset($firstPkg['LabelImage'])) {
+            // Fallback for older/different UPS response format
+            $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+            $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+        }
+
+        if (! $graphicImage) {
+            return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'awb_number' => $invoice->shipperInfo->awb_number,
+            'label_format' => $labelFormat,
+            'graphic_image' => $graphicImage,
+        ]);
+    }
+
+    /**
+     * Remove a single prepaid shipment from a manifest.
+     *
+     * Deletes the Manifest row for the given shipper and moves the shipment
+     * back to 'packed' so it can be re-manifested later. Admin may act on any
+     * prepaid (shipment_type = 5) manifest.
+     */
+    public function prepaidRemoveFromManifest(Request $request)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $adminId = (int) auth()->guard('admin')->id();
+        $shipperId = (int) $request->input('shipper_id');
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if (! $shipperId || $manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $manifest = Manifest::query()
+            ->where('shipper_id', $shipperId)
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->first();
+
+        if (! $manifest) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest record not found for this shipment.',
+            ], 404);
+        }
+
+        $shipper = ShipperInfo::find($shipperId);
+
+        if (! $shipper) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shipment not found.',
+            ], 404);
+        }
+
+        $awbNumber = $shipper->awb_number;
+        $manifestNumberRemoved = $manifest->manifest_number;
+
+        $manifest->delete();
+
+        $shipper->status = 'packed';
+        $shipper->save();
+
+        ShipmentLog::logStatus(
+            $shipperId,
+            $awbNumber,
+            'packed',
+            'manifested',
+            'Prepaid shipment removed from manifest '.$manifestNumberRemoved.' and moved back to Packed.',
+            $shipper->customer_id ?? 0,
+            'admin'
+        );
+
+        \Log::info('Prepaid shipment #'.$shipperId.' (AWB '.$awbNumber.') removed from manifest '.$manifestNumberRemoved.' by admin #'.$adminId.' → status back to packed.');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Shipment removed from manifest '.$manifestNumberRemoved.' and moved back to Packed.',
+        ]);
+    }
+
+    /**
+     * Close a prepaid manifest (set its status to Close).
+     *
+     * All manifest rows sharing the given manifest number (prepaid shippers
+     * only) are marked as closed.
+     */
+    public function prepaidCloseManifest(Request $request)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $adminId = (int) auth()->guard('admin')->id();
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if ($manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $rows = Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest not found.',
+            ], 404);
+        }
+
+        $alreadyClosed = $rows->every(function ($row) {
+            return (int) $row->status === Manifest::STATUS_CLOSE;
+        });
+
+        if ($alreadyClosed) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This manifest is already closed.',
+            ], 422);
+        }
+
+        Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->update(['status' => Manifest::STATUS_CLOSE]);
+
+        \Log::info('Prepaid manifest '.$manifestNumber.' closed by admin #'.$adminId.' ('.$rows->count().' manifest rows).');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Manifest '.$manifestNumber.' has been closed successfully.',
+        ]);
+    }
+
+    /**
+     * Assign a closed prepaid manifest for pickup.
+     *
+     * Marks every prepaid manifest row sharing the given manifest number as
+     * Pickup and stores the requested pickup date. Each underlying shipment
+     * is moved to 'ready_for_pickup'.
+     */
+    public function prepaidAssignForPickup(Request $request)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your session has expired. Please login again.',
+            ], 401);
+        }
+
+        $adminId = (int) auth()->guard('admin')->id();
+        $manifestNumber = trim((string) $request->input('manifest_number'));
+
+        if ($manifestNumber === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request. Please try again.',
+            ], 422);
+        }
+
+        $pickupDate = trim((string) $request->input('pickup_date'));
+
+        if ($pickupDate !== '') {
+            try {
+                \Carbon\Carbon::parse($pickupDate)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid pickup date selected.',
+                ], 422);
+            }
+        }
+
+        $rows = Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manifest not found.',
+            ], 404);
+        }
+
+        $alreadyAssigned = $rows->every(function ($row) {
+            return (int) $row->status === Manifest::STATUS_PICKUP;
+        });
+
+        if ($alreadyAssigned) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This manifest is already assigned for pickup.',
+            ], 422);
+        }
+
+        Manifest::query()
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->update([
+                'status' => Manifest::STATUS_PICKUP,
+                'pickup_date' => $pickupDate !== '' ? \Carbon\Carbon::parse($pickupDate)->format('Y-m-d') : null,
+            ]);
+
+        $updatedShippers = 0;
+        foreach ($rows as $row) {
+            $shipper = ShipperInfo::find($row->shipper_id);
+            if (! $shipper || $shipper->status === 'assigned_for_pickup') {
+                continue;
+            }
+
+            $oldStatus = $shipper->status;
+            $shipper->status = 'ready_for_pickup';
+            $shipper->save();
+
+            ShipmentLog::logStatus(
+                $shipper->id,
+                $shipper->awb_number,
+                'ready_for_pickup',
+                $oldStatus ?: 'manifested',
+                'Prepaid manifest '.$manifestNumber.' assigned for pickup.',
+                $shipper->customer_id ?? 0,
+                'admin'
+            );
+
+            $updatedShippers++;
+        }
+
+        \Log::info('Prepaid manifest '.$manifestNumber.' assigned for pickup by admin #'.$adminId.' ('.$rows->count().' manifest rows, '.$updatedShippers.' shipments marked ready for pickup).');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Manifest '.$manifestNumber.' has been assigned for pickup.',
+        ]);
+    }
+
+    private function getPickupDateOptions(): array
+    {
+        $now = \Carbon\Carbon::now('Asia/Kolkata');
+        $startOffset = $now->hour < 12 ? 0 : 1;
+        $labels = ['', '', '', ''];
+        $options = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            $date = $now->copy()->addDays($startOffset + $i);
+            $options[] = [
+                'label' => $labels[$startOffset + $i],
+                'value' => $date->format('Y-m-d'),
+                'display' => $date->format('D, j M'),
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Load every manifest row sharing a manifest number, restricted to
+     * prepaid shippers (shipment_type = 5).
+     */
+    private function loadPrepaidManifestRows(string $manifestNumber)
+    {        return Manifest::with([
+            'shipper.consigneeInfo' => function ($q) {
+                $q->select(
+                    'id',
+                    'shipper_id',
+                    'consignee_name',
+                    'contact_person',
+                    'phone_number',
+                    'email',
+                    'address_line1',
+                    'address_line2',
+                    'address_line3',
+                    'city',
+                    'state',
+                    'zip_code',
+                    'delivery_destination',
+                    'origin_type'
+                );
+            },
+            'shipper.packageDimensions',
+            'shipper.shipmentTracking',
+            'shipper.invoices.invoiceItems',
+            'customer' => function ($q) {
+                $q->select('id', 'first_name', 'last_name', 'phone_number', 'email');
+            },
+        ])
+            ->where('manifest_number', $manifestNumber)
+            ->whereHas('shipper', function ($q) {
+                $q->where('shipment_type', 5);
+            })
+            ->orderBy('created_at')
+            ->get();
+    }
+
+    /**
+     * Owning customer for a prepaid manifest row: the manifest's customer
+     * first, else the shipper's exporter customer record.
+     */
+    private function resolvePrepaidManifestCustomer($manifest, $shipper)
+    {
+        if ($manifest && $manifest->customer) {
+            return $manifest->customer;
+        }
+
+        $customerId = $shipper ? (int) ($shipper->customer_id ?? 0) : 0;
+        if ($customerId > 0) {
+            return Customer::select('id', 'first_name', 'last_name', 'phone_number', 'email')->find($customerId);
+        }
+
+        return null;
+    }
+
+    /**
+     * Show all details for a single prepaid manifest (same
+     * customer.manifest-detail page the customer flow uses).
+     */
+    public function prepaidViewManifestDetail($manifestNumber)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return redirect()->route('admin.login');
+        }
+
+        $manifestRows = $this->loadPrepaidManifestRows((string) $manifestNumber);
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+
+        $shipments = $manifestRows->map(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $rowCustomer = $this->resolvePrepaidManifestCustomer($manifest, $shipper);
+
+            $from = $shipper ? trim(($shipper->city ?? '-') . ', ' . ($shipper->state ?? '-')) : '-';
+            $to = $consignee ? trim(($consignee->city ?? '-') . ', ' . ($consignee->state ?? '-')) : '-';
+
+            $totalWeight = 0.0;
+            if ($shipper) {
+                foreach ($shipper->packageDimensions as $pkg) {
+                    $totalWeight += (float) ($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+                }
+            }
+
+            $originType = strtoupper(trim((string) ($consignee->origin_type ?? '')));
+            $orderType = in_array($originType, ['CSB V', 'CSB 5'], true) ? 'CSB5' : 'CSB4';
+
+            $consigneeAddress = $consignee
+                ? trim(implode(', ', array_filter([
+                    $consignee->address_line1 ?? '',
+                    $consignee->address_line2 ?? '',
+                    $consignee->address_line3 ?? '',
+                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '')),
+                    $consignee->zip_code ?? '',
+                    $consignee->delivery_destination ?? '',
+                ])))
+                : '';
+
+            return [
+                'shipper_id' => $shipper ? (int) $shipper->id : null,
+                'awb_number' => $shipper ? ($shipper->awb_number ?? 'N/A') : 'N/A',
+                'invoice_number' => $invoice ? ($invoice->invoice_number ?? 'N/A') : 'N/A',
+                'shipper_company' => $shipper ? ($shipper->company_name ?: ($shipper->contact_person ?: 'N/A')) : 'N/A',
+                'consignee_name' => $consignee ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A')) : 'N/A',
+                'from' => $from,
+                'to' => $to,
+                'currency' => $invoice ? ($invoice->invoice_currency ?? '') : '',
+                'amount' => (float) ($shipper ? ($shipper->total_price ?? 0) : 0),
+                'amount_formatted' => $shipper && $shipper->total_price
+                    ? number_format((float) $shipper->total_price, 2) . ' ' . ($invoice->invoice_currency ?? '')
+                    : 'N/A',
+                'status' => $shipper ? ($shipper->status ?: 'N/A') : 'N/A',
+                'order_date' => $shipper && $shipper->created_at
+                    ? $shipper->created_at->format('d-m-Y h:i A')
+                    : 'N/A',
+                'order_type' => $orderType,
+                'total_weight' => $totalWeight > 0 ? number_format($totalWeight, 2) . ' kg' : '-',
+                'package_count' => $shipper ? $shipper->packageDimensions->count() : 0,
+                'address' => $consigneeAddress ?: '-',
+                'customer' => [
+                    'name' => trim(($rowCustomer->first_name ?? '') . ' ' . ($rowCustomer->last_name ?? '')),
+                    'phone' => $rowCustomer->phone_number ?? 'N/A',
+                    'email' => $rowCustomer->email ?? 'N/A',
+                ],
+            ];
+        })->values();
+
+        $currency = $shipments->pluck('currency')->filter()->first() ?? '';
+        $totalValue = (float) $shipments->sum('amount');
+        $totalCost = (float) $manifestRows->sum(function ($manifest) {
+            $shipper = $manifest->shipper;
+            if (! $shipper) {
+                return 0;
+            }
+            return (float) $shipper->total_base_price
+                + (float) $shipper->total_fuel_price
+                + (float) $shipper->total_surcharge;
+        });
+
+        // Shipment detail data for the "View" modal (JS-friendly), keyed by shipper_id.
+        $shipmentDetails = $manifestRows->mapWithKeys(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $tracking = $shipper ? $shipper->shipmentTracking : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+            $packages = $shipper ? $shipper->packageDimensions : collect([]);
+            $rowCustomer = $this->resolvePrepaidManifestCustomer($manifest, $shipper);
+
+            $displayAmount = $shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : round((float) $items->sum('amount'), 2);
+
+            $orderDate = $shipper && $shipper->created_at
+                ? $shipper->created_at->format('d-m-Y h:i A')
+                : null;
+
+            if (! $shipper || ! $shipper->id) {
+                return [];
+            }
+
+            return [
+                (int) $shipper->id => [
+                    'shipper_id' => (int) $shipper->id,
+                    'awb_number' => $shipper->awb_number ?? null,
+                    'manifest_number' => $manifest->manifest_number,
+                    'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+                    'invoice_number' => $invoice ? ($invoice->invoice_number ?? null) : null,
+                    'invoice_date' => $invoice && $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
+                    'invoice_amount' => $invoice ? number_format((float) $items->sum('amount'), 2) : null,
+                    'invoice_currency' => $invoice ? ($invoice->invoice_currency ?? null) : null,
+                    'incoterms' => $invoice ? ($invoice->incoterms ?? null) : null,
+                    'reference_number' => $invoice ? ($invoice->reference_number ?? null) : null,
+                    'status' => $shipper->status ?: 'draft',
+                    'order_date' => $orderDate,
+                    'customer' => [
+                        'name' => trim(($rowCustomer->first_name ?? '') . ' ' . ($rowCustomer->last_name ?? '')),
+                        'phone' => $rowCustomer->phone_number ?? null,
+                        'email' => $rowCustomer->email ?? null,
+                    ],
+                    'ship_from' => $shipper
+                        ? trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India')
+                        : null,
+                    'ship_to' => $consignee
+                        ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? ''))
+                        : null,
+                    'shipper' => [
+                        'company' => $shipper->company_name,
+                        'contact' => $shipper->contact_person,
+                        'phone' => $shipper->phone_number,
+                        'email' => $shipper->email,
+                        'address' => trim(($shipper->address_line1 ?? '') . ' ' . ($shipper->address_line2 ?? '') . ' ' . ($shipper->address_line3 ?? '')),
+                        'address_line1' => $shipper->address_line1,
+                        'address_line2' => $shipper->address_line2,
+                        'address_line3' => $shipper->address_line3,
+                        'kyc_number' => $shipper->kyc_number,
+                        'city_state_pin' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                    ],
+                    'consignee' => $consignee ? [
+                        'name' => $consignee->consignee_name,
+                        'contact' => $consignee->contact_person,
+                        'phone' => $consignee->phone_number,
+                        'email' => $consignee->email,
+                        'address' => trim(($consignee->address_line1 ?? '') . ' ' . ($consignee->address_line2 ?? '') . ' ' . ($consignee->address_line3 ?? '')),
+                        'address_line1' => $consignee->address_line1,
+                        'address_line2' => $consignee->address_line2,
+                        'address_line3' => $consignee->address_line3,
+                        'city_state_zip' => trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                    ] : null,
+                    'destination' => $consignee ? $consignee->delivery_destination : null,
+                    'origin_type' => $consignee ? $consignee->origin_type : null,
+                    'shipping_method' => $shipper ? $shipper->shipping_method : null,
+                    'packages' => $packages->map(function ($pkg, $idx) {
+                        return [
+                            'index' => $idx + 1,
+                            'weight' => $pkg->actual_weight_kg,
+                            'length' => $pkg->length_cm,
+                            'width' => $pkg->width_cm,
+                            'height' => $pkg->height_cm,
+                            'volumetric' => $pkg->volumetric_weight,
+                            'chargeable' => $pkg->chargeable_weight,
+                        ];
+                    })->values()->toArray(),
+                    'items' => $items->map(function ($item) {
+                        $qty = $item->qty ?? 0;
+                        $rate = $item->unit_rate ?? 0;
+                        $igstAmt = $item->igst_amount ?? 0;
+                        $baseAmount = $qty * $rate;
+                        $amount = $item->amount ?? ($baseAmount + $igstAmt);
+
+                        return [
+                            'box_no' => $item->box_no,
+                            'description' => $item->description,
+                            'hs_code' => $item->hs_code,
+                            'hts_code' => $item->hts_code,
+                            'unit_type' => $item->unit_type,
+                            'qty' => $qty,
+                            'unit_rate' => $rate,
+                            'igst_percentage' => $item->igst_percentage ?? 0,
+                            'igst_amount' => number_format($igstAmt, 2),
+                            'amount' => number_format($amount, 2),
+                        ];
+                    })->values()->toArray(),
+                    'items_total' => number_format($displayAmount, 2),
+                    'price_breakdown' => [
+                        'base' => $shipper->total_base_price !== null ? (float) $shipper->total_base_price : ($shipper->base_price !== null ? (float) $shipper->base_price : null),
+                        'fuel' => $shipper->total_fuel_price !== null ? (float) $shipper->total_fuel_price : ($shipper->fuel_price !== null ? (float) $shipper->fuel_price : null),
+                        'surcharge' => $shipper->total_surcharge !== null ? (float) $shipper->total_surcharge : ($shipper->surcharge_total !== null ? (float) $shipper->surcharge_total : null),
+                        'gst' => $shipper->gst_amount !== null ? (float) $shipper->gst_amount : null,
+                        'total' => (float) $displayAmount,
+                    ],
+                    'charges' => [
+                        'transport' => $shipper->total_base_price !== null
+                            ? 'INR ' . number_format((float) $shipper->total_base_price, 2)
+                            : ($shipper->base_price !== null ? 'INR ' . number_format((float) $shipper->base_price, 2) : null),
+                        'service_options' => $shipper->total_fuel_price !== null
+                            ? 'INR ' . number_format((float) $shipper->total_fuel_price, 2)
+                            : ($shipper->fuel_price !== null ? 'INR ' . number_format((float) $shipper->fuel_price, 2) : null),
+                        'surcharge' => $shipper->total_surcharge !== null
+                            ? 'INR ' . number_format((float) $shipper->total_surcharge, 2)
+                            : ($shipper->surcharge_total !== null ? 'INR ' . number_format((float) $shipper->surcharge_total, 2) : null),
+                        'gst' => $shipper->gst_amount !== null
+                            ? 'INR ' . number_format((float) $shipper->gst_amount, 2)
+                            : null,
+                        'total' => $shipper->total_price !== null && (float) $shipper->total_price > 0
+                            ? 'INR ' . number_format((float) $shipper->total_price, 2)
+                            : null,
+                        'billing_weight' => $tracking && $tracking->billing_weight
+                            ? trim(($tracking->billing_weight_uom ?? '') . ' ' . ($tracking->billing_weight ?? '-'))
+                            : null,
+                    ],
+                ],
+            ];
+        })->all();
+
+        $firstCustomer = $this->resolvePrepaidManifestCustomer($firstManifest, $firstManifest->shipper);
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'manifest_created_at' => $firstManifest->created_at,
+            'customer_name' => trim(($firstCustomer->first_name ?? '') . ' ' . ($firstCustomer->last_name ?? '')),
+            'shipment_count' => $shipments->count(),
+            'total_value' => $totalValue,
+            'total_cost' => $totalCost,
+            'currency' => $currency,
+            'status' => (int) ($firstManifest->status ?? Manifest::STATUS_OPEN),
+            'shipments' => $shipments,
+        ];
+
+        return view('customer.manifest-detail', compact('manifest', 'shipmentDetails'))
+            ->with('pickupDateOptions', $this->getPickupDateOptions())
+            ->with('isAdminView', true);
+    }
+
+    /**
+     * Print the prepaid manifest label(s) - same UWC label page the customer
+     * flow uses.
+     */
+    public function prepaidManifestLabel($manifestNumber)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return redirect()->route('admin.login');
+        }
+
+        $manifestRows = $this->loadPrepaidManifestRows((string) $manifestNumber);
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+
+        $shipmentCount = $manifestRows->count();
+        $totalValue = 0;
+        $service = 'DIRECT';
+        $senderCompany = 'UWC COURIERS PVT LTD';
+        $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
+        $senderPhone = '8130470109';
+
+        foreach ($manifestRows as $manifest) {
+            $shipper = $manifest->shipper;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+
+            $displayAmount = $shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0
+                ? (float) $shipper->total_price
+                : round((float) $items->sum('amount'), 2);
+
+            $totalValue += (float) $displayAmount;
+
+            if ($shipper) {
+                $service = strtoupper(trim((string) ($shipper->shipping_method ?: $service)));
+                $senderCompany = ($shipper->company_name ?: $shipper->contact_person) ?: $senderCompany;
+
+                $shipperAddress = trim(implode(', ', array_filter([
+                    $shipper->address_line1 ?? '',
+                    $shipper->address_line2 ?? '',
+                    $shipper->address_line3 ?? '',
+                    trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '')),
+                ])));
+
+                if ($shipperAddress !== '') {
+                    $senderAddress = $shipperAddress;
+                }
+
+                if ($shipper->phone_number) {
+                    $senderPhone = $shipper->phone_number;
+                }
+            }
+        }
+
+        $deliveryCompany = 'Multiple Destinations';
+        $deliveryAddress = $shipmentCount . ' shipments in this manifest';
+        $deliveryPhone = '';
+
+        if ($shipmentCount === 1) {
+            $firstShipper = $manifestRows->first()->shipper;
+            $consignee = $firstShipper ? $firstShipper->consigneeInfo : null;
+
+            if ($consignee) {
+                $deliveryCompany = $consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A');
+                $deliveryAddress = trim(implode(', ', array_filter([
+                    $consignee->address_line1 ?? '',
+                    $consignee->address_line2 ?? '',
+                    $consignee->address_line3 ?? '',
+                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
+                    $consignee->delivery_destination ?? '',
+                ])));
+                $deliveryAddress = $deliveryAddress !== '' ? $deliveryAddress : '-';
+                $deliveryPhone = $consignee->phone_number ?? '';
+            }
+        }
+
+        $labels = [[
+            'manifest_number' => $firstManifest->manifest_number,
+            'awb_number' => $firstManifest->manifest_number,
+            'service' => $service,
+            'sender_company' => $senderCompany,
+            'sender_address' => $senderAddress,
+            'sender_phone' => $senderPhone,
+            'delivery_company' => $deliveryCompany,
+            'delivery_address' => $deliveryAddress,
+            'delivery_phone' => $deliveryPhone,
+            'items' => [[
+                'description' => 'Assorted Goods',
+                'qty' => $shipmentCount,
+                'unit_type' => 'shipment(s)',
+                'amount' => $totalValue,
+            ]],
+            'items_total' => number_format($totalValue, 2),
+            'date' => now('Asia/Kolkata')->format('Y-m-d H:i:s'),
+        ]];
+
+        $firstCustomer = $this->resolvePrepaidManifestCustomer($firstManifest, $firstManifest->shipper);
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'shipment_count' => $shipmentCount,
+            'customer_name' => trim(($firstCustomer->first_name ?? '') . ' ' . ($firstCustomer->last_name ?? '')),
+            'total_value' => $totalValue,
+        ];
+
+        return view('customer.manifest-label', compact('manifest', 'labels'));
+    }
+
+    /**
+     * Print the prepaid manifest document (A4 summary sheet).
+     */
+    public function prepaidManifestDocument($manifestNumber)
+    {
+        if (! auth()->guard('admin')->check()) {
+            return redirect()->route('admin.login');
+        }
+
+        $manifestRows = $this->loadPrepaidManifestRows((string) $manifestNumber);
+
+        if ($manifestRows->isEmpty()) {
+            abort(404, 'Manifest not found.');
+        }
+
+        $firstManifest = $manifestRows->first();
+        $customer = $this->resolvePrepaidManifestCustomer($firstManifest, $firstManifest->shipper);
+
+        $shipments = $manifestRows->map(function ($manifest) {
+            $shipper = $manifest->shipper;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $invoice = $shipper ? $shipper->invoices->sortByDesc('id')->first() : null;
+            $items = $invoice ? $invoice->invoiceItems : collect([]);
+
+            $totalWeight = 0.0;
+            if ($shipper) {
+                foreach ($shipper->packageDimensions as $pkg) {
+                    $totalWeight += (float) ($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+                }
+            }
+
+            return [
+                'awb_number' => $shipper ? ($shipper->awb_number ?? 'N/A') : 'N/A',
+                'invoice_number' => $invoice ? ($invoice->invoice_number ?? 'N/A') : 'N/A',
+                'shipper_company' => $shipper ? ($shipper->company_name ?: ($shipper->contact_person ?: 'N/A')) : 'N/A',
+                'consignee_name' => $consignee ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A')) : 'N/A',
+                'from' => $shipper ? trim(($shipper->city ?? '-') . ', ' . ($shipper->state ?? '-')) : '-',
+                'to' => $consignee ? trim(($consignee->city ?? '-') . ', ' . ($consignee->state ?? '-')) : '-',
+                'delivery_destination' => $consignee ? ($consignee->delivery_destination ?? '') : '',
+                'package_count' => $shipper ? $shipper->packageDimensions->count() : 0,
+                'total_weight' => $totalWeight > 0 ? number_format($totalWeight, 2) . ' kg' : '-',
+                'currency' => $invoice ? ($invoice->invoice_currency ?? '') : '',
+                'amount' => (float) ($shipper ? ($shipper->total_price ?? 0) : 0),
+                'items' => $items->map(function ($item) {
+                    $qty = (float) ($item->qty ?? 0);
+                    $rate = (float) ($item->unit_rate ?? 0);
+                    $igstAmt = (float) ($item->igst_amount ?? 0);
+                    $baseAmount = $qty * $rate;
+                    $amount = $item->amount ?? ($baseAmount + $igstAmt);
+
+                    return [
+                        'description' => $item->description ?: 'Item',
+                        'qty' => $qty,
+                        'amount' => (float) $amount,
+                    ];
+                })->values()->all(),
+            ];
+        })->values();
+
+        $currency = $shipments->pluck('currency')->filter()->first() ?? '';
+        $totalValue = (float) $shipments->sum('amount');
+        $totalCost = (float) $manifestRows->sum(function ($manifest) {
+            $shipper = $manifest->shipper;
+            if (! $shipper) {
+                return 0;
+            }
+            return (float) $shipper->total_base_price
+                + (float) $shipper->total_fuel_price
+                + (float) $shipper->total_surcharge;
+        });
+
+        $manifest = (object) [
+            'manifest_number' => $firstManifest->manifest_number,
+            'manifest_created_at' => $firstManifest->created_at,
+            'pickup_date' => $firstManifest->pickup_date,
+            'status' => (int) ($firstManifest->status ?? Manifest::STATUS_OPEN),
+            'customer_name' => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
+            'customer_phone' => $customer->phone_number ?? '',
+            'shipment_count' => $shipments->count(),
+            'total_value' => $totalValue,
+            'total_cost' => $totalCost,
+            'currency' => $currency,
+            'shipments' => $shipments,
+        ];
+
+        return view('customer.manifest-document', compact('manifest'));
+    }
+
+    // ====================================================================
+    // Shared manifest helpers (same logic as the customer manifest helpers
+    // in CustomerController). Carrier helpers are customer-agnostic; wallet
+    // helpers receive the exporter customer id (0 = none, blocks paid
+    // manifests exactly like a missing wallet does).
+    // ====================================================================
+
+    private function resolveShippingMethod($shipper)
+    {
+        $shippingMethod = $shipper->shipping_method;
+
+        if (! $shippingMethod) {
+            $createShipmentMethod = CreateShipment::where('shipper_id', $shipper->id)->value('shipping_method');
+            if ($createShipmentMethod) {
+                $shippingMethod = $createShipmentMethod;
+            }
+        }
+
+        if (! $shippingMethod) {
+            $pkgMethod = PackageDimension::where('shipper_id', $shipper->id)
+                ->whereNotNull('shipping_method')
+                ->value('shipping_method');
+            if ($pkgMethod) {
+                $shippingMethod = $pkgMethod;
+            }
+        }
+
+        if (! $shippingMethod) {
+            $defaultService = CourierService::orderBy('id', 'asc')->first();
+            if ($defaultService) {
+                $shippingMethod = $defaultService->method;
+            }
+        }
+
+        return $shippingMethod ?? '';
+    }
+
+    private function isPostShippingMethod($shippingMethod)
+    {
+        if (empty($shippingMethod)) {
+            return false;
+        }
+
+        $methodUpper = strtoupper(trim($shippingMethod));
+
+        // PostShipping API is called only for UNITED AIR PREMIUM DDP shipments.
+        $isDdp = str_contains($methodUpper, 'DDP');
+        $isAirPremium = str_contains($methodUpper, 'UNITED AIR PREMIUM');
+
+        return $isDdp && $isAirPremium;
+    }
+
+    private function resolveApiProvider($shippingMethod, $shipper, $courierService = null)
+    {
+        // Default provider when nothing else matches.
+        $fallback = 'ups';
+
+        // Reuse a pre-resolved service when the caller already has one;
+        // otherwise look it up now.
+        if (! $courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
+        if ($courierService) {
+            $provider = strtolower(trim($courierService->api_provider ?? ''));
+            if (! empty($provider)) {
+                return $provider;
+            }
+
+            // No explicit api_provider — derive the network for the
+            // ShipUniversal/ShipGlobal/UPS fallback branches below.
+            $network = strtolower(trim($courierService->network ?? ''));
+        } else {
+            $network = '';
+        }
+
+        // Legacy fallback chain (mirrors the original if/elseif order).
+        if ($network === 'ship universal' || $network === 'shipuniversal') {
+            return 'shipuniversal';
+        }
+        if ($this->isOverseasLogisticMethod($shippingMethod)) {
+            return 'overseas';
+        }
+        if ($this->isPostShippingMethod($shippingMethod)) {
+            return 'postshipping';
+        }
+        if ($this->isFlyingTigersMethod($shippingMethod)) {
+            return 'flyingtigers';
+        }
+        if ($network === 'ship global' || $network === 'shipglobal') {
+            return 'shipglobal';
+        }
+
+        return $fallback;
+    }
+
+    private function overseasValueToString($value)
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_null($value)) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+        // Arrays / objects -> JSON string (never triggers array-to-string).
+        $json = json_encode($value);
+
+        return ($json === false) ? '' : $json;
+    }
+
+    /**
+     * Persist a successful ShipUniversal prepaid manifest using the common
+     * tracking tables. Audit entries are performed by "admin".
+     */
+    private function persistPrepaidShipUniversalManifest(
+        $shipper,
+        $customerId,
+        array $apiResponse,
+        $trackingNumber,
+        $labelUrl,
+        $isBulk = false,
+        $targetStatus = 'manifested',
+        ?string $manifestNumber = null,
+        int $adminId = 0
+    ) {
+        $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+
+        ShipmentTracking::updateOrCreate(
+            ['shipper_id' => $shipper->id],
+            [
+                'customer_id' => $customerId,
+                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                'response_status_code' => '1',
+                'response_status_description' => 'ShipUniversal shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                'raw_response' => $apiResponse,
+                'status' => 'created',
+            ]
+        );
+
+        $previousStatus = $shipper->status;
+        $shipper->status = $targetStatus;
+        $shipper->save();
+
+        Tracking::firstOrCreate(
+            [
+                'shipper_id' => $shipper->id,
+                'status' => $targetStatus,
+            ],
+            [
+                'awb_number' => $shipper->awb_number,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus($targetStatus),
+            ]
+        );
+
+        // Create a manifest record from the manifests table
+        // (bulk flow shares a single manifest number across the whole batch)
+        $this->createManifestRecord($shipper->id, $customerId, $manifestNumber);
+
+        ShipmentLog::logStatus(
+            $shipper->id,
+            $shipper->awb_number,
+            $targetStatus,
+            $previousStatus,
+            'Prepaid shipment manifested via ShipUniversal'
+                .($isBulk ? ' (bulk)' : '')
+                .'. Tracking: '.($trackingNumber ?? 'N/A'),
+            $customerId,
+            'admin'
+        );
+
+        \Log::info('Prepaid shipment #'.$shipper->id.' manifested via ShipUniversal by admin #'.$adminId.'.');
+    }
+
+    /**
+     * Create a manifest record for a successfully manifested shipment.
+     *
+     * Uses the existing record when the same shipper is manifested again
+     * (e.g. Confirm Payment flow) so a duplicate manifest is never created.
+     */
+    private function createManifestRecord(int $shipperId, int $customerId, ?string $manifestNumber = null)
+    {
+        $manifest = Manifest::where('shipper_id', $shipperId)->first();
+
+        if ($manifest) {
+            return $manifest;
+        }
+
+        return Manifest::createForShipper($shipperId, $customerId, $manifestNumber);
+    }
+
+    private function revertPrepaidReadyToDraftOnManifestFailure(ShipperInfo $shipper, int $customerId, string $previousStatus, int $adminId): bool
+    {
+        // Only revert when the failed manifest attempt actually started from 'ready'.
+        if ($previousStatus !== 'ready' || $shipper->status !== 'ready') {
+            return false;
+        }
+
+        $shipper->status = 'draft';
+        $shipper->save();
+
+        ShipmentLog::logStatus(
+            $shipper->id,
+            $shipper->awb_number,
+            'draft',
+            'ready',
+            'Prepaid manifest (carrier booking) failed. Shipment moved back to Draft. No payment was deducted.',
+            $customerId,
+            'admin'
+        );
+
+        \Log::info('Prepaid manifest failed for shipper #'.$shipper->id.' → reverted from ready to draft. No payment was deducted.');
+
+        return true;
+    }
+
+    /**
+     * Compute the payable amount for a shipment and check whether it has already been charged.
+     * Payment is cut ONLY after a successful manifest booking.
+     */
+    private function getShipmentChargeInfo(ShipperInfo $shipper, int $customerId): array
+    {
+        $amount = $shipper->total_price !== null && (float) $shipper->total_price > 0
+            ? (float) $shipper->total_price
+            : ($shipper->serviceRate
+                ? (float) $shipper->serviceRate->inclusive_total
+                : round((float) ($shipper->invoices()->first()->total_amount ?? 0), 2));
+
+        $amount = round((float) $amount, 2);
+
+        $wallet = $customerId > 0 ? Wallet::where('customer_id', $customerId)->first() : null;
+        $balance = $wallet ? (float) $wallet->balance : 0;
+
+        if ($amount <= 0) {
+            // Free shipment — nothing to charge, still manifestable.
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => $balance,
+                'can_manifest' => true,
+                'message' => null,
+            ];
+        }
+
+        if (! $wallet) {
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => 0,
+                'can_manifest' => false,
+                'message' => 'Wallet not found. Please contact support.',
+            ];
+        }
+
+        if ($wallet->balance < $amount) {
+            return [
+                'amount' => $amount,
+                'already_charged' => false,
+                'balance' => $balance,
+                'can_manifest' => false,
+                'message' => 'Insufficient wallet balance to manifest this shipment. Current balance is ₹'.number_format($wallet->balance, 2).', required ₹'.number_format($amount, 2).'.',
+            ];
+        }
+
+        return [
+            'amount' => $amount,
+            'already_charged' => false,
+            'balance' => $balance,
+            'can_manifest' => true,
+            'message' => null,
+        ];
+    }
+
+    /**
+     * Deduct the shipment charge from the wallet.
+     * Must be called AFTER a successful carrier booking so that payment is cut only when
+     * the manifest succeeds.
+     */
+    private function chargeShipmentIfNotPaid(ShipperInfo $shipper, int $customerId): array
+    {
+        $info = $this->getShipmentChargeInfo($shipper, $customerId);
+        $amount = $info['amount'];
+        $balance = $info['balance'];
+
+        if ($amount <= 0) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => 0,
+                'new_balance' => $balance,
+                'message' => null,
+            ];
+        }
+
+        if (! $info['can_manifest']) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => $amount,
+                'new_balance' => $balance,
+                'message' => $info['message'],
+            ];
+        }
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if (! $wallet) {
+            return [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => $amount,
+                'new_balance' => 0,
+                'message' => 'Wallet not found. Please contact support.',
+            ];
+        }
+
+        DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
+            $wallet->decrement('balance', $amount);
+            $wallet->refresh();
+
+            WalletTransaction::create([
+                'customer_id' => $customerId,
+                'type' => 'debit',
+                'reason' => 'shipment_charge',
+                'amount' => $amount,
+                'balance_after' => $wallet->balance,
+                'reference' => $shipper->awb_number,
+                'description' => 'Payment of ₹'.number_format($amount, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id),
+            ]);
+        });
+
+        return [
+            'charged' => true,
+            'already_charged' => false,
+            'amount' => $amount,
+            'new_balance' => (float) $wallet->refresh()->balance,
+            'message' => null,
+        ];
+    }
+
+    // ====================================================================
+    // Carrier manifest helpers ported verbatim from CustomerController
+    // (customer-agnostic: shipper-driven, wallet via passed customer id).
+    // ====================================================================
+
+
+    /**
+     * Call the Ship Global API to create an order/shipment.
+     * Two-step process:
+     * 1. Generate Bearer token from customers.php
+     * 2. Create order via addOrder.php using the Bearer token
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array
+     */
+    private function callShipGlobalApiFromDb($shipper)
+    {
+        try {
+            // Step 1: Generate Bearer token from Ship Global
+            $tokenResponse = Http::withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post('https://labels.shipglobal.in/api/v1/customers.php', [
+                'email' => 'csd@unitedcouriers.biz',
+                'password' => 'mSN7KbhrZ0uvb229YWO',
+            ]);
+
+            if (! $tokenResponse->successful()) {
+                $tokenError = $tokenResponse->json();
+                $errorMessage = 'Ship Global token generation failed.';
+                if (is_array($tokenError)) {
+                    if (isset($tokenError['error'])) {
+                        $errorMessage = is_string($tokenError['error']) ? $tokenError['error'] : json_encode($tokenError['error']);
+                    } elseif (isset($tokenError['message'])) {
+                        $errorMessage = $tokenError['message'];
+                    }
+                }
+                \Log::error('Ship Global token generation failed: '.$errorMessage.' | Status: '.$tokenResponse->status());
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                ];
+            }
+
+            $tokenData = $tokenResponse->json();
+            $bearerToken = null;
+
+            // Extract token from various possible response formats
+            if (isset($tokenData['token'])) {
+                $bearerToken = $tokenData['token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['token'])) {
+                $bearerToken = $tokenData['data']['token'];
+            } elseif (isset($tokenData['access_token'])) {
+                $bearerToken = $tokenData['access_token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['access_token'])) {
+                $bearerToken = $tokenData['data']['access_token'];
+            }
+
+            if (! $bearerToken) {
+                \Log::error('Ship Global: No token found in response. Response: '.json_encode($tokenData));
+
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in Ship Global authentication response.',
+                ];
+            }
+
+            \Log::info('Ship Global token generated successfully.');
+
+            // Step 2: Build the order payload and create the order
+            $consignee = $shipper->consigneeInfo;
+            $packages = $shipper->packageDimensions;
+            $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+            if (! $consignee) {
+                return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+            }
+
+            // Get package dimensions (use first package)
+            $firstPackage = $packages->first();
+            $packageWeightKg = $firstPackage ? (float) $firstPackage->actual_weight_kg * 1000 : 0.5;
+            $packageLength = $firstPackage ? (float) $firstPackage->length_cm : 10;
+            $packageBreadth = $firstPackage ? (float) $firstPackage->width_cm : 10;
+            $packageHeight = $firstPackage ? (float) $firstPackage->height_cm : 10;
+
+            // Get consignee country code from delivery_destination
+            $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+            // Build shipper address string
+            $shipperAddress = trim(
+                ($shipper->address_line1 ?? '').' '.
+                ($shipper->address_line2 ?? '').' '.
+                ($shipper->address_line3 ?? '')
+            );
+
+            // Build consignee address string
+            $consigneeAddress = trim(
+                ($consignee->address_line1 ?? '').' '.
+                ($consignee->address_line2 ?? '').' '.
+                ($consignee->address_line3 ?? '')
+            );
+
+            // Split shipper name into first/last
+            // Ship Global requires both firstname and lastname to be non-empty
+            $shipperNameParts = preg_split('/\s+/', trim($shipper->contact_person ?? $shipper->company_name ?? 'Shipper'), 2);
+            $sellerFirstname = $shipperNameParts[0] ?? 'Shipper';
+            $sellerLastname = ! empty($shipperNameParts[1]) ? $shipperNameParts[1] : $sellerFirstname;
+
+            // Split consignee name into first/last
+            // Ship Global requires both firstname and lastname to be non-empty
+            $consigneeNameParts = preg_split('/\s+/', trim($consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee'), 2);
+            $consigneeFirstname = $consigneeNameParts[0] ?? 'Consignee';
+            $consigneeLastname = ! empty($consigneeNameParts[1]) ? $consigneeNameParts[1] : $consigneeFirstname;
+
+            // Get invoice details
+            $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+            $invoiceDate = $invoice ? ($invoice->invoice_date ? $invoice->invoice_date->format('Y-m-d') : '') : '';
+            $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'USD') : 'USD';
+            $orderReference = $shipper->awb_number ?? ($invoice ? ($invoice->reference_number ?? '') : '');
+
+            // Get csb5_status from customer
+            $customer = Customer::find($shipper->customer_id);
+            $csb5Status = 0;
+            if ($customer && $customer->csb_status) {
+                $csb5Status = (int) $customer->csb_status;
+            }
+
+            // Get the courier service code for the shipping method
+            $shippingMethod = $this->resolveShippingMethod($shipper);
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
+
+            // Build vendor_order_items from invoice items
+            $vendorOrderItems = [];
+            if ($invoice) {
+                $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+                foreach ($invoiceItems as $item) {
+                    $vendorOrderItems[] = [
+                        'vendor_order_item_name' => $item->description ?? '',
+                        'vendor_order_item_sku' => $item->hs_code ?? $item->hts_code ?? '',
+                        'vendor_order_item_quantity' => (int) $item->qty,
+                        'vendor_order_item_unit_price' => (float) $item->unit_rate,
+                        'vendor_order_item_hsn' => $item->hs_code ?? '',
+                        'vendor_order_item_tax_rate' => (float) $item->igst_percentage,
+                    ];
+                }
+            }
+
+            // If no invoice items, add a default item
+            if (empty($vendorOrderItems)) {
+                $vendorOrderItems[] = [
+                    'vendor_order_item_name' => 'General Merchandise',
+                    'vendor_order_item_sku' => '',
+                    'vendor_order_item_quantity' => 1,
+                    'vendor_order_item_unit_price' => (float) ($invoice ? $invoice->invoice_amount : 0),
+                    'vendor_order_item_hsn' => '',
+                    'vendor_order_item_tax_rate' => 0,
+                ];
+            }
+
+            // Build the Ship Global order payload
+            $payload = [
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'order_reference' => $orderReference,
+                'service' => $serviceCode,
+                'package_weight' => (float) $packageWeightKg,
+                'package_length' => (float) $packageLength,
+                'package_breadth' => (float) $packageBreadth,
+                'package_height' => (float) $packageHeight,
+                'currency_code' => $currencyCode,
+                'csb5_status' => $csb5Status,
+                'seller_nickname' => 'UnitedW',
+                'seller_firstname' => $sellerFirstname,
+                'seller_lastname' => $sellerLastname,
+                'seller_mobile' => $shipper->phone_number ?? '',
+                'seller_email' => $shipper->email ?? '',
+                'seller_company' => $shipper->company_name ?? '',
+                'seller_address' => $shipperAddress ?: 'Address not provided',
+                'seller_address_2' => $shipperAddress ?: 'Address not provided',
+                'seller_city' => $shipper->city ?? '',
+                'seller_postcode' => $shipper->pincode ?? '',
+                'seller_country_code' => 'IN',
+                'seller_state' => $shipper->state ?? '',
+                'customer_shipping_firstname' => $consigneeFirstname,
+                'customer_shipping_lastname' => $consigneeLastname,
+                'customer_shipping_mobile' => $consignee->phone_number ?? '',
+                'customer_shipping_email' => $consignee->email ?? '',
+                'customer_shipping_company' => $consignee->consignee_name ?? '',
+                'customer_shipping_address' => $consigneeAddress ?: 'Address not provided',
+                'customer_shipping_address_2' => $consigneeAddress ?: 'Address not provided',
+                'customer_shipping_city' => $consignee->city ?? '',
+                'customer_shipping_postcode' => $consignee->zip_code ?? '',
+                'customer_shipping_country_code' => $consigneeCountryCode,
+                'customer_shipping_state' => $consignee->state ?? '',
+                'vendor_order_items' => $vendorOrderItems,
+                // i want abw number in tracking field but ship global api is not accepting it so i am leaving it blank for now
+                'tracking' => $shipper->awb_number ?? '',
+                // 'mailClass' => '',
+                // 'deliveryConfirmation' => '',
+                // 'retry' => false,
+            ];
+
+            // print_r($payload);
+            // return;
+
+            \Log::info('Ship Global order payload for shipper #'.$shipper->id.': '.json_encode($payload));
+
+            // Step 2: Call the addOrder.php API with Bearer token
+            $orderResponse = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Authorization' => 'Bearer '.$bearerToken,
+            ])->post('https://labels.shipglobal.in/api/v1/addOrder.php', $payload);
+
+            $apiResponse = $orderResponse->json();
+
+            // Ship Global may return HTTP 200 but with "success": false in the body
+            // (e.g., label: "manual" means order created but label needs manual generation)
+            // We treat it as success if an order_number was returned, regardless of body success flag
+            $orderNumber = null;
+            if (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                $orderNumber = $apiResponse['data']['order_number'];
+            } elseif (isset($apiResponse['order_number'])) {
+                $orderNumber = $apiResponse['order_number'];
+            }
+
+            if ($orderResponse->successful() && $orderNumber) {
+                \Log::info('Ship Global order created for shipper #'.$shipper->id.'. Order#: '.$orderNumber.'. Response: '.json_encode($apiResponse));
+
+                return [
+                    'success' => true,
+                    'message' => 'Ship Global order created successfully. Order#: '.$orderNumber,
+                    'data' => $apiResponse,
+                ];
+            } elseif ($orderResponse->successful() && ! $orderNumber) {
+                // HTTP 200 but no order_number — could be a validation/business error in the body
+                $errorMessage = 'Ship Global API returned no order number.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Ship Global order creation: HTTP 200 but no order_number. Response: '.json_encode($apiResponse));
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                ];
+            } else {
+                $apiResponse = $orderResponse->json();
+                $errorMessage = 'Ship Global API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    // Append validation details if available (Ship Global returns field-level errors in "details")
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Ship Global order creation failed: '.$errorMessage.' | Status: '.$orderResponse->status().' | Response: '.json_encode($apiResponse));
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'status_code' => $orderResponse->status(),
+                ];
+            }
+        } catch (\Exception $e) {
+            \Log::error('Ship Global API call failed: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Ship Global API call failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Determine if a shipping method should be routed to the PostShipping API.
+     * Triggered for DDP variants of UNITED AIR PREMIUM and UNITED PRIOR POST.
+     *
+     * @param  string|null  $shippingMethod
+     * @return bool
+     */
+
+
+    /**
+     * Determine the PostShipping ServiceTypeName based on weight, parcel count,
+     * and destination. Precedence:
+     *   1. Offshore (Northern Ireland, Scottish Highlands & Islands) → DPD111
+     *   2. Multiple Parcels (>1)                                   → MDPD112
+     *   3. 0-5 Kg (single parcel)                                  → DPDUKEPND
+     *   4. 5-30 Kg (single parcel)                                 → DPD112
+     *
+     * @param  string  $shippingMethod
+     * @param  CourierService|null  $courierService
+     * @param  float  $totalWeight  Total shipment weight in Kg
+     * @param  int  $noOfItems  Number of parcels
+     * @param  ConsigneeInfo|null  $consignee
+     * @return string
+     */
+    private function getPostShippingServiceTypeName($shippingMethod, $courierService, $totalWeight = 0, $noOfItems = 1, $consignee = null)
+    {
+        // Priority 1: Offshore deliveries → DPD111 (DPD OFFSHORE- TWO DAY)
+        if ($this->isPostShippingOffshoreDestination($consignee)) {
+            \Log::info('getPostShippingServiceTypeName: Offshore destination → DPD111');
+
+            return 'DPD111';
+        }
+
+        // Priority 2: Multiple parcels → MDPD112 (Multi DPD UK MAINLAND- NEXT DAY)
+        if ((int) $noOfItems > 1) {
+            \Log::info('getPostShippingServiceTypeName: Multiple parcels ('.$noOfItems.') → MDPD112');
+
+            return 'MDPD112';
+        }
+
+        // Priority 3 & 4: Weight-based for single parcel
+        if ($totalWeight <= 5) {
+            \Log::info('getPostShippingServiceTypeName: Weight '.$totalWeight.'kg (≤5) → DPDUKEPND');
+
+            return 'DPDUKEPND'; // DPD UK Mainland Express PAK
+        }
+
+        \Log::info('getPostShippingServiceTypeName: Weight '.$totalWeight.'kg (>5) → DPD112');
+
+        return 'DPD112'; // DPD UK Mainland Next Day
+    }
+
+    /**
+     * Map a PostShipping ServiceTypeName to the DPD UK NetworkCode.
+     *
+     * The DPD UK API validates consignment.networkCode (error 1021 "Service Denied"
+     * when missing). NetworkCode identifies the delivery service network:
+     *   - DPD111 (Offshore - Two Day)        → "7"
+     *   - DPDUKEPND / DPD112 / MDPD112       → "1" (Next Day mainland)
+     *
+     * @param  string  $serviceTypeName
+     * @return string
+     */
+
+
+    /**
+     * Map a PostShipping ServiceTypeName to the DPD UK NetworkCode.
+     *
+     * The DPD UK API validates consignment.networkCode (error 1021 "Service Denied"
+     * when missing). NetworkCode identifies the delivery service network:
+     *   - DPD111 (Offshore - Two Day)        → "7"
+     *   - DPDUKEPND / DPD112 / MDPD112       → "1" (Next Day mainland)
+     *
+     * @param  string  $serviceTypeName
+     * @return string
+     */
+    private function getPostShippingNetworkCode($serviceTypeName)
+    {
+        $code = strtoupper(trim((string) $serviceTypeName));
+
+        // Offshore (DPD OFFSHORE - TWO DAY) uses network code "7"
+        if ($code === 'DPD111') {
+            return '7';
+        }
+
+        // All mainland next-day services (DPDUKEPND, DPD112, MDPD112) use network code "1"
+        return '1';
+    }
+
+    /**
+     * Check if a consignee destination is an offshore area requiring DPD111 service.
+     * Offshore = Northern Ireland (BT postcodes) + Scottish Highlands & Islands
+     * (IV, HS, KA, KW, PA, PH, ZE postcodes) + Isle of Man (IM) + Channel Islands (JE, GY).
+     *
+     * @param  ConsigneeInfo|null  $consignee
+     * @return bool
+     */
+
+
+    /**
+     * Check if a consignee destination is an offshore area requiring DPD111 service.
+     * Offshore = Northern Ireland (BT postcodes) + Scottish Highlands & Islands
+     * (IV, HS, KA, KW, PA, PH, ZE postcodes) + Isle of Man (IM) + Channel Islands (JE, GY).
+     *
+     * @param  ConsigneeInfo|null  $consignee
+     * @return bool
+     */
+    private function isPostShippingOffshoreDestination($consignee)
+    {
+        if (! $consignee) {
+            return false;
+        }
+
+        $postcode = strtoupper(preg_replace('/\s+/', '', (string) ($consignee->zip_code ?? '')));
+        $city = strtoupper(trim((string) ($consignee->city ?? '')));
+        $state = strtoupper(trim((string) ($consignee->state ?? '')));
+
+        // Northern Ireland: postcodes start with BT
+        if ($postcode !== '' && str_starts_with($postcode, 'BT')) {
+            return true;
+        }
+
+        // Scottish Highlands & Islands + other UK offshore postcode prefixes
+        $offshorePrefixes = ['IV', 'HS', 'KA', 'KW', 'PA', 'PH', 'ZE', 'IM', 'JE', 'GY'];
+        if ($postcode !== '') {
+            foreach ($offshorePrefixes as $prefix) {
+                if (str_starts_with($postcode, $prefix)) {
+                    return true;
+                }
+            }
+        }
+
+        // Fallback: keyword matching on city/state for cases where postcode is missing
+        $offshoreKeywords = [
+            'NORTHERN IRELAND', 'HIGHLAND', 'ISLAND', 'ISLE OF',
+            'ORKNEY', 'SHETLAND', 'HEBRIDES', 'SKYE', 'ISLE OF MAN',
+            'CHANNEL ISLANDS', 'JERSEY', 'GUERNSEY',
+        ];
+        foreach ($offshoreKeywords as $keyword) {
+            if (str_contains($city, $keyword) || str_contains($state, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the ThirdPartyToken for PostShipping.
+     * A single fixed token is used for all UNITED AIR PREMIUM DDP shipments.
+     *
+     * @param  float  $totalWeight  Total shipment weight in Kg (kept for signature compatibility)
+     * @return string
+     */
+
+
+    /**
+     * Return the ThirdPartyToken for PostShipping.
+     * A single fixed token is used for all UNITED AIR PREMIUM DDP shipments.
+     *
+     * @param  float  $totalWeight  Total shipment weight in Kg (kept for signature compatibility)
+     * @return string
+     */
+    private function getPostShippingThirdPartyToken($totalWeight)
+    {
+        $token = config('services.postshipping.third_party_token');
+        \Log::info('getPostShippingThirdPartyToken: Using fixed token for UNITED AIR PREMIUM DDP');
+
+        return $token;
+    }
+
+    /**
+     * Build the PostShipping API payload from database records.
+     * Payload structure mirrors the documented https://api.postshipping.com/api2/shipments format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+
+
+    /**
+     * Build the PostShipping API payload from database records.
+     * Payload structure mirrors the documented https://api.postshipping.com/api2/shipments format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildPostShippingPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (! $consignee) {
+            \Log::warning('buildPostShippingPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildPostShippingPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+        // Resolve shipping method + courier service
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+
+        // Consignee country code from delivery_destination
+        $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+        // Currency code (default INR to match example payload)
+        $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+
+        // Total weight & package count (computed first so ServiceTypeName + ThirdPartyToken
+        // can be selected based on weight/parcel-count/destination).
+        $totalWeight = 0;
+        $noOfItems = 0;
+        foreach ($packages as $pkg) {
+            $w = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($w <= 0) {
+                $w = 0.5;
+            }
+            $totalWeight += $w;
+            $noOfItems++;
+        }
+        if ($totalWeight <= 0) {
+            $totalWeight = 0.5;
+        }
+        if ($noOfItems <= 0) {
+            $noOfItems = 1;
+        }
+
+        // ServiceTypeName is weight/parcel-count/destination-dependent:
+        //   Offshore → DPD111 | Multiple parcels → MDPD112 | ≤5kg → DPDUKEPND | >5kg → DPD112
+        $serviceTypeName = $this->getPostShippingServiceTypeName($shippingMethod, $courierService, $totalWeight, $noOfItems, $consignee);
+
+        // ThirdPartyToken is weight-dependent:
+        //   1-10kg → DPDNW token | 10.1-30kg → DPD112 token
+        $thirdPartyToken = $this->getPostShippingThirdPartyToken($totalWeight);
+
+        // First package dimensions for top-level PackageDetails
+        $firstPackage = $packages->first();
+        $cubicL = (float) ($firstPackage->length_cm ?? 0) ?: 10;
+        $cubicW = (float) ($firstPackage->width_cm ?? 0) ?: 10;
+        $cubicH = (float) ($firstPackage->height_cm ?? 0) ?: 10;
+
+        // Goods description: prefer first invoice item description, else invoice reference, else default
+        $goodsDescription = 'General Merchandise';
+        $invoiceItems = collect();
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+            $firstItem = $invoiceItems->first();
+            if ($firstItem && ! empty($firstItem->description)) {
+                $goodsDescription = $firstItem->description;
+            }
+        }
+
+        // Custom value: invoice amount (default 30.00 to match example floor)
+        $customValue = $invoice ? (float) ($invoice->invoice_amount ?? 0) : 0;
+        if ($customValue <= 0) {
+            $customValue = 30.00;
+        }
+
+        // Incoterms
+        $incoterms = $invoice ? ($invoice->incoterms ?? 'CIF') : 'CIF';
+        $orderNumber = $invoice ? ($invoice->invoice_number ?? '') : ($shipper->awb_number ?? '');
+
+        // Build ShipmentResponseItem array — one entry per package, with Pieces from invoice items.
+        $shipmentResponseItems = [];
+        $packageIndex = 0;
+        foreach ($packages as $pkg) {
+            $packageIndex++;
+            $pkgWeight = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($pkgWeight <= 0) {
+                $pkgWeight = 0.5;
+            }
+            $pkgL = (float) ($pkg->length_cm ?? 0) ?: 10;
+            $pkgW = (float) ($pkg->width_cm ?? 0) ?: 10;
+            $pkgH = (float) ($pkg->height_cm ?? 0) ?: 10;
+
+            // Find invoice items mapped to this package via box_no (1-based)
+            $boxItems = $invoiceItems->filter(function ($item) use ($packageIndex) {
+                return ((int) ($item->box_no ?? 0)) === $packageIndex;
+            });
+
+            // If no items mapped to this box, use all items for the first package
+            if ($boxItems->isEmpty() && $packageIndex === 1) {
+                $boxItems = $invoiceItems;
+            }
+
+            $pieces = [];
+            if ($boxItems->isNotEmpty()) {
+                foreach ($boxItems as $item) {
+                    $itemQty = (float) ($item->qty ?? 1);
+                    if ($itemQty <= 0) {
+                        $itemQty = 1;
+                    }
+                    $itemValue = (float) ($item->amount ?? 0);
+                    if ($itemValue <= 0) {
+                        $itemValue = $customValue;
+                    }
+                    $pieces[] = [
+                        'HarmonisedCode' => (string) ($item->hs_code ?? $item->hts_code ?? ''),
+                        'GoodsDescription' => $item->description ?? $goodsDescription,
+                        'Content' => $item->description ?? $goodsDescription,
+                        'Quantity' => $itemQty,
+                        'Weight' => $pkgWeight,
+                        'ManufactureCountryCode' => 'IN',
+                        'OriginCountryCode' => 'IN',
+                        'CurrencyCode' => $currencyCode,
+                        'CustomsValue' => $itemValue,
+                    ];
+                }
+            } else {
+                // Fallback single piece when no invoice items exist
+                $pieces[] = [
+                    'HarmonisedCode' => '',
+                    'GoodsDescription' => $goodsDescription,
+                    'Content' => $goodsDescription,
+                    'Quantity' => 1,
+                    'Weight' => $pkgWeight,
+                    'ManufactureCountryCode' => 'IN',
+                    'OriginCountryCode' => 'IN',
+                    'CurrencyCode' => $currencyCode,
+                    'CustomsValue' => $customValue,
+                ];
+            }
+
+            $shipmentResponseItems[] = [
+                'ItemNoOfPcs' => 1,
+                'ItemCubicL' => $pkgL,
+                'ItemCubicW' => $pkgW,
+                'ItemCubicH' => $pkgH,
+                'ItemWeight' => $pkgWeight,
+                'ItemDescription' => $goodsDescription,
+                'ItemCustomValue' => $customValue,
+                'ItemCustomCurrencyCode' => $currencyCode,
+                'Notes' => 'Commercial shipment',
+                'Pieces' => $pieces,
+            ];
+        }
+
+        // Pickup times — ReadyTime = now + 2h, CloseTime = now + 5h (format Y/m/d H:i:s)
+        $readyTime = now()->addHours(2)->format('Y/m/d H:i:s');
+        $closeTime = now()->addHours(5)->format('Y/m/d H:i:s');
+
+        // Build the single shipment object (API expects an array of these)
+        $shipmentObject = [
+            'ThirdPartyToken' => $thirdPartyToken,
+            'SenderDetails' => [
+                // 'SenderName'                 => $shipper->contact_person ?? ($shipper->company_name ?? 'Ved'),
+                // 'SenderCompanyName'          => $shipper->company_name ?? 'United Worldwide Couriers Pvt Ltd',
+                // 'SenderCountryCode'          => 'IN',
+                // 'SenderAdd1'                 => $shipper->address_line1 ?? '',
+                // 'SenderAdd2'                 => $shipper->address_line2 ?? '',
+                // 'SenderAdd3'                 => $shipper->address_line3 ?? '',
+                // 'SenderAddCity'              => strtoupper($shipper->city ?? 'NEW DELHI'),
+                // 'SenderAddState'             => strtoupper($shipper->state ?? 'DELHI'),
+                // 'SenderAddPostcode'          => $shipper->pincode ?? '110037',
+                // 'SenderPhone'                => $shipper->phone_number ?? '01146122222',
+                // 'SenderEmail'                => $shipper->email ?? 'abc@abc.com',
+                // 'SenderFax'                  => '',
+                // 'SenderKycType'              => $shipper->kyc_type ?? 'Passport',
+                // 'SenderKycNumber'            => $shipper->kyc_number ?? '',
+                // 'SenderReceivingCountryTaxID' => '',
+                'SenderName' => 'Ved',
+                'SenderCompanyName' => 'United Worldwide Couriers Pvt Ltd',
+                'SenderCountryCode' => 'IN',
+                'SenderAdd1' => 'BUILDING NO 1 BYPASS ROAD',
+                'SenderAdd2' => 'MAHIPALPUR',
+                'SenderAdd3' => '',
+                'SenderAddCity' => 'NEW DELHI',
+                'SenderAddState' => 'DELHI',
+                'SenderAddPostcode' => '110037',
+                'SenderPhone' => '01146122222',
+                'SenderEmail' => 'abc@abc.com',
+                'SenderFax' => '',
+                'SenderKycType' => 'Passport',
+                'SenderKycNumber' => 'P00001',
+                'SenderReceivingCountryTaxID' => '',
+            ],
+            'ReceiverDetails' => [
+                'ReceiverName' => $consignee->consignee_name ?? ($consignee->contact_person ?? 'Consignee'),
+                'ReceiverCompanyName' => $consignee->consignee_name ?? ($consignee->contact_person ?? ''),
+                // 'ReceiverCountryCode'   => $consigneeCountryCode,
+                'ReceiverCountryCode' => 'GB',
+                'ReceiverAdd1' => $consignee->address_line1 ?? '',
+                'ReceiverAdd2' => $consignee->address_line2 ?? '',
+                'ReceiverAdd3' => $consignee->address_line3 ?? '',
+                'ReceiverAddCity' => $consignee->city ?? '',
+                'ReceiverAddState' => $consignee->state ?? '',
+                'ReceiverAddPostcode' => $consignee->zip_code ?? '',
+                'ReceiverMobile' => $consignee->phone_number ?? '',
+                'ReceiverPhone' => $consignee->phone_number ?? '',
+                'ReceiverEmail' => $consignee->email ?? 'abc@abc.com',
+                'ReceiverAddResidential' => 'N',
+                'ReceiverFax' => '',
+                'ReceiverKycType' => 'Passport',
+                'ReceiverKycNumber' => '',
+            ],
+            'PackageDetails' => [
+                'GoodsDescription' => $goodsDescription,
+                'CustomValue' => (float) $customValue,
+                'CustomCurrencyCode' => $currencyCode,
+                'InsuranceValue' => 0.00,
+                'InsuranceCurrencyCode' => $currencyCode,
+                'ShipmentTerm' => '',
+                'GoodsOriginCountryCode' => 'IN',
+                'Weight' => (float) $totalWeight,
+                'WeightMeasurement' => 'KG',
+                'NoOfItems' => (int) $noOfItems,
+                'CubicL' => (float) $cubicL,
+                'CubicW' => (float) $cubicW,
+                'CubicH' => (float) $cubicH,
+                'CubicWeight' => 0,
+                'ServiceTypeName' => $serviceTypeName,
+                'NetworkCode' => $this->getPostShippingNetworkCode($serviceTypeName),
+                'BookPickUP' => false,
+                'SenderRef1' => $shipper->awb_number ?? ('TEST-SHIPMENT-'.$shipper->id),
+                'BusinessType' => 'B2B',
+                'ShipmentResponseItem' => $shipmentResponseItems,
+                'CODAmount' => 0,
+                'CODCurrencyCode' => $currencyCode,
+                'DeadWeight' => (float) $totalWeight,
+                'ReasonExport' => 'Sale',
+                'OrderNumber' => $orderNumber,
+                'Incoterms' => $incoterms,
+            ],
+            'PickupDetails' => [
+                'ReadyTime' => $readyTime,
+                'CloseTime' => $closeTime,
+                'SpecialInstructions' => 'Call before pickup',
+                'Address1' => $shipper->address_line1 ?? '',
+                'Address2' => $shipper->address_line2 ?? '',
+                'Address3' => $shipper->address_line3 ?? '',
+                'AddressCity' => strtoupper($shipper->city ?? 'NEW DELHI'),
+                'AddressState' => strtoupper($shipper->state ?? 'DELHI'),
+                'AddressPostalCode' => $shipper->pincode ?? '110037',
+                'AddressCountryCode' => 'IN',
+            ],
+        ];
+
+        // PostShipping expects an array of shipment objects.
+        // The fixed ThirdPartyToken is also returned so the caller can
+        // send it as the API-Key request header.
+        return [
+            'success' => true,
+            'payload' => [$shipmentObject],
+            'third_party_token' => $thirdPartyToken,
+        ];
+    }
+
+    /**
+     * Call the PostShipping API to create a shipment.
+     * Endpoint: https://api.postshipping.com/api2/shipments
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+
+
+    /**
+     * Call the PostShipping API to create a shipment.
+     * Endpoint: https://api.postshipping.com/api2/shipments
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+    private function callPostShippingApiFromDb($shipper)
+    {
+        try {
+            $payloadResult = $this->buildPostShippingPayloadFromDb($shipper);
+            if (! $payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build PostShipping payload.',
+                ];
+            }
+
+            $payload = $payloadResult['payload'];
+            // The ThirdPartyToken is sent inside the request body.
+            // A SEPARATE api_token is sent as the "token" request header for authentication.
+            $apiToken = config('services.postshipping.api_token');
+            $baseUrl = rtrim(config('services.postshipping.base_url'), '/');
+            $endpoint = config('services.postshipping.endpoint', '/api2/shipments');
+            $url = $baseUrl.$endpoint;
+            $timeout = (int) config('services.postshipping.timeout', 60);
+
+            \Log::info('PostShipping payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
+
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'Connection' => 'keep-alive',
+            ];
+            if (! empty($apiToken)) {
+                $headers['token'] = $apiToken;
+            }
+
+            $response = Http::withHeaders($headers)
+                ->withOptions(['verify' => false])
+                ->timeout($timeout)
+                ->post($url, $payload);
+
+            $apiResponse = $response->json();
+
+            if (! $response->successful()) {
+                $errorMessage = 'PostShipping API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('PostShipping API failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code' => $response->status(),
+                ];
+            }
+
+            \Log::info('PostShipping response for shipper #'.$shipper->id.': '.substr($response->body(), 0, 2000));
+
+            // The DPD/PostShipping API may return HTTP 200 but still reject the
+            // shipment by embedding an error inside the "ErrMessage" field of
+            // each consignment object (e.g. "Service Denied (1021) - ...").
+            // Detect this so the caller treats it as a failure instead of success.
+            $errMessage = $this->extractPostShippingErrorMessage($apiResponse);
+            if ($errMessage !== null) {
+                \Log::error('PostShipping API rejected shipment (ErrMessage): '.$errMessage.' | Body: '.$response->body());
+
+                return [
+                    'success' => false,
+                    'message' => 'PostShipping API rejected shipment: '.$errMessage,
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code' => $response->status(),
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'PostShipping shipment created successfully.',
+                'data' => $apiResponse,
+                'request_payload' => $payload,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('PostShipping API call failed: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'PostShipping API call failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Detect an embedded error in a PostShipping API response.
+     *
+     * The DPD/PostShipping API sometimes returns HTTP 200 but rejects the
+     * shipment by placing an "ErrMessage" string inside each consignment
+     * object of the response array. This method scans the response for any
+     * non-empty ErrMessage and returns the first one found (trimmed), or
+     * null when the response is genuinely successful.
+     *
+     * Supported response shapes:
+     *   - Indexed array of consignments: [ {ErrMessage: "..."}, ... ]
+     *   - Single object: {ErrMessage: "..."}
+     *   - Nested under a "data" / "shipments" key
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Detect an embedded error in a PostShipping API response.
+     *
+     * The DPD/PostShipping API sometimes returns HTTP 200 but rejects the
+     * shipment by placing an "ErrMessage" string inside each consignment
+     * object of the response array. This method scans the response for any
+     * non-empty ErrMessage and returns the first one found (trimmed), or
+     * null when the response is genuinely successful.
+     *
+     * Supported response shapes:
+     *   - Indexed array of consignments: [ {ErrMessage: "..."}, ... ]
+     *   - Single object: {ErrMessage: "..."}
+     *   - Nested under a "data" / "shipments" key
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingErrorMessage($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        // Candidate containers that may hold consignment objects.
+        $containers = [];
+
+        // Top-level indexed array of consignments.
+        $hasStringKeys = false;
+        foreach (array_keys($apiResponse) as $k) {
+            if (is_string($k)) {
+                $hasStringKeys = true;
+                break;
+            }
+        }
+        if (! $hasStringKeys) {
+            $containers[] = $apiResponse;
+        }
+
+        // Common nested keys.
+        foreach (['data', 'shipments', 'Shipment', 'Shipments', 'consignment', 'consignments'] as $key) {
+            if (isset($apiResponse[$key]) && is_array($apiResponse[$key])) {
+                $containers[] = $apiResponse[$key];
+            }
+        }
+
+        // If the response itself looks like a single consignment object.
+        if (isset($apiResponse['ErrMessage'])) {
+            $containers[] = [$apiResponse];
+        }
+
+        foreach ($containers as $container) {
+            foreach ($container as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                if (! empty($item['ErrMessage']) && is_string($item['ErrMessage'])) {
+                    $msg = trim($item['ErrMessage']);
+                    if ($msg !== '') {
+                        return $msg;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a tracking/reference number from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing: ShipmentNumber, AlternateRef, LabelURL, ErrMessage, AcccountCode.
+     * We also keep fallbacks for other possible shapes (top-level, nested under
+     * "data", or wrapped under "Shipments") for resilience.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract a tracking/reference number from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing: ShipmentNumber, AlternateRef, LabelURL, ErrMessage, AcccountCode.
+     * We also keep fallbacks for other possible shapes (top-level, nested under
+     * "data", or wrapped under "Shipments") for resilience.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingTrackingNumber($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the documented PostShipping response format.
+        $priorityKeys = ['ShipmentNumber', 'shipment_number', 'AlternateRef', 'alternate_ref'];
+        $fallbackKeys = [
+            'tracking_number', 'TrackingNumber', 'waybill_number', 'WaybillNumber',
+            'awb_number', 'AwbNumber', 'consignment_number', 'ConsignmentNumber',
+            'order_number', 'OrderNumber', 'waybill', 'Waybill',
+            'reference', 'Reference', 'shipment_id', 'ShipmentId',
+        ];
+        $candidateKeys = array_merge($priorityKeys, $fallbackKeys);
+
+        // Case A: The response itself is a list of shipment objects
+        // (documented format: [{ ShipmentNumber, LabelURL, ... }])
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($candidateKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys (single shipment object returned directly)
+        foreach ($candidateKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            // data is a list of shipments
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($candidateKeys as $key) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            // data is a single shipment object
+            foreach ($candidateKeys as $key) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Shipment" / "shipment"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the LabelURL from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing a LabelURL field with the shipping label download link.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract the LabelURL from a PostShipping API response.
+     *
+     * The documented response format is an array of shipment objects, each
+     * containing a LabelURL field with the shipping label download link.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractPostShippingLabelUrl($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        $labelKeys = ['LabelURL', 'label_url', 'LabelUrl', 'labelurl', 'Label', 'label'];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($labelKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($labelKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($labelKeys as $key) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($labelKeys as $key) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Flying Tigers API (UNITED ECO POST)
+    |--------------------------------------------------------------------------
+    | Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+    | Auth headers: ClientCode, UserCode, AuthToken
+    |
+    */
+
+    /**
+     * Determine if a shipping method should be routed to the Flying Tigers API.
+     * Triggered for UNITED ECO POST shipments.
+     *
+     * @param  string|null  $shippingMethod
+     * @return bool
+     */
+
+
+    /**
+     * Generate a Bearer token using ShipUniversal HTTP Basic authentication.
+     *
+     * @return array ['success' => bool, 'token' => string|null, 'message' => string|null]
+     */
+    private function getShipUniversalToken()
+    {
+        try {
+            $tokenUrl = config('services.shipuniversal.token_url');
+            $username = config('services.shipuniversal.username');
+            $password = config('services.shipuniversal.password');
+            $grantType = config('services.shipuniversal.grant_type', 'client_credentials');
+            $timeout = (int) config('services.shipuniversal.timeout', 60);
+
+            if (empty($tokenUrl) || empty($username) || empty($password)) {
+                return [
+                    'success' => false,
+                    'message' => 'ShipUniversal credentials are not configured.',
+                ];
+            }
+
+            $response = Http::withBasicAuth($username, $password)
+                ->acceptJson()
+                ->asForm()
+                ->timeout($timeout)
+                ->post($tokenUrl, [
+                    'grant_type' => $grantType,
+                ]);
+
+            if (! $response->successful()) {
+                $responseData = $response->json();
+                $message = $this->extractShipUniversalErrorMessage(
+                    $responseData,
+                    'ShipUniversal token generation failed.'
+                );
+
+                \Log::error(
+                    'ShipUniversal token generation failed. Status: '
+                    .$response->status().' | Body: '.$response->body()
+                );
+
+                return ['success' => false, 'message' => $message];
+            }
+
+            $tokenData = $response->json();
+            $token = $this->findShipUniversalResponseValue(
+                $tokenData,
+                ['access_token', 'accessToken', 'token', 'Token', 'bearer_token', 'bearerToken']
+            );
+
+            // Some token endpoints return a plain token instead of JSON.
+            if (empty($token)) {
+                $rawToken = trim($response->body(), " \t\n\r\0\x0B\"");
+                if ($rawToken !== '' && ! str_starts_with($rawToken, '{') && ! str_starts_with($rawToken, '[')) {
+                    $token = $rawToken;
+                }
+            }
+
+            if (! is_scalar($token) || trim((string) $token) === '') {
+                \Log::error('ShipUniversal token response did not contain a token.');
+
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in ShipUniversal authentication response.',
+                ];
+            }
+
+            return ['success' => true, 'token' => trim((string) $token)];
+        } catch (\Exception $e) {
+            \Log::error('ShipUniversal token generation exception: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal token generation failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Build the ShipUniversal shipment-create payload from stored shipment data.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+
+
+    /**
+     * Build the ShipUniversal shipment-create payload from stored shipment data.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildShipUniversalPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (! $consignee) {
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+        $invoiceItems = $invoice
+            ? ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get()
+            : collect();
+        $csbInformation = $shipper->csbInformation;
+
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = ! empty($shipper->service_id)
+            ? CourierService::find($shipper->service_id)
+            : null;
+        if (! $courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
+        $serviceCode = trim((string) (
+            $courierService->service_code
+            ?? $courierService->scode
+            ?? ''
+        ));
+        if ($serviceCode === '') {
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal service code is not configured for the selected courier service.',
+            ];
+        }
+
+        $kycType = match ($shipper->kyc_type) {
+            'GST (Normal)' => 'GSTIN (Normal)',
+            'Aadhar Card' => 'Aadhaar Number',
+            'PAN Card' => 'PAN Number',
+            default => (string) ($shipper->kyc_type ?? ''),
+        };
+
+        $packageDetails = $packages->map(function ($package) {
+            return [
+                'Length' => (float) ($package->length_cm ?? 0),
+                'Width' => (float) ($package->width_cm ?? 0),
+                'Height' => (float) ($package->height_cm ?? 0),
+                'ActualWeight' => (float) ($package->actual_weight_kg ?? 0),
+            ];
+        })->values()->all();
+
+        $totalPackageWeight = (float) $packages->sum(function ($package) {
+            return (float) ($package->actual_weight_kg ?? 0);
+        });
+        $totalItemQuantity = (float) $invoiceItems->sum(function ($item) {
+            return max(0, (float) ($item->qty ?? 0));
+        });
+        $pieceWeight = $totalItemQuantity > 0
+            ? round($totalPackageWeight / $totalItemQuantity, 3)
+            : round($totalPackageWeight, 3);
+
+        $productDetails = $invoiceItems->map(function ($item) use ($pieceWeight) {
+            return [
+                'BoxNo' => (string) ($item->box_no ?? 1),
+                'Description' => (string) ($item->description ?? ''),
+                'HSNCode' => (string) ($item->hs_code ?? ''),
+                'HTSCode' => (string) ($item->hts_code ?? ''),
+                'UnitType' => (string) ($item->unit_type ?? 'PCS'),
+                'Qty' => (float) ($item->qty ?? 1),
+                'UnitRate' => (float) ($item->unit_rate ?? 0),
+                'ShipPieceIGST' => (float) ($item->igst_percentage ?? 0),
+                'PieceWt' => $pieceWeight,
+            ];
+        })->values()->all();
+
+        if (empty($productDetails)) {
+            $productDetails[] = [
+                'BoxNo' => '1',
+                'Description' => 'General Merchandise',
+                'HSNCode' => '',
+                'HTSCode' => '',
+                'UnitType' => 'PCS',
+                'Qty' => 1,
+                'UnitRate' => (float) ($invoice->invoice_amount ?? 0),
+                'ShipPieceIGST' => 0,
+                'PieceWt' => $pieceWeight,
+            ];
+        }
+
+        $originType = strtoupper(trim((string) ($consignee->origin_type ?? '')));
+        $csbType = in_array($originType, ['CSB V', 'CSB 5'], true) ? 'CSB 5' : 'CSB 4';
+        $bondUtIgst = trim((string) ($csbInformation->bond_ut_igst ?? ''));
+        $isIgstPaid = str_contains(strtoupper($bondUtIgst), 'IGST');
+        $igstAmount = (float) $invoiceItems->sum(function ($item) {
+            return (float) ($item->igst_amount ?? 0);
+        });
+
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? $invoice->invoice_date->format('Y-m-d').'T00:00:00Z'
+            : now()->format('Y-m-d').'T00:00:00Z';
+        $referenceNumber = trim((string) ($invoice->reference_number ?? ''));
+        if ($referenceNumber === '') {
+            $referenceNumber = (string) ($shipper->awb_number ?? ('SU-'.$shipper->id));
+        }
+
+        $senderAddressLine1 = trim((string) ($shipper->address_line1 ?? ''));
+        $senderAddressLine2 = trim((string) ($shipper->address_line2 ?? ''));
+        if ($senderAddressLine2 === '') {
+            $senderAddressLine2 = $senderAddressLine1;
+        }
+
+        $receiverAddressLine1 = trim((string) ($consignee->address_line1 ?? ''));
+        $receiverAddressLine2 = trim((string) ($consignee->address_line2 ?? ''));
+        if ($receiverAddressLine2 === '') {
+            $receiverAddressLine2 = $receiverAddressLine1;
+        }
+
+        $payload = [
+            'AccountCode' => config('services.shipuniversal.account_code', 'SU0119'),
+            'Sender' => [
+                'SenderName' => (string) ($shipper->company_name ?? $shipper->contact_person ?? 'Shipper'),
+                'SenderContactPerson' => (string) ($shipper->contact_person ?? $shipper->company_name ?? 'Shipper'),
+                'SenderAddressLine1' => $senderAddressLine1,
+                'SenderAddressLine2' => $senderAddressLine2,
+                'SenderAddressLine3' => (string) ($shipper->address_line3 ?? ''),
+                'SenderPincode' => (string) ($shipper->pincode ?? ''),
+                'SenderCity' => (string) ($shipper->city ?? ''),
+                'SenderState' => (string) ($shipper->state ?? ''),
+                'SenderTelephone' => (string) ($shipper->phone_number ?? ''),
+                'SenderEmailId' => (string) ($shipper->email ?? ''),
+                'KYCType' => $kycType,
+                'KYCNo' => (string) ($shipper->kyc_number ?? ''),
+            ],
+            'Receiver' => [
+                'ReceiverName' => (string) ($consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee'),
+                'ReceiverContactPerson' => (string) ($consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee'),
+                'ReceiverAddressLine1' => $receiverAddressLine1,
+                'ReceiverAddressLine2' => $receiverAddressLine2,
+                'ReceiverAddressLine3' => (string) ($consignee->address_line3 ?? ''),
+                'ReceiverZipcode' => (string) ($consignee->zip_code ?? ''),
+                'ReceiverCity' => (string) ($consignee->city ?? ''),
+                'ReceiverState' => (string) ($consignee->state ?? ''),
+                'ReceiverCountry' => $this->getShipUniversalCountryCode($consignee->delivery_destination),
+                'ReceiverTelephone' => (string) ($consignee->phone_number ?? ''),
+                'ReceiverEmailid' => (string) ($consignee->email ?? ''),
+                'VatId' => '',
+            ],
+            'ServiceDetails' => [
+                'Service' => $serviceCode,
+                'GoodsType' => 'NDox',
+                'PackageType' => 'PACKAGE',
+            ],
+            'PackageDetails' => [
+                'PackageDetail' => $packageDetails,
+            ],
+            'AdditionalDetails' => [
+                'IsThirdParty' => true,
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => (string) ($invoice->invoice_currency ?? 'INR'),
+                'InvoiceNo' => (string) ($invoice->invoice_number ?? ''),
+                'InvoiceDate' => $invoiceDate,
+                'TermsOfSale' => (string) ($invoice->incoterms ?? 'FOB'),
+                'ReasonForExport' => 'SALE',
+                'FreightCharge' => 0,
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => $referenceNumber,
+                'DeliveryConfirmation' => 'No',
+                'DutyTax' => 'DDU',
+                'DutiesAccountNo' => '',
+                'TransactionId' => '',
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
+                'IECNo' => (string) ($csbInformation->iec_code ?? ''),
+                'ADCode' => (string) ($csbInformation->ad_code ?? ''),
+                'BankType' => 'G',
+                'BankAccount' => (string) ($csbInformation->bank_account_number ?? ''),
+                'NFEI' => false,
+                'Ecom' => $this->shipUniversalValueIsYes($csbInformation->ecommerce ?? null),
+                'MEIS' => $this->shipUniversalValueIsYes($csbInformation->scheme ?? null),
+                'BoundUT' => $bondUtIgst !== '' ? $bondUtIgst : 'NA',
+                'IGSTPaid' => $isIgstPaid ? 'Yes' : 'No',
+                'IGSTAmount' => $isIgstPaid ? $igstAmount : 0,
+            ],
+        ];
+
+        return ['success' => true, 'payload' => $payload];
+    }
+
+    /**
+     * Create a shipment through ShipUniversal using a generated Bearer token.
+     */
+
+
+    /**
+     * Create a shipment through ShipUniversal using a generated Bearer token.
+     */
+    private function callShipUniversalApiFromDb($shipper)
+    {
+        try {
+            $tokenResult = $this->getShipUniversalToken();
+            if (! $tokenResult['success']) {
+                return $tokenResult;
+            }
+
+            $payloadResult = $this->buildShipUniversalPayloadFromDb($shipper);
+            if (! $payloadResult['success']) {
+                return $payloadResult;
+            }
+
+            $shipmentUrl = config('services.shipuniversal.shipment_url');
+            $timeout = (int) config('services.shipuniversal.timeout', 60);
+            $payload = $payloadResult['payload'];
+
+            if (empty($shipmentUrl)) {
+                return [
+                    'success' => false,
+                    'message' => 'ShipUniversal shipment URL is not configured.',
+                    'request_payload' => $payload,
+                ];
+            }
+
+            \Log::info(
+                'ShipUniversal shipment request for shipper #'.$shipper->id,
+                ['service' => $payload['ServiceDetails']['Service'] ?? null]
+            );
+
+            $response = Http::withToken($tokenResult['token'])
+                ->acceptJson()
+                ->asJson()
+                ->timeout($timeout)
+                ->post($shipmentUrl, $payload);
+
+            $apiResponse = $response->json();
+            if (! is_array($apiResponse)) {
+                $apiResponse = ['raw_body' => $response->body()];
+            }
+
+            if (! $response->successful()) {
+                $message = $this->extractShipUniversalErrorMessage(
+                    $apiResponse,
+                    'ShipUniversal shipment creation failed.'
+                );
+                \Log::error(
+                    'ShipUniversal shipment creation failed. Status: '
+                    .$response->status().' | Body: '.$response->body()
+                );
+
+                return [
+                    'success' => false,
+                    'message' => $message,
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code' => $response->status(),
+                ];
+            }
+
+            $status = $this->findShipUniversalResponseValue($apiResponse, ['Status', 'status', 'Success', 'success']);
+            if ($status === false || (is_string($status) && in_array(strtoupper($status), ['ERROR', 'FAILED', 'FAILURE', 'FALSE'], true))) {
+                return [
+                    'success' => false,
+                    'message' => $this->extractShipUniversalErrorMessage(
+                        $apiResponse,
+                        'ShipUniversal API returned an error status.'
+                    ),
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'ShipUniversal shipment created successfully.',
+                'data' => $apiResponse,
+                'request_payload' => $payload,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('ShipUniversal API call failed: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'ShipUniversal API call failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Find the first matching scalar value anywhere in a ShipUniversal response.
+     */
+
+
+    /**
+     * Find the first matching scalar value anywhere in a ShipUniversal response.
+     */
+    private function findShipUniversalResponseValue($value, array $keys)
+    {
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $normalizedKeys = array_map('strtolower', $keys);
+        foreach ($value as $key => $child) {
+            if (in_array(strtolower((string) $key), $normalizedKeys, true) && is_scalar($child)) {
+                return $child;
+            }
+        }
+
+        foreach ($value as $child) {
+            if (is_array($child)) {
+                $found = $this->findShipUniversalResponseValue($child, $keys);
+                if ($found !== null && $found !== '') {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    private function extractShipUniversalTrackingNumber($apiResponse)
+    {
+        $value = $this->findShipUniversalResponseValue($apiResponse, [
+            'AwbNo', 'AwbNumber', 'AWBNumber', 'awb_number', 'awb',
+            'TrackingNumber', 'tracking_number', 'WaybillNumber', 'waybill_number',
+            'ConsignmentNumber', 'consignment_number', 'ShipmentNumber', 'shipment_number',
+        ]);
+
+        return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+
+    private function extractShipUniversalLabelUrl($apiResponse)
+    {
+        $value = $this->findShipUniversalResponseValue($apiResponse, [
+            'AirwaybillUrl', 'BoxlabelUrl', 'LabelUrl', 'label_url', 'LabelURL',
+            'LabelLink', 'label_link', 'PdfUrl', 'pdf_url', 'LabelBase64', 'label_base64',
+        ]);
+
+        return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+
+    private function extractShipUniversalErrorMessage($apiResponse, $fallback)
+    {
+        $message = $this->findShipUniversalResponseValue($apiResponse, [
+            'ErrorMessage', 'error_message', 'Error', 'error', 'Message', 'message',
+            'Description', 'description', 'Detail', 'detail',
+        ]);
+
+        if (is_scalar($message) && trim((string) $message) !== '') {
+            return trim((string) $message);
+        }
+
+        return $fallback;
+    }
+
+
+    private function shipUniversalValueIsYes($value)
+    {
+        return in_array(strtolower(trim((string) $value)), ['1', 'yes', 'true', 'y'], true);
+    }
+
+
+    private function getShipUniversalCountryCode($destination)
+    {
+        $destination = strtoupper(trim((string) $destination));
+        if (preg_match('/^[A-Z]{2}$/', $destination)) {
+            return $destination;
+        }
+
+        $countries = [
+            'UNITED STATES' => 'US',
+            'UNITED STATE' => 'US',
+            'USA' => 'US',
+            'UNITED KINGDOM' => 'GB',
+            'GREAT BRITAIN' => 'GB',
+            'UK' => 'GB',
+            'CANADA' => 'CA',
+            'AUSTRALIA' => 'AU',
+            'INDIA' => 'IN',
+            'CHINA' => 'CN',
+            'RUSSIA' => 'RU',
+            'SRI LANKA' => 'LK',
+            'SRILANKA' => 'LK',
+            'UNITED ARAB EMIRATES' => 'AE',
+            'UAE' => 'AE',
+            'GERMANY' => 'DE',
+            'FRANCE' => 'FR',
+            'ITALY' => 'IT',
+            'SPAIN' => 'ES',
+            'NETHERLANDS' => 'NL',
+            'SINGAPORE' => 'SG',
+            'MALAYSIA' => 'MY',
+        ];
+
+        foreach ($countries as $name => $code) {
+            if (str_contains($destination, $name)) {
+                return $code;
+            }
+        }
+
+        // Destination dropdown values commonly begin with an ISO code (e.g. "US-").
+        if (preg_match('/^([A-Z]{2})\s*[-–:]/', $destination, $matches)) {
+            return $matches[1];
+        }
+
+        return 'US';
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Overseas Logistic API (UNITED CANADA DDP / UNITED CANADA E-COMMERCE)
+    |--------------------------------------------------------------------------
+    | Token URL:    https://api.overseaslogistic.com/token
+    | Shipment URL: https://api.overseaslogistic.com/api/shipment/create
+    |
+    | Two-step flow:
+    |   1. POST /token (OAuth2 client_credentials grant) -> Bearer access_token
+    |   2. POST /api/shipment/create with Authorization: Bearer <token>
+    |
+    | The /token endpoint is an OAuth2 token server. It requires a
+    | client_credentials grant with client_id/client_secret sent as
+    | form-encoded data (application/x-www-form-urlencoded). Sending
+    | username/password as JSON returns "invalid_client".
+    |
+    | The same endpoint/payload is used for both DDP and E-Commerce variants;
+    | the Service field inside ServiceDetails differentiates the service.
+    |
+    */
+
+    /**
+     * Generate a Bearer token from the Overseas Logistic /token endpoint.
+     *
+     * Uses the OAuth2 client_credentials grant type. The username configured
+     * in services.overseas.username is sent as client_id and the password as
+     * client_secret, form-encoded (NOT JSON).
+     *
+     * @return array ['success' => bool, 'token' => string|null, 'message' => string|null]
+     */
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Overseas Logistic API (UNITED CANADA DDP / UNITED CANADA E-COMMERCE)
+    |--------------------------------------------------------------------------
+    | Token URL:    https://api.overseaslogistic.com/token
+    | Shipment URL: https://api.overseaslogistic.com/api/shipment/create
+    |
+    | Two-step flow:
+    |   1. POST /token (OAuth2 client_credentials grant) -> Bearer access_token
+    |   2. POST /api/shipment/create with Authorization: Bearer <token>
+    |
+    | The /token endpoint is an OAuth2 token server. It requires a
+    | client_credentials grant with client_id/client_secret sent as
+    | form-encoded data (application/x-www-form-urlencoded). Sending
+    | username/password as JSON returns "invalid_client".
+    |
+    | The same endpoint/payload is used for both DDP and E-Commerce variants;
+    | the Service field inside ServiceDetails differentiates the service.
+    |
+    */
+
+    /**
+     * Generate a Bearer token from the Overseas Logistic /token endpoint.
+     *
+     * Uses the OAuth2 client_credentials grant type. The username configured
+     * in services.overseas.username is sent as client_id and the password as
+     * client_secret, form-encoded (NOT JSON).
+     *
+     * @return array ['success' => bool, 'token' => string|null, 'message' => string|null]
+     */
+    private function getOverseasLogisticToken()
+    {
+        try {
+            $tokenUrl = config('services.overseas.token_url');
+            $clientId = config('services.overseas.username');
+            $clientSec = config('services.overseas.password');
+            $timeout = (int) config('services.overseas.timeout', 60);
+
+            if (empty($tokenUrl) || empty($clientId) || empty($clientSec)) {
+                return [
+                    'success' => false,
+                    'message' => 'Overseas Logistic credentials are not configured.',
+                ];
+            }
+
+            // OAuth2 client_credentials grant — must be form-encoded.
+            $response = Http::asForm()
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                ])
+                ->timeout($timeout)
+                ->post($tokenUrl, [
+                    'grant_type' => 'client_credentials',
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSec,
+                ]);
+
+            if (! $response->successful()) {
+                $errorBody = $response->json() ?: $response->body();
+                $errorMessage = 'Overseas Logistic token generation failed.';
+                if (is_array($errorBody)) {
+                    if (isset($errorBody['error_description'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['error_description']);
+                    } elseif (isset($errorBody['error'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['error']);
+                    } elseif (isset($errorBody['message'])) {
+                        $errorMessage = $this->overseasValueToString($errorBody['message']);
+                    }
+                }
+                \Log::error('Overseas Logistic token generation failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                ];
+            }
+
+            $tokenData = $response->json();
+            $bearerToken = null;
+
+            // Extract token from various possible response formats.
+            // The OAuth2 server returns "access_token" at the top level.
+            if (isset($tokenData['access_token'])) {
+                $bearerToken = $tokenData['access_token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['access_token'])) {
+                $bearerToken = $tokenData['data']['access_token'];
+            } elseif (isset($tokenData['token'])) {
+                $bearerToken = $tokenData['token'];
+            } elseif (isset($tokenData['data']) && isset($tokenData['data']['token'])) {
+                $bearerToken = $tokenData['data']['token'];
+            } elseif (isset($tokenData['Token'])) {
+                $bearerToken = $tokenData['Token'];
+            }
+
+            if (! $bearerToken) {
+                \Log::error('Overseas Logistic: No token found in response. Response: '.json_encode($tokenData));
+
+                return [
+                    'success' => false,
+                    'message' => 'No bearer token found in Overseas Logistic authentication response.',
+                ];
+            }
+
+            \Log::info('Overseas Logistic token generated successfully.');
+
+            return [
+                'success' => true,
+                'token' => $bearerToken,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Overseas Logistic token generation exception: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Overseas Logistic token generation failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Build the Overseas Logistic shipment-create payload from database records.
+     * Payload structure mirrors the documented /api/shipment/create format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+
+
+    /**
+     * Build the Overseas Logistic shipment-create payload from database records.
+     * Payload structure mirrors the documented /api/shipment/create format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildOverseasLogisticPayloadFromDb($shipper)
+    {
+
+        $consignee = $shipper->consigneeInfo;
+        if (! $consignee) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+        if ($shipper->kyc_type == 'GST (Normal)') {
+            $kycType_data = 'GSTIN (Normal)';
+        } elseif ($shipper->kyc_type == 'Aadhar Card') {
+            $kycType_data = 'Aadhaar Number';
+        } elseif ($shipper->kyc_type == 'PAN Card') {
+            $kycType_data = 'PAN Number';
+        } else {
+            $kycType_data = $shipper->kyc_type ?? '';
+        }
+
+        // ---- Sender ----
+        $senderName = $shipper->company_name ?? $shipper->contact_person ?? 'Shipper';
+        $senderContact = $shipper->contact_person ?? $shipper->company_name ?? 'Shipper';
+        $senderAddress1 = $shipper->address_line1 ?? '';
+        $senderAddress2 = $shipper->address_line2 ?? '';
+        $senderAddress3 = $shipper->address_line3 ?? '';
+        $senderPincode = (string) ($shipper->pincode ?? '');
+        $senderCity = $shipper->city ?? '';
+        $senderState = $shipper->state ?? '';
+
+        // ---- Validation: shipper state must not exceed 2 characters ----
+        // The Overseas Logistic API expects a 2-letter state code (e.g. "GJ",
+        // "MH"). If the shipper's state field contains more than 2 letters
+        // (e.g. a full state name like "Gujarat"), shipment creation is blocked
+        // here with an error so the API is never called with invalid data.
+        // This applies to ALL Overseas Logistic shipments (Canada DDP /
+        // E-Commerce and ARAMEX GPX / Australia).
+        $senderStateTrimmed = trim((string) $senderState);
+        if (strlen($senderStateTrimmed) > 2) {
+            \Log::warning('buildOverseasLogisticPayloadFromDb: Shipper state exceeds 2 characters for shipper #'.$shipper->id.' | state="'.$senderStateTrimmed.'"');
+
+            return [
+                'success' => false,
+                'message' => 'Shipper state must be a 2-letter code (e.g. "GJ", "MH"). The provided state "'.$senderStateTrimmed.'" is too long. Please update the shipper state to a 2-letter code and try again.',
+            ];
+        }
+
+        $senderTelephone = (string) ($shipper->phone_number ?? '');
+        $senderEmail = $shipper->email ?? '';
+        // $kycType         = $shipper->kyc_type ?? 'GSTIN (Normal)';
+        $kycType = $kycType_data;
+        $kycNo = (string) ($shipper->kyc_number ?? '');
+
+        // ---- Receiver ----
+        // $receiverType      = $consignee->origin_type ? ucfirst(strtolower($consignee->origin_type)) : 'Business';
+        // if($consignee->origin_type == "CSB IV") {
+        //     $receiverType = "customer";
+        // } else if($consignee->origin_type == "CSB V") {
+        //     $receiverType = "Business";
+        // }
+        $receiverName = $consignee->consignee_name ?? $consignee->contact_person ?? 'Consignee';
+        $receiverContact = $consignee->contact_person ?? $consignee->consignee_name ?? 'Consignee';
+        $receiverAddress1 = $consignee->address_line1 ?? '';
+        $receiverAddress2 = $consignee->address_line2 ?? '';
+        $receiverAddress3 = $consignee->address_line3 ?? '';
+        $receiverZipcode = (string) ($consignee->zip_code ?? '');
+        $receiverCity = $consignee->city ?? '';
+        $receiverState = $consignee->state ?? '';
+        $receiverCountry = $this->getOverseasCountryCode($consignee->delivery_destination ?? '', 'CA');
+        $receiverTelephone = (string) ($consignee->phone_number ?? '');
+        $receiverEmail = $consignee->email ?? '';
+
+        // ---- Service details ----
+        // Resolve the courier service to get the Service code (e.g. CANADA_YVR_SELF).
+        // The overseas payload is identical for every overseas service; only the
+        // Service field inside ServiceDetails changes per service. We now prefer
+        // the explicit shipper_info.service_id (stored at manifest time) to look
+        // up the courier_services row directly — this is more reliable than the
+        // fuzzy string matching below, which can pick the wrong service when
+        // several overseas services share similar method names.
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = null;
+
+        // 1) Preferred path: resolve directly from shipper_info.service_id.
+        if (! empty($shipper->service_id)) {
+            $serviceById = CourierService::find($shipper->service_id);
+            if ($serviceById && $this->isOverseasLogisticMethod($serviceById->method)) {
+                $courierService = $serviceById;
+                // Keep shipping_method in sync with the resolved service so the
+                // DutyTax / CSB logic below and any logging use the real method.
+                $shippingMethod = $serviceById->method;
+            }
+        }
+
+        // 2) Fallback: legacy fuzzy match (for older rows where service_id is NULL
+        //    or points at a non-overseas service).
+        if (! $courierService) {
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        }
+
+        $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
+        if (empty($serviceCode)) {
+            // Fallback to a sensible default if the service code is missing.
+            $serviceCode = 'CANADA_YVR_SELF';
+        }
+
+        // GoodsType: NDox (documents) vs NDox (non-documents). Default to NDox.
+        $goodsType = 'NDox';
+        $packageType = 'PACKAGE';
+
+        // ---- Package details ----
+        $packageDetail = [];
+        foreach ($packages as $pkg) {
+            $packageDetail[] = [
+                'Length' => (float) ($pkg->length_cm ?? 0),
+                'Width' => (float) ($pkg->width_cm ?? 0),
+                'Height' => (float) ($pkg->height_cm ?? 0),
+                'ActualWeight' => (float) ($pkg->actual_weight_kg ?? 0),
+            ];
+        }
+
+        // ---- Additional details / product details ----
+        $productDetails = [];
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+            foreach ($invoiceItems as $item) {
+                $productDetails[] = [
+                    'BoxNo' => (string) ($item->box_no ?? 1),
+                    'Description' => $item->description ?? '',
+                    'HSNCode' => (string) ($item->hs_code ?? ''),
+                    'HTSCode' => (string) ($item->hts_code ?? ''),
+                    'UnitType' => $item->unit_type ?? 'PCS',
+                    'Qty' => (int) $item->qty,
+                    'UnitRate' => (float) $item->unit_rate,
+                    'ShipPieceIGST' => (float) ($item->igst_percentage ?? 0),
+                    'PieceWt' => (float) ($item->amount > 0 && $item->qty > 0 ? round($item->amount / $item->qty, 3) : 0),
+                ];
+            }
+        }
+
+        // Fallback product detail when no invoice items exist.
+        if (empty($productDetails)) {
+            $productDetails[] = [
+                'BoxNo' => '1',
+                'Description' => 'General Merchandise',
+                'HSNCode' => '',
+                'HTSCode' => '',
+                'UnitType' => 'PCS',
+                'Qty' => 1,
+                'UnitRate' => (float) ($invoice ? $invoice->invoice_amount : 0),
+                'ShipPieceIGST' => 0.00,
+                'PieceWt' => 0.3,
+            ];
+        }
+
+        // Invoice / export details.
+        $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? $invoice->invoice_date->format('Y-m-d').'T00:00:00Z'
+            : now()->format('Y-m-d').'T00:00:00Z';
+        $invoiceCurrency = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+        $termsOfSale = $invoice ? ($invoice->incoterms ?? 'FOB') : 'FOB';
+        $customerRefNo = $invoice ? ($invoice->reference_number ?? '') : '';
+        $transactionId = $shipper->awb_number ?? ('TXN-'.$shipper->id);
+
+        // DutyTax: DDP for UNITED CANADA DDP, DDU otherwise (E-Commerce).
+        $methodUpper = strtoupper(trim($shippingMethod));
+        $dutyTax = str_contains($methodUpper, 'DDP') ? 'DDP' : 'DDU';
+
+        // CSB type from customer csb_status (1..5 -> "CSB 1".."CSB 5"); default CSB 4.
+        $customer = Customer::find($shipper->customer_id);
+        $csbType = 'CSB 4';
+        // if ($customer && $customer->csb_status) {
+        //     // m chahata hu ki ek condition ho ki agar csb_status 1 h toh csbtype "csb 1" ho toh $csbType = "CSB 4" print ho agar csb_status 2 h toh csbtype "csb 2" h toh $csbType = "CSB 5" print ho
+
+        //     if ($customer->csb_status == 1) {
+        //         $csbType = 'CSB 4';
+        //     } elseif ($customer->csb_status == 2) {
+        //         $csbType = 'CSB 5';
+        //     }
+        //     print_r($csbType);
+        // }
+
+        if ($consignee->origin_type == 'CSB IV') {
+
+            $csbType = 'CSB 4';
+        } elseif ($consignee->origin_type == 'CSB V') {
+
+            $csbType = 'CSB 5';
+        }
+
+        $payload = [
+            'AccountCode' => config('services.overseas.account_code', 'PR-U02'),
+            'Sender' => [
+                'SenderName' => $senderName,
+                'SenderContactPerson' => $senderContact,
+                'SenderAddressLine1' => $senderAddress1,
+                'SenderAddressLine2' => $senderAddress2,
+                'SenderAddressLine3' => $senderAddress3,
+                'SenderPincode' => $senderPincode,
+                'SenderCity' => $senderCity,
+                'SenderState' => $senderState,
+                'SenderTelephone' => $senderTelephone,
+                'SenderEmailId' => $senderEmail,
+                'KYCType' => $kycType,
+                'KYCNo' => $kycNo,
+            ],
+            'Receiver' => [
+                'ReceiverType' => 'Business',
+                'ReceiverName' => $receiverName,
+                'ReceiverContactPerson' => $receiverContact,
+                'ReceiverAddressLine1' => $receiverAddress1,
+                'ReceiverAddressLine2' => $receiverAddress2,
+                'ReceiverAddressLine3' => $receiverAddress3,
+                'ReceiverZipcode' => $receiverZipcode,
+                'ReceiverCity' => $receiverCity,
+                'ReceiverState' => $receiverState,
+                'ReceiverCountry' => $receiverCountry,
+                'ReceiverTelephone' => $receiverTelephone,
+                'ReceiverEmailid' => $receiverEmail,
+                'VatId' => '',
+            ],
+            'ServiceDetails' => [
+                'Service' => $serviceCode,
+                'GoodsType' => $goodsType,
+                'PackageType' => $packageType,
+            ],
+            'PackageDetails' => [
+                'PackageDetail' => $packageDetail,
+            ],
+            'AdditionalDetails' => [
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => $invoiceCurrency,
+                'InvoiceNo' => $invoiceNo,
+                'InvoiceDate' => $invoiceDate,
+                'TermsOfSale' => $termsOfSale,
+                'ReasonForExport' => 'GIFT',
+                'FreightCharge' => 0,
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => $customerRefNo,
+                'DeliveryConfirmation' => 'No',
+                'DutyTax' => $dutyTax,
+                'DutiesAccountNo' => '',
+                'TransactionId' => $transactionId,
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
+            ],
+        ];
+
+        return ['success' => true, 'payload' => $payload];
+    }
+
+    /**
+     * Safely convert any value (string, array, object, null) into a string
+     * for use in log messages and error responses. Prevents
+     * "Array to string conversion" errors when API error fields are arrays.
+     *
+     * @param  mixed  $value
+     * @return string
+     */
+
+
+    /**
+     * Call the Overseas Logistic API to create a shipment.
+     * Two-step process:
+     * 1. Generate Bearer token from /token
+     * 2. Create shipment via /api/shipment/create using the Bearer token
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null, 'request_payload' => array|null]
+     */
+    private function callOverseasLogisticApiFromDb($shipper)
+    {
+        try {
+            // Step 1: Generate Bearer token.
+            $tokenResult = $this->getOverseasLogisticToken();
+            if (! $tokenResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $tokenResult['message'] ?? 'Overseas Logistic token generation failed.',
+                ];
+            }
+            $bearerToken = $tokenResult['token'];
+
+            // Step 2: Build the shipment payload.
+            $payloadResult = $this->buildOverseasLogisticPayloadFromDb($shipper);
+            if (! $payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build Overseas Logistic payload.',
+                ];
+            }
+            $payload = $payloadResult['payload'];
+
+            $shipmentUrl = config('services.overseas.shipment_url');
+            $timeout = (int) config('services.overseas.timeout', 60);
+
+            \Log::info('Overseas Logistic shipment payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
+
+            // Step 3: Call the shipment/create API with the Bearer token.
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer '.$bearerToken,
+            ])
+                ->timeout($timeout)
+                ->post($shipmentUrl, $payload);
+
+            $apiResponse = $response->json();
+
+            if (! $response->successful()) {
+                $errorMessage = 'Overseas Logistic API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['message']);
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = $this->overseasValueToString($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $details = $apiResponse['details'];
+                        if (is_array($details)) {
+                            $flat = array_map([$this, 'overseasValueToString'], $details);
+                            $errorMessage .= ' — '.implode('; ', $flat);
+                        } else {
+                            $errorMessage .= ' — '.$this->overseasValueToString($details);
+                        }
+                    }
+                }
+                \Log::error('Overseas Logistic shipment creation failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'request_payload' => $payload,
+                    'status_code' => $response->status(),
+                ];
+            }
+
+            // Check for a body-level error/status even on HTTP 200.
+            // The Overseas Logistic API returns { "Status": true/false, "Error": "...", "Data": {...} }.
+            // Treat Status === false (boolean) OR status === "ERROR" (string) as a failure.
+            if (is_array($apiResponse)) {
+                $responseStatus = $apiResponse['Status'] ?? $apiResponse['status'] ?? null;
+                $isError = false;
+                if ($responseStatus === false) {
+                    $isError = true;
+                } elseif ($responseStatus !== null && strtoupper((string) $responseStatus) === 'ERROR') {
+                    $isError = true;
+                }
+                if ($isError) {
+                    $rawError = $apiResponse['Error'] ?? $apiResponse['error']
+                        ?? $apiResponse['message'] ?? $apiResponse['Message']
+                        ?? 'Overseas Logistic API returned an error status.';
+                    $errorMessage = $this->overseasValueToString($rawError);
+                    \Log::error('Overseas Logistic API returned error in body for shipper #'.$shipper->id.': '.$errorMessage.' | Body: '.$response->body());
+
+                    return [
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'data' => $apiResponse,
+                        'request_payload' => $payload,
+                    ];
+                }
+            }
+
+            \Log::info('Overseas Logistic shipment created for shipper #'.$shipper->id.'. Response: '.substr($response->body(), 0, 2000));
+
+            return [
+                'success' => true,
+                'message' => 'Overseas Logistic shipment created successfully.',
+                'data' => $apiResponse,
+                'request_payload' => $payload,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Overseas Logistic API call failed: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Overseas Logistic API call failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Extract a tracking/AWB number from an Overseas Logistic API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract a tracking/AWB number from an Overseas Logistic API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractOverseasTrackingNumber($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the confirmed Overseas Logistic response format:
+        // { "Status": true, "Data": { "AwbNo": "55141977", ... } }
+        $priorityKeys = ['AwbNo', 'AwbNumber', 'awb_number', 'AWBNumber'];
+        $candidateKeys = [
+            'TrackingNumber', 'tracking_number',
+            'WaybillNumber', 'waybill_number', 'ConsignmentNumber', 'consignment_number',
+            'ShipmentNumber', 'shipment_number', 'OrderNumber', 'order_number',
+            'ReferenceNo', 'reference_no', 'RefNo', 'BookingId', 'booking_id',
+            'Waybill', 'waybill', 'Reference', 'reference', 'ShipmentId', 'shipment_id',
+        ];
+        $allKeys = array_merge($priorityKeys, $candidateKeys);
+
+        // Case A: The response itself is a list of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($allKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys.
+        foreach ($allKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "Data" (capital, confirmed format) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    foreach ($allKeys as $key) {
+                        if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                            return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                        }
+                    }
+                }
+                foreach ($allKeys as $key) {
+                    if (isset($data[$key]) && ! empty($data[$key])) {
+                        return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                    }
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a label URL (or base64 label) from an Overseas Logistic API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract a label URL (or base64 label) from an Overseas Logistic API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractOverseasLabelUrl($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        // Priority keys for the confirmed Overseas Logistic response format:
+        // { "Data": { "Airwaybill": { "AirwaybillUrl": "...", "BoxlabelUrl": "...", "CustomInvoiceUrl": "..." } } }
+        $priorityKeys = ['AirwaybillUrl', 'BoxlabelUrl', 'LabelUrl', 'label_url', 'LabelURL', 'LabelLink', 'label_link'];
+        $labelKeys = [
+            'PdfUrl', 'pdf_url', 'PdfLink', 'pdf_link', 'Label', 'label',
+            'LabelData', 'label_data', 'PdfBase64', 'pdf_base64', 'LabelBase64', 'label_base64',
+        ];
+        $allKeys = array_merge($priorityKeys, $labelKeys);
+
+        // Case 0 (confirmed format): Data.Airwaybill.<key>
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                foreach (['Airwaybill', 'airwaybill', 'AirwayBill', 'Label', 'label'] as $awbKey) {
+                    if (isset($data[$awbKey]) && is_array($data[$awbKey])) {
+                        foreach ($priorityKeys as $key) {
+                            if (isset($data[$awbKey][$key]) && ! empty($data[$awbKey][$key])) {
+                                return is_string($data[$awbKey][$key]) ? $data[$awbKey][$key] : (string) $data[$awbKey][$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Case A: List of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($allKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Top-level keys.
+        foreach ($allKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "Data" (capital) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    foreach ($allKeys as $key) {
+                        if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                            return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                        }
+                    }
+                }
+                foreach ($allKeys as $key) {
+                    if (isset($data[$key]) && ! empty($data[$key])) {
+                        return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                    }
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the 4x6 box label URL from an Overseas Logistic API response.
+     *
+     * Same case-walking as extractOverseasLabelUrl(), but prioritizes the
+     * BoxlabelUrl key so the 4x6 label is stored alongside the full
+     * airwaybill (LabelURL) in package_results.
+     */
+    private function extractOverseasBoxLabelUrl($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        $boxKeys = ['BoxlabelUrl', 'BoxLabelURL', 'boxlabelUrl', 'box_label_url', 'BoxLabelUrl'];
+        $awbKeys = ['Airwaybill', 'airwaybill', 'AirwayBill', 'Label', 'label'];
+
+        $pick = function ($arr) use ($boxKeys) {
+            if (! is_array($arr)) {
+                return null;
+            }
+            foreach ($boxKeys as $key) {
+                if (isset($arr[$key]) && ! empty($arr[$key])) {
+                    return is_string($arr[$key]) ? $arr[$key] : (string) $arr[$key];
+                }
+            }
+
+            return null;
+        };
+
+        // Case 0 (confirmed format): Data.Airwaybill.BoxlabelUrl
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                foreach ($awbKeys as $awbKey) {
+                    if (isset($data[$awbKey]) && is_array($data[$awbKey])) {
+                        $found = $pick($data[$awbKey]);
+                        if ($found) {
+                            return $found;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Case A: List of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            $found = $pick($apiResponse[0]);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        // Case B: Top-level keys.
+        $found = $pick($apiResponse);
+        if ($found) {
+            return $found;
+        }
+
+        // Case C: Nested under "Data" (capital) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    $found = $pick($data[0]);
+                    if ($found) {
+                        return $found;
+                    }
+                }
+                $found = $pick($data);
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        $found = $pick($first);
+                        if ($found) {
+                            return $found;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    /**
+     * Normalize a delivery-destination string into an ISO country code for the
+     * Overseas Logistic API. Defaults to the provided fallback (CA for Canada).
+     *
+     * @param  string|null  $destination
+     * @param  string  $fallback
+     * @return string
+     */
+    private function getOverseasCountryCode($destination, $fallback = 'CA')
+    {
+        $destUpper = strtoupper(trim($destination ?? ''));
+
+        if ($destUpper === '') {
+            return $fallback;
+        }
+
+        // Canada detection.
+        $isCanada = (
+            $destUpper === 'CANADA'
+            || $destUpper === 'CA'
+            || str_contains($destUpper, 'CANADA')
+        );
+        if ($isCanada) {
+            return 'CA';
+        }
+
+        // Australia detection — covers "Australia", "AU", "AUS", and any
+        // string containing "Australia". Returns ISO code "AU" for the
+        // Overseas Logistic API ReceiverCountry field.
+        $isAustralia = (
+            $destUpper === 'AUSTRALIA'
+            || $destUpper === 'AU'
+            || $destUpper === 'AUS'
+            || str_contains($destUpper, 'AUSTRALIA')
+        );
+        if ($isAustralia) {
+            return 'AU';
+        }
+
+        // UK detection.
+        $isUk = (
+            $destUpper === 'UK'
+            || $destUpper === 'GB'
+            || str_contains($destUpper, 'UNITED KINGDOM')
+            || str_starts_with($destUpper, 'UK -')
+            || str_contains($destUpper, 'GREAT BRITAIN')
+        );
+        if ($isUk) {
+            return 'GB';
+        }
+
+        // US detection.
+        $isUs = (
+            $destUpper === 'US'
+            || $destUpper === 'USA'
+            || str_contains($destUpper, 'UNITED STATE')
+            || str_starts_with($destUpper, 'US-')
+        );
+        if ($isUs) {
+            return 'US';
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * Build the Flying Tigers API payload from database records.
+     * Payload structure mirrors the documented CustomerBookingAPI format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+
+
+    /**
+     * Build the Flying Tigers API payload from database records.
+     * Payload structure mirrors the documented CustomerBookingAPI format.
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'payload' => array|null, 'message' => string|null]
+     */
+    private function buildFlyingTigersPayloadFromDb($shipper)
+    {
+        $consignee = $shipper->consigneeInfo;
+        if (! $consignee) {
+            \Log::warning('buildFlyingTigersPayloadFromDb: No consignee found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No consignee information found for this shipment.'];
+        }
+
+        $packages = $shipper->packageDimensions;
+        if ($packages->isEmpty()) {
+            \Log::warning('buildFlyingTigersPayloadFromDb: No packages found for shipper #'.$shipper->id);
+
+            return ['success' => false, 'message' => 'No package dimensions found for this shipment.'];
+        }
+
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+
+        // Consignee country code from delivery_destination (e.g. "US", "UK")
+        $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
+
+        // Currency code (default INR to match example payload)
+        $currencyCode = $invoice ? ($invoice->invoice_currency ?? 'INR') : 'INR';
+
+        // Booking date in "d-M-Y" format (e.g. "25-May-2026")
+        $bookingDate = now()->format('d-M-Y');
+
+        // Reference number: prefer invoice reference, else AWB number
+        $refNo = $invoice ? ($invoice->reference_number ?? '') : '';
+        if (empty($refNo)) {
+            $refNo = $shipper->awb_number ?? ('FT-'.$shipper->id);
+        }
+
+        // Consignee name: prefer consignee_name, else contact_person
+        $consigneeName = $consignee->consignee_name ?? '';
+        if (empty(trim($consigneeName))) {
+            $consigneeName = $consignee->contact_person ?? '';
+        }
+
+        // Consignee phone
+        $consigneePhone = $consignee->phone_number ?? '';
+
+        // Consignee address (combine line1 + line2 + line3 if line1 is short)
+        $consigneeAddress1 = trim($consignee->address_line1 ?? '');
+        if (empty($consigneeAddress1)) {
+            $consigneeAddress1 = trim(($consignee->address_line2 ?? '').' '.($consignee->address_line3 ?? ''));
+        }
+
+        // Invoice number & date for packet details
+        $invoiceNo = $invoice ? ($invoice->invoice_number ?? '') : '';
+        if (empty($invoiceNo)) {
+            $invoiceNo = $shipper->awb_number ?? ('INV-'.$shipper->id);
+        }
+        $invoiceDate = $invoice && $invoice->invoice_date
+            ? Carbon::parse($invoice->invoice_date)->format('d-M-Y')
+            : now()->format('d-M-Y');
+
+        // Build addPacketDetailList — one entry per package, with boxInvoiceDetails from invoice items.
+        $addPacketDetailList = [];
+        $invoiceItems = collect();
+        if ($invoice) {
+            $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+        }
+
+        $packageIndex = 0;
+        foreach ($packages as $pkg) {
+            $packageIndex++;
+
+            $pkgWeight = (float) ($pkg->actual_weight_kg ?? 0);
+            if ($pkgWeight <= 0) {
+                $pkgWeight = 0.5;
+            }
+            $pkgL = (float) ($pkg->length_cm ?? 0) ?: 1;
+            $pkgW = (float) ($pkg->width_cm ?? 0) ?: 1;
+            $pkgH = (float) ($pkg->height_cm ?? 0) ?: 1;
+
+            // Find invoice items mapped to this package via box_no (1-based)
+            $boxItems = $invoiceItems->filter(function ($item) use ($packageIndex) {
+                return ((int) ($item->box_no ?? 0)) === $packageIndex;
+            });
+
+            // If no items mapped to this box, use all items for the first package
+            if ($boxItems->isEmpty() && $packageIndex === 1) {
+                $boxItems = $invoiceItems;
+            }
+
+            $boxInvoiceDetails = [];
+            if ($boxItems->isNotEmpty()) {
+                foreach ($boxItems as $item) {
+                    $itemQty = (float) ($item->qty ?? 1);
+                    if ($itemQty <= 0) {
+                        $itemQty = 1;
+                    }
+                    $itemUnitPrice = (float) ($item->unit_rate ?? 0);
+                    if ($itemUnitPrice <= 0) {
+                        $itemUnitPrice = (float) ($item->amount ?? 0) / $itemQty;
+                    }
+                    if ($itemUnitPrice <= 0) {
+                        $itemUnitPrice = 5.00;
+                    }
+                    $boxInvoiceDetails[] = [
+                        'ProductName' => (string) ($item->description ?? 'General Merchandise'),
+                        'UnitPrice' => number_format($itemUnitPrice, 2, '.', ''),
+                        'Quantity' => (string) (int) $itemQty,
+                    ];
+                }
+            } else {
+                // Fallback single item when no invoice items exist
+                $boxInvoiceDetails[] = [
+                    'ProductName' => 'General Merchandise',
+                    'UnitPrice' => '5.00',
+                    'Quantity' => '1',
+                ];
+            }
+
+            $addPacketDetailList[] = [
+                'BoxWeight' => number_format($pkgWeight, 3, '.', ''),
+                'BoxLength' => number_format($pkgL, 2, '.', ''),
+                'BoxWidth' => number_format($pkgW, 2, '.', ''),
+                'BoxHeight' => number_format($pkgH, 2, '.', ''),
+                'InvoiceNo' => (string) $invoiceNo,
+                'InvoiceDate' => (string) $invoiceDate,
+                'boxInvoiceDetails' => $boxInvoiceDetails,
+            ];
+        }
+
+        $payload = [
+            'shipmentType' => 'Forward',
+            // 'consigneeCountry'  => (string) ($consignee->delivery_destination ?? $consigneeCountryCode ?? 'US'),
+            'consigneeCountry' => (string) ('US'),
+            'RefNo' => (string) $refNo,
+            'BookingDate' => (string) $bookingDate,
+            'Consignee' => (string) $consigneeName,
+            'ConsigneePhoneNo' => (string) $consigneePhone,
+            'ConsigneeAddress1' => (string) $consigneeAddress1,
+            'ConsigneePinCode' => (string) ($consignee->zip_code ?? ''),
+            'ConsigneeState' => (string) ($consignee->state ?? ''),
+            'ConsigneeCity' => (string) ($consignee->city ?? ''),
+            'BusinessType' => 'B2C',
+            'Vendor' => 'USPS Work',
+            'Service' => 'Uniuni',
+            'PickupPoint' => '2',
+            'addPacketDetailList' => $addPacketDetailList,
+            'PackageType' => 'NONDOC',
+            'currencyCode' => (string) $currencyCode,
+        ];
+
+        // print_r($payload); // Debugging line to inspect the payload structure
+        // die;
+
+        return [
+            'success' => true,
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * Call the Flying Tigers API to create a shipment.
+     * Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+
+
+    /**
+     * Call the Flying Tigers API to create a shipment.
+     * Endpoint: https://app.flyingtigers.in/api/Shipment/CustomerBookingAPI
+     *
+     * @param  ShipperInfo  $shipper
+     * @return array ['success' => bool, 'message' => string, 'data' => array|null]
+     */
+    private function callFlyingTigersApiFromDb($shipper)
+    {
+        try {
+            $payloadResult = $this->buildFlyingTigersPayloadFromDb($shipper);
+            if (! $payloadResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $payloadResult['message'] ?? 'Failed to build Flying Tigers payload.',
+                ];
+            }
+
+            $payload = $payloadResult['payload'];
+
+            $clientCode = config('services.flyingtigers.client_code');
+            $userCode = config('services.flyingtigers.user_code');
+            $authToken = config('services.flyingtigers.auth_token');
+            $baseUrl = rtrim(config('services.flyingtigers.base_url'), '/');
+            $endpoint = config('services.flyingtigers.endpoint', '/api/Shipment/CustomerBookingAPI');
+            $url = $baseUrl.$endpoint;
+            $timeout = (int) config('services.flyingtigers.timeout', 60);
+
+            \Log::info('Flying Tigers payload for shipper #'.$shipper->id.': '.substr(json_encode($payload), 0, 2000));
+
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'ClientCode' => $clientCode,
+                'UserCode' => $userCode,
+                'AuthToken' => $authToken,
+            ];
+
+            $response = Http::withHeaders($headers)
+                ->withOptions(['verify' => false])
+                ->timeout($timeout)
+                ->post($url, $payload);
+
+            $apiResponse = $response->json();
+
+            if (! $response->successful()) {
+                $errorMessage = 'Flying Tigers API returned error.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    } elseif (isset($apiResponse['errors'])) {
+                        $errorMessage = is_string($apiResponse['errors']) ? $apiResponse['errors'] : json_encode($apiResponse['errors']);
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
+                    }
+                }
+                \Log::error('Flying Tigers API failed: '.$errorMessage.' | Status: '.$response->status().' | Body: '.$response->body());
+
+                // Check if this is an address-related error (for auto-fallback to UNITED CLASSIC)
+                $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                    'status_code' => $response->status(),
+                    'is_address_error' => $isAddressError,
+                ];
+            }
+
+            \Log::info('Flying Tigers response for shipper #'.$shipper->id.': '.substr($response->body(), 0, 2000));
+
+            // Some APIs return 200 OK but with an error in the body — check for address error
+            $isAddressError = $this->isFlyingTigersAddressError(null, $apiResponse, $response->body());
+            if ($isAddressError) {
+                \Log::warning('Flying Tigers API returned address error in success response for shipper #'.$shipper->id.': '.$response->body());
+
+                return [
+                    'success' => false,
+                    'message' => 'Cannot create order: Provided address appears to be incorrect or incomplete.',
+                    'data' => $apiResponse,
+                    'is_address_error' => true,
+                ];
+            }
+
+            // Check if the API returned an error status in the body (HTTP 200 but status=ERROR)
+            // e.g. {"status": "ERROR", "message": "Ref no already exists."}
+            if (is_array($apiResponse)) {
+                $responseStatus = $apiResponse['status'] ?? null;
+                if ($responseStatus !== null && strtoupper((string) $responseStatus) === 'ERROR') {
+                    $errorMessage = $apiResponse['message'] ?? 'Flying Tigers API returned an error status.';
+                    \Log::error('Flying Tigers API returned ERROR in body for shipper #'.$shipper->id.': '.$errorMessage.' | Body: '.$response->body());
+
+                    // Check if this is also an address error (for fallback to UNITED CLASSIC)
+                    $isAddressError = $this->isFlyingTigersAddressError($errorMessage, $apiResponse, $response->body());
+
+                    return [
+                        'success' => false,
+                        'message' => $errorMessage,
+                        'data' => $apiResponse,
+                        'is_address_error' => $isAddressError,
+                    ];
+                }
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Flying Tigers shipment created successfully.',
+                'data' => $apiResponse,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Flying Tigers API call failed: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Flying Tigers API call failed: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Extract a tracking/reference number from a Flying Tigers API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract a tracking/reference number from a Flying Tigers API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractFlyingTigersTrackingNumber($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        $candidateKeys = [
+            'TrackingNumber', 'tracking_number', 'WaybillNumber', 'waybill_number',
+            'AwbNumber', 'awb_number', 'ConsignmentNumber', 'consignment_number',
+            'OrderNumber', 'order_number', 'ShipmentNumber', 'shipment_number',
+            'ReferenceNo', 'reference_no', 'RefNo', 'BookingId', 'booking_id',
+            'Waybill', 'waybill', 'Reference', 'reference', 'ShipmentId', 'shipment_id',
+        ];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($candidateKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($candidateKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($candidateKeys as $key) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($candidateKeys as $key) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Shipment" / "shipment"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($candidateKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the LabelURL from a Flying Tigers API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+
+
+    /**
+     * Extract the LabelURL from a Flying Tigers API response.
+     *
+     * @param  mixed  $apiResponse
+     * @return string|null
+     */
+    private function extractFlyingTigersLabelUrl($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        $labelKeys = ['LabelURL', 'label_url', 'LabelUrl', 'labelurl', 'Label', 'label', 'PdfUrl', 'pdf_url', 'LabelLink', 'label_link'];
+
+        // Case A: The response itself is a list of shipment objects
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            foreach ($labelKeys as $key) {
+                if (isset($apiResponse[0][$key]) && ! empty($apiResponse[0][$key])) {
+                    return is_string($apiResponse[0][$key]) ? $apiResponse[0][$key] : (string) $apiResponse[0][$key];
+                }
+            }
+        }
+
+        // Case B: Check top-level keys
+        foreach ($labelKeys as $key) {
+            if (isset($apiResponse[$key]) && ! empty($apiResponse[$key])) {
+                return is_string($apiResponse[$key]) ? $apiResponse[$key] : (string) $apiResponse[$key];
+            }
+        }
+
+        // Case C: Nested under "data"
+        $data = $apiResponse['data'] ?? null;
+        if (is_array($data)) {
+            if (isset($data[0]) && is_array($data[0])) {
+                foreach ($labelKeys as $key) {
+                    if (isset($data[0][$key]) && ! empty($data[0][$key])) {
+                        return is_string($data[0][$key]) ? $data[0][$key] : (string) $data[0][$key];
+                    }
+                }
+            }
+            foreach ($labelKeys as $key) {
+                if (isset($data[$key]) && ! empty($data[$key])) {
+                    return is_string($data[$key]) ? $data[$key] : (string) $data[$key];
+                }
+            }
+        }
+
+        // Case D: Nested under "Shipments" / "shipments" / "Result" / "result"
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        foreach ($labelKeys as $key) {
+                            if (isset($first[$key]) && ! empty($first[$key])) {
+                                return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if a Flying Tigers API response/error indicates an address-related error.
+     * Used to trigger auto-fallback to UNITED CLASSIC (Ship Global).
+     *
+     * @param  string|null  $errorMessage
+     * @param  mixed  $apiResponse
+     * @param  string|null  $rawBody
+     * @return bool
+     */
+
+
+    /**
+     * Check if a Flying Tigers API response/error indicates an address-related error.
+     * Used to trigger auto-fallback to UNITED CLASSIC (Ship Global).
+     *
+     * @param  string|null  $errorMessage
+     * @param  mixed  $apiResponse
+     * @param  string|null  $rawBody
+     * @return bool
+     */
+    private function isFlyingTigersAddressError($errorMessage, $apiResponse, $rawBody = null)
+    {
+        $addressErrorPatterns = [
+            'address appears to be incorrect',
+            'address appears to be incomplete',
+            'address is incorrect',
+            'address is incomplete',
+            'incorrect or incomplete address',
+            'address incorrect or incomplete',
+            'provided address appears to be incorrect',
+            'provided address appears to be incomplete',
+        ];
+
+        // Combine all text sources to search
+        $searchText = '';
+        if (! empty($errorMessage)) {
+            $searchText .= ' '.strtolower((string) $errorMessage);
+        }
+        if (is_array($apiResponse)) {
+            $searchText .= ' '.strtolower(json_encode($apiResponse));
+        }
+        if (! empty($rawBody)) {
+            $searchText .= ' '.strtolower((string) $rawBody);
+        }
+
+        if (empty(trim($searchText))) {
+            return false;
+        }
+
+        foreach ($addressErrorPatterns as $pattern) {
+            if (str_contains($searchText, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Calculate UNITED CLASSIC (Ship Global) fallback info for a Flying Tigers address error.
+     * Does NOT modify any data — only calculates the rate, paid amount, difference,
+     * and wallet impact so the frontend can present a dropdown option to the customer.
+     *
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
+     * @return array
+     */
+
+
+    /**
+     * Calculate UNITED CLASSIC (Ship Global) fallback info for a Flying Tigers address error.
+     * Does NOT modify any data — only calculates the rate, paid amount, difference,
+     * and wallet impact so the frontend can present a dropdown option to the customer.
+     *
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
+     * @return array
+     */
+    private function getFlyingTigersAddressErrorFallbackInfo($shipper, $customerId)
+    {
+        // 1. Find the UNITED CLASSIC courier service
+        $classicService = CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (! $classicService) {
+            \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+
+            return [
+                'success' => false,
+                'message' => 'Address is incorrect for UNITED ECO POST. Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error' => true,
+            ];
+        }
+
+        // 2. Calculate the total chargeable weight from packages
+        $packages = $shipper->packageDimensions;
+        $totalWeight = 0;
+        foreach ($packages as $pkg) {
+            $totalWeight += floatval($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+        }
+
+        // 3. Get consignee state for zone lookup
+        $consignee = $shipper->consigneeInfo;
+        $consigneeState = $consignee ? ($consignee->state ?? '') : '';
+
+        // 4. Calculate the UNITED CLASSIC rate
+        $classicRate = app(BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicTotal = floatval($classicRate['total'] ?? 0);
+
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
+
+        // 5. Determine what was actually paid. Under the new flow payment is only cut
+        //    AFTER a successful manifest, so a packed shipment may still be unpaid.
+        $paidCharge = WalletTransaction::where('customer_id', $customerId)
+            ->where('type', 'debit')
+            ->where('reason', 'shipment_charge')
+            ->where('reference', $shipper->awb_number)
+            ->first();
+        $paidAmount = $paidCharge ? floatval($paidCharge->amount) : 0;
+
+        // 6. Calculate the difference
+        $difference = $classicTotal - $paidAmount;
+
+        // 7. Determine wallet impact (preview only — no actual deduction yet)
+        $walletAction = 'none';
+        $walletAmount = 0;
+        $walletBalance = 0;
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if ($wallet) {
+            $walletBalance = (float) $wallet->balance;
+            if ($difference > 0.01) {
+                $walletAction = 'deduct';
+                $walletAmount = $difference;
+            } elseif ($difference < -0.01) {
+                $walletAction = 'refund';
+                $walletAmount = abs($difference);
+            }
+        }
+
+        return [
+            'success' => true,
+            'is_address_error' => true,
+            'shipper_id' => $shipper->id,
+            'classic_service' => $classicService->method,
+            'classic_rate' => $classicTotal,
+            'paid_amount' => $paidAmount,
+            'difference' => $difference,
+            'wallet_action' => $walletAction,
+            'wallet_amount' => $walletAmount,
+            'wallet_balance' => $walletBalance,
+            'total_weight' => $totalWeight,
+        ];
+    }
+
+    /**
+     * Execute the Ship Global (UNITED CLASSIC) fallback for a Flying Tigers address error.
+     * Called when the customer confirms the dropdown option in the frontend.
+     * Performs: update shipping method, call Ship Global API, store tracking,
+     * wallet deduction/refund, update invoice.
+     *
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
+     * @return array
+     */
+
+
+    /**
+     * Execute the Ship Global (UNITED CLASSIC) fallback for a Flying Tigers address error.
+     * Called when the customer confirms the dropdown option in the frontend.
+     * Performs: update shipping method, call Ship Global API, store tracking,
+     * wallet deduction/refund, update invoice.
+     *
+     * @param  ShipperInfo  $shipper
+     * @param  int  $customerId
+     * @return array
+     */
+    private function executeShipGlobalFallback($shipper, $customerId)
+    {
+        // 1. Find the UNITED CLASSIC courier service
+        $classicService = CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
+        if (! $classicService) {
+            \Log::error('Flying Tigers address fallback: UNITED CLASSIC service not found in database.');
+
+            return [
+                'success' => false,
+                'message' => 'Could not find UNITED CLASSIC service for fallback. Please contact support.',
+                'is_address_error' => true,
+            ];
+        }
+
+        // 2. Calculate the total chargeable weight from packages
+        $packages = $shipper->packageDimensions;
+        $totalWeight = 0;
+        foreach ($packages as $pkg) {
+            $totalWeight += floatval($pkg->chargeable_weight ?? $pkg->actual_weight_kg ?? 0);
+        }
+
+        // 3. Get consignee state for zone lookup
+        $consignee = $shipper->consigneeInfo;
+        $consigneeState = $consignee ? ($consignee->state ?? '') : '';
+
+        // 4. Calculate the UNITED CLASSIC rate
+        $classicRate = app(BulkUploadController::class)->calculateBulkRate($customerId, $classicService, $totalWeight, $consigneeState);
+        $classicTotal = floatval($classicRate['total'] ?? 0);
+
+        \Log::info('Flying Tigers address fallback: UNITED CLASSIC rate calculated: '.$classicTotal.' for shipper #'.$shipper->id);
+
+        // 5. Determine what was actually paid. Under the new flow payment is only cut
+        //    AFTER a successful manifest, so a packed shipment may still be unpaid.
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->first();
+        $paidCharge = WalletTransaction::where('customer_id', $customerId)
+            ->where('type', 'debit')
+            ->where('reason', 'shipment_charge')
+            ->where('reference', $shipper->awb_number)
+            ->first();
+        $paidAmount = $paidCharge ? floatval($paidCharge->amount) : 0;
+
+        // 6. Calculate the difference
+        $difference = $classicTotal - $paidAmount;
+
+        // 7. Update the shipper's shipping method to UNITED CLASSIC
+        $shipper->shipping_method = $classicService->method;
+        $shipper->save();
+
+        // Also update package dimensions shipping method
+        PackageDimension::where('shipper_id', $shipper->id)->update(['shipping_method' => $classicService->method]);
+
+        // 8. Call Ship Global API to create the shipment
+        $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+        if (! $shipGlobalResult['success']) {
+            \Log::error('Flying Tigers address fallback: Ship Global API failed: '.($shipGlobalResult['message'] ?? 'Unknown'));
+
+            return [
+                'success' => false,
+                'message' => 'Fallback to UNITED CLASSIC failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
+                'is_address_error' => true,
+                'classic_rate' => $classicTotal,
+                'paid_amount' => $paidAmount,
+            ];
+        }
+
+        // 9. Extract tracking number from Ship Global response
+        $apiResponse = $shipGlobalResult['data'] ?? [];
+        $trackingNumber = null;
+        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
+            $trackingNumber = $apiResponse['data']['waybill_number'];
+        } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
+            $trackingNumber = $apiResponse['waybill_number'];
+        } elseif (isset($apiResponse['tracking_number'])) {
+            $trackingNumber = $apiResponse['tracking_number'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+            $trackingNumber = $apiResponse['data']['tracking_number'];
+        } elseif (isset($apiResponse['awb_number'])) {
+            $trackingNumber = $apiResponse['awb_number'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+            $trackingNumber = $apiResponse['data']['awb_number'];
+        } elseif (isset($apiResponse['waybill'])) {
+            $trackingNumber = $apiResponse['waybill'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+            $trackingNumber = $apiResponse['data']['waybill'];
+        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+            $trackingNumber = $apiResponse['data']['order_number'];
+        } elseif (isset($apiResponse['order_number'])) {
+            $trackingNumber = $apiResponse['order_number'];
+        }
+
+        // 10. Store tracking data
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+        try {
+            ShipmentTracking::updateOrCreate(
+                ['shipper_id' => $shipper->id],
+                [
+                    'customer_id' => $customerId,
+                    'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                    'response_status_code' => '1',
+                    'response_status_description' => 'Ship Global shipment created (fallback from Flying Tigers address error)',
+                    'shipment_identification_number' => $trackingNumber,
+                    'total_charges_currency' => 'INR',
+                    'total_charges_amount' => $classicTotal,
+                    'billing_weight_uom' => 'KGS',
+                    'billing_weight' => $totalWeight,
+                    'package_results' => null,
+                    'raw_response' => $apiResponse,
+                    'status' => 'created',
+                ]
+            );
+
+            // Update shipper status to manifested
+            $shipper->status = 'manifested';
+            $shipper->save();
+
+            // Create a manifest record from the manifests table
+            $this->createManifestRecord($shipper->id, $customerId);
+
+            // Create tracking record for manifested status
+            Tracking::create([
+                'awb_number' => $shipper->awb_number,
+                'shipper_id' => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus('manifested'),
+                'status' => 'manifested',
+            ]);
+
+            // Log the manifested status change (Ship Global fallback from Flying Tigers address error)
+            ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', 'packed', 'Shipment manifested via Ship Global (UNITED CLASSIC fallback from Flying Tigers address error). Tracking: '.($trackingNumber ?? 'N/A'), $customerId, 'customer');
+        } catch (\Exception $e) {
+            \Log::error('Flying Tigers address fallback: Failed to store tracking data: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Fallback to UNITED CLASSIC succeeded but failed to store tracking: '.$e->getMessage(),
+                'is_address_error' => true,
+                'classic_rate' => $classicTotal,
+                'paid_amount' => $paidAmount,
+            ];
+        }
+
+        // 11. Handle wallet charge/deduction/refund AFTER a successful booking.
+        //     If nothing was ever paid, charge the full UNITED CLASSIC rate now.
+        //     If it was already paid, only handle the rate difference.
+        $walletAction = 'none';
+        $walletAmount = 0;
+        $newBalance = 0;
+
+        $wallet = Wallet::where('customer_id', $customerId)->first();
+        if ($wallet) {
+            if (! $paidCharge) {
+                // New flow: nothing paid before → charge the full UNITED CLASSIC rate.
+                if ($classicTotal > 0) {
+                    if ($wallet->balance < $classicTotal) {
+                        $newBalance = (float) $wallet->balance;
+                        $walletAction = 'insufficient';
+                        \Log::warning('Flying Tigers address fallback: Insufficient wallet balance for full charge ₹'.$classicTotal.' on shipper #'.$shipper->id);
+                    } else {
+                        $wallet->decrement('balance', $classicTotal);
+                        $wallet->refresh();
+                        $walletAction = 'charged';
+                        $walletAmount = $classicTotal;
+                        $newBalance = (float) $wallet->balance;
+
+                        WalletTransaction::create([
+                            'customer_id' => $customerId,
+                            'type' => 'debit',
+                            'reason' => 'shipment_charge',
+                            'amount' => $classicTotal,
+                            'balance_after' => $wallet->balance,
+                            'reference' => $shipper->awb_number,
+                            'description' => 'Payment of ₹'.number_format($classicTotal, 2).' for shipment '.($shipper->awb_number ?: '#'.$shipper->id).' (UNITED CLASSIC fallback).',
+                        ]);
+
+                        \Log::info('Flying Tigers address fallback: Charged full ₹'.$classicTotal.' from wallet (UNITED CLASSIC fallback) for shipper #'.$shipper->id);
+                    }
+                } else {
+                    $newBalance = (float) $wallet->balance;
+                }
+            } else {
+                // Old flow: already paid → handle the rate difference only.
+                if ($difference > 0.01) {
+                    // UNITED CLASSIC is more expensive → deduct difference from wallet
+                    $wallet->decrement('balance', $difference);
+                    $wallet->refresh();
+                    $walletAction = 'deducted';
+                    $walletAmount = $difference;
+                    $newBalance = (float) $wallet->balance;
+                    \Log::info('Flying Tigers address fallback: Deducted ₹'.$difference.' from wallet (CLASSIC rate ₹'.$classicTotal.' > paid ₹'.$paidAmount.')');
+                } elseif ($difference < -0.01) {
+                    // UNITED CLASSIC is cheaper → refund difference to wallet
+                    $refundAmount = abs($difference);
+                    $wallet->increment('balance', $refundAmount);
+                    $wallet->refresh();
+                    $walletAction = 'refunded';
+                    $walletAmount = $refundAmount;
+                    $newBalance = (float) $wallet->balance;
+                    \Log::info('Flying Tigers address fallback: Refunded ₹'.$refundAmount.' to wallet (CLASSIC rate ₹'.$classicTotal.' < paid ₹'.$paidAmount.')');
+                } else {
+                    $newBalance = (float) $wallet->balance;
+                }
+            }
+        }
+
+        // 12. Update the invoice total to reflect the new rate
+        if ($invoice && $classicTotal > 0) {
+            $invoice->update(['total_amount' => $classicTotal]);
+        }
+
+        // Build the user-facing message
+        $message = 'Shipment manifested successfully via UNITED CLASSIC (Ship Global).';
+        if ($walletAction === 'charged') {
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been deducted from your wallet.';
+        } elseif ($walletAction === 'insufficient') {
+            $message .= ' The shipment is booked, but your wallet could not be charged (insufficient balance). Please recharge your wallet.';
+        } elseif ($walletAction === 'deducted') {
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been deducted from your wallet (rate difference).';
+        } elseif ($walletAction === 'refunded') {
+            $message .= ' ₹'.number_format($walletAmount, 2).' has been refunded to your wallet (rate difference).';
+        }
+
+        return [
+            'success' => true,
+            'message' => $message,
+            'tracking_number' => $trackingNumber,
+            'shipper_id' => $shipper->id,
+            'manifest_number' => Manifest::where('shipper_id', $shipper->id)->value('manifest_number'),
+            'network' => 'Ship Global (Fallback)',
+            'is_address_error' => true,
+            'classic_rate' => $classicTotal,
+            'paid_amount' => $paidAmount,
+            'wallet_action' => $walletAction,
+            'wallet_amount' => $walletAmount,
+            'new_balance' => $newBalance,
+            'ship_global_response' => $apiResponse,
+        ];
+    }
+
+    /**
+     * Manifest a prepaid shipment via Ship Global (UNITED CLASSIC) fallback.
+     * Called when the admin confirms the dropdown option after a Flying Tigers address error.
+     *
+     * @return JsonResponse
+     */
+    public function prepaidManifestShipGlobalFallback(Request $request)
+    {
+        try {
+            if (! auth()->guard('admin')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $validated = $request->validate([
+                'shipper_id' => 'required|integer',
+            ]);
+
+            $shipperId = $validated['shipper_id'];
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('shipment_type', 5)
+                ->first();
+
+            if (! $shipper) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found.',
+                ], 404);
+            }
+
+            if ($shipper->status === 'manifested') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This shipment has already been manifested.',
+                ], 400);
+            }
+
+            $manifestCustomerId = (int) ($shipper->customer_id ?? 0);
+            if ($manifestCustomerId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This prepaid shipment has no linked customer. Link an exporter customer before manifesting.',
+                ], 422);
+            }
+
+            $result = $this->executeShipGlobalFallback($shipper, $manifestCustomerId);
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 500);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Prepaid Ship Global fallback manifest error: '.$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Manifest a single prepaid shipment - check network and call appropriate API.
+     * Works for prepaid shipments in 'ready' or 'packed' status. Wallet is
+     * charged from the exporter customer's wallet (when linked) only AFTER a
+     * successful carrier booking.
+     */
+    public function prepaidManifestShipment(Request $request)
+    {
+        try {
+            if (! auth()->guard('admin')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $adminId = (int) auth()->guard('admin')->id();
+            $shipperId = $request->input('shipper_id');
+
+            $shipper = ShipperInfo::where('id', $shipperId)
+                ->where('shipment_type', 5)
+                ->first();
+
+            if (! $shipper) {
+                return response()->json(['success' => false, 'message' => 'Shipment not found.'], 404);
+            }
+
+            if (! in_array($shipper->status, ['ready', 'packed'])) {
+                return response()->json(['success' => false, 'message' => 'Shipment must be in Ready or Packed status to manifest.'], 400);
+            }
+
+            $manifestCustomerId = (int) ($shipper->customer_id ?? 0);
+            if ($manifestCustomerId <= 0) {
+                return response()->json(['success' => false, 'message' => 'This prepaid shipment has no linked customer. Link an exporter customer before manifesting.'], 422);
+            }
+
+            $previousStatus = $shipper->status;
+            // Confirm Payment se manifest hone par status Ready rakha jata hai (target_status=ready).
+            $targetStatus = $request->input('target_status') === 'ready' ? 'ready' : 'manifested';
+
+            // Agar carrier booking pehle ho chuki hai (Confirm Payment par), to dobara API call mat karo.
+            // Sirf status aage badhao taaki duplicate AWB / double charge na ho.
+            if ($targetStatus === 'manifested') {
+                $existingTracking = ShipmentTracking::where('shipper_id', $shipper->id)
+                    ->whereNotNull('shipment_identification_number')
+                    ->first();
+                if ($existingTracking && ! empty($existingTracking->shipment_identification_number)) {
+                    $createShipmentExisting = CreateShipment::where('shipper_id', $shipper->id)->first();
+                    $shipper->status = 'manifested';
+                    $shipper->save();
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+
+                    Tracking::firstOrCreate(
+                        ['shipper_id' => $shipper->id, 'status' => 'manifested'],
+                        [
+                            'awb_number' => $shipper->awb_number,
+                            'shipping_id' => $createShipmentExisting ? $createShipmentExisting->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                        ]
+                    );
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        'manifested',
+                        $previousStatus,
+                        'Status moved to Manifested (carrier booking already done on payment). Tracking: '.$existingTracking->shipment_identification_number,
+                        $manifestCustomerId,
+                        'admin'
+                    );
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Already manifested on payment. Status moved to Manifested.',
+                        'tracking_number' => $existingTracking->shipment_identification_number,
+                        'shipper_id' => $shipperId,
+                        'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                        'already_manifested' => true,
+                    ]);
+                }
+            }
+
+            // Ready flow me Primus ke liye custom label chahiye hota hai (jo normally Packed me banta hai).
+            // Yahan auto-label bana kar store kar dete hain taaki manifest fail na ho, status change nahi hota.
+            if ($targetStatus === 'ready' && empty($shipper->custom_label)) {
+                try {
+                    [$autoLabelPath, $autoLabelUrl] = $this->storeCustomLabelFile(
+                        $shipper,
+                        '<div style="font-family:Arial,sans-serif;padding:16px;"><h2>Shipping Label (Auto on payment)</h2><p>AWB: '.htmlspecialchars((string) ($shipper->awb_number ?: $shipper->id), ENT_QUOTES, 'UTF-8').'</p></div>'
+                    );
+                    $shipper->custom_label = $autoLabelUrl;
+                    $shipper->save();
+                } catch (\Throwable $e) {
+                    \Log::warning('Auto custom label failed before prepaid manifest (ready flow).', [
+                        'shipper_id' => $shipper->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            // Determine the network from the shipping method's CourierService
+            $shippingMethod = $this->resolveShippingMethod($shipper);
+            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
+
+            // Resolve the API provider: database-first (courier_services.api_provider)
+            // with a fallback to the legacy string-matching methods.
+            $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
+
+            \Log::info('prepaidManifest: Shipper #'.$shipperId.' → shipping_method="'.$shippingMethod.'" → network="'.$network.'" → api_provider="'.$apiProvider.'"');
+
+            // Route to appropriate API based on the resolved provider.
+            if ($apiProvider === 'shipuniversal') {
+                $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
+                if (! $shipUniversalResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'ShipUniversal API Failed: '.($shipUniversalResult['message'] ?? 'Unknown error'),
+                        'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
+                        'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                $apiResponse = $shipUniversalResult['data'] ?? [];
+                $trackingNumber = $this->extractShipUniversalTrackingNumber($apiResponse);
+                $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
+
+                if (empty($trackingNumber)) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => $previousStatus === 'ready'
+                            ? 'ShipUniversal created no usable AWB number. The shipment has been moved back to Draft.'
+                            : 'ShipUniversal created no usable AWB number. The shipment remains in '.$previousStatus.' status.',
+                        'shipuniversal_response' => $apiResponse,
+                        'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    ], 502);
+                }
+
+                try {
+                    $this->persistPrepaidShipUniversalManifest(
+                        $shipper,
+                        $manifestCustomerId,
+                        $apiResponse,
+                        $trackingNumber,
+                        $labelUrl,
+                        false,
+                        $targetStatus,
+                        null,
+                        $adminId
+                    );
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid ShipUniversal manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to store tracking data: '.$e->getMessage(),
+                    ], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via ShipUniversal!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'ShipUniversal',
+                    'shipuniversal_response' => $apiResponse,
+                    'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            } elseif ($apiProvider === 'primus') {
+                $primusResult = app(PrimusShipmentService::class)->manifest(
+                    $shipper,
+                    (int) $manifestCustomerId,
+                    false,
+                    $targetStatus
+                );
+
+                if (! $primusResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Primus API Failed: '.($primusResult['message'] ?? 'Unknown error'),
+                        'request_payload' => $primusResult['payload'] ?? null,
+                    ], 422);
+                }
+
+                // Create a manifest record from the manifests table
+                $this->createManifestRecord($shipper->id, $manifestCustomerId);
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Primus!'.$chargeNote,
+                    'tracking_number' => $primusResult['tracking_number'],
+                    'label_url' => $primusResult['label'] ?? null,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'Primus',
+                    'request_payload' => $primusResult['payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+                // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+                //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+            } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
+                // Call Overseas Logistic API
+                $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
+                if (! $overseasResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+                    $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown error');
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Overseas Logistic API Failed: '.$overseasMsg,
+                        'overseas_response' => $overseasResult['data'] ?? null,
+                        'request_payload' => $overseasResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                // Overseas Logistic succeeded - store tracking data
+                $apiResponse = $overseasResult['data'] ?? [];
+                $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
+                $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+                $boxLabelUrl = $this->extractOverseasBoxLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $manifestCustomerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Overseas Logistic shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => ($labelUrl || $boxLabelUrl) ? array_filter([
+                                'LabelURL' => $labelUrl,
+                                'BoxLabelURL' => $boxLabelUrl,
+                            ]) : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
+                    $shipper->save();
+
+                    // Create tracking record for target status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
+                    ]);
+
+                    // Log the manifested status change
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        $targetStatus,
+                        $previousStatus,
+                        'Prepaid shipment manifested via Overseas Logistic. Tracking: '.($trackingNumber ?? 'N/A'),
+                        $manifestCustomerId,
+                        'admin'
+                    );
+
+                    \Log::info('Prepaid shipment manifested via Overseas Logistic: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid shipment tracking for Overseas Logistic manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Overseas Logistic!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'Overseas Logistic',
+                    'overseas_response' => $apiResponse,
+                    'request_payload' => $overseasResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
+                // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
+                // Call PostShipping API
+                $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+                if (! $postShippingResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
+                        'postshipping_response' => $postShippingResult['data'] ?? null,
+                        'request_payload' => $postShippingResult['request_payload'] ?? null,
+                    ], 500);
+                }
+
+                // PostShipping succeeded - store tracking data
+                $apiResponse = $postShippingResult['data'] ?? [];
+                $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+                $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $manifestCustomerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'PostShipping shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
+                    $shipper->save();
+
+                    // Create tracking record for target status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
+                    ]);
+
+                    \Log::info('Prepaid shipment manifested via PostShipping: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid shipment tracking for PostShipping manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via PostShipping!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'PostShipping',
+                    'postshipping_response' => $apiResponse,
+                    'request_payload' => $postShippingResult['request_payload'] ?? null,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
+                // Call Flying Tigers API (UNITED ECO POST)
+                $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
+                if (! $flyingTigersResult['success']) {
+                    // Check if this is an address error → return fallback info for dropdown option
+                    if (! empty($flyingTigersResult['is_address_error'])) {
+                        // The booking failed. If this shipment was in Ready (Confirm Payment flow),
+                        // take it back to Draft immediately — the admin can still pick the
+                        // UNITED CLASSIC fallback or cancel from the modal.
+                        $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+                        $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $manifestCustomerId);
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'The address provided appears to be incorrect or incomplete for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                            'is_address_error' => true,
+                            'shipper_id' => $shipperId,
+                            'classic_rate' => $fallbackInfo['classic_rate'] ?? null,
+                            'paid_amount' => $fallbackInfo['paid_amount'] ?? null,
+                            'difference' => $fallbackInfo['difference'] ?? null,
+                            'wallet_action' => $fallbackInfo['wallet_action'] ?? 'none',
+                            'wallet_amount' => $fallbackInfo['wallet_amount'] ?? 0,
+                            'wallet_balance' => $fallbackInfo['wallet_balance'] ?? 0,
+                            'total_weight' => $fallbackInfo['total_weight'] ?? 0,
+                        ], 422);
+                    }
+
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Flying Tigers API Failed: '.($flyingTigersResult['message'] ?? 'Unknown error'),
+                        'flyingtigers_response' => $flyingTigersResult['data'] ?? null,
+                    ], 500);
+                }
+
+                // Flying Tigers succeeded - store tracking data
+                $apiResponse = $flyingTigersResult['data'] ?? [];
+                $trackingNumber = $this->extractFlyingTigersTrackingNumber($apiResponse);
+                $labelUrl = $this->extractFlyingTigersLabelUrl($apiResponse);
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $manifestCustomerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Flying Tigers shipment created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
+                    $shipper->save();
+
+                    // Create tracking record for target status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
+                    ]);
+
+                    \Log::info('Prepaid shipment manifested via Flying Tigers: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid shipment tracking for Flying Tigers manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Flying Tigers!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'label_url' => $labelUrl,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'Flying Tigers',
+                    'flyingtigers_response' => $apiResponse,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
+                // Call Ship Global API
+                $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+                if (! $shipGlobalResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ship Global API Failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
+                        'ship_global_response' => $shipGlobalResult['data'] ?? null,
+                    ], 500);
+                }
+
+                // Ship Global succeeded - store tracking data
+                $apiResponse = $shipGlobalResult['data'] ?? [];
+                $trackingNumber = null;
+                // Ship Global returns tracking/reference number in various possible formats
+                // Priority: waybill_number > tracking_number > awb_number > order_number
+                if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
+                    $trackingNumber = $apiResponse['data']['waybill_number'];
+                } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
+                    $trackingNumber = $apiResponse['waybill_number'];
+                } elseif (isset($apiResponse['tracking_number'])) {
+                    $trackingNumber = $apiResponse['tracking_number'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+                    $trackingNumber = $apiResponse['data']['tracking_number'];
+                } elseif (isset($apiResponse['awb_number'])) {
+                    $trackingNumber = $apiResponse['awb_number'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+                    $trackingNumber = $apiResponse['data']['awb_number'];
+                } elseif (isset($apiResponse['waybill'])) {
+                    $trackingNumber = $apiResponse['waybill'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+                    $trackingNumber = $apiResponse['data']['waybill'];
+                } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                    // If no waybill/tracking yet, use order_number as reference (label: "manual" case)
+                    $trackingNumber = $apiResponse['data']['order_number'];
+                } elseif (isset($apiResponse['order_number'])) {
+                    $trackingNumber = $apiResponse['order_number'];
+                }
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $manifestCustomerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => '1',
+                            'response_status_description' => 'Ship Global order created',
+                            'shipment_identification_number' => $trackingNumber,
+                            'total_charges_currency' => 'INR',
+                            'total_charges_amount' => null,
+                            'billing_weight_uom' => 'KGS',
+                            'billing_weight' => null,
+                            'package_results' => null,
+                            'raw_response' => $apiResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
+                    $shipper->save();
+
+                    // Create tracking record for target status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
+                    ]);
+
+                    \Log::info('Prepaid shipment manifested via Ship Global: '.($trackingNumber ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid shipment tracking for Ship Global manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via Ship Global!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'Ship Global',
+                    'ship_global_response' => $apiResponse,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+
+            } else {
+                // Default: Call UPS Ship API
+                $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                if (! $payloadResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => $payloadResult['message']], 400);
+                }
+                $upsPayload = $payloadResult['payload'];
+
+                $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+                if (! $upsResult['success']) {
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+                    $errorMessage = $upsResult['message'] ?? 'Unknown UPS error';
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'UPS Shipment Failed: '.$errorMessage,
+                        'rawResponse' => $upsResult['rawResponse'] ?? null,
+                    ], 500);
+                }
+
+                // UPS succeeded - store tracking data
+                $shipmentResponse = $upsResult['shipmentResponse'];
+                $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                    ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                    ?? null;
+
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                try {
+                    ShipmentTracking::updateOrCreate(
+                        ['shipper_id' => $shipperId],
+                        [
+                            'customer_id' => $manifestCustomerId,
+                            'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                            'raw_response' => $shipmentResponse,
+                            'status' => 'created',
+                        ]
+                    );
+
+                    // Update shipper status to target (manifested, or ready when from Confirm Payment)
+                    $shipper->status = $targetStatus;
+                    $shipper->save();
+
+                    // Create tracking record for target status
+                    Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                        'title' => Tracking::getTitleForStatus($targetStatus),
+                        'status' => $targetStatus,
+                    ]);
+
+                    // Log the manifested status change
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        $shipper->awb_number,
+                        $targetStatus,
+                        $previousStatus,
+                        'Prepaid shipment manifested via UPS. Tracking: '.($trackingNumber ?? 'N/A'),
+                        $manifestCustomerId,
+                        'admin'
+                    );
+
+                    \Log::info('Prepaid shipment manifested via UPS: '.($shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? 'N/A'));
+
+                    // Create a manifest record from the manifests table
+                    $this->createManifestRecord($shipper->id, $manifestCustomerId);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to store prepaid shipment tracking for manifest: '.$e->getMessage());
+                    $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $previousStatus, $adminId);
+
+                    return response()->json(['success' => false, 'message' => 'Failed to store tracking data: '.$e->getMessage()], 500);
+                }
+
+                // Payment is cut only AFTER the manifest succeeds.
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully via UPS!'.$chargeNote,
+                    'tracking_number' => $trackingNumber,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'UPS',
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            }
+        } catch (\Exception $e) {
+            if (isset($shipper, $previousStatus)) {
+                $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId ?? 0, $previousStatus, $adminId ?? 0);
+            }
+
+            return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Bulk manifest multiple prepaid shipments at once.
+     */
+    public function prepaidBulkManifestShipments(Request $request)
+    {
+        try {
+            if (! auth()->guard('admin')->check()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $adminId = (int) auth()->guard('admin')->id();
+            $shipperIds = $request->input('shipper_ids', []);
+
+            if (empty($shipperIds) || ! is_array($shipperIds)) {
+                return response()->json(['success' => false, 'message' => 'No shipments selected.'], 400);
+            }
+
+            $results = [
+                'success' => [],
+                'failed' => [],
+                'total' => count($shipperIds),
+            ];
+
+            // Bulk manifest: ALL selected shipments share ONE manifest number.
+            // Generate it once before the loop and reuse it for every successful
+            // shipment in the batch (single manifest flow keeps unique numbers).
+            $bulkManifestNumber = Manifest::generateManifestNumber();
+
+            foreach ($shipperIds as $shipperId) {
+                try {
+                    $shipper = ShipperInfo::where('id', $shipperId)
+                        ->where('shipment_type', 5)
+                        ->first();
+
+                    if (! $shipper) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Shipment not found'];
+
+                        continue;
+                    }
+
+                    if (! in_array($shipper->status, ['ready', 'packed'])) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Not in Ready or Packed status'];
+
+                        continue;
+                    }
+
+                    $manifestCustomerId = (int) ($shipper->customer_id ?? 0);
+                    if ($manifestCustomerId <= 0) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => 'Shipment has no linked customer. Link an exporter customer before manifesting.'];
+
+                        continue;
+                    }
+
+                    $bulkPreviousStatus = $shipper->status;
+
+                    // Determine the network from the shipping method's CourierService
+                    $shippingMethod = $this->resolveShippingMethod($shipper);
+                    $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+                    $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
+
+                    // Resolve the API provider: database-first (courier_services.api_provider)
+                    // with a fallback to the legacy string-matching methods.
+                    $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
+
+                    \Log::info('prepaidBulkManifest: Shipper #'.$shipperId.' → network="'.$network.'" → api_provider="'.$apiProvider.'"');
+
+                    if ($apiProvider === 'shipuniversal') {
+                        $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
+                        if (! $shipUniversalResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'ShipUniversal API error: '.($shipUniversalResult['message'] ?? 'Unknown'),
+                                'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                                'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
+                            ];
+
+                            continue;
+                        }
+
+                        $apiResponse = $shipUniversalResult['data'] ?? [];
+                        $trackingNumber = $this->extractShipUniversalTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
+
+                        if (empty($trackingNumber)) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => $bulkPreviousStatus === 'ready'
+                                    ? 'ShipUniversal created no usable AWB number. The shipment has been moved back to Draft.'
+                                    : 'ShipUniversal created no usable AWB number. The shipment remains in '.$shipper->status.' status.',
+                                'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                                'shipuniversal_response' => $apiResponse,
+                            ];
+
+                            continue;
+                        }
+
+                        $this->persistPrepaidShipUniversalManifest(
+                            $shipper,
+                            $manifestCustomerId,
+                            $apiResponse,
+                            $trackingNumber,
+                            $labelUrl,
+                            true,
+                            'manifested',
+                            $bulkManifestNumber,
+                            $adminId
+                        );
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'ShipUniversal',
+                            'request_payload' => $shipUniversalResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via ShipUniversal.');
+                    } elseif ($apiProvider === 'primus') {
+                        $primusResult = app(PrimusShipmentService::class)->manifest(
+                            $shipper,
+                            (int) $manifestCustomerId,
+                            true
+                        );
+
+                        if (! $primusResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Primus API error: '.($primusResult['message'] ?? 'Unknown'),
+                                'request_payload' => $primusResult['payload'] ?? null,
+                            ];
+
+                            continue;
+                        }
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $primusResult['tracking_number'],
+                            'label_url' => $primusResult['label'] ?? null,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'Primus',
+                            'request_payload' => $primusResult['payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via Primus.');
+                        // Priority 0: Overseas Logistic for UNITED CANADA DDP /
+                        //              UNITED CANADA E-COMMERCE and ARAMEX GPX (Australia).
+                    } elseif ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
+                        // Call Overseas Logistic API
+                        $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
+
+                        if (! $overseasResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $overseasMsg = $this->overseasValueToString($overseasResult['message'] ?? 'Unknown');
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Overseas Logistic API error: '.$overseasMsg,
+                                'request_payload' => $overseasResult['request_payload'] ?? null,
+                                'overseas_response' => $overseasResult['data'] ?? null,
+                            ];
+
+                            continue;
+                        }
+
+                        $apiResponse = $overseasResult['data'] ?? [];
+                        $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+                        $boxLabelUrl = $this->extractOverseasBoxLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Overseas Logistic shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => ($labelUrl || $boxLabelUrl) ? array_filter([
+                                    'LabelURL' => $labelUrl,
+                                    'BoxLabelURL' => $boxLabelUrl,
+                                ]) : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'Overseas Logistic',
+                            'request_payload' => $overseasResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via Overseas Logistic.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested via Overseas Logistic (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $manifestCustomerId, 'admin');
+
+                    } elseif ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
+                        // Priority 1: PostShipping (DPD/UK) for UNITED AIR PREMIUM DDP / UNITED PRIOR POST DDP
+                        // Call PostShipping API
+                        $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+
+                        if (! $postShippingResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'PostShipping API error: '.($postShippingResult['message'] ?? 'Unknown'),
+                                'request_payload' => $postShippingResult['request_payload'] ?? null,
+                                'postshipping_response' => $postShippingResult['data'] ?? null,
+                            ];
+
+                            continue;
+                        }
+
+                        $apiResponse = $postShippingResult['data'] ?? [];
+                        $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'PostShipping shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'PostShipping',
+                            'request_payload' => $postShippingResult['request_payload'] ?? null,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via PostShipping.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested via PostShipping (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $manifestCustomerId, 'admin');
+
+                    } elseif ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
+                        // Call Flying Tigers API (UNITED ECO POST)
+                        $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
+
+                        if (! $flyingTigersResult['success']) {
+                            // Check if this is an address error → return fallback info for dropdown option
+                            if (! empty($flyingTigersResult['is_address_error'])) {
+                                // The booking failed. If this shipment was in Ready (Confirm Payment flow),
+                                // take it back to Draft immediately — the admin can still pick the
+                                // UNITED CLASSIC fallback or cancel.
+                                $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                                $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $manifestCustomerId);
+                                $results['address_errors'][] = [
+                                    'shipper_id' => $shipperId,
+                                    'message' => 'Address is incorrect for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                                    'is_address_error' => true,
+                                    'classic_rate' => $fallbackInfo['classic_rate'] ?? null,
+                                    'paid_amount' => $fallbackInfo['paid_amount'] ?? null,
+                                    'difference' => $fallbackInfo['difference'] ?? null,
+                                    'wallet_action' => $fallbackInfo['wallet_action'] ?? 'none',
+                                    'wallet_amount' => $fallbackInfo['wallet_amount'] ?? 0,
+                                    'wallet_balance' => $fallbackInfo['wallet_balance'] ?? 0,
+                                    'total_weight' => $fallbackInfo['total_weight'] ?? 0,
+                                ];
+                                \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' address error — awaiting admin decision for UNITED CLASSIC fallback.');
+
+                                continue;
+                            }
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Flying Tigers API error: '.($flyingTigersResult['message'] ?? 'Unknown'),
+                            ];
+
+                            continue;
+                        }
+
+                        $apiResponse = $flyingTigersResult['data'] ?? [];
+                        $trackingNumber = $this->extractFlyingTigersTrackingNumber($apiResponse);
+                        $labelUrl = $this->extractFlyingTigersLabelUrl($apiResponse);
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Flying Tigers shipment created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'label_url' => $labelUrl,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'Flying Tigers',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via Flying Tigers.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested via Flying Tigers (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $manifestCustomerId, 'admin');
+
+                    } elseif ($apiProvider === 'shipglobal' || $network === 'ship global' || $network === 'shipglobal') {
+                        // Call Ship Global API
+                        $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+
+                        if (! $shipGlobalResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'Ship Global API error: '.($shipGlobalResult['message'] ?? 'Unknown'),
+                            ];
+
+                            continue;
+                        }
+
+                        $apiResponse = $shipGlobalResult['data'] ?? [];
+                        $trackingNumber = null;
+                        // Ship Global returns tracking/reference number in various possible formats
+                        // Priority: waybill_number > tracking_number > awb_number > order_number
+                        if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
+                            $trackingNumber = $apiResponse['data']['waybill_number'];
+                        } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
+                            $trackingNumber = $apiResponse['waybill_number'];
+                        } elseif (isset($apiResponse['tracking_number'])) {
+                            $trackingNumber = $apiResponse['tracking_number'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+                            $trackingNumber = $apiResponse['data']['tracking_number'];
+                        } elseif (isset($apiResponse['awb_number'])) {
+                            $trackingNumber = $apiResponse['awb_number'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+                            $trackingNumber = $apiResponse['data']['awb_number'];
+                        } elseif (isset($apiResponse['waybill'])) {
+                            $trackingNumber = $apiResponse['waybill'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+                            $trackingNumber = $apiResponse['data']['waybill'];
+                        } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                            // If no waybill/tracking yet, use order_number as reference (label: "manual" case)
+                            $trackingNumber = $apiResponse['data']['order_number'];
+                        } elseif (isset($apiResponse['order_number'])) {
+                            $trackingNumber = $apiResponse['order_number'];
+                        }
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'Ship Global order created',
+                                'shipment_identification_number' => $trackingNumber,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => null,
+                                'raw_response' => $apiResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Create tracking record for manifested status
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'Ship Global',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via Ship Global.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested via Ship Global (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $manifestCustomerId, 'admin');
+
+                    } else {
+                        // Default: Call UPS Ship API
+                        $payloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+                        if (! $payloadResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $payloadResult['message']];
+
+                            continue;
+                        }
+                        $upsPayload = $payloadResult['payload'];
+
+                        $upsResult = $this->callUpsShipApiInternal($upsPayload);
+
+                        if (! $upsResult['success']) {
+                            $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId, $bulkPreviousStatus, $adminId);
+                            $results['failed'][] = [
+                                'shipper_id' => $shipperId,
+                                'message' => 'UPS API error: '.($upsResult['message'] ?? 'Unknown'),
+                            ];
+
+                            continue;
+                        }
+
+                        $shipmentResponse = $upsResult['shipmentResponse'];
+                        $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+                            ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+                            ?? null;
+
+                        $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                                'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+                                'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+                                'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+                                'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+                                'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+                                'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+                                'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+                                'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+                                'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+                                'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+                                'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+                                'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+                                'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+                                'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+                                'raw_response' => $shipmentResponse,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        // Create a manifest record from the manifests table
+                        // (bulk: share the single batch manifest number)
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        // Create tracking record for manifested status
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        // Payment is cut only AFTER the manifest succeeds.
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $trackingNumber,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'UPS',
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested via UPS.');
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested via UPS (bulk). Tracking: '.($trackingNumber ?? 'N/A'), $manifestCustomerId, 'admin');
+                    }
+
+                } catch (\Exception $e) {
+                    if (isset($shipper, $bulkPreviousStatus)) {
+                        $this->revertPrepaidReadyToDraftOnManifestFailure($shipper, $manifestCustomerId ?? 0, $bulkPreviousStatus, $adminId ?? 0);
+                    }
+                    $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $e->getMessage()];
+                    \Log::error('Prepaid bulk manifest error for shipper '.$shipperId.': '.$e->getMessage());
+                }
+            }
+
+            $bulkNewBalance = null;
+            foreach ($results['success'] as $bulkSuccessEntry) {
+                if (isset($bulkSuccessEntry['new_balance'])) {
+                    $bulkNewBalance = $bulkSuccessEntry['new_balance'];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bulk manifest completed. '.count($results['success']).' succeeded, '.count($results['failed']).' failed out of '.$results['total'].' shipments.',
+                'results' => $results,
+                'new_balance' => $bulkNewBalance,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Book the SELECTED service's carrier API at prepaid order creation.
+     *
+     * Same per-service routing as manifest-time in the customer flow
+     * (shipuniversal / primus / overseas / postshipping / flyingtigers /
+     * shipglobal / UPS default): the chosen service's own carrier is booked,
+     * never a hardcoded one. Only persists carrier tracking data — shipper
+     * status, manifest record, wallet and logs are owned by the caller.
+     *
+     * Returns ['success' => bool, 'tracking_number' => ?string,
+     *          'shipment_response' => ?array (UPS only),
+     *          'rawResponse' => mixed, 'message' => ?string, ...].
+     */
+    private function bookPrepaidCarrierAtCreation($shipper, int $adminId): array
+    {
+        $manifestCustomerId = (int) ($shipper->customer_id ?? 0);
+        if ($manifestCustomerId <= 0) {
+            return ['success' => false, 'message' => 'This prepaid shipment has no linked customer. Link an exporter customer before creating the order.'];
+        }
+
+        $shipperId = $shipper->id;
+        $awbNumber = $shipper->awb_number;
+
+        $shippingMethod = $this->resolveShippingMethod($shipper);
+        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
+
+        \Log::info('prepaidCarrierBooking: Shipper #'.$shipperId.' → shipping_method="'.$shippingMethod.'" → api_provider="'.$apiProvider.'"');
+
+        $storeTracking = function (array $fields) use ($shipperId, $manifestCustomerId) {
+            ShipmentTracking::updateOrCreate(
+                ['shipper_id' => $shipperId],
+                array_merge([
+                    'customer_id' => $manifestCustomerId,
+                    'create_shipment_id' => CreateShipment::where('shipper_id', $shipperId)->value('id'),
+                    'status' => 'created',
+                ], $fields)
+            );
+        };
+
+        if ($apiProvider === 'shipuniversal') {
+            $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
+            if (! $shipUniversalResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'ShipUniversal API Failed: '.($shipUniversalResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $shipUniversalResult['data'] ?? null,
+                ];
+            }
+
+            $apiResponse = $shipUniversalResult['data'] ?? [];
+            $trackingNumber = $this->extractShipUniversalTrackingNumber($apiResponse);
+            $labelUrl = $this->extractShipUniversalLabelUrl($apiResponse);
+
+            if (empty($trackingNumber)) {
+                return ['success' => false, 'message' => 'ShipUniversal created no usable AWB number.', 'rawResponse' => $apiResponse];
+            }
+
+            $storeTracking([
+                'response_status_code' => '1',
+                'response_status_description' => 'ShipUniversal shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                'raw_response' => $apiResponse,
+            ]);
+
+            return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
+        }
+
+        if ($apiProvider === 'primus') {
+            $primusResult = app(PrimusShipmentService::class)->manifest(
+                $shipper,
+                (int) $manifestCustomerId,
+                false,
+                'manifested'
+            );
+
+            if (! $primusResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'Primus API Failed: '.($primusResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $primusResult,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'tracking_number' => $primusResult['tracking_number'] ?? null,
+                'label_url' => $primusResult['label'] ?? null,
+            ];
+        }
+
+        if ($apiProvider === 'overseas' || $this->isOverseasLogisticMethod($shippingMethod)) {
+            $overseasResult = $this->callOverseasLogisticApiFromDb($shipper);
+            if (! $overseasResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'Overseas Logistic API Failed: '.$this->overseasValueToString($overseasResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $overseasResult['data'] ?? null,
+                ];
+            }
+
+            $apiResponse = $overseasResult['data'] ?? [];
+            $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
+            $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+            $boxLabelUrl = $this->extractOverseasBoxLabelUrl($apiResponse);
+
+            $storeTracking([
+                'response_status_code' => '1',
+                'response_status_description' => 'Overseas Logistic shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => ($labelUrl || $boxLabelUrl) ? array_filter([
+                    'LabelURL' => $labelUrl,
+                    'BoxLabelURL' => $boxLabelUrl,
+                ]) : null,
+                'raw_response' => $apiResponse,
+            ]);
+
+            return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
+        }
+
+        if ($apiProvider === 'postshipping' || $this->isPostShippingMethod($shippingMethod)) {
+            $postShippingResult = $this->callPostShippingApiFromDb($shipper);
+            if (! $postShippingResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $postShippingResult['data'] ?? null,
+                ];
+            }
+
+            $apiResponse = $postShippingResult['data'] ?? [];
+            $trackingNumber = $this->extractPostShippingTrackingNumber($apiResponse);
+            $labelUrl = $this->extractPostShippingLabelUrl($apiResponse);
+
+            $storeTracking([
+                'response_status_code' => '1',
+                'response_status_description' => 'PostShipping shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                'raw_response' => $apiResponse,
+            ]);
+
+            return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
+        }
+
+        if ($apiProvider === 'flyingtigers' || $this->isFlyingTigersMethod($shippingMethod)) {
+            $flyingTigersResult = $this->callFlyingTigersApiFromDb($shipper);
+            if (! $flyingTigersResult['success']) {
+                if (! empty($flyingTigersResult['is_address_error'])) {
+                    $fallbackInfo = $this->getFlyingTigersAddressErrorFallbackInfo($shipper, $manifestCustomerId);
+
+                    return array_merge([
+                        'success' => false,
+                        'message' => 'The address provided appears to be incorrect or incomplete for UNITED ECO POST. You can ship via UNITED CLASSIC (Ship Global) instead.',
+                        'is_address_error' => true,
+                    ], $fallbackInfo);
+                }
+
+                return [
+                    'success' => false,
+                    'message' => 'Flying Tigers API Failed: '.($flyingTigersResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $flyingTigersResult['data'] ?? null,
+                ];
+            }
+
+            $apiResponse = $flyingTigersResult['data'] ?? [];
+            $trackingNumber = $this->extractFlyingTigersTrackingNumber($apiResponse);
+            $labelUrl = $this->extractFlyingTigersLabelUrl($apiResponse);
+
+            $storeTracking([
+                'response_status_code' => '1',
+                'response_status_description' => 'Flying Tigers shipment created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                'raw_response' => $apiResponse,
+            ]);
+
+            return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
+        }
+
+        if ($apiProvider === 'shipglobal' || ($courierService && in_array(strtolower(trim($courierService->network ?? '')), ['ship global', 'shipglobal'], true))) {
+            $shipGlobalResult = $this->callShipGlobalApiFromDb($shipper);
+            if (! $shipGlobalResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'Ship Global API Failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
+                    'rawResponse' => $shipGlobalResult['data'] ?? null,
+                ];
+            }
+
+            $apiResponse = $shipGlobalResult['data'] ?? [];
+            $trackingNumber = null;
+            if (isset($apiResponse['data']) && isset($apiResponse['data']['waybill_number']) && ! empty($apiResponse['data']['waybill_number'])) {
+                $trackingNumber = $apiResponse['data']['waybill_number'];
+            } elseif (isset($apiResponse['waybill_number']) && ! empty($apiResponse['waybill_number'])) {
+                $trackingNumber = $apiResponse['waybill_number'];
+            } elseif (isset($apiResponse['tracking_number'])) {
+                $trackingNumber = $apiResponse['tracking_number'];
+            } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['tracking_number'])) {
+                $trackingNumber = $apiResponse['data']['tracking_number'];
+            } elseif (isset($apiResponse['awb_number'])) {
+                $trackingNumber = $apiResponse['awb_number'];
+            } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['awb_number'])) {
+                $trackingNumber = $apiResponse['data']['awb_number'];
+            } elseif (isset($apiResponse['waybill'])) {
+                $trackingNumber = $apiResponse['waybill'];
+            } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['waybill'])) {
+                $trackingNumber = $apiResponse['data']['waybill'];
+            } elseif (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                $trackingNumber = $apiResponse['data']['order_number'];
+            } elseif (isset($apiResponse['order_number'])) {
+                $trackingNumber = $apiResponse['order_number'];
+            }
+
+            $storeTracking([
+                'response_status_code' => '1',
+                'response_status_description' => 'Ship Global order created',
+                'shipment_identification_number' => $trackingNumber,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => null,
+                'raw_response' => $apiResponse,
+            ]);
+
+            return ['success' => true, 'tracking_number' => $trackingNumber];
+        }
+
+        // Default: UPS Ship API (also covers legacy/unresolved services).
+        $upsPayloadResult = $this->buildUpsShipPayloadFromDb($shipper);
+        if (! $upsPayloadResult['success']) {
+            return ['success' => false, 'message' => $upsPayloadResult['message'] ?? 'Unable to build the UPS shipment payload.'];
+        }
+
+        $upsResult = $this->callUpsShipApiInternal($upsPayloadResult['payload']);
+        if (! $upsResult['success']) {
+            Log::error('Prepaid order rejected by UPS Ship API.', [
+                'awb_number' => $awbNumber,
+                'message' => $upsResult['message'] ?? 'Unknown UPS error',
+                'raw_response' => $upsResult['rawResponse'] ?? null,
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'UPS Shipment Failed: '.($upsResult['message'] ?? 'Unknown UPS error'),
+                'rawResponse' => $upsResult['rawResponse'] ?? null,
+            ];
+        }
+
+        $shipmentResponse = $upsResult['shipmentResponse'];
+        $trackingNumber = $shipmentResponse['ShipmentResults']['PackageResults']['TrackingNumber']
+            ?? $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber']
+            ?? null;
+
+        $storeTracking([
+            'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
+            'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,
+            'transaction_identifier' => $shipmentResponse['Response']['TransactionReference']['TransactionIdentifier'] ?? null,
+            'customer_context' => $shipmentResponse['Response']['TransactionReference']['CustomerContext'] ?? null,
+            'shipment_identification_number' => $shipmentResponse['ShipmentResults']['ShipmentIdentificationNumber'] ?? null,
+            'transportation_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['CurrencyCode'] ?? null,
+            'transportation_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TransportationCharges']['MonetaryValue'] ?? null,
+            'service_options_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['CurrencyCode'] ?? null,
+            'service_options_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['ServiceOptionsCharges']['MonetaryValue'] ?? null,
+            'total_charges_currency' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['CurrencyCode'] ?? null,
+            'total_charges_amount' => $shipmentResponse['ShipmentResults']['ShipmentCharges']['TotalCharges']['MonetaryValue'] ?? null,
+            'billing_weight_uom' => $shipmentResponse['ShipmentResults']['BillingWeight']['UnitOfMeasurement']['Code'] ?? null,
+            'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
+            'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
+            'raw_response' => $shipmentResponse,
+        ]);
+
+        Log::info('Prepaid order accepted by UPS Ship API.', [
+            'admin_id' => $adminId,
+            'awb_number' => $awbNumber,
+            'carrier_tracking_number' => $trackingNumber,
+        ]);
+
+        return ['success' => true, 'tracking_number' => $trackingNumber, 'shipment_response' => $shipmentResponse];
     }
 }

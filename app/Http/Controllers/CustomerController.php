@@ -1006,6 +1006,30 @@ class CustomerController extends Controller
             }
         }
 
+        // CSB V GST fields (Step 4) reuse the Step-2 GST KYC values when the user
+        // already verified GST in Step 2. Without this, selecting CSB V + GST
+        // throws "gst certificate number / gst business name required" even
+        // though the same GSTIN + business name was already entered + verified
+        // in Step 2 (gst_kyc_number / gst_kyc_business_name).
+        $submittedGstCertNumber = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('gst_certificate_number')));
+        if ($submittedGstCertNumber === '') {
+            $fallbackGstNumber = strtoupper(preg_replace(
+                '/[^A-Za-z0-9]+/',
+                '',
+                (string) ($request->input('gst_kyc_number') ?: session('kyc_gst_number'))
+            ));
+            if ($fallbackGstNumber !== '') {
+                $submittedGstCertNumber = $fallbackGstNumber;
+            }
+        }
+        $submittedGstBizName = trim((string) $request->input('gst_business_name'));
+        if ($submittedGstBizName === '') {
+            $fallbackGstBizName = trim((string) ($request->input('gst_kyc_business_name') ?: session('kyc_gst_business_name')));
+            if ($fallbackGstBizName !== '') {
+                $submittedGstBizName = $fallbackGstBizName;
+            }
+        }
+
         $request->merge([
             'business_category_id' => $request->filled('business_category_id')
                 ? (int) $request->input('business_category_id')
@@ -1023,8 +1047,8 @@ class CustomerController extends Controller
             'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
             'billing_contact' => preg_replace('/\D+/', '', (string) $request->input('billing_contact')),
             'billing_email' => strtolower(trim((string) $request->input('billing_email'))),
-            'gst_certificate_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('gst_certificate_number'))),
-            'gst_business_name' => trim((string) $request->input('gst_business_name')),
+            'gst_certificate_number' => $submittedGstCertNumber,
+            'gst_business_name' => $submittedGstBizName,
         ]);
 
         $isCsbV = $request->input('csb_type') === 'csb_v';
@@ -8033,6 +8057,7 @@ class CustomerController extends Controller
                 $apiResponse = $overseasResult['data'] ?? [];
                 $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
                 $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+                $boxLabelUrl = $this->extractOverseasBoxLabelUrl($apiResponse);
 
                 $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
 
@@ -8049,7 +8074,10 @@ class CustomerController extends Controller
                             'total_charges_amount' => null,
                             'billing_weight_uom' => 'KGS',
                             'billing_weight' => null,
-                            'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                            'package_results' => ($labelUrl || $boxLabelUrl) ? array_filter([
+                                'LabelURL' => $labelUrl,
+                                'BoxLabelURL' => $boxLabelUrl,
+                            ]) : null,
                             'raw_response' => $apiResponse,
                             'status' => 'created',
                         ]
@@ -8716,6 +8744,7 @@ class CustomerController extends Controller
                         $apiResponse = $overseasResult['data'] ?? [];
                         $trackingNumber = $this->extractOverseasTrackingNumber($apiResponse);
                         $labelUrl = $this->extractOverseasLabelUrl($apiResponse);
+                        $boxLabelUrl = $this->extractOverseasBoxLabelUrl($apiResponse);
 
                         $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
 
@@ -8731,7 +8760,10 @@ class CustomerController extends Controller
                                 'total_charges_amount' => null,
                                 'billing_weight_uom' => 'KGS',
                                 'billing_weight' => null,
-                                'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
+                                'package_results' => ($labelUrl || $boxLabelUrl) ? array_filter([
+                                    'LabelURL' => $labelUrl,
+                                    'BoxLabelURL' => $boxLabelUrl,
+                                ]) : null,
                                 'raw_response' => $apiResponse,
                                 'status' => 'created',
                             ]
@@ -12180,6 +12212,100 @@ class CustomerController extends Controller
                             if (isset($first[$key]) && ! empty($first[$key])) {
                                 return is_string($first[$key]) ? $first[$key] : (string) $first[$key];
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the 4x6 box label URL from an Overseas Logistic API response.
+     *
+     * Same case-walking as extractOverseasLabelUrl(), but prioritizes the
+     * BoxlabelUrl key so the 4x6 label is stored alongside the full
+     * airwaybill (LabelURL) in package_results.
+     */
+    private function extractOverseasBoxLabelUrl($apiResponse)
+    {
+        if (! is_array($apiResponse)) {
+            return null;
+        }
+
+        $boxKeys = ['BoxlabelUrl', 'BoxLabelURL', 'boxlabelUrl', 'box_label_url', 'BoxLabelUrl'];
+        $awbKeys = ['Airwaybill', 'airwaybill', 'AirwayBill', 'Label', 'label'];
+
+        $pick = function ($arr) use ($boxKeys) {
+            if (! is_array($arr)) {
+                return null;
+            }
+            foreach ($boxKeys as $key) {
+                if (isset($arr[$key]) && ! empty($arr[$key])) {
+                    return is_string($arr[$key]) ? $arr[$key] : (string) $arr[$key];
+                }
+            }
+
+            return null;
+        };
+
+        // Case 0 (confirmed format): Data.Airwaybill.BoxlabelUrl
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                foreach ($awbKeys as $awbKey) {
+                    if (isset($data[$awbKey]) && is_array($data[$awbKey])) {
+                        $found = $pick($data[$awbKey]);
+                        if ($found) {
+                            return $found;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Case A: List of shipment objects.
+        if (isset($apiResponse[0]) && is_array($apiResponse[0])) {
+            $found = $pick($apiResponse[0]);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        // Case B: Top-level keys.
+        $found = $pick($apiResponse);
+        if ($found) {
+            return $found;
+        }
+
+        // Case C: Nested under "Data" (capital) or "data".
+        foreach (['Data', 'data'] as $dataKey) {
+            $data = $apiResponse[$dataKey] ?? null;
+            if (is_array($data)) {
+                if (isset($data[0]) && is_array($data[0])) {
+                    $found = $pick($data[0]);
+                    if ($found) {
+                        return $found;
+                    }
+                }
+                $found = $pick($data);
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        // Case D: Nested under common wrapper keys.
+        foreach (['Shipments', 'shipments', 'Shipment', 'shipment', 'Result', 'result', 'Response', 'response'] as $wrapKey) {
+            if (isset($apiResponse[$wrapKey])) {
+                $wrap = $apiResponse[$wrapKey];
+                if (is_array($wrap)) {
+                    $first = isset($wrap[0]) ? $wrap[0] : $wrap;
+                    if (is_array($first)) {
+                        $found = $pick($first);
+                        if ($found) {
+                            return $found;
                         }
                     }
                 }

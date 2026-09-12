@@ -8200,7 +8200,7 @@
                                                             <span class="badge bg-secondary" id="countryServiceCount"></span>
                                                         </div>
                                                         <div id="countryServiceList" class="d-flex flex-wrap gap-2 mt-2"></div>
-                                                        <div class="text-muted small mt-1">Country select karte hi services dikhti hain — weight se filter nahi hoti. SELF static option rate list me sabse upar milta hai.</div>
+                                                        <div class="text-muted small mt-1">Country select karte hi services dikhti hain — weight se filter nahi hoti.</div>
                                                     </div> -->
                                                     <!-- Rate Result (list layout, no outer card) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
@@ -9298,7 +9298,8 @@
                 consignee_state: consigneeState,
                 consignee_zip_code: getVal('input[name="consignee_zip_code"]'),
                 delivery_destination: deliveryDestination,
-                package_weights: packageWeights
+                package_weights: packageWeights,
+                selected_exporter_customer_id: document.getElementById('exporterCustomerSelect')?.value || ''
             })
         })
         .then(res => res.json())
@@ -9337,10 +9338,6 @@
                 if (data.all_rates && data.all_rates.length > 0) {
                     // Helper function to render a single rate card
                     function renderRateCard(r, idx, isChecked) {
-                        // NOTE: rate se selection block nahi hoti — har country
-                        // service selectable hai. Jiss service ka rate band na
-                        // mile woh ₹0.00 ke saath dikhta hai (backend usko list
-                        // me sabse neeche rakhta hai).
                         const checked = isChecked ? 'checked' : '';
                         const selectedClass = isChecked ? ' selected' : '';
 
@@ -9396,8 +9393,21 @@
                                     </div>
                                     <div class="col-lg-6">
                                         <div class="row h-100 align-items-center">
-                                            <div class="col-md-12">
-                                                <div class="action-container d-flex align-items-center justify-content-end">
+                                            <div class="col-md-7">
+                                                <div class="price-section">
+                                                    <div class="price-container">
+                                                        <div class="price-amount">
+                                                            <span class="price-symbol">₹</span> ${totalPrice.toFixed(2)}
+                                                        </div>
+                                                        <div class="tax-info">
+                                                            <i class="fas fa-check-circle"></i>
+                                                            All taxes included
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-5">
+                                                <div class="action-container d-flex align-items-center justify-content-between">
                                                     <div class="form-check m-0 d-flex align-items-center">
                                                         <input type="radio" name="rate_select" value="${r.service_id}"
                                                             class="form-check-input me-2 service-radio"
@@ -9414,6 +9424,10 @@
                                                             Select
                                                         </label>
                                                     </div>
+                                                    <button class="breakdown-toggle btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#breakdown-${idx}" aria-expanded="false" aria-controls="breakdown-${idx}">
+                                                        <span>break price</span>
+                                                        <i class="fas fa-chevron-down chevron ms-1"></i>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -9538,7 +9552,10 @@
                     // here. Without rendering this group those rates never show on the
                     // frontend even though the API returns them.
                     if (zoneGroups['general']) {
-                        cardsHtml += ``;
+                        cardsHtml += `<div class="zone-group mb-4">
+                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
+                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
+                            </div>`;
                         zoneGroups['general'].forEach(function(r) {
                             const isChecked = globalIndex === 0;
                             cardsHtml += renderRateCard(r, globalIndex, isChecked);
@@ -9561,8 +9578,6 @@
                 } else {
                     cardsHtml = '<div class="text-center text-muted py-4">No rates found. Please check consignee state and package weights.</div>';
                 }
-                // Static SELF option stays on top regardless of weight-based rates.
-                cardsHtml = (window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '') + cardsHtml;
                 cardList.innerHTML = cardsHtml;
 
                 // Attach click handlers to rate cards (excluding breakdown toggle)
@@ -9596,27 +9611,21 @@
                     });
                 });
             } else {
-                cardList.innerHTML = window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '';
-                errorDiv.textContent = (data.message || 'Failed to get rate') + ' — SELF (static) is still available above.';
+                cardList.innerHTML = '';
+                errorDiv.textContent = (data.message || 'Failed to get rate');
                 errorDiv.classList.remove('d-none');
-                // SELF static option stays selectable, so keep Preview enabled.
-                const previewBtnFail = document.getElementById('previewOrderBtn');
-                if (previewBtnFail) previewBtnFail.disabled = false;
             }
         })
         .catch(err => {
             console.error('Rate error:', err);
-            cardList.innerHTML = window.getSelfServiceCardHTML ? window.getSelfServiceCardHTML(false) : '';
-            errorDiv.textContent = 'Network error. Please try again. — SELF (static) is still available above.';
+            cardList.innerHTML = '';
+            errorDiv.textContent = 'Network error. Please try again.';
             errorDiv.classList.remove('d-none');
             resultDiv.style.display = 'block';
             if (statusBadge) {
                 statusBadge.textContent = 'Error';
                 statusBadge.className = 'badge bg-danger';
             }
-            // SELF static option stays selectable, so keep Preview enabled.
-            const previewBtnErr = document.getElementById('previewOrderBtn');
-            if (previewBtnErr) previewBtnErr.disabled = false;
         })
         .finally(() => {
             if (btn) {
@@ -9626,59 +9635,15 @@
         });
     }
 
-    // ===== Prepaid: SELF static option + country-wise service list (no weight filter) =====
+    // ===== Prepaid: country-wise service list (no weight filter) =====
     window.codEscapeHtml = window.codEscapeHtml || function(str) {
         return String(str ?? '').replace(/[&<>"']/g, function(c) {
             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
         });
     };
 
-    // Static SELF card (manual/self delivery, zero price, no carrier API).
-    // Shown at the top of the rate list — both after Calculate Rate and as
-    // soon as a delivery destination (country) is selected. Clicking it saves
-    // shipper_info.shipping_method = 'SELF' on submit.
-    window.getSelfServiceCardHTML = window.getSelfServiceCardHTML || function(isChecked) {
-        const checked = isChecked ? 'checked' : '';
-        const selectedClass = isChecked ? ' selected' : '';
-        const rateData = JSON.stringify({base:'0.00',fuel:'0.00',gst:'0.00',surcharge:'0.00',surcharges:[],demand:'0.00',remote:'0.00',oversize:'0.00',goGreen:'0.00',misc:'',miscAmount:'0.00',total:'0.00'});
-        return '<div class="rate-comparison-card' + selectedClass + '" data-service-id="SELF" style="border-style:dashed;">'
-            + '<div class="rate-comparison-card-body"><div class="row g-3 align-items-center">'
-            + '<div class="col-lg-6"><div class="carrier-badge">'
-            + '<div class="carrier-logo-container" style="background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%) !important;"><span class="text-white fw-bold fs-15">SELF</span></div>'
-            + '<div class="service-info"><div class="service-title">SELF</div>'
-            // + '<div class="service-tat" style="font-weight:bold;font-size:14px;">Manual / Self Delivery</div>'
-            // + '<div class="service-zone" style="font-size:12px;color:#666;">No carrier API &bull; Rate &#8377;0.00</div>'
-            // + '<span class="status-badge">Static</span>'
-            + '</div></div></div>'
-            + '<div class="col-lg-6"><div class="row h-100 align-items-center"><div class="col-md-12">'
-            + '<div class="action-container d-flex align-items-center justify-content-end gap-3">'
-            // + '<div class="price-amount">&#8377; 0.00</div>'
-            + '<div class="form-check m-0 d-flex align-items-center">'
-            + '<input type="radio" name="rate_select" value="SELF" class="form-check-input me-2 service-radio" data-method="SELF" data-network="SELF" data-tat="Manual" data-method_code="SELF" data-price="0" data-rate-id="" data-rate=\'' + rateData + '\' id="service_SELF" ' + checked + '>'
-            + '<label class="form-check-label small fw-semibold" for="service_SELF">Select</label>'
-            + '</div></div></div></div></div>'
-            + '</div></div></div>';
-    };
-
-    // Ensure the SELF card exists at the top of the rate list (used when the
-    // country is selected but Calculate Rate has not run yet).
-    window.ensureSelfCardInList = window.ensureSelfCardInList || function() {
-        const resultDiv = document.getElementById('upsRateResult');
-        const cardList = document.getElementById('upsRateCardList');
-        const errorDiv = document.getElementById('upsRateError');
-        const statusBadge = document.getElementById('rateStatusBadge');
-        if (!resultDiv || !cardList) return;
-        if (cardList.querySelector('[data-service-id="SELF"]')) return;
-        resultDiv.style.display = 'block';
-        if (statusBadge) { statusBadge.textContent = 'Success'; statusBadge.className = 'badge bg-success'; }
-        if (errorDiv) errorDiv.classList.add('d-none');
-        cardList.insertAdjacentHTML('afterbegin', window.getSelfServiceCardHTML(false));
-        const previewBtn = document.getElementById('previewOrderBtn');
-        if (previewBtn) previewBtn.disabled = false;
-    };
-
     // Country-wise services (WITHOUT weight filtering). Called as soon as the
-    // Delivery Destination changes — e.g. US shows only the UPS services.
+    // Delivery Destination changes — shows that country's services.
     window.loadPrepaidCountryServices = window.loadPrepaidCountryServices || function() {
         const destSelect = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
         const wrap = document.getElementById('countryServiceWrap');
@@ -9699,7 +9664,7 @@
             const destName = (data.destination && data.destination.name) || '';
             title.textContent = 'Available services for ' + destName + (data.destination_country ? ' (' + data.destination_country + ')' : '');
             const services = data.services || [];
-            count.textContent = services.length + ' UPS + SELF';
+            count.textContent = services.length + ' services';
             let html = '';
             services.forEach(function(s) {
                 html += '<span class="badge bg-primary-subtle text-primary border" style="font-size:12px;padding:6px 10px;">'
@@ -9708,16 +9673,13 @@
                 if (s.tat) html += ' &bull; ' + esc(s.tat);
                 html += ')</span></span>';
             });
-            html += '<span class="badge bg-dark-subtle text-dark border" style="font-size:12px;padding:6px 10px;">SELF <span class="text-muted">(Static &bull; Manual &bull; &#8377;0)</span></span>';
             list.innerHTML = html;
-            // Make SELF clickable right away, without waiting for Calculate Rate.
-            window.ensureSelfCardInList();
         })
         .catch(function() { /* keep previous list */ });
     };
 
-    // Delegated click/change handlers so dynamically added cards (SELF and
-    // country pre-list) behave like the Calculate-Rate cards.
+    // Delegated click/change handlers so dynamically added cards behave
+    // like the Calculate-Rate cards.
     if (!window.codRateCardDelegationBound) {
         window.codRateCardDelegationBound = true;
         document.addEventListener('click', function(e) {
@@ -10963,7 +10925,7 @@
                 document.getElementById('preview_delivery_destination').textContent = destDisplay;
             }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
-            // Prefer the selected rate card's method (covers SELF); fall back
+            // Prefer the selected rate card's method; fall back
             // to the hidden shipping_method select for older flows.
             (function() {
                 const selRate = form.querySelector('input[name="rate_select"]:checked');

@@ -132,6 +132,19 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/prepaid/zones-by-destination', [PrepaidController::class, 'prepaidZonesByDestination'])->name('admin.prepaid.zones-by-destination');
     Route::get('/prepaid/services-by-destination', [PrepaidController::class, 'prepaidServicesByDestination'])->name('admin.prepaid.services-by-destination');
     Route::get('/prepaid/shipment/{shipperId}', [PrepaidController::class, 'prepaidShipmentDetail'])->name('admin.prepaid.shipment-detail');
+    Route::get('/prepaid/shipment-label/{invoiceId}', [PrepaidController::class, 'prepaidGetShipmentLabel'])->name('admin.prepaid.shipment-label');
+
+    // Prepaid manifest APIs (mirrors the customer manifest APIs).
+    Route::post('/prepaid/mark-packed', [PrepaidController::class, 'prepaidMarkPacked'])->name('admin.prepaid.mark-packed');
+    Route::post('/prepaid/manifest', [PrepaidController::class, 'prepaidManifestShipment'])->name('admin.prepaid.manifest');
+    Route::post('/prepaid/bulk-manifest', [PrepaidController::class, 'prepaidBulkManifestShipments'])->name('admin.prepaid.bulk-manifest');
+    Route::post('/prepaid/manifest-ship-global-fallback', [PrepaidController::class, 'prepaidManifestShipGlobalFallback'])->name('admin.prepaid.manifest-ship-global-fallback');
+    Route::get('/prepaid/manifest/{manifestNumber}', [PrepaidController::class, 'prepaidViewManifestDetail'])->name('admin.prepaid.manifest-detail');
+    Route::get('/prepaid/manifest/{manifestNumber}/label', [PrepaidController::class, 'prepaidManifestLabel'])->name('admin.prepaid.manifest-label');
+    Route::get('/prepaid/manifest/{manifestNumber}/document', [PrepaidController::class, 'prepaidManifestDocument'])->name('admin.prepaid.manifest-document');
+    Route::post('/prepaid/manifest/remove', [PrepaidController::class, 'prepaidRemoveFromManifest'])->name('admin.prepaid.manifest-remove');
+    Route::post('/prepaid/manifest/close', [PrepaidController::class, 'prepaidCloseManifest'])->name('admin.prepaid.manifest-close');
+    Route::post('/prepaid/manifest/assign-pickup', [PrepaidController::class, 'prepaidAssignForPickup'])->name('admin.prepaid.manifest-assign-pickup');
     Route::get('/cod/shipment/{shipperId}', [CodController::class, 'codShipmentDetail'])->name('admin.cod.shipment-detail');
 
     // Create User (Admin Management) Routes
