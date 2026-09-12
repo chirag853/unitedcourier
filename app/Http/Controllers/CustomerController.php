@@ -2791,6 +2791,7 @@ class CustomerController extends Controller
             // Never trust a client-submitted saved-customer ID or its accompanying
             // shipper fields. Verify account ownership and category access, then use
             // the saved record as the authoritative source before shipment validation.
+            $selectedExporterCustomer = null;
             if (! empty($validatedData['selected_exporter_customer_id'])) {
                 $selectedExporterCustomer = $this->canManageSavedCustomers($customer)
                     ? ExporterCustomer::where('exporter_id', $customer->id)
@@ -2945,60 +2946,111 @@ class CustomerController extends Controller
             if ($validatedData['origin_type'] === 'CSB V') {
                 $customer = auth()->guard('customer')->user();
                 if ($customer->csb_status === 1) {
-                    if (! $request->expectsJson()) {
-                        return back()
-                            ->withErrors([
-                                'origin_type' => 'CSB V requires CSB V onboarding. Your current status is CSB-IV only.',
-                            ])
-                            ->withInput()
-                            ->with('error', 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.');
-                    }
+                    // Courier/Aggregator only: a CSB-V saved customer selected above
+                    // makes this shipment CSB-V eligible, so skip the onboarding block.
+                    // Manual entry or a CSB-IV saved customer keeps the old behaviour.
+                    $isCsbVSavedCustomerShipment = $this->canManageSavedCustomers($customer)
+                        && $selectedExporterCustomer
+                        && strtolower(trim((string) $selectedExporterCustomer->csb_type)) === 'csb_v';
 
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.',
-                        'errors' => [
-                            'origin_type' => ['CSB V requires CSB V onboarding. Your current status is CSB-IV only.'],
-                        ],
-                    ], 422);
+                    if (! $isCsbVSavedCustomerShipment) {
+                        if (! $request->expectsJson()) {
+                            return back()
+                                ->withErrors([
+                                    'origin_type' => 'CSB V requires CSB V onboarding. Your current status is CSB-IV only.',
+                                ])
+                                ->withInput()
+                                ->with('error', 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.');
+                        }
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'You are not authorized to create shipments with CSB V origin type. Please complete CSB V onboarding first.',
+                            'errors' => [
+                                'origin_type' => ['CSB V requires CSB V onboarding. Your current status is CSB-IV only.'],
+                            ],
+                        ], 422);
+                    }
                 }
             }
 
             // GST/LUT selection for CSB V is controlled by the customer's approved
             // CSB profile. Do not trust browser-submitted tax details.
             if ($validatedData['origin_type'] === 'CSB V') {
-                $customerCsbForm = $customer->csbForm;
-                $hasGst = (bool) ($customerCsbForm?->is_gst);
-                $hasLut = (bool) ($customerCsbForm?->is_lut);
+                // Courier/Aggregator + CSB-V saved customer: tax profile comes from
+                // the selected saved customer, not the login account (which is CSB-IV only).
+                $useSavedCustomerTaxProfile = $selectedExporterCustomer
+                    && $this->canManageSavedCustomers($customer)
+                    && strtolower(trim((string) $selectedExporterCustomer->csb_type)) === 'csb_v'
+                    && (int) $customer->csb_status === 1;
 
-                if (! $hasGst && ! $hasLut) {
-                    throw ValidationException::withMessages([
-                        'csb_tax_type' => 'GST or LUT information is not available in your CSB profile.',
-                    ]);
+                if ($useSavedCustomerTaxProfile) {
+                    $savedGstNumber = ($selectedExporterCustomer->kyc_type === 'GST (Normal)' && ! empty($selectedExporterCustomer->kyc_number))
+                        ? $selectedExporterCustomer->kyc_number
+                        : ($selectedExporterCustomer->gst_certificate_number ?: null);
+                    $hasGst = (bool) ($selectedExporterCustomer->is_gst || ! empty($savedGstNumber));
+                    $hasLut = (bool) $selectedExporterCustomer->is_lut;
+
+                    if (! $hasGst && ! $hasLut) {
+                        throw ValidationException::withMessages([
+                            'csb_tax_type' => 'GST or LUT information is not available in the selected customer profile.',
+                        ]);
+                    }
+
+                    $selectedTaxType = $hasGst && ! $hasLut
+                        ? 'gst'
+                        : (! $hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
+
+                    if ($hasGst && $hasLut && ! in_array($selectedTaxType, ['gst', 'lut'], true)) {
+                        throw ValidationException::withMessages([
+                            'csb_tax_type' => 'Please select GST or LUT for this shipment.',
+                        ]);
+                    }
+                    $validatedData['csb_tax_type'] = $selectedTaxType;
+                    $validatedData['bond_ut_igst'] = $selectedTaxType === 'lut' ? 'Bond UT' : 'IGST';
+                    $validatedData['lut_number'] = $selectedTaxType === 'lut'
+                        ? $selectedExporterCustomer->lut_number
+                        : null;
+                    $validatedData['gst_number'] = $selectedTaxType === 'gst'
+                        ? $savedGstNumber
+                        : null;
+                    $validatedData['iec_code'] = $selectedExporterCustomer->iec_number;
+                    $validatedData['ad_code'] = $selectedExporterCustomer->ad_code;
+                    $validatedData['bank_account_number'] = $selectedExporterCustomer->bank_account_number;
+                } else {
+                    $customerCsbForm = $customer->csbForm;
+                    $hasGst = (bool) ($customerCsbForm?->is_gst);
+                    $hasLut = (bool) ($customerCsbForm?->is_lut);
+
+                    if (! $hasGst && ! $hasLut) {
+                        throw ValidationException::withMessages([
+                            'csb_tax_type' => 'GST or LUT information is not available in your CSB profile.',
+                        ]);
+                    }
+
+                    // A single available option is authoritative; only use the submitted
+                    // radio selection when both GST and LUT are enabled in the profile.
+                    $selectedTaxType = $hasGst && ! $hasLut
+                        ? 'gst'
+                        : (! $hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
+
+                    if ($hasGst && $hasLut && ! in_array($selectedTaxType, ['gst', 'lut'], true)) {
+                        throw ValidationException::withMessages([
+                            'csb_tax_type' => 'Please select GST or LUT for this shipment.',
+                        ]);
+                    }
+                    $validatedData['csb_tax_type'] = $selectedTaxType;
+                    $validatedData['bond_ut_igst'] = $selectedTaxType === 'lut' ? 'Bond UT' : 'IGST';
+                    $validatedData['lut_number'] = $selectedTaxType === 'lut'
+                        ? $customerCsbForm->lut_number
+                        : null;
+                    $validatedData['gst_number'] = $selectedTaxType === 'gst'
+                        ? ($customerCsbForm->gst_certificate_number ?: $customerCsbForm->billing_gst)
+                        : null;
+                    $validatedData['iec_code'] = $customerCsbForm->iec_number;
+                    $validatedData['ad_code'] = $customerCsbForm->ad_code;
+                    $validatedData['bank_account_number'] = $customerCsbForm->bank_account_number;
                 }
-
-                // A single available option is authoritative; only use the submitted
-                // radio selection when both GST and LUT are enabled in the profile.
-                $selectedTaxType = $hasGst && ! $hasLut
-                    ? 'gst'
-                    : (! $hasGst && $hasLut ? 'lut' : ($validatedData['csb_tax_type'] ?? null));
-
-                if ($hasGst && $hasLut && ! in_array($selectedTaxType, ['gst', 'lut'], true)) {
-                    throw ValidationException::withMessages([
-                        'csb_tax_type' => 'Please select GST or LUT for this shipment.',
-                    ]);
-                }
-                $validatedData['csb_tax_type'] = $selectedTaxType;
-                $validatedData['bond_ut_igst'] = $selectedTaxType === 'lut' ? 'Bond UT' : 'IGST';
-                $validatedData['lut_number'] = $selectedTaxType === 'lut'
-                    ? $customerCsbForm->lut_number
-                    : null;
-                $validatedData['gst_number'] = $selectedTaxType === 'gst'
-                    ? ($customerCsbForm->gst_certificate_number ?: $customerCsbForm->billing_gst)
-                    : null;
-                $validatedData['iec_code'] = $customerCsbForm->iec_number;
-                $validatedData['ad_code'] = $customerCsbForm->ad_code;
-                $validatedData['bank_account_number'] = $customerCsbForm->bank_account_number;
             }
 
             // Server-side validation: enforce max invoice total based on origin_type.

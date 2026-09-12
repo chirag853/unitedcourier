@@ -313,7 +313,7 @@
                                                         <small class="text-muted"> (Selecting a saved customer fills Shipper Info automatically.)</small>
 
                                                         <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
-                                                            <option value="" data-csb-color="#212529" data-initial-visible="1">Enter shipper details manually</option>
+                                                            <option value="" data-csb-color="#212529" data-csb-type="" data-initial-visible="1">Enter shipper details manually</option>
                                                             @foreach($exporterCustomers as $savedCustomer)
                                                                 @php
                                                                     $isCsbV = $savedCustomer->csb_type === 'csb_v';
@@ -323,6 +323,7 @@
                                                                 <option
                                                                     value="{{ $savedCustomer->id }}"
                                                                     data-csb-color="{{ $csbColor }}"
+                                                                    data-csb-type="{{ $savedCustomer->csb_type }}"
                                                                     data-initial-visible="{{ $loop->iteration <= 10 ? '1' : '0' }}"
                                                                     style="color: {{ $csbColor }}; font-weight: 600;"
                                                                     {{ old('selected_exporter_customer_id') == $savedCustomer->id ? 'selected' : '' }}
@@ -7590,30 +7591,26 @@
                                                         @endphp
                                                         <input type="hidden" name="csb_tax_type" id="csbTaxType"
                                                             value="{{ $defaultCsbTaxType }}">
-                                                        @if($hasCsbGst && $hasCsbLut)
-                                                            <div class="col-md-4" id="csbTaxTypeSelector">
-                                                                <div class="mb-4">
-                                                                    <label class="form-label">Tax information</label>
-                                                                    <div class="d-flex flex-wrap gap-3">
-                                                                        <div class="form-check">
-                                                                            <input type="radio" id="csbGstOption" name="csb_tax_type_radio"
-                                                                                value="gst" class="form-check-input" {{ $defaultCsbTaxType === 'gst' ? 'checked' : '' }}>
-                                                                            <label class="form-check-label" for="csbGstOption">GST</label>
-                                                                        </div>
-                                                                        <div class="form-check">
-                                                                            <input type="radio" id="csbLutOption" name="csb_tax_type_radio"
-                                                                                value="lut" class="form-check-input" {{ $defaultCsbTaxType === 'lut' ? 'checked' : '' }}>
-                                                                            <label class="form-check-label" for="csbLutOption">LUT</label>
-                                                                        </div>
+                                                        <div class="col-md-4" id="csbTaxTypeSelector" style="display: {{ ($hasCsbGst && $hasCsbLut) ? 'block' : 'none' }};">
+                                                            <div class="mb-4">
+                                                                <label class="form-label">Tax information</label>
+                                                                <div class="d-flex flex-wrap gap-3">
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="csbGstOption" name="csb_tax_type_radio"
+                                                                            value="gst" class="form-check-input" {{ $defaultCsbTaxType === 'gst' ? 'checked' : '' }}>
+                                                                        <label class="form-check-label" for="csbGstOption">GST</label>
+                                                                    </div>
+                                                                    <div class="form-check">
+                                                                        <input type="radio" id="csbLutOption" name="csb_tax_type_radio"
+                                                                            value="lut" class="form-check-input" {{ $defaultCsbTaxType === 'lut' ? 'checked' : '' }}>
+                                                                        <label class="form-check-label" for="csbLutOption">LUT</label>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        @endif
-                                                        @if(!$hasCsbGst && !$hasCsbLut)
-                                                            <div class="col-md-4" id="csbTaxAvailabilityMessage">
-                                                                <div class="alert alert-warning mb-4">GST/LUT information is not available in your CSB profile.</div>
-                                                            </div>
-                                                        @endif
+                                                        </div>
+                                                        <div class="col-md-4" id="csbTaxAvailabilityMessage" style="display: {{ (!$hasCsbGst && !$hasCsbLut) ? 'block' : 'none' }};">
+                                                            <div class="alert alert-warning mb-4">GST/LUT information is not available in your CSB profile.</div>
+                                                        </div>
                                                         {{--
                                                         --}}
                                                         <div class="col-md-4">
@@ -8971,6 +8968,8 @@
     @endif
     <script>
     // Show only the GST or LUT details selected from the customer's CSB profile.
+    // Courier/Aggregator: when a CSB-V saved customer is selected, the effective
+    // profile comes from that saved customer (see window.getEffectiveCsbTaxFlags).
     document.addEventListener('DOMContentLoaded', function() {
         const taxTypeInput = document.getElementById('csbTaxType');
         const taxTypeSelector = document.getElementById('csbTaxTypeSelector');
@@ -8978,16 +8977,29 @@
         const gstDetails = document.getElementById('csbGstDetails');
         const lutDetails = document.getElementById('csbLutDetails');
         const taxRadios = document.querySelectorAll('[name="csb_tax_type_radio"]');
+        const loginHasGst = @json((bool) ($csbForm?->is_gst));
+        const loginHasLut = @json((bool) ($csbForm?->is_lut));
 
-        function syncCsbTaxDetails() {
-            const selectedType = Array.from(taxRadios).find(radio => radio.checked)?.value || taxTypeInput?.value || '';
-            if (taxTypeInput) taxTypeInput.value = selectedType;
-            if (gstDetails) gstDetails.style.display = selectedType === 'gst' ? 'block' : 'none';
-            if (lutDetails) lutDetails.style.display = selectedType === 'lut' ? 'block' : 'none';
-            if (taxTypeSelector) taxTypeSelector.style.display = taxRadios.length > 1 ? 'block' : 'none';
-            if (availabilityMessage) availabilityMessage.style.display = taxRadios.length ? 'none' : 'block';
+        function getEffectiveFlags() {
+            if (typeof window.getEffectiveCsbTaxFlags === 'function') {
+                try {
+                    return window.getEffectiveCsbTaxFlags(loginHasGst, loginHasLut);
+                } catch (e) { /* fall through to login profile */ }
+            }
+            return { hasGst: loginHasGst, hasLut: loginHasLut };
         }
 
+        function syncCsbTaxDetails() {
+            const flags = getEffectiveFlags();
+            const selectedType = Array.from(taxRadios).find(radio => radio.checked)?.value || taxTypeInput?.value || '';
+            if (taxTypeInput) taxTypeInput.value = selectedType;
+            if (gstDetails) gstDetails.style.display = (flags.hasGst && selectedType === 'gst') ? 'block' : 'none';
+            if (lutDetails) lutDetails.style.display = (flags.hasLut && selectedType === 'lut') ? 'block' : 'none';
+            if (taxTypeSelector) taxTypeSelector.style.display = (flags.hasGst && flags.hasLut) ? 'block' : 'none';
+            if (availabilityMessage) availabilityMessage.style.display = (!flags.hasGst && !flags.hasLut) ? 'block' : 'none';
+        }
+
+        window.syncCsbTaxDetails = syncCsbTaxDetails;
         taxRadios.forEach(radio => radio.addEventListener('change', syncCsbTaxDetails));
         syncCsbTaxDetails();
     });
@@ -8997,15 +9009,35 @@
         const originTypeSelect = document.getElementById('originType');
         const csbInfoSection = document.getElementById('csbInfoSection');
         const csbStatus = @json($customer->csb_status ?? null);
+        const canBypassCsbVBlock = @json($canManageSavedCustomers ?? false);
+
+        // Courier/Aggregator only: when a CSB-V saved customer is selected above,
+        // treat the shipment as CSB-V eligible even though the login account has csb_status = 1.
+        function isCsbVSavedCustomerSelected() {
+            if (!canBypassCsbVBlock) return false;
+            const sel = document.getElementById('exporterCustomerSelect');
+            if (!sel || !sel.value) return false;
+            const opt = sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+            const csbType = String(opt?.dataset?.csbType || '').toLowerCase().trim();
+            return csbType === 'csb_v';
+        }
+        // Expose for the CSB-V warning gate script below.
+        window.isCsbVSavedCustomerSelected = isCsbVSavedCustomerSelected;
+        window.canBypassCsbVBlock = canBypassCsbVBlock;
 
         function toggleCsbInfo() {
             const rateCalcNum = document.getElementById('rateCalculateNumber');
-            if (originTypeSelect.value === 'CSB V' && csbStatus !== 1) {
+            if (!originTypeSelect || !csbInfoSection) return;
+            if (originTypeSelect.value === 'CSB V' && (csbStatus !== 1 || isCsbVSavedCustomerSelected())) {
                 csbInfoSection.style.display = 'block';
                 // Order: 1-Shipper, 2-Consignee, 3-Package, 4-CSB, 5-Invoice, 6-Rate Calculate
                 document.getElementById('csbInfoNumber').textContent = '4';
                 document.getElementById('shipmentInvoiceNumber').textContent = '5';
                 if (rateCalcNum) rateCalcNum.textContent = '6';
+                // Refresh GST/LUT visibility for the effective (saved-customer or login) profile.
+                if (typeof window.syncCsbTaxDetails === 'function') {
+                    window.syncCsbTaxDetails();
+                }
             } else {
                 csbInfoSection.style.display = 'none';
                 $('#csbinfo').collapse('hide');
@@ -9017,9 +9049,19 @@
         // Initial check
         toggleCsbInfo();
         // Listen for changes
-        originTypeSelect.addEventListener('change', toggleCsbInfo);
+        if (originTypeSelect) {
+            originTypeSelect.addEventListener('change', toggleCsbInfo);
+        }
+        // Re-evaluate when the saved customer changes (CSB-V customer allows CSB V origin).
+        const savedCustomerSelectForCsb = document.getElementById('exporterCustomerSelect');
+        if (savedCustomerSelectForCsb) {
+            savedCustomerSelectForCsb.addEventListener('change', toggleCsbInfo);
+            if (window.jQuery) {
+                jQuery(savedCustomerSelectForCsb).on('change', toggleCsbInfo);
+            }
+        }
         // Also handle Select2 changes if it's initialized
-        if (originTypeSelect.classList.contains('select2-hidden-accessible')) {
+        if (originTypeSelect && originTypeSelect.classList.contains('select2-hidden-accessible')) {
             $(document).on('change', '#originType', toggleCsbInfo);
         }
     });
@@ -9756,21 +9798,32 @@
         ];
         $exporterCustomerPrefill = $exporterCustomers->mapWithKeys(function ($savedCustomer) {
             $isCsbV = $savedCustomer->csb_type === 'csb_v';
+            $savedGstNumber = $savedCustomer->kyc_type === 'GST (Normal)' && filled($savedCustomer->kyc_number)
+                ? $savedCustomer->kyc_number
+                : ($savedCustomer->gst_certificate_number ?: '');
+            $hasSavedGst = (bool) ($savedCustomer->is_gst || filled($savedGstNumber));
+            $hasSavedLut = (bool) $savedCustomer->is_lut;
+            $savedTaxType = ! $isCsbV
+                ? ''
+                : ($hasSavedGst && ! $hasSavedLut
+                    ? 'gst'
+                    : (! $hasSavedGst && $hasSavedLut ? 'lut' : ($hasSavedGst && $hasSavedLut ? 'lut' : '')));
 
             return [
                 $savedCustomer->id => array_merge($savedCustomer->toShipperArray(), [
                     'csb_type' => $savedCustomer->csb_type,
                     'csb_label' => $isCsbV ? 'CSB V' : 'CSB IV',
+                    'is_gst' => $hasSavedGst,
+                    'is_lut' => $hasSavedLut,
+                    'csb_tax_type' => $savedTaxType,
                     'bond_ut_igst' => $isCsbV
-                        ? ($savedCustomer->is_lut ? 'Bond UT' : 'IGST')
+                        ? ($savedTaxType === 'lut' ? 'Bond UT' : ($savedTaxType === 'gst' ? 'IGST' : ($savedCustomer->is_lut ? 'Bond UT' : 'IGST')))
                         : '',
                     'lut_number' => $isCsbV && $savedCustomer->is_lut
                         ? $savedCustomer->lut_number
                         : '',
                     'iec_code' => $isCsbV ? $savedCustomer->iec_number : '',
-                    'gst_number' => $savedCustomer->kyc_type === 'GST (Normal)'
-                        ? $savedCustomer->kyc_number
-                        : '',
+                    'gst_number' => $savedGstNumber,
                     'ad_code' => $isCsbV ? $savedCustomer->ad_code : '',
                     'bank_account_number' => $isCsbV
                         ? $savedCustomer->bank_account_number
@@ -9789,6 +9842,77 @@
 
         const customerData = @json($customerPrefill);
         const exporterCustomerData = @json($exporterCustomerPrefill);
+        // Expose for the CSB-V warning/CSB-info gates defined in other script blocks.
+        window.exporterCustomerData = exporterCustomerData;
+
+        // Login account's CSB numbers, captured before any saved-customer fill,
+        // so switching back to manual entry restores them.
+        const loginCsbDefaults = {};
+        ['iec_code', 'gst_number', 'lut_number', 'ad_code', 'bank_account_number', 'bond_ut_igst', 'csb_tax_type'].forEach(function (name) {
+            const el = document.querySelector('[name="' + name + '"]');
+            loginCsbDefaults[name] = el ? el.value : '';
+        });
+        const loginCsbRadioChecked = {};
+        document.querySelectorAll('[name="csb_tax_type_radio"]').forEach(function (radio) {
+            loginCsbRadioChecked[radio.value] = radio.checked;
+        });
+
+        // Effective GST/LUT availability: CSB-V saved customer overrides the
+        // login account (which for Courier/Aggregator is CSB-IV only).
+        window.getEffectiveCsbTaxFlags = function (fallbackHasGst, fallbackHasLut) {
+            const sel = document.getElementById('exporterCustomerSelect');
+            const canBypass = (typeof window.canBypassCsbVBlock !== 'undefined')
+                ? window.canBypassCsbVBlock
+                : !!sel;
+            if (canBypass && sel && sel.value && exporterCustomerData[String(sel.value)]) {
+                const sc = exporterCustomerData[String(sel.value)];
+                if (String(sc.csb_type || '').toLowerCase() === 'csb_v') {
+                    return { hasGst: !!sc.is_gst, hasLut: !!sc.is_lut };
+                }
+                return { hasGst: false, hasLut: false };
+            }
+            return { hasGst: !!fallbackHasGst, hasLut: !!fallbackHasLut };
+        };
+
+        // Fill (or restore) the CSB Information fields from the effective profile,
+        // then refresh GST/LUT visibility via the shared sync function.
+        function syncEffectiveCsbTaxProfile() {
+            const sel = document.getElementById('exporterCustomerSelect');
+            const sc = (sel && sel.value) ? exporterCustomerData[String(sel.value)] : null;
+            const isCsbVSaved = sc && String(sc.csb_type || '').toLowerCase() === 'csb_v';
+            const canBypass = (typeof window.canBypassCsbVBlock !== 'undefined')
+                ? window.canBypassCsbVBlock
+                : !!sel;
+
+            if (canBypass && isCsbVSaved) {
+                setField('csb_tax_type', sc.csb_tax_type || '');
+                setField('bond_ut_igst', sc.bond_ut_igst || '');
+                setField('iec_code', sc.iec_code || '');
+                setField('gst_number', sc.gst_number || '');
+                setField('lut_number', sc.lut_number || '');
+                setField('ad_code', sc.ad_code || '');
+                setField('bank_account_number', sc.bank_account_number || '');
+                document.querySelectorAll('[name="csb_tax_type_radio"]').forEach(function (radio) {
+                    radio.checked = (radio.value === (sc.csb_tax_type || ''));
+                    radio.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            } else if (!sc) {
+                // Manual entry: restore the login account's own CSB numbers.
+                Object.keys(loginCsbDefaults).forEach(function (name) {
+                    setField(name, loginCsbDefaults[name]);
+                });
+                document.querySelectorAll('[name="csb_tax_type_radio"]').forEach(function (radio) {
+                    radio.checked = !!loginCsbRadioChecked[radio.value];
+                    radio.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            }
+            // CSB-IV saved customer: keep the cleared CSB-V fields from the main
+            // fill (bond/lut/iec/ad/bank already cleared via prefill), only refresh UI.
+            if (typeof window.syncCsbTaxDetails === 'function') {
+                window.syncCsbTaxDetails();
+            }
+        }
+        window.syncEffectiveCsbTaxProfile = syncEffectiveCsbTaxProfile;
 
         // Remember user-entered values so unchecking restores them
         const savedValues = {};
@@ -9938,6 +10062,28 @@
                 });
             });
         }
+        // Lock only the inputs that actually received information from the
+        // selected saved customer. Empty fields stay editable so the user can
+        // fill the missing details manually.
+        function isSavedCustomerValueFilled(value) {
+            if (value === null || value === undefined) return false;
+            if (typeof value === 'boolean') return true;
+            return String(value).trim() !== '';
+        }
+        function lockFilledSavedCustomerFields(selectedCustomer) {
+            const allNames = fieldNames.concat(savedCustomerCsbFieldNames);
+            const toLock = [];
+            const toUnlock = [];
+            allNames.forEach(function (name) {
+                if (selectedCustomer && isSavedCustomerValueFilled(selectedCustomer[name])) {
+                    toLock.push(name);
+                } else {
+                    toUnlock.push(name);
+                }
+            });
+            if (toUnlock.length) setShipperFieldsLocked(toUnlock, false);
+            if (toLock.length) setShipperFieldsLocked(toLock, true);
+        }
 
         const savedCustomerConsigneeFieldMap = {
             consignee_name: 'shipper_company_names',
@@ -10067,8 +10213,10 @@
             const selectedCustomer = exporterCustomerData[selectedCustomerId];
             syncOriginTypeOptions(selectedCustomer ? selectedCustomer.csb_type : '');
             setShipperFieldsLocked(fieldNames, false);
+            setShipperFieldsLocked(savedCustomerCsbFieldNames, false);
             if (!selectedCustomer) {
                 resetExporterCustomerAddressSelect();
+                syncEffectiveCsbTaxProfile();
                 return;
             }
 
@@ -10076,12 +10224,17 @@
             fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (name) {
                 setField(name, selectedCustomer[name]);
             });
+            // When Origin is CSB V, the CSB Information section must show this
+            // saved customer's CSB-V details (not the login account's).
+            syncEffectiveCsbTaxProfile();
             clearDuplicatedCustomerDataFromConsignee(selectedCustomer);
 
             if (sameAsCustomer) {
                 sameAsCustomer.checked = false;
             }
-            setShipperFieldsLocked(fieldNames, true);
+            // Readonly only the inputs that received information from the
+            // selected customer. Empty ones stay editable.
+            lockFilledSavedCustomerFields(selectedCustomer);
 
             // Offer the selected customer's saved addresses so the user can choose
             // which one populates the Shipper address fields.
@@ -10252,6 +10405,11 @@
 
         function syncSameCustomerCsbFields() {
             if (!sameAsCustomer || !originTypeSelect) return;
+
+            // A selected saved customer owns the CSB fields (filled by
+            // applySelectedExporterCustomer + syncEffectiveCsbTaxProfile).
+            // Don't wipe AD / IEC / Bank / LUT when one is selected.
+            if (typeof exporterCustomerSelect !== 'undefined' && exporterCustomerSelect && exporterCustomerSelect.value) return;
 
             const isCsbV = sameAsCustomer.checked && originTypeSelect.value === 'CSB V';
             savedCustomerCsbFieldNames.forEach(function (name) {
@@ -11200,11 +11358,36 @@ if (rateRadio && rateRadio.dataset.rate) {
         const originTypeError = document.getElementById('originTypeError');
         const csbInfoSection = document.getElementById('csbInfoSection');
         const csbStatus = @json($customer->csb_status ?? null);
+        const canBypassCsbVBlock = (typeof window.canBypassCsbVBlock !== 'undefined')
+            ? window.canBypassCsbVBlock
+            : @json($canManageSavedCustomers ?? false);
+
+        // Courier/Aggregator only: a CSB-V saved customer selected above makes
+        // CSB V origin eligible, so the onboarding warning must not appear.
+        function isCsbVSavedCustomerSelected() {
+            if (typeof window.isCsbVSavedCustomerSelected === 'function'
+                && window.isCsbVSavedCustomerSelected !== isCsbVSavedCustomerSelected) {
+                return window.isCsbVSavedCustomerSelected();
+            }
+            if (!canBypassCsbVBlock) return false;
+            const sel = document.getElementById('exporterCustomerSelect');
+            if (!sel || !sel.value) return false;
+            const opt = sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+            return String(opt?.dataset?.csbType || '').toLowerCase().trim() === 'csb_v';
+        }
+
+        function isCsbVBlocked() {
+            if (!originTypeSelect) return false;
+            const originVal = (typeof $ !== 'undefined')
+                ? $(originTypeSelect).val()
+                : originTypeSelect.value;
+            return originVal === 'CSB V' && csbStatus === 1 && !isCsbVSavedCustomerSelected();
+        }
 
         if (originTypeSelect && typeof $ !== 'undefined') {
             // Use Select2 change event
-            $(originTypeSelect).on('change', function() {
-                if ($(this).val() === 'CSB V' && csbStatus === 1) {
+            const evaluateCsbVBlock = function() {
+                if (isCsbVBlocked()) {
                     // Show inline error message
                     if (originTypeError) {
                         originTypeError.style.display = 'block';
@@ -11214,22 +11397,22 @@ if (rateRadio && rateRadio.dataset.rate) {
                         $('#csbinfo').collapse('hide');
                     }
                     // Disable all form inputs except origin_type select
-                    const form = $(this).closest('form');
-                    if (form) {
+                    const form = $(originTypeSelect).closest('form');
+                    if (form && form.length) {
                         form.find(
                             'input:not([name="origin_type"]), select:not(#originType), textarea, button[type="submit"]'
                         ).prop('disabled', true);
                     }
                     // Reset to CSB IV
-                    // $(this).val('CSB IV').trigger('change');
+                    // $(originTypeSelect).val('CSB IV').trigger('change');
                 } else {
                     // Hide error message
                     if (originTypeError) {
                         originTypeError.style.display = 'none';
                     }
                     // Enable all form inputs
-                    const form = $(this).closest('form');
-                    if (form) {
+                    const form = $(originTypeSelect).closest('form');
+                    if (form && form.length) {
                         form.find('input, select, textarea, button[type="submit"]').prop('disabled',
                             false);
                     }
@@ -11242,7 +11425,19 @@ if (rateRadio && rateRadio.dataset.rate) {
                         window.checkWeightLimit();
                     }
                 }
-            });
+            };
+            $(originTypeSelect).on('change', evaluateCsbVBlock);
+            // Re-evaluate when the saved customer changes (CSB-V customer lifts the block).
+            const savedCustomerSelectForBlock = document.getElementById('exporterCustomerSelect');
+            if (savedCustomerSelectForBlock) {
+                if (window.jQuery) {
+                    jQuery(savedCustomerSelectForBlock).on('change', evaluateCsbVBlock);
+                } else {
+                    savedCustomerSelectForBlock.addEventListener('change', evaluateCsbVBlock);
+                }
+            }
+            // Initial evaluation (e.g. validation redirect restores CSB V + saved customer).
+            evaluateCsbVBlock();
             // Apply IGST visibility on initial load too
             if (window.applyIgstVisibility) {
                 window.applyIgstVisibility();
