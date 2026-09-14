@@ -946,12 +946,65 @@ class CustomerController extends Controller
             && ! empty($verifiedGstNumber)
             && ! empty($verifiedGstBusinessName);
 
+        // View modal ke liye customer details JSON (controller me json_encode taaki
+        // Blade me @json nested-array directive parsing issue na aaye).
+        $exporterCustomersDetailMap = [];
+        foreach ($exporterCustomers as $savedCustomer) {
+            $docUrl = function ($path) {
+                return (is_string($path) && trim($path) !== '') ? asset($path) : null;
+            };
+            $exporterCustomersDetailMap[$savedCustomer->id] = [
+                'id' => $savedCustomer->id,
+                'company_name' => $savedCustomer->company_name,
+                'contact_person' => $savedCustomer->contact_person,
+                'phone_number' => $savedCustomer->phone_number,
+                'email' => $savedCustomer->email,
+                'customer_type' => $savedCustomer->businessCategory?->category_name,
+                'addresses' => $savedCustomer->displayAddresses(),
+                'csb_type' => $savedCustomer->csb_type,
+                'csb_label' => $savedCustomer->csb_type === 'csb_v' ? 'CSB V' : 'CSB IV',
+                'is_gst' => (bool) $savedCustomer->is_gst,
+                'is_lut' => (bool) $savedCustomer->is_lut,
+                'kyc_type' => $savedCustomer->kyc_type,
+                'kyc_number' => $savedCustomer->kyc_number,
+                'pan_number' => $savedCustomer->pan_number,
+                'pan_holder_name' => $savedCustomer->pan_holder_name,
+                'pan_dob' => $savedCustomer->pan_dob ? $savedCustomer->pan_dob->format('d M Y') : null,
+                'gst_certificate_number' => $savedCustomer->gst_certificate_number,
+                'gst_business_name' => $savedCustomer->gst_business_name,
+                'ad_code' => $savedCustomer->ad_code,
+                'iec_number' => $savedCustomer->iec_number,
+                'bank_account_number' => $savedCustomer->bank_account_number,
+                'bank_type' => $savedCustomer->bank_type,
+                'lut_bond_year' => $savedCustomer->lut_bond_year,
+                'lut_expiry_date' => $savedCustomer->lut_expiry_date ? $savedCustomer->lut_expiry_date->format('d M Y') : null,
+                'billing_address' => $savedCustomer->billing_address,
+                'billing_contact' => $savedCustomer->billing_contact,
+                'billing_email' => $savedCustomer->billing_email,
+                'added_on' => $savedCustomer->created_at?->format('d M Y'),
+                'documents' => [
+                    ['label' => 'Aadhaar Front', 'url' => $docUrl($savedCustomer->aadhar_front_document)],
+                    ['label' => 'Aadhaar Back', 'url' => $docUrl($savedCustomer->aadhar_back_document)],
+                    ['label' => 'PAN Document', 'url' => $docUrl($savedCustomer->pan_document)],
+                    ['label' => 'GST Certificate', 'url' => $docUrl($savedCustomer->gst_certificate_document)],
+                    ['label' => 'AD Code Document', 'url' => $docUrl($savedCustomer->ad_code_document)],
+                    ['label' => 'IEC Document', 'url' => $docUrl($savedCustomer->iec_document)],
+                    ['label' => 'LUT Document', 'url' => $docUrl($savedCustomer->lut_document)],
+                ],
+            ];
+        }
+        $exporterCustomersDetailJson = json_encode(
+            $exporterCustomersDetailMap ?: (object) [],
+            JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
+        );
+
         return view('customer.exporter-customers', compact(
             'exporterCustomers',
             'groupedBusinessCategories',
             'verifiedGstReusable',
             'verifiedGstNumber',
-            'verifiedGstBusinessName'
+            'verifiedGstBusinessName',
+            'exporterCustomersDetailJson'
         ));
     }
 
@@ -1509,6 +1562,224 @@ class CustomerController extends Controller
 
         return redirect()->route('customer.exporter-customers')
             ->with('success', 'Address saved successfully.');
+    }
+
+    /**
+     * Upgrade a saved CSB IV customer to CSB V.
+     * View All Customers list me "Enable CSB5" button se CSB5 fields bharne par
+     * csb_type = csb_v update hota hai.
+     */
+    public function enableExporterCustomerCsb5(Request $request, $id)
+    {
+        $exporter = auth()->guard('customer')->user();
+        if (! $exporter) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must be logged in.',
+            ], 401);
+        }
+
+        abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
+
+        $customer = $exporter->exporterCustomers()->findOrFail((int) $id);
+
+        if ($customer->csb_type === 'csb_v') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Customer is already CSB V.',
+                'csb_type' => $customer->csb_type,
+            ]);
+        }
+
+        $request->merge([
+            'ad_code' => preg_replace('/\D+/', '', (string) $request->input('ad_code')),
+            'iec_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('iec_number'))),
+            'bank_account_number' => preg_replace('/\D+/', '', (string) $request->input('bank_account_number')),
+            'billing_contact' => preg_replace('/\D+/', '', (string) $request->input('billing_contact')),
+            'billing_email' => strtolower(trim((string) $request->input('billing_email'))),
+            'gst_certificate_number' => strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) $request->input('gst_certificate_number'))),
+            'gst_business_name' => trim((string) $request->input('gst_business_name')),
+            'billing_address' => trim((string) $request->input('billing_address')),
+        ]);
+
+        // LUT bond start/end year se combined lut_bond_year + expiry auto-derive.
+        $lutStartYearInput = trim((string) $request->input('lut_bond_start_year'));
+        $lutEndYearInput = trim((string) $request->input('lut_bond_end_year'));
+        if ($lutStartYearInput !== '' && $lutEndYearInput !== '') {
+            $request->merge([
+                'lut_bond_year' => $lutStartYearInput.'-'.substr($lutEndYearInput, -2),
+                'lut_expiry_date' => sprintf('%04d-03-31', (int) $lutEndYearInput),
+            ]);
+        }
+
+        $usesLut = $request->boolean('is_lut');
+        $usesGst = $request->boolean('is_gst');
+
+        if (! $usesLut && ! $usesGst) {
+            throw ValidationException::withMessages([
+                'is_lut' => 'Select GST, LUT, or both. At least one option is required for CSB V.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'is_lut' => ['nullable', 'boolean'],
+            'is_gst' => ['nullable', 'boolean'],
+            'ad_code' => ['required', 'regex:/^(\d{7}|\d{14})$/'],
+            'ad_code_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'iec_number' => ['required', 'regex:/^[A-Z0-9]{10}$/'],
+            'iec_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'bank_account_number' => ['required', 'regex:/^[0-9]{9,18}$/'],
+            'bank_type' => ['required', Rule::in(['private', 'government'])],
+            'lut_bond_start_year' => [Rule::requiredIf($usesLut), 'nullable', 'digits:4', 'integer', 'min:2000', 'max:2100'],
+            'lut_bond_end_year' => [Rule::requiredIf($usesLut), 'nullable', 'digits:4', 'integer', 'min:2000', 'max:2100'],
+            'lut_bond_year' => [Rule::requiredIf($usesLut), 'nullable', 'regex:/^[0-9]{4}-[0-9]{2}$/'],
+            'lut_expiry_date' => [Rule::requiredIf($usesLut), 'nullable', 'date', 'after_or_equal:today'],
+            'lut_document' => [Rule::requiredIf($usesLut), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+            'gst_certificate_number' => [Rule::requiredIf($usesGst), 'nullable', 'regex:/^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/'],
+            'gst_business_name' => [Rule::requiredIf($usesGst), 'nullable', 'string', 'min:2', 'max:255'],
+            'gst_certificate_document' => [Rule::requiredIf($usesGst), 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+            'billing_address' => ['required', 'string', 'min:10', 'max:1000'],
+            'billing_contact' => ['required', 'regex:/^[6-9][0-9]{9}$/'],
+            'billing_email' => ['required', 'email:rfc', 'max:255'],
+        ], [
+            'ad_code.regex' => 'The AD Code must be exactly 7 or 14 numeric digits.',
+            'iec_number.regex' => 'The IEC Number must be exactly 10 letters or digits.',
+            'bank_account_number.regex' => 'The Bank Account Number must contain 9 to 18 digits.',
+            'lut_bond_year.regex' => 'The LUT Bond Year must use YYYY-YY format.',
+            'gst_certificate_number.regex' => 'The GSTIN must be a valid 15-character GST number.',
+            'billing_contact.regex' => 'The Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.',
+        ]);
+
+        if ($usesLut && ! empty($validated['lut_bond_year'])) {
+            [$startYear, $endYearSuffix] = explode('-', $validated['lut_bond_year']);
+            $startYear = (int) $startYear;
+            $endYear = (intdiv($startYear, 100) * 100) + (int) $endYearSuffix;
+            if ($endYear <= $startYear) {
+                $endYear += 100;
+            }
+            if ($endYear < $startYear + 1 || $endYear > $startYear + 5) {
+                throw ValidationException::withMessages([
+                    'lut_bond_year' => 'The LUT Bond End Year must be within five years after the Start Year.',
+                ]);
+            }
+
+            $expectedExpiryDate = sprintf('%04d-03-31', $endYear);
+            if (($validated['lut_expiry_date'] ?? null) !== $expectedExpiryDate) {
+                throw ValidationException::withMessages([
+                    'lut_expiry_date' => 'The LUT Expiry Date must be 31 March of the selected LUT Bond End Year.',
+                ]);
+            }
+        }
+
+        $uploadDirectory = public_path('uploads/exporter_customer_csb_documents/'.$exporter->id);
+        if (! is_dir($uploadDirectory)) {
+            mkdir($uploadDirectory, 0755, true);
+        }
+
+        foreach (['ad_code_document', 'iec_document', 'lut_document', 'gst_certificate_document'] as $documentField) {
+            if (! $request->hasFile($documentField)) {
+                continue;
+            }
+
+            $file = $request->file($documentField);
+            $filename = Str::uuid().'_'.$documentField.'.'.$file->extension();
+            $file->move($uploadDirectory, $filename);
+            $validated[$documentField] = 'uploads/exporter_customer_csb_documents/'.$exporter->id.'/'.$filename;
+        }
+
+        // Start/end year helper inputs DB me save nahi hote.
+        unset($validated['lut_bond_start_year'], $validated['lut_bond_end_year']);
+
+        $validated['csb_type'] = 'csb_v';
+        $validated['is_lut'] = $usesLut;
+        $validated['is_gst'] = $usesGst;
+
+        $customer->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Customer upgraded to CSB V successfully.',
+            'csb_type' => $customer->csb_type,
+            'is_gst' => (bool) $customer->is_gst,
+            'is_lut' => (bool) $customer->is_lut,
+        ]);
+    }
+
+    /**
+     * View All Customers list ke "View" button ke liye single customer details (JSON).
+     */
+    public function showExporterCustomer($id)
+    {
+        $exporter = auth()->guard('customer')->user();
+        if (! $exporter) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must be logged in.',
+            ], 401);
+        }
+
+        abort_unless($this->canManageSavedCustomers($exporter), 403, 'Only Courier or Aggregator accounts can manage saved customers.');
+
+        $customer = $exporter->exporterCustomers()
+            ->with(['businessCategory', 'addresses'])
+            ->findOrFail((int) $id);
+
+        $docUrl = function ($path) {
+            if (! is_string($path) || trim($path) === '') {
+                return null;
+            }
+
+            return asset($path);
+        };
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $customer->id,
+                'company_name' => $customer->company_name,
+                'contact_person' => $customer->contact_person,
+                'phone_number' => $customer->phone_number,
+                'email' => $customer->email,
+                'customer_type' => $customer->businessCategory?->category_name,
+                'address_line1' => $customer->address_line1,
+                'address_line2' => $customer->address_line2,
+                'address_line3' => $customer->address_line3,
+                'pincode' => $customer->pincode,
+                'city' => $customer->city,
+                'state' => $customer->state,
+                'addresses' => $customer->displayAddresses(),
+                'csb_type' => $customer->csb_type,
+                'csb_label' => $customer->csb_type === 'csb_v' ? 'CSB V' : 'CSB IV',
+                'is_gst' => (bool) $customer->is_gst,
+                'is_lut' => (bool) $customer->is_lut,
+                'kyc_type' => $customer->kyc_type,
+                'kyc_number' => $customer->kyc_number,
+                'pan_number' => $customer->pan_number,
+                'pan_holder_name' => $customer->pan_holder_name,
+                'pan_dob' => $customer->pan_dob ? Carbon::parse($customer->pan_dob)->format('d M Y') : null,
+                'gst_certificate_number' => $customer->gst_certificate_number,
+                'gst_business_name' => $customer->gst_business_name,
+                'ad_code' => $customer->ad_code,
+                'iec_number' => $customer->iec_number,
+                'bank_account_number' => $customer->bank_account_number,
+                'bank_type' => $customer->bank_type,
+                'lut_bond_year' => $customer->lut_bond_year,
+                'lut_expiry_date' => $customer->lut_expiry_date ? Carbon::parse($customer->lut_expiry_date)->format('d M Y') : null,
+                'billing_address' => $customer->billing_address,
+                'billing_contact' => $customer->billing_contact,
+                'billing_email' => $customer->billing_email,
+                'added_on' => $customer->created_at?->format('d M Y'),
+                'documents' => [
+                    ['label' => 'Aadhaar Front', 'url' => $docUrl($customer->aadhar_front_document)],
+                    ['label' => 'Aadhaar Back', 'url' => $docUrl($customer->aadhar_back_document)],
+                    ['label' => 'PAN Document', 'url' => $docUrl($customer->pan_document)],
+                    ['label' => 'GST Certificate', 'url' => $docUrl($customer->gst_certificate_document)],
+                    ['label' => 'AD Code Document', 'url' => $docUrl($customer->ad_code_document)],
+                    ['label' => 'IEC Document', 'url' => $docUrl($customer->iec_document)],
+                    ['label' => 'LUT Document', 'url' => $docUrl($customer->lut_document)],
+                ],
+            ],
+        ]);
     }
 
     public function createShipment()

@@ -502,6 +502,7 @@
                                         $statusBadgeMap = [
                                             'draft' => 'badge bg-warning text-dark',
                                             'manifested' => 'badge bg-secondary',
+                                            'dispatched' => 'badge bg-primary',
                                             'cod' => 'badge bg-success',
                                             'cancelled' => 'badge bg-danger',
                                             'delivered' => 'badge bg-dark',
@@ -511,6 +512,7 @@
                                         $statusLabelMap = [
                                             'draft' => 'Draft',
                                             'manifested' => 'Manifested',
+                                            'dispatched' => 'Dispatched',
                                             'cod' => 'COD Collected',
                                             'cancelled' => 'Cancelled',
                                             'delivered' => 'Prepaid Close',
@@ -686,22 +688,22 @@
                                                              class="btn btn-sm btn-outline-info d-inline-flex align-items-center justify-content-center"
                                                              title="Print Label"
                                                             aria-label="Print Label"
-                                                            onclick="prepaidDirectPrint({{ $invoice->id }}, {{ $invoice->shipper_id }}, {{ strtoupper($shipper?->shipping_method ?? '') === 'SELF' ? 'true' : 'false' }})"
+                                                            onclick="prepaidDirectPrint({{ $invoice->id }}, {{ $invoice->shipper_id }}, {{ strtoupper($shipper?->shipping_method ?? '') === 'SELF' ? 'true' : 'false' }}, this)"
                                                             style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                         <i class="ti ti-printer" aria-hidden="true"></i>
                                                     </button>
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center btn-open-close-modal"
-                                                            title="Close"
-                                                            aria-label="Close"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#closeRemarkModal"
-                                                            data-invoice-id="{{ $invoice->id }}"
-                                                            data-shipper-id="{{ $invoice->shipper_id }}"
-                                                            data-awb-number="{{ $shipper?->awb_number ?: $invoice->invoice_number }}"
-                                                            style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                     <!-- <button type="button"
+                                                             class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center btn-open-close-modal"
+                                                             title="Close"
+                                                             aria-label="Close"
+                                                             data-bs-toggle="modal"
+                                                             data-bs-target="#closeRemarkModal"
+                                                             data-invoice-id="{{ $invoice->id }}"
+                                                             data-shipper-id="{{ $invoice->shipper_id }}"
+                                                             data-awb-number="{{ $shipper?->awb_number ?: $invoice->invoice_number }}"
+                                                             style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                         <i class="ti ti-lock" aria-hidden="true"></i>
-                                                    </button>
+                                                    </button> -->
                                             </div>
                                         </td>
                                     </tr>
@@ -1413,11 +1415,16 @@
          * one label per box (BOX X OF N), each on its own page.
          * @param {number} shipperId
          * @param {HTMLElement} btn - clicked button (loading state)
+         * @param {number|null} invoiceId - shipment_invoice ID (for dispatched status update)
          */
-        function printPrepaidCustomLabel(shipperId, btn) {
+        function printPrepaidCustomLabel(shipperId, btn, invoiceId) {
             if (!shipperId) {
                 return;
             }
+            // Print click par status dispatched me update ke liye ids save karo.
+            window._prepaidPrintingInvoiceId = invoiceId || null;
+            window._prepaidPrintingShipperId = shipperId || null;
+            window._prepaidPrintingBtn = btn || null;
             if (typeof JsBarcode === 'undefined') {
                 alert('Barcode library failed to load. Please check your connection and try again.');
                 return;
@@ -1477,6 +1484,8 @@
                             printWindow.close();
                         };
                     }, 300);
+                    // SELF custom label print par bhi status dispatched me update karo.
+                    prepaidMarkDispatchedOnPrint(window._prepaidPrintingInvoiceId, window._prepaidPrintingShipperId, window._prepaidPrintingBtn);
                 },
                 error: function(xhr) {
                     restoreBtn();
@@ -1490,17 +1499,61 @@
         }
 
         /**
+         * Print Shipping Label modal ke "Print Label" click par (aur SELF
+         * custom label print par) status ko dispatched me update karo.
+         * Row ka badge turant update hota hai, full reload ki need nahi.
+         */
+        function prepaidMarkDispatchedOnPrint(invoiceId, shipperId, btn) {
+            if (!invoiceId && !shipperId) {
+                return;
+            }
+            $.ajax({
+                url: '{{ route("admin.prepaid.mark-dispatched") }}',
+                type: 'POST',
+                data: { invoice_id: invoiceId, shipper_id: shipperId },
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Row ka status badge turant Dispatched dikhao.
+                        var $row = btn ? $(btn).closest('tr') : $();
+                        if (!$row.length && (invoiceId || shipperId)) {
+                            // Fallback: stored printing button se row dhoondo.
+                            var $storedBtn = window._prepaidPrintingBtn ? $(window._prepaidPrintingBtn) : $();
+                            if ($storedBtn.length) {
+                                $row = $storedBtn.closest('tr');
+                            }
+                        }
+                        if ($row.length) {
+                            var $badge = $row.find('.shipment-status-badge');
+                            if ($badge.length) {
+                                $badge.removeClass('badge bg-warning text-dark badge bg-secondary badge bg-success badge bg-danger badge bg-dark badge bg-primary bg-warning bg-secondary bg-success bg-danger bg-dark bg-primary text-dark')
+                                    .addClass('badge bg-primary')
+                                    .text('Dispatched');
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
          * Direct print for one row: SELF shipments open the custom 4x6
          * courier label, everything else opens the carrier (UPS) label.
          * @param {number} invoiceId - shipment_invoice ID (carrier label)
          * @param {number} shipperId - shipper ID (custom label)
          * @param {boolean} isSelf - whether the shipment is SELF service
+         * @param {HTMLElement} btn - clicked Print button (row badge update ke liye)
          */
-        function prepaidDirectPrint(invoiceId, shipperId, isSelf) {
+        function prepaidDirectPrint(invoiceId, shipperId, isSelf, btn) {
+            window._prepaidPrintingInvoiceId = invoiceId || null;
+            window._prepaidPrintingShipperId = shipperId || null;
+            window._prepaidPrintingBtn = btn || null;
             if (isSelf) {
-                printPrepaidCustomLabel(shipperId, null);
+                printPrepaidCustomLabel(shipperId, btn, invoiceId);
             } else {
-                printPrepaidLabel(invoiceId);
+                printPrepaidLabel(invoiceId, shipperId, btn);
             }
         }
 
@@ -1508,8 +1561,17 @@
          * Print shipping label - fetches base64 PDF from server (shipment_tracking
          * label via admin.generate-label) and displays it in the modal.
          * @param {number} shipmentId - The shipment_invoice ID
+         * @param {number|null} shipperId - shipper ID (dispatched status update ke liye)
+         * @param {HTMLElement|null} btn - clicked Print button (row badge update ke liye)
          */
-        function printPrepaidLabel(shipmentId) {
+        function printPrepaidLabel(shipmentId, shipperId, btn) {
+            window._prepaidPrintingInvoiceId = shipmentId || window._prepaidPrintingInvoiceId || null;
+            if (typeof shipperId !== 'undefined') {
+                window._prepaidPrintingShipperId = shipperId || window._prepaidPrintingShipperId || null;
+            }
+            if (typeof btn !== 'undefined') {
+                window._prepaidPrintingBtn = btn || window._prepaidPrintingBtn || null;
+            }
             $('#printLabelLoading').removeClass('d-none');
             $('#printLabelError').addClass('d-none');
             $('#printLabelPdfFrame').css('display', 'none');
@@ -1559,9 +1621,12 @@
 
         /**
          * Trigger browser print for the PDF label.
+         * Print click par status ko dispatched me update karo.
          */
         function triggerPrepaidPdfPrint() {
             if (window._prepaidLabelPdfBlobUrl) {
+                // Status update: modal ke Print Label click par dispatched.
+                prepaidMarkDispatchedOnPrint(window._prepaidPrintingInvoiceId, window._prepaidPrintingShipperId, window._prepaidPrintingBtn);
                 const printWindow = window.open(window._prepaidLabelPdfBlobUrl, '_blank');
                 if (printWindow) {
                     printWindow.onload = function() {

@@ -128,6 +128,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/prepaid/all-orders', [PrepaidController::class, 'prepaidAllOrders'])->name('admin.prepaid.all-orders');
     Route::post('/prepaid/create-order', [PrepaidController::class, 'prepaidStoreOrder'])->name('admin.prepaid.store-order');
     Route::post('/prepaid/close-order', [PrepaidController::class, 'prepaidCloseOrder'])->name('admin.prepaid.close-order');
+    Route::post('/prepaid/mark-dispatched', [PrepaidController::class, 'prepaidMarkDispatched'])->name('admin.prepaid.mark-dispatched');
     Route::post('/prepaid/ups-rate', [PrepaidController::class, 'prepaidUpsRate'])->name('admin.prepaid.ups-rate');
     Route::get('/prepaid/zones-by-destination', [PrepaidController::class, 'prepaidZonesByDestination'])->name('admin.prepaid.zones-by-destination');
     Route::get('/prepaid/services-by-destination', [PrepaidController::class, 'prepaidServicesByDestination'])->name('admin.prepaid.services-by-destination');
@@ -682,7 +683,12 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
     Route::get('/companies', [CustomerController::class, 'companies'])->name('companies');
     Route::get('/exporter-customers', [CustomerController::class, 'exporterCustomers'])->name('exporter-customers');
     Route::post('/exporter-customers', [CustomerController::class, 'storeExporterCustomer'])->name('exporter-customers.store');
-    Route::post('/exporter-customers/{id}/address', [CustomerController::class, 'updateExporterCustomerAddress'])->name('exporter-customers.address');
+    Route::post('/exporter-customers/{id}/address', [CustomerController::class,
+        'updateExporterCustomerAddress'])->name('exporter-customers.address');
+    Route::post('/exporter-customers/{id}/enable-csb5', [CustomerController::class,
+        'enableExporterCustomerCsb5'])->name('exporter-customers.enable-csb5');
+    Route::get('/exporter-customers/{id}', [CustomerController::class,
+        'showExporterCustomer'])->name('exporter-customers.show');
     Route::post('/verify-exporter-customer-aadhar', [KycController::class, 'verifyExporterCustomerAadhar'])->name('verify.exporter-customer-aadhar');
     Route::post('/verify-exporter-customer-pan', [KycController::class, 'verifyExporterCustomerPan'])->name('verify.exporter-customer-pan');
     Route::get('/create-shipment', [CustomerController::class, 'createShipment'])->name('create-shipment');

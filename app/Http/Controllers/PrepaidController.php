@@ -1496,6 +1496,73 @@ class PrepaidController extends Controller
     }
 
     /**
+     * Print Shipping Label modal se "Print Label" click par Prepaid order
+     * ka status dispatched karo.
+     * shipment_type = 4 rehta hai, status = dispatched.
+     */
+    public function prepaidMarkDispatched(Request $request)
+    {
+        $validated = $request->validate([
+            'invoice_id' => 'nullable|integer|exists:shipment_invoice,id',
+            'shipper_id' => 'nullable|integer|exists:shipper_info,id',
+        ]);
+
+        if (empty($validated['invoice_id']) && empty($validated['shipper_id'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'invoice_id ya shipper_id required hai.',
+            ], 422);
+        }
+
+        if (! empty($validated['invoice_id'])) {
+            $invoice = ShipmentInvoice::findOrFail($validated['invoice_id']);
+            $shipperId = $validated['shipper_id'] ?? $invoice->shipper_id;
+        } else {
+            $shipperId = $validated['shipper_id'];
+        }
+
+        $shipper = ShipperInfo::findOrFail($shipperId);
+
+        // Already closed/cancelled orders ko dispatched me mat badlo.
+        if (in_array($shipper->status, ['prepaid_close', 'delivered', 'cancelled'], true)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Order already closed.',
+                'status' => $shipper->status,
+            ]);
+        }
+
+        // Already dispatched hai to dubara update ki need nahi.
+        if ($shipper->status !== 'dispatched') {
+            $shipper->status = 'dispatched';
+            $shipper->save();
+
+            // Tracking history me entry (same pattern as receiveShipment).
+            try {
+                $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+
+                Tracking::firstOrCreate([
+                    'shipper_id' => $shipper->id,
+                    'status' => 'dispatched',
+                ], [
+                    'awb_number' => $shipper->awb_number,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('dispatched'),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('prepaidMarkDispatched: tracking entry failed: '.$e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order marked as dispatched.',
+            'status' => $shipper->status,
+        ]);
+    }
+
+    /**
      * Generate a unique AWB number for Prepaid orders.
      * Same format as the customer create-shipment page:
      * UWC + YYMMDD + 5-digit serial (resets daily).
