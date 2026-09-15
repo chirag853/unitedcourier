@@ -46,7 +46,7 @@
         }
 
         .doc-header .brand {
-            font-size: 26px;
+            /* font-size: 26px; */
             font-weight: 800;
             text-transform: uppercase;
             line-height: 1.15;
@@ -282,7 +282,7 @@
 
         <div class="doc">
             <div class="doc-header">
-                <div class="brand">Unite Worldwide<br><span class="sub">Couriers</span></div>
+                <div class="brand">United Worldwide Couriers </div>
                 <div class="doc-title">
                     <div class="title-main">Manifest Document</div>
                     <div class="title-sub">Shipping Manifest Summary</div>

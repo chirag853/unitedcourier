@@ -404,6 +404,13 @@
     <!-- End Main Wrapper -->
 
     <!-- Wallet Recharge Modal -->
+    <style>
+        #walletRechargeModal .quick-amount.active {
+            background-color: #198754 !important;
+            border-color: #198754 !important;
+            color: #fff !important;
+        }
+    </style>
     <div class="modal fade" id="walletRechargeModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -707,6 +714,8 @@
 
             $('.quick-amount').on('click', function () {
                 $('#rechargeAmount').val($(this).data('amount'));
+                $('.quick-amount').removeClass('active');
+                $(this).addClass('active');
             });
 
             var isRecharging = false;

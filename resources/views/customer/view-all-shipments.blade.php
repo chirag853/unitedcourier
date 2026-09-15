@@ -970,6 +970,9 @@
                                 $isDraftView = request('status') === 'draft';
                                 $isAllOrdersView = $selectedStatus === null || $selectedStatus === 'all';
                                 $showActionColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true);
+                                // Cancelled tab: show the Action column too, but with only a
+                                // View button (no print) that opens the HAWB detail modal.
+                                $showCancelledActionColumn = $selectedStatus === 'cancelled';
                                 $showHawbSubInfo = $isDraftView || in_array($selectedStatus, ['ready', 'packed', 'manifested'], true);
                                 $postPackedStatuses = ['packed', 'manifested', 'ready_for_pickup', 'assigned_for_pickup', 'received', 'confirm_pickup', 'dispatched', 'cancelled', 'delivered', 'disputed', 'on_hold'];
                                 $hideCurrencyColumn = $isAllOrdersView || $isDraftView || $selectedStatus === 'ready' || in_array($selectedStatus, $postPackedStatuses, true);
@@ -1024,7 +1027,7 @@
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
                                             --}}
                                             <th @class(['manifest-col', 'd-none' => $hideManifestColumn])>Manifest</th>
-                                            <th class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>Action</th>
+                                            <th class="action-col" @class(['text-center', 'd-none' => !($showActionColumn || $showCancelledActionColumn)])>Action</th>
                                             {{-- Standalone Cancel column merged into Action column
                                             <th @class(['text-center', 'd-none' => $hideCancelColumn || $showActionColumn])>Cancel</th>
                                             --}}
@@ -1351,8 +1354,19 @@
                                                     <span class="text-muted" style="font-size:12px;">-</span>
                                                 @endif
                                             </td>
-                                            <td class="action-col" @class(['text-center', 'd-none' => !$showActionColumn])>
+                                            <td class="action-col" @class(['text-center', 'd-none' => !($showActionColumn || $showCancelledActionColumn)])>
                                                 <div class="d-inline-flex align-items-center gap-1">
+                                                    @if($rowStatus === 'cancelled')
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                                                data-invoice-id="{{ $invoice->id }}"
+                                                                title="View Shipment"
+                                                                aria-label="View Shipment"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;"
+                                                                onclick="showShipmentDetail({{ $invoice->id }});">
+                                                            <i class="ti ti-eye" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
                                                     @if($rowStatus === 'draft')
                                                         <button type="button"
                                                                 class="btn btn-sm btn-outline-success pay-now-btn d-inline-flex align-items-center justify-content-center"
@@ -1364,7 +1378,7 @@
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-credit-card" aria-hidden="true"></i>
                                                         </button>
-                                                    @elseif($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
+                                                    @elseif($rowStatus !== 'cancelled' && $invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                         @if(!empty($hideCodFocPrintManifest))
                                                             <span class="text-muted" style="font-size:12px;">-</span>
                                                         @else
@@ -1726,11 +1740,11 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-0">Are you sure you want to cancel shipment <strong id="cancelInvoiceRef"></strong>?</p>
-                    <p id="cancelRefundInfo" class="mt-2 mb-0" style="font-size:13px;color:#28a745;display:none;">
+                    <p class="mb-0">Are you sure you want to cancel shipment?</p>
+                    <!-- <p id="cancelRefundInfo" class="mt-2 mb-0" style="font-size:13px;color:#28a745;display:none;">
                         <i class="ti ti-refund me-1"></i> If <strong id="cancelRefundAmount"></strong> was deducted, it will be refunded to your wallet.
                     </p>
-                    <p class="text-muted mt-2 mb-0" style="font-size:13px;">This action cannot be undone.</p>
+                    <p class="text-muted mt-2 mb-0" style="font-size:13px;">This action cannot be undone.</p> -->
                 </div>
                 <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It</button>
@@ -1756,6 +1770,27 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep It Open</button>
                     <button type="button" class="btn btn-dark" id="confirmCloseManifestBtn">
                         <i class="ti ti-lock me-1"></i>Yes, Close Manifest
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manifest Confirm Modal -->
+    <div class="modal fade" id="manifestConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-package me-2"></i>Confirm Manifest</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" id="manifestConfirmText">Are you sure you want to manifest this shipment?</p>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmManifestBtn">
+                        <i class="ti ti-check me-1"></i>Yes, Manifest
                     </button>
                 </div>
             </div>
@@ -1807,7 +1842,7 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Shipment AWB / Invoice</label>
+                        <label class="form-label fw-semibold">Shipment HAWB / Invoice</label>
                         <input type="text" class="form-control" id="payShipmentRef" readonly>
                     </div>
                     <div class="mb-3">
@@ -1822,11 +1857,17 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" id="confirmPayNowBtn">
-                        <i class="ti ti-credit-card me-1"></i>Confirm Payment
-                    </button>
+                <div class="modal-footer border-0 pt-0 flex-column align-items-stretch gap-2">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="confirmPayNowBtn">
+                            <i class="ti ti-credit-card me-1"></i>Confirm Payment
+                        </button>
+                    </div>
+                    <div class="alert alert-danger d-none py-2 px-3 mb-0" id="payInsufficientAlert" role="alert" style="border-radius:8px;">
+                        <i class="ti ti-alert-triangle me-2"></i>
+                        <span id="payInsufficientText">Insufficient wallet balance! Your balance is INR 0.00</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2008,20 +2049,42 @@
 
     <!-- Print Options Modal (Label / Invoice) -->
     <div class="modal fade" id="printOptionsModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title"><i class="ti ti-printer me-2"></i>Print Options</h5>
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+                <div class="modal-header border-0 pb-0 pt-4 px-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #2d8eff 0%, #1a5fd7 100%); color: #fff;">
+                            <i class="ti ti-printer fs-5"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0">Print Options</h5>
+                            <small class="text-muted" style="font-size: 12px;">Choose document to print</small>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body py-3">
+                <div class="modal-body p-4">
                     <p class="text-muted mb-3" style="font-size:13px;">What would you like to print for this shipment?</p>
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-primary d-flex align-items-center justify-content-center gap-2" id="printLabelOptionBtn">
-                            <i class="ti ti-barcode"></i> Print Label
+                    <div class="d-grid gap-3">
+                        <button type="button" class="btn btn-light text-start d-flex align-items-center gap-3 p-3" id="printLabelOptionBtn" style="border: 1.5px solid #e9ecef; border-radius: 12px; transition: all .2s;">
+                            <span class="d-flex align-items-center justify-content-center flex-shrink-0" style="width: 46px; height: 46px; border-radius: 12px; background: #eef4ff; color: #2d8eff;">
+                                <i class="ti ti-barcode fs-4"></i>
+                            </span>
+                            <span>
+                                <span class="d-block fw-bold text-dark" style="font-size: 14px;">Print Label</span>
+                                <span class="d-block text-muted" style="font-size: 12px;">Courier label with barcode & addresses</span>
+                            </span>
+                            <i class="ti ti-chevron-right ms-auto text-muted"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-primary d-flex align-items-center justify-content-center gap-2" id="printInvoiceOptionBtn">
-                            <i class="ti ti-file-invoice"></i> Print Invoice
+                        <button type="button" class="btn text-start d-flex align-items-center gap-3 p-3" id="printInvoiceOptionBtn" style="border: 1.5px solid #2d8eff; border-radius: 12px; background: linear-gradient(135deg, #f0f6ff 0%, #e3edff 100%); transition: all .2s; box-shadow: 0 4px 14px rgba(45,142,255,.18);">
+                            <span class="d-flex align-items-center justify-content-center flex-shrink-0" style="width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #2d8eff 0%, #1a5fd7 100%); color: #fff;">
+                                <i class="ti ti-file-invoice fs-4"></i>
+                            </span>
+                            <span>
+                                <span class="d-block fw-bold text-dark" style="font-size: 14px;">Print Invoice <span class="badge bg-primary ms-1" style="font-size: 10px;">A4</span></span>
+                                <span class="d-block text-muted" style="font-size: 12px;">GST invoice with company logo & details</span>
+                            </span>
+                            <i class="ti ti-chevron-right ms-auto" style="color: #2d8eff;"></i>
                         </button>
                     </div>
                 </div>
@@ -2565,6 +2628,11 @@
                 const data = shipmentData[invoiceId];
                 if (!data) return;
 
+                const companyLogoUrl = "{{ asset('assets/img/logo.png') }}";
+                const companyFullName = "United Worldwide Couriers Pvt. Ltd.";
+                const companyAddress = "Building No. 1, Bypass Road, Mahipalpur, New Delhi - 110037";
+                const companyEmail = "support@unitedcouriers.biz";
+
                 const shipper = data.shipper || {};
                 const consignee = data.consignee || {};
                 const items = Array.isArray(data.items) ? data.items : [];
@@ -2613,17 +2681,57 @@
                     ? parseFloat(data.gst_percentage)
                     : 0;
 
-                // Items table uses the same 5 columns as the A4 invoice
-                // (#, Description, Qty, Unit Rate, Amount).
-                const rowsHtml = items.length ? items.map(function (item, idx) {
-                    return '<tr>' +
-                        '<td>' + (item.box_no || (idx + 1)) + '</td>' +
-                        '<td>' + (item.description || 'Goods') + '</td>' +
-                        '<td class="text-center">' + (item.qty || '-') + '</td>' +
-                        '<td class="text-right">' + fmt(item.unit_rate) + '</td>' +
-                        '<td class="text-right">' + fmt(item.amount) + '</td>' +
-                        '</tr>';
-                }).join('') : '<tr><td colspan="5" class="text-center">No items</td></tr>';
+                // Items grouped box-wise: Box 1 items, then Box 2 items, each with its dimensions.
+                var pkgByIndex = {};
+                packages.forEach(function (pkg) { pkgByIndex[String(pkg.index)] = pkg; });
+                var boxNos = [];
+                items.forEach(function (item) {
+                    var bn = String(item.box_no || '1');
+                    if (boxNos.indexOf(bn) === -1) boxNos.push(bn);
+                });
+                packages.forEach(function (pkg) {
+                    var bn = String(pkg.index);
+                    if (boxNos.indexOf(bn) === -1) boxNos.push(bn);
+                });
+                boxNos.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
+
+                function dimText(pkg) {
+                    if (!pkg) return 'Dimensions not available';
+                    var parts = [];
+                    if (pkg.weight) parts.push('Wt: ' + pkg.weight + ' Kg');
+                    if (pkg.length && pkg.width && pkg.height) parts.push('L×W×H: ' + pkg.length + '×' + pkg.width + '×' + pkg.height + ' cm');
+                    if (pkg.volumetric) parts.push('Vol. Wt: ' + pkg.volumetric + ' Kg');
+                    if (pkg.chargeable) parts.push('Chg. Wt: ' + pkg.chargeable + ' Kg');
+                    return parts.length ? parts.join(' &nbsp;|&nbsp; ') : 'Dimensions not available';
+                }
+
+                var boxesHtml = boxNos.length ? boxNos.map(function (bn) {
+                    var boxItems = items.filter(function (it) { return String(it.box_no || '1') === String(bn); });
+                    var pkg = pkgByIndex[String(bn)] || null;
+                    var boxTotal = 0;
+                    boxItems.forEach(function (it) { boxTotal += num(it.amount); });
+                    var itemRows = boxItems.length ? boxItems.map(function (item, idx) {
+                        return '<tr>' +
+                            '<td>' + (idx + 1) + '</td>' +
+                            '<td>' + (item.description || 'Goods') + '</td>' +
+                            '<td class="text-center">' + (item.qty || '-') + '</td>' +
+                            '<td class="text-right">' + fmt(item.unit_rate) + '</td>' +
+                            '<td class="text-right">' + fmt(item.amount) + '</td>' +
+                            '</tr>';
+                    }).join('') : '<tr><td colspan="5" class="text-center">No items in this box</td></tr>';
+                    var countLabel = boxItems.length + (boxItems.length === 1 ? ' item' : ' items');
+                    return '<div class="box-block">' +
+                        '<div class="box-head"><span class="box-title">Box ' + bn + '</span>' +
+                        '<span class="box-count">' + countLabel + '</span></div>' +
+                        '<div class="box-dim">' + dimText(pkg) + '</div>' +
+                        '<table class="items"><thead><tr><th style="width:40px;">#</th><th>Description</th>' +
+                        '<th class="text-center" style="width:60px;">Qty</th>' +
+                        '<th class="text-right" style="width:90px;">Unit Rate</th>' +
+                        '<th class="text-right" style="width:100px;">Amount</th></tr></thead>' +
+                        '<tbody>' + itemRows + '</tbody></table>' +
+                        '<div class="box-subtotal">Box ' + bn + ' Subtotal: ' + fmt(boxTotal) + ' ' + currency + '</div>' +
+                        '</div>';
+                }).join('') : '<p class="text-center">No items</p>';
 
                 // Totals block mirrors the A4 invoice
                 // (Subtotal, Shipping Cost, Fuel Charge, GST and Grand Total).
@@ -2652,51 +2760,77 @@
                 printWindow.document.write('<title>Invoice ' + (data.invoice_number || '') + '</title>');
                 printWindow.document.write('<style>');
                 printWindow.document.write('* { box-sizing: border-box; }');
-                printWindow.document.write('body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; font-size: 12px; }');
-                printWindow.document.write('.invoice-wrapper { padding: 30px 40px; }');
-                printWindow.document.write('.invoice-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #2d8eff; padding-bottom: 20px; margin-bottom: 25px; }');
-                printWindow.document.write('.company-info h1 { font-size: 22px; color: #2d8eff; margin: 0 0 5px 0; }');
-                printWindow.document.write('.company-info p { margin: 2px 0; color: #666; font-size: 11px; }');
-                printWindow.document.write('.invoice-meta { text-align: right; }');
-                printWindow.document.write('.invoice-meta h2 { font-size: 18px; margin: 0 0 8px 0; color: #333; text-transform: uppercase; letter-spacing: 1px; }');
-                printWindow.document.write('.invoice-meta table { font-size: 11px; margin-left: auto; }');
-                printWindow.document.write('.invoice-meta td { padding: 2px 8px; }');
-                printWindow.document.write('.invoice-meta td:first-child { color: #888; font-weight: 600; }');
-                printWindow.document.write('.parties { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px; }');
-                printWindow.document.write('.party-box { flex: 1; background: #f8f9fa; border-left: 3px solid #2d8eff; padding: 12px 15px; border-radius: 0 6px 6px 0; }');
-                printWindow.document.write('.party-box h4 { font-size: 11px; text-transform: uppercase; color: #2d8eff; margin: 0 0 8px 0; letter-spacing: 0.5px; }');
-                printWindow.document.write('.party-box p { margin: 2px 0; font-size: 11px; line-height: 1.5; }');
-                printWindow.document.write('.party-box .name { font-weight: 700; font-size: 12px; color: #333; }');
-                printWindow.document.write('table.items { width: 100%; border-collapse: collapse; margin-bottom: 25px; }');
-                printWindow.document.write('table.items thead th { background: #2d8eff; color: #fff; padding: 10px 8px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }');
-                printWindow.document.write('table.items tbody td { padding: 8px; border-bottom: 1px solid #e9ecef; font-size: 11px; }');
-                printWindow.document.write('table.items tbody tr:nth-child(even) { background: #fafbfc; }');
-                printWindow.document.write('table.items tfoot td { padding: 8px; font-weight: 600; border-top: 2px solid #2d8eff; }');
-                printWindow.document.write('.totals { margin-left: auto; width: 300px; margin-bottom: 25px; }');
+                printWindow.document.write('body { font-family: \'Segoe UI\', Arial, sans-serif; color: #1f2937; margin: 0; padding: 0; font-size: 12px; background: #fff; }');
+                printWindow.document.write('.top-strip { height: 8px; background: linear-gradient(90deg, #1a56db 0%, #2d8eff 50%, #7c3aed 100%); }');
+                printWindow.document.write('.invoice-wrapper { padding: 28px 38px 20px 38px; }');
+                printWindow.document.write('.invoice-header { padding-bottom: 16px; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; }');
+                printWindow.document.write('.brand-centered { text-align: center; }');
+                printWindow.document.write('.brand-centered img { max-height: 64px; max-width: 200px; object-fit: contain; margin-bottom: 6px; }');
+                printWindow.document.write('.brand-name { font-size: 19px; font-weight: 800; color: #111827; margin: 0; line-height: 1.3; }');
+                printWindow.document.write('.brand-tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #1a56db; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 20px; padding: 2px 10px; margin: 6px 0; }');
+                printWindow.document.write('.company-info p { margin: 2px 0; color: #6b7280; font-size: 11px; line-height: 1.5; }');
+                printWindow.document.write('.invoice-meta-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 14px; }');
+                printWindow.document.write('.invoice-badge { display: inline-block; font-size: 20px; font-weight: 800; letter-spacing: 2px; color: #fff; background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); border-radius: 8px; padding: 6px 22px; margin-bottom: 10px; text-transform: uppercase; }');
+                printWindow.document.write('.invoice-meta table { font-size: 11px; margin-left: auto; border-collapse: collapse; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }');
+                printWindow.document.write('.invoice-meta td { padding: 5px 10px; border-bottom: 1px solid #eef2f7; }');
+                printWindow.document.write('.invoice-meta tr:last-child td { border-bottom: none; }');
+                printWindow.document.write('.invoice-meta td:first-child { color: #6b7280; font-weight: 600; text-align: left; }');
+                printWindow.document.write('.invoice-meta td:last-child { text-align: right; font-weight: 600; color: #111827; }');
+                printWindow.document.write('.parties { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 16px; }');
+                printWindow.document.write('.party-box { flex: 1; background: #f8fafc; border: 1px solid #e5e7eb; border-top: 3px solid #1a56db; padding: 12px 15px; border-radius: 0 0 8px 8px; }');
+                printWindow.document.write('.party-box.consignee { border-top-color: #7c3aed; }');
+                printWindow.document.write('.party-box h4 { font-size: 10px; text-transform: uppercase; color: #1a56db; margin: 0 0 8px 0; letter-spacing: 1px; }');
+                printWindow.document.write('.party-box.consignee h4 { color: #7c3aed; }');
+                printWindow.document.write('.party-box p { margin: 2px 0; font-size: 11px; line-height: 1.5; color: #374151; }');
+                printWindow.document.write('.party-box .name { font-weight: 700; font-size: 12.5px; color: #111827; }');
+                printWindow.document.write('table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }');
+                printWindow.document.write('table.items thead th { background: linear-gradient(135deg, #1a56db 0%, #2d5fd7 100%); color: #fff; padding: 10px 8px; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; }');
+                printWindow.document.write('table.items tbody td { padding: 9px 8px; border-bottom: 1px solid #eef2f7; font-size: 11px; color: #374151; }');
+                printWindow.document.write('table.items tbody tr:nth-child(even) { background: #f8fafc; }');
+                printWindow.document.write('table.items tbody tr:last-child td { border-bottom: none; }');
+                printWindow.document.write('.box-block { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 16px; page-break-inside: avoid; }');
+                printWindow.document.write('.box-head { display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #1a56db 0%, #2d5fd7 100%); color: #fff; padding: 8px 14px; }');
+                printWindow.document.write('.box-title { font-size: 13px; font-weight: 800; letter-spacing: .4px; }');
+                printWindow.document.write('.box-count { font-size: 10.5px; font-weight: 700; background: rgba(255,255,255,.22); border-radius: 20px; padding: 2px 12px; }');
+                printWindow.document.write('.box-dim { background: #eff6ff; border-bottom: 1px solid #dbeafe; color: #1e40af; font-size: 10.5px; font-weight: 600; padding: 7px 14px; }');
+                printWindow.document.write('.box-block table.items { border: none; border-radius: 0; margin-bottom: 0; }');
+                printWindow.document.write('.box-subtotal { text-align: right; font-size: 11.5px; font-weight: 800; color: #111827; background: #f8fafc; border-top: 1px solid #e5e7eb; padding: 8px 14px; }');
+                printWindow.document.write('.section-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #111827; margin: 4px 0 12px 0; padding-left: 10px; border-left: 4px solid #1a56db; }');
+                printWindow.document.write('.totals { margin-left: auto; width: 300px; margin-bottom: 20px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }');
                 printWindow.document.write('.totals table { width: 100%; border-collapse: collapse; }');
-                printWindow.document.write('.totals td { padding: 6px 10px; font-size: 11px; }');
-                printWindow.document.write('.totals td:first-child { color: #666; }');
-                printWindow.document.write('.totals .grand-total td { background: #2d8eff; color: #fff; font-size: 13px; font-weight: 700; border-radius: 4px; }');
-                printWindow.document.write('.awb-box { background: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px; padding: 12px 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }');
-                printWindow.document.write('.awb-box .label { font-size: 11px; color: #997404; text-transform: uppercase; font-weight: 600; }');
-                printWindow.document.write('.awb-box .value { font-size: 16px; font-weight: 700; color: #997404; letter-spacing: 1px; }');
-                printWindow.document.write('.footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e9ecef; text-align: center; color: #999; font-size: 10px; }');
+                printWindow.document.write('.totals td { padding: 7px 12px; font-size: 11px; border-bottom: 1px solid #f1f5f9; }');
+                printWindow.document.write('.totals tr:last-child td { border-bottom: none; }');
+                printWindow.document.write('.totals td:first-child { color: #6b7280; }');
+                printWindow.document.write('.totals td:last-child { font-weight: 600; color: #111827; }');
+                printWindow.document.write('.totals .grand-total td { background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); color: #fff; font-size: 13px; font-weight: 800; }');
+                printWindow.document.write('.awb-box { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fcd34d; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }');
+                printWindow.document.write('.awb-box .label { font-size: 10px; color: #92400e; text-transform: uppercase; font-weight: 700; letter-spacing: .6px; }');
+                printWindow.document.write('.awb-box .value { font-size: 17px; font-weight: 800; color: #78350f; letter-spacing: 1px; }');
+                printWindow.document.write('.terms { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; font-size: 10px; color: #64748b; line-height: 1.6; }');
+                printWindow.document.write('.footer { margin-top: 24px; padding-top: 14px; border-top: 2px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 10px; line-height: 1.6; }');
+                printWindow.document.write('.footer strong { color: #4b5563; }');
                 printWindow.document.write('.text-right { text-align: right; }');
                 printWindow.document.write('.text-center { text-align: center; }');
                 printWindow.document.write('@page { size: A4; margin: 0; }');
-                printWindow.document.write('@media print { body { margin: 0; } }');
+                printWindow.document.write('@media print { body { margin: 0; } .invoice-wrapper { padding: 20px 28px; } }');
                 printWindow.document.write('</style></head><body>');
+                printWindow.document.write('<div class="top-strip"></div>');
                 printWindow.document.write('<div class="invoice-wrapper">');
 
-                // Header
+                // Header: logo on top, company name + address below it (centered)
                 printWindow.document.write('<div class="invoice-header">');
+                printWindow.document.write('<div class="brand-centered">');
+                printWindow.document.write('<img src="' + companyLogoUrl + '" alt="' + companyFullName + '">');
                 printWindow.document.write('<div class="company-info">');
-                printWindow.document.write('<h1>United Courier</h1>');
-                printWindow.document.write('<p>Providing seamless global logistics solutions since 1995</p>');
-                printWindow.document.write('<p>support@unitedcourier.com</p>');
+                printWindow.document.write('<p class="brand-name">' + companyFullName + '</p>');
+                printWindow.document.write('<span class="brand-tag">Global Logistics Since 1995</span>');
+                printWindow.document.write('<p>' + companyAddress + '</p>');
+                printWindow.document.write('<p>Email: ' + companyEmail + ' &nbsp;|&nbsp; www.unitedcouriers.biz</p>');
                 printWindow.document.write('</div>');
+                printWindow.document.write('</div>');
+                printWindow.document.write('<div class="invoice-meta-row">');
+                printWindow.document.write('<span class="invoice-badge">Invoice</span>');
                 printWindow.document.write('<div class="invoice-meta">');
-                printWindow.document.write('<h2>Invoice</h2>');
                 printWindow.document.write('<table>');
                 printWindow.document.write('<tr><td>Invoice No:</td><td><strong>' + (data.invoice_number || '-') + '</strong></td></tr>');
                 printWindow.document.write('<tr><td>Date:</td><td>' + (data.invoice_date || '-') + '</td></tr>');
@@ -2705,6 +2839,7 @@
                     printWindow.document.write('<tr><td>Reference:</td><td>' + data.reference_number + '</td></tr>');
                 }
                 printWindow.document.write('</table>');
+                printWindow.document.write('</div>');
                 printWindow.document.write('</div>');
                 printWindow.document.write('</div>');
 
@@ -2721,7 +2856,7 @@
                 printWindow.document.write('<p>Phone: ' + (shipper.phone || '-') + '</p>');
                 if (shipper.kyc_number) { printWindow.document.write('<p>GST: ' + shipper.kyc_number + '</p>'); }
                 printWindow.document.write('</div>');
-                printWindow.document.write('<div class="party-box">');
+                printWindow.document.write('<div class="party-box consignee">');
                 printWindow.document.write('<h4>To (Consignee)</h4>');
                 printWindow.document.write('<p class="name">' + (consignee.name || '-') + '</p>');
                 printWindow.document.write('<p>' + (consignee.contact || '') + '</p>');
@@ -2739,19 +2874,19 @@
                 printWindow.document.write('<div class="text-right"><div class="label">Total Chargeable Weight</div><div class="value">' + weightHtml + '</div></div>');
                 printWindow.document.write('</div>');
 
-                // Items
-                printWindow.document.write('<table class="items">');
-                printWindow.document.write('<thead><tr><th style="width:40px;">#</th><th>Description</th><th class="text-center" style="width:60px;">Qty</th><th class="text-right" style="width:90px;">Unit Rate</th><th class="text-right" style="width:100px;">Amount</th></tr></thead>');
-                printWindow.document.write('<tbody>' + rowsHtml + '</tbody>');
-                printWindow.document.write('</table>');
+                // Box-wise items with dimensions
+                printWindow.document.write('<div class="section-title">Shipment Contents — Box Wise</div>');
+                printWindow.document.write(boxesHtml);
 
                 // Totals
                 printWindow.document.write('<div class="totals"><table>' + totalsHtml + '</table></div>');
 
-                // Footer
+                // Terms + Footer with full company name
+                printWindow.document.write('<div class="terms">Goods once sold will not be taken back. All disputes subject to Delhi jurisdiction. This is a computer-generated invoice and does not require a physical signature.</div>');
                 printWindow.document.write('<div class="footer">');
                 printWindow.document.write('<p>This is a system-generated invoice. Generated on ' + new Date().toLocaleString() + '.</p>');
-                printWindow.document.write('<p>United Courier &copy; ' + new Date().getFullYear() + '. All rights reserved.</p>');
+                printWindow.document.write('<p><strong>' + companyFullName + '</strong> &nbsp;|&nbsp; ' + companyAddress + ' &nbsp;|&nbsp; ' + companyEmail + '</p>');
+                printWindow.document.write('<p>&copy; ' + new Date().getFullYear() + ' ' + companyFullName + '. All rights reserved.</p>');
                 printWindow.document.write('</div>');
 
                 printWindow.document.write('</div></body></html>');
@@ -2847,7 +2982,18 @@
                 bulkPayQueue = [];
                 payInvoiceId = null;
                 payShipperId = null;
+                $('#payInsufficientAlert').addClass('d-none');
+                $('#confirmPayNowBtn').prop('disabled', false);
             });
+
+            // Show/hide the inline insufficient-balance message below the
+            // Pay Now buttons and disable Confirm Payment when short.
+            function updatePayInsufficientAlert(amount) {
+                const insufficient = (parseFloat(amount) || 0) > walletBalance;
+                $('#payInsufficientText').text('Insufficient wallet balance! Your balance is INR ' + number_format(walletBalance, 2));
+                $('#payInsufficientAlert').toggleClass('d-none', !insufficient);
+                $('#confirmPayNowBtn').prop('disabled', insufficient);
+            }
 
             // Pay Now button click handler (delegated)
             $('#shipmentsTable').on('click', '.pay-now-btn', function () {
@@ -2861,6 +3007,7 @@
                 $('#payShipmentRef').val(refText);
                 $('#payAmount').val(amount);
                 $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
+                updatePayInsufficientAlert(amount);
 
                 $('#payNowModal').modal('show');
             });
@@ -2873,6 +3020,7 @@
                     return;
                 }
                 if (amount > walletBalance) {
+                    updatePayInsufficientAlert(amount);
                     showAlert('danger', 'Insufficient wallet balance! Your balance is INR ' + number_format(walletBalance, 2));
                     return;
                 }
@@ -3066,7 +3214,31 @@
 
             // =============================================
             // MANIFEST: Single shipment manifest button
+            // Uses the Manifest Confirm popup instead of the browser confirm().
             // =============================================
+            let pendingSingleManifestBtn = null;
+            let pendingBulkManifest = false;
+
+            // Popup "Yes, Manifest" -> re-trigger the original button with a
+            // one-time flag so its handler skips the popup and runs the AJAX.
+            $('#confirmManifestBtn').on('click', function () {
+                $('#manifestConfirmModal').modal('hide');
+                if (pendingSingleManifestBtn) {
+                    const $b = pendingSingleManifestBtn;
+                    pendingSingleManifestBtn = null;
+                    $b.data('manifest-confirmed', true).trigger('click');
+                } else if (pendingBulkManifest) {
+                    pendingBulkManifest = false;
+                    $('#bulkManifestBtn').data('manifest-confirmed', true).trigger('click');
+                }
+            });
+
+            // Popup dismissed without confirming -> drop any pending request.
+            $('#manifestConfirmModal').on('hidden.bs.modal', function () {
+                pendingSingleManifestBtn = null;
+                pendingBulkManifest = false;
+            });
+
             $('#shipmentsTable').on('click', '.manifest-single-btn', function () {
                 const $btn = $(this);
                 const originalButtonHtml = $btn.html();
@@ -3075,10 +3247,15 @@
 
                 if (!shipperId) return;
 
-                // Confirm with user
-                if (!confirm('Are you sure you want to manifest this shipment? This will call the appropriate shipping API (UPS or Ship Global) based on the shipment network.')) {
+                // Confirm with user via popup
+                if (!$btn.data('manifest-confirmed')) {
+                    pendingSingleManifestBtn = $btn;
+                    pendingBulkManifest = false;
+                    $('#manifestConfirmText').text('Are you sure you want to manifest this shipment?');
+                    $('#manifestConfirmModal').modal('show');
                     return;
                 }
+                $btn.removeData('manifest-confirmed');
 
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting...');
 
@@ -3162,11 +3339,17 @@
                     return $(this).data('shipper-id');
                 }).get();
 
-                if (!confirm('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)? This will call the appropriate shipping API (UPS or Ship Global) based on each shipment\'s network.')) {
+                const $btn = $(this);
+
+                // Confirm with user via popup
+                if (!$btn.data('manifest-confirmed')) {
+                    pendingBulkManifest = true;
+                    pendingSingleManifestBtn = null;
+                    $('#manifestConfirmText').text('Are you sure you want to manifest ' + shipperIds.length + ' selected shipment(s)?');
+                    $('#manifestConfirmModal').modal('show');
                     return;
                 }
-
-                const $btn = $(this);
+                $btn.removeData('manifest-confirmed');
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Manifesting ' + shipperIds.length + ' shipment(s)...');
 
                 $.ajax({

@@ -1517,10 +1517,11 @@
                                                         </button>
                                                         <button type="button"
                                                                 class="btn-address add-address-btn"
+                                                                style="background-color: #4f46e5; color: #fff;"
                                                                 data-customer-id="{{ $savedCustomer->id }}"
                                                                 data-company="{{ $savedCustomer->company_name }}"
                                                                 title="Save Address">
-                                                            <i class="fas fa-location-dot"></i> Save Address
+                                                            <i class="fas fa-location-dot"></i> Add Address
                                                         </button>
                                                         @if(! $isCsbV)
                                                             <button type="button"
@@ -1566,7 +1567,7 @@
                 @csrf
                 <input type="hidden" id="addressCustomerId" name="customer_id" value="">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addAddressModalLabel"><i class="fas fa-location-dot me-2 text-white"></i>Save Address</h5>
+                    <h5 class="modal-title" style="color: #fff;" id="addAddressModalLabel"><i class="fas fa-location-dot me-2 text-white"></i>Add Address</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">

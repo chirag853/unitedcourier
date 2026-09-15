@@ -863,12 +863,14 @@ class BulkUploadController extends Controller
     private function generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalWeight)
     {
         $invoiceItems = ShipmentInvoiceItem::where('invoice_id', $invoice->id)->get();
+        $packages = PackageDimension::where('shipper_id', $shipper->id)->orderBy('id')->get();
 
         $data = [
             'shipper' => $shipper,
             'consignee' => $consignee,
             'invoice' => $invoice,
             'invoiceItems' => $invoiceItems,
+            'packages' => $packages,
             'rateDetails' => $rateDetails,
             'totalWeight' => $totalWeight,
         ];

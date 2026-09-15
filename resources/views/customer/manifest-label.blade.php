@@ -56,11 +56,12 @@
         }
 
         .header .company .brand {
-            font-size: 22px;
+            /* font-size: 22px; */
             font-weight: 800;
             letter-spacing: .5px;
             line-height: 1.1;
             text-transform: uppercase;
+            color:linear-gradient(to right, #2563eb, #9333ea)
         }
 
         .header .company .brand .sub {
@@ -83,10 +84,10 @@
         }
 
         .header .service .svc-value {
-            font-size: 26px;
+            /* font-size: 26px; */
             font-weight: 800;
-            letter-spacing: 2px;
-            color: #b22222;
+            /* letter-spacing: 2px; */
+            /* color: #b22222; */
         }
 
         /* Barcode */
@@ -230,7 +231,7 @@
         <div class="label">
             <div class="header">
                 <div class="company">
-                    <div class="brand">Unite Worldwide<br><span class="sub">Couriers</span></div>
+                    <div class="brand">United Worldwide Couriers </div>
                 </div>
                 <div class="service">
                     <div class="svc-label">Service</div>

@@ -318,10 +318,10 @@
                                 All <span class="badge bg-light text-dark ms-1" id="allCount">{{ $transactions->count() }}</span>
                             </button>
                             <button class="btn btn-light rounded-pill px-4 py-2 type-filter-btn" data-filter="recharge">
-                                Recharges <span class="badge bg-secondary ms-1" id="rechargeCount">0</span>
+                                Recharges <span class="badge bg-secondary ms-1" id="rechargeCount">{{ $transactions->where('reason', 'recharge')->count() }}</span>
                             </button>
                             <button class="btn btn-light rounded-pill px-4 py-2 type-filter-btn" data-filter="refund">
-                                Refunds <span class="badge bg-secondary ms-1" id="refundCount">0</span>
+                                Refunds <span class="badge bg-secondary ms-1" id="refundCount">{{ $transactions->where('reason', 'refund')->count() }}</span>
                             </button>
                         </div>
                     </div>
@@ -477,6 +477,13 @@
     <!-- End Main Wrapper -->
 
     <!-- Wallet Recharge Modal -->
+    <style>
+        #walletRechargeModal .quick-amount.active {
+            background-color: #198754 !important;
+            border-color: #198754 !important;
+            color: #fff !important;
+        }
+    </style>
     <div class="modal fade" id="walletRechargeModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -634,10 +641,32 @@
 
             // =============================================
             // UPDATE SUMMARY CARDS BASED ON VISIBLE ROWS
+            // Badges (All/Recharge/Refund) ignore the reason filter
+            // so switching to Refund doesn't zero out All/Recharges.
             // =============================================
+            function passesDateFilter(createdDate) {
+                var fromVal = fpFrom && fpFrom.selectedDates[0] ? fpFrom.selectedDates[0] : null;
+                var toVal = fpTo && fpTo.selectedDates[0] ? fpTo.selectedDates[0] : null;
+                if (!fromVal && !toVal) return true;
+                if (!createdDate) return false;
+                var rowDate = new Date(createdDate + 'T00:00:00');
+                if (fromVal && rowDate < fromVal) return false;
+                if (toVal) {
+                    var toEnd = new Date(toVal);
+                    toEnd.setHours(23, 59, 59, 999);
+                    if (rowDate > toEnd) return false;
+                }
+                return true;
+            }
+
+            function passesGlobalSearch(row) {
+                var term = (dataTable.search() || '').toString().toLowerCase().trim();
+                if (!term) return true;
+                return $(row).text().toLowerCase().indexOf(term) !== -1;
+            }
+
             function updateSummaryCards() {
                 var recharges = 0, refunds = 0, count = 0;
-                var rechargeCnt = 0, refundCnt = 0;
                 var visibleRows = dataTable.rows({ search: 'applied' }).nodes();
 
                 visibleRows.each(function (row) {
@@ -647,16 +676,27 @@
                     var amountText = $row.find('td').eq(10).text().replace(/[₹+\-,\s]/g, '').trim();
                     var amount = parseFloat(amountText) || 0;
                     count++;
-                    if (reason === 'recharge') { recharges += amount; rechargeCnt++; }
-                    else if (reason === 'refund') { refunds += amount; refundCnt++; }
+                    if (reason === 'recharge') { recharges += amount; }
+                    else if (reason === 'refund') { refunds += amount; }
                 });
 
                 $('#totalRechargesValue').text(formatCurrency(recharges));
                 $('#totalRefundsValue').text(formatCurrency(refunds));
                 $('#totalTxnCount').text(count);
 
-                // Update filter button badge counts based on visible rows
-                $('#allCount').text(count);
+                // Badge counts: respect date + global search, ignore reason filter
+                var allCnt = 0, rechargeCnt = 0, refundCnt = 0;
+                dataTable.rows().nodes().each(function (row) {
+                    var $row = $(row);
+                    if (!passesDateFilter($row.data('created-date'))) return;
+                    if (!passesGlobalSearch(row)) return;
+                    allCnt++;
+                    var reason = $row.data('txn-reason');
+                    if (reason === 'recharge') { rechargeCnt++; }
+                    else if (reason === 'refund') { refundCnt++; }
+                });
+
+                $('#allCount').text(allCnt);
                 $('#rechargeCount').text(rechargeCnt);
                 $('#refundCount').text(refundCnt);
             }
@@ -715,6 +755,9 @@
                 $('#countInfo').text('Showing ' + visibleCount + ' of ' + totalCount + ' records');
                 updateSummaryCards();
             });
+
+            // On-load: draw event already fired during init, so update counts immediately
+            updateSummaryCards();
 
             // =============================================
             // EXPORT CSV
@@ -780,6 +823,8 @@
 
             $('.quick-amount').on('click', function () {
                 $('#rechargeAmount').val($(this).data('amount'));
+                $('.quick-amount').removeClass('active');
+                $(this).addClass('active');
             });
 
             var isRecharging = false;

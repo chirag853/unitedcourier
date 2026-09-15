@@ -475,7 +475,7 @@
                                         <table class="table table-sm table-bordered mb-0">
                                             <thead class="table-light">
                                                 <tr>
-                                                    <th>AWB Number</th>
+                                                    <th>HAWB Number</th>
                                                     <th>From / To</th>
                                                     <th>Customer Name</th>
                                                     <th>Consignee</th>
@@ -576,7 +576,7 @@
                                         <table class="table table-sm table-bordered mb-0">
                                             <thead class="table-light">
                                                 <tr>
-                                                    <th>AWB Number</th>
+                                                    <th>HAWB Number</th>
                                                     <th>From / To</th>
                                                     <th>Customer Name</th>
                                                     <th>Consignee</th>
@@ -633,7 +633,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
-                                                <th>AWB Number</th>
+                                                <th>HAWB Number</th>
                                                 <th>From / To</th>
                                                 <th>Customer Name</th>
                                                 <th>Shipper Company</th>
@@ -744,7 +744,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
-                                                <th>AWB Number</th>
+                                                <th>HAWB Number</th>
                                                 <th>From / To</th>
                                                 <th>Customer Name</th>
                                                 <th>Shipper Company</th>
@@ -850,7 +850,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
-                                                <th>AWB Number</th>
+                                                <th>HAWB Number</th>
                                                 <th>From / To</th>
                                                 <th>Customer Name</th>
                                                 <th>Shipper Company</th>
@@ -968,7 +968,7 @@
                         <div id="assignDeliveryAlert" class="alert d-none"></div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">AWB Number</label>
+                            <label class="form-label fw-semibold">HAWB Number</label>
                             <p class="mb-0" id="assign_awb_display">-</p>
                         </div>
 
@@ -982,13 +982,13 @@
                                         <small class="text-muted">Pickup Duty Unpaid</small>
                                     </label>
                                 </div>
-                                <div class="form-check">
+                                <!-- <div class="form-check">
                                     <input class="form-check-input" type="radio" name="delivery_type" id="delivery_ddp" value="DDP">
                                     <label class="form-check-label" for="delivery_ddp">
                                         <strong>Shiprocket</strong><br>
                                         <small class="text-muted">Pickup Duty Paid</small>
                                     </label>
-                                </div>
+                                </div> -->
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="delivery_type" id="delivery_self" value="Self">
                                     <label class="form-check-label" for="delivery_self">
@@ -1077,7 +1077,7 @@
                         <div id="receiveShipmentAlert" class="alert d-none"></div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">AWB Number</label>
+                            <label class="form-label fw-semibold">HAWB Number</label>
                             <p class="mb-0" id="receive_awb_display">-</p>
                         </div>
 

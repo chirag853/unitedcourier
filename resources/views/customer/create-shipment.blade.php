@@ -7699,7 +7699,7 @@
                                                                     <label class="form-label">Invoice Amount </label>
                                                                     <input type="number" class="form-control"
                                                                         name="invoice_amount" value="{{ old('invoice_amount') }}"
-                                                                        placeholder="Invoice Amount">
+                                                                        placeholder="Invoice Amount" readonly>
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
@@ -8117,6 +8117,9 @@
                                                             });
                                                             const totalInput = document.getElementById('totalAmount');
                                                             if (totalInput) totalInput.value = total;
+                                                            // Autofill Invoice Amount with the same items total
+                                                            const invoiceAmountInput = document.querySelector('[name="invoice_amount"]');
+                                                            if (invoiceAmountInput) invoiceAmountInput.value = total;
                                                             // Validate against max allowed total
                                                             const maxTotal = window.getMaxInvoiceTotal();
                                                             const totalAmountEl = document.getElementById('totalAmount');
@@ -9560,10 +9563,7 @@
                     // here. Without rendering this group those rates never show on the
                     // frontend even though the API returns them.
                     if (zoneGroups['general']) {
-                        cardsHtml += `<div class="zone-group mb-4">
-                            <div class="zone-group-header" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; font-size: 15px;">
-                                <i class="fas fa-globe me-2"></i> General Rates (Zone Independent)
-                            </div>`;
+                        cardsHtml += `<div class="zone-group mb-4">`;
                         zoneGroups['general'].forEach(function(r) {
                             const isChecked = globalIndex === 0;
                             cardsHtml += renderRateCard(r, globalIndex, isChecked);

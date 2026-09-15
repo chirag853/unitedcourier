@@ -248,6 +248,13 @@
         </header>
 
         <!-- Wallet Recharge Modal -->
+        <style>
+            #walletRechargeModal .prepaid-btn.active {
+                background-color: #198754 !important;
+                border-color: #198754 !important;
+                color: #fff !important;
+            }
+        </style>
         <div class="modal fade" id="walletRechargeModal" tabindex="-1" aria-labelledby="walletRechargeModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
@@ -350,14 +357,14 @@
             prepaidBtns.forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     amountInput.value = this.getAttribute('data-amount');
-                    prepaidBtns.forEach(function(b) { b.classList.remove('active', 'bg-primary', 'text-white'); });
-                    this.classList.add('active', 'bg-primary', 'text-white');
+                    prepaidBtns.forEach(function(b) { b.classList.remove('active'); });
+                    this.classList.add('active');
                     if (rechargeAmountError) { rechargeAmountError.textContent = ''; amountInput.classList.remove('is-invalid'); }
                 });
             });
 
             amountInput.addEventListener('input', function() {
-                prepaidBtns.forEach(function(b) { b.classList.remove('active', 'bg-primary', 'text-white'); });
+                prepaidBtns.forEach(function(b) { b.classList.remove('active'); });
                 if (rechargeAmountError) { rechargeAmountError.textContent = ''; amountInput.classList.remove('is-invalid'); }
             });
 
@@ -420,7 +427,7 @@
                             }, 2000);
                         }
                         amountInput.value = '';
-                        prepaidBtns.forEach(function(b) { b.classList.remove('active', 'bg-primary', 'text-white'); });
+                        prepaidBtns.forEach(function(b) { b.classList.remove('active'); });
                     } else {
                         closeCheckoutPopup();
                         if (rechargeAmountError) { rechargeAmountError.textContent = data.message || 'Recharge failed.'; amountInput.classList.add('is-invalid'); }
