@@ -7,6 +7,7 @@
                 $walletBalance = $authCustomer && $authCustomer->wallet ? $authCustomer->wallet->balance : 0;
                 $customerInitial = $authCustomer ? strtoupper(substr($authCustomer->first_name, 0, 1)) : 'G';
                 $customerFullName = $authCustomer ? $authCustomer->first_name . ' ' . $authCustomer->last_name : 'Guest';
+                $customerCategoryName = $authCustomer && $authCustomer->businessCategory ? $authCustomer->businessCategory->category_name : 'Customer';
             @endphp
             <div class="page-container topbar-menu">
                 <div class="d-flex align-items-center gap-2">
@@ -207,7 +208,7 @@
                                 <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-16" style="width:38px;background: linear-gradient(to right, #2563eb, #9333ea);height:38px;">{{ $customerInitial }}</div>
                                 <div class="ms-2">
                                     <p class="fw-medium text-dark mb-0">{{ $customerFullName }}</p>
-                                    <span class="d-block fs-13">Customer</span>
+                                    <span class="d-block fs-13">{{ $customerCategoryName }}</span>
                                 </div>
                             </div>
 
