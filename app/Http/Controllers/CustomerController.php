@@ -2577,7 +2577,7 @@ class CustomerController extends Controller
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'terms_accepted' => $validated['terms_accepted'],
                 'terms_accepted_at' => $validated['terms_accepted'] ? now() : null,
-                'kyc_status' => 'under_review',
+                'kyc_status' => 'approved',
             ];
 
             // If GST verification returned an address, use it as the Aadhaar address.
@@ -2610,7 +2610,7 @@ class CustomerController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Business KYC (CSB-V) submitted successfully! Your application is now under review.',
+                'message' => 'Business KYC (CSB-V) submitted successfully! Your application is now approved.',
                 'redirect' => route('customer.kyc.summary'),
             ], 200);
 
