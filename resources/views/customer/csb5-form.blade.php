@@ -451,39 +451,6 @@
                                 </div>
                             </div>
                             @endif
-                            <div class="section-title-alt">Merchant Agreement</div>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <label class="section-label">Signed Merchant Agreement (with Company Stamp & Signature)</label>
-                                    <div class="doc-item" id="businessMerchantAgreementContainer">
-                                        <div class="doc-meta">
-                                            <div>
-                                                <div class="d-flex align-items-center">
-                                                    <span class="doc-name">Merchant Agreement (PDF)</span>
-                                                    <i class="fas fa-info-circle info-circle ms-2"
-                                                        title="Upload the signed merchant agreement with company stamp and authorized signature"></i>
-                                                </div>
-                                                <div id="businessMerchantAgreementFileInfo" class="file-status">Selected: <span
-                                                        id="businessMerchantAgreementFileNameDisplay">file</span></div>
-                                            </div>
-                                        </div>
-                                        <div class="text-end d-flex align-items-center">
-                                            <input type="file" id="businessMerchantAgreementFileInput" name="merchant_agreement" required
-                                                style="display: none;" accept=".pdf"
-                                                onchange="handleDocSelect(this, 'businessMerchantAgreementFileNameDisplay', 'businessMerchantAgreementFileInfo', 'businessMerchantAgreementRemoveFile', '.businessMerchantAgreementUploadBtn', '#businessMerchantAgreementContainer');">
-                                            <button type="button"
-                                                class="link-alt border-0 bg-transparent businessMerchantAgreementUploadBtn"
-                                                onclick="document.getElementById('businessMerchantAgreementFileInput').click();">
-                                                <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                                            </button>
-                                            <span class="text-danger-alt businessMerchantAgreementRemoveFile" style="display: none;"
-                                                onclick="clearDocInput('businessMerchantAgreementFileInput', 'businessMerchantAgreementFileNameDisplay', 'businessMerchantAgreementFileInfo', 'businessMerchantAgreementRemoveFile', '.businessMerchantAgreementUploadBtn', '#businessMerchantAgreementContainer');"><i
-                                                    class="fas fa-trash-alt"></i> Remove</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="agreement-box mt-4">
                                 <div class="form-check d-flex align-items-start mb-3">
                                     <input class="form-check-input mt-1" type="checkbox" id="businessTermsAccepted"
@@ -863,7 +830,6 @@
                             if (!/^[6-9]\d{9}$/.test(fieldValue('billing_contact'))) return showCsb5ValidationError('Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.', targetForm.querySelector('[name="billing_contact"]'));
                             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fieldValue('billing_email'))) return showCsb5ValidationError('Please enter a valid Billing Email address.', targetForm.querySelector('[name="billing_email"]'));
                             @endif
-                            if (!validateCsb5File(targetForm, 'merchant_agreement', 'the signed Merchant Agreement', ['pdf'], 10)) return false;
                             if (!targetForm.querySelector('[name="terms_accepted"]').checked) return showCsb5ValidationError('Please accept the declaration and terms before continuing.', targetForm.querySelector('[name="terms_accepted"]'));
                             return true;
                         }

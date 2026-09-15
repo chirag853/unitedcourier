@@ -259,7 +259,6 @@ function validateCsb5Form(form) {
     if (value('billing_address').length < 10 || value('billing_address').length > 1000) return showCsb5ValidationError('Billing Address must contain 10 to 1000 characters.', field('billing_address'));
     if (!/^[6-9]\d{9}$/.test(value('billing_contact'))) return showCsb5ValidationError('Billing Contact Number must contain exactly 10 digits and start with 6, 7, 8, or 9.', field('billing_contact'));
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value('billing_email'))) return showCsb5ValidationError('Please enter a valid Billing Email address.', field('billing_email'));
-    if (!validateCsb5File(form, 'merchant_agreement', 'the signed Merchant Agreement', ['pdf'], 10)) return false;
     if (!field('terms_accepted').checked) return showCsb5ValidationError('Please accept the declaration and terms before continuing.', field('terms_accepted'));
     return true;
 }
