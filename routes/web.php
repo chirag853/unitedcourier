@@ -474,6 +474,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     
     // Custom Form Routes
     Route::get('/csb5-form', [AdminController::class, 'csb5Form'])->name('admin.csb5-form');
+    Route::post('/csb5-form/approve/{id}', [AdminController::class, 'approveCsb5'])->name('admin.csb5-form.approve');
     Route::get('/form-kyc', [AdminController::class, 'formKyc'])->name('admin.form-kyc');
     
     // Website Management Routes

@@ -2016,6 +2016,24 @@ class AdminController extends Controller
         return view('admin.csb5-form', compact('csbForms'));
     }
 
+    public function approveCsb5($id)
+    {
+        $csbForm = CsbForm::findOrFail($id);
+        $csbForm->is_csb_v = true;
+        $csbForm->save();
+
+        \App\Support\SystemLogger::log(
+            'csb5.approve',
+            'CSB5 approved for Customer #' . $csbForm->customer_id,
+            'csb_form',
+            0,
+            1
+        );
+
+        return redirect()->to(route('admin.csb5-form') . '#tab-pending')
+            ->with('success', 'CSB5 form approved successfully. It has been moved out of pending.');
+    }
+
     public function formKyc()
     {
         return view('admin.form-kyc');

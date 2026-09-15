@@ -3797,6 +3797,10 @@
                                                                         class="text-danger fw-bold">Go to CSB V
                                                                         Onboarding</a>
                                                                 </div>
+                                                                <div id="csbUnderReviewMsg" class="alert alert-warning mt-2 mb-0"
+                                                                    style="display: none;" role="alert">
+                                                                    CSB5 is under review
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -9012,6 +9016,7 @@
         const originTypeSelect = document.getElementById('originType');
         const csbInfoSection = document.getElementById('csbInfoSection');
         const csbStatus = @json($customer->csb_status ?? null);
+        const loginIsCsbV = @json((bool) ($csbForm?->is_csb_v));
         const canBypassCsbVBlock = @json($canManageSavedCustomers ?? false);
 
         // Courier/Aggregator only: when a CSB-V saved customer is selected above,
@@ -9031,7 +9036,9 @@
         function toggleCsbInfo() {
             const rateCalcNum = document.getElementById('rateCalculateNumber');
             if (!originTypeSelect || !csbInfoSection) return;
-            if (originTypeSelect.value === 'CSB V' && (csbStatus !== 1 || isCsbVSavedCustomerSelected())) {
+            const sameAsCustomerEl = document.getElementById('sameAsCustomer');
+            const isSameAsCustomerUnderReview = !!(sameAsCustomerEl && sameAsCustomerEl.checked && originTypeSelect.value === 'CSB V' && !loginIsCsbV);
+            if (originTypeSelect.value === 'CSB V' && !isSameAsCustomerUnderReview && (csbStatus !== 1 || isCsbVSavedCustomerSelected())) {
                 csbInfoSection.style.display = 'block';
                 // Order: 1-Shipper, 2-Consignee, 3-Package, 4-CSB, 5-Invoice, 6-Rate Calculate
                 document.getElementById('csbInfoNumber').textContent = '4';
@@ -9054,6 +9061,10 @@
         // Listen for changes
         if (originTypeSelect) {
             originTypeSelect.addEventListener('change', toggleCsbInfo);
+        }
+        const sameAsCustomerForToggle = document.getElementById('sameAsCustomer');
+        if (sameAsCustomerForToggle) {
+            sameAsCustomerForToggle.addEventListener('change', toggleCsbInfo);
         }
         // Re-evaluate when the saved customer changes (CSB-V customer allows CSB V origin).
         const savedCustomerSelectForCsb = document.getElementById('exporterCustomerSelect');
@@ -11443,6 +11454,41 @@ if (rateRadio && rateRadio.dataset.rate) {
                 window.applyIgstVisibility();
             }
         }
+    });
+    </script>
+    <script>
+    // Show "CSB5 is under review" when Same as customer + CSB V is selected
+    // but the login account's csb_forms.is_csb_v is still 0.
+    document.addEventListener('DOMContentLoaded', function() {
+        const originTypeSelectForReview = document.getElementById('originType');
+        const sameAsCustomerForReview = document.getElementById('sameAsCustomer');
+        const underReviewMsg = document.getElementById('csbUnderReviewMsg');
+        const loginIsCsbV = @json((bool) ($csbForm?->is_csb_v));
+        function syncCsbUnderReviewMsg() {
+            if (!originTypeSelectForReview || !underReviewMsg) return;
+            const originVal = (typeof $ !== 'undefined' && typeof $(originTypeSelectForReview).val === 'function')
+                ? $(originTypeSelectForReview).val()
+                : originTypeSelectForReview.value;
+            const show = !!(sameAsCustomerForReview && sameAsCustomerForReview.checked && originVal === 'CSB V' && !loginIsCsbV);
+            underReviewMsg.style.display = show ? 'block' : 'none';
+            if (show) {
+                const csbInfoSectionForReview = document.getElementById('csbInfoSection');
+                if (csbInfoSectionForReview) {
+                    csbInfoSectionForReview.style.display = 'none';
+                    if (typeof $ !== 'undefined') $('#csbinfo').collapse('hide');
+                }
+            }
+        }
+        window.syncCsbUnderReviewMsg = syncCsbUnderReviewMsg;
+        if (originTypeSelectForReview && typeof $ !== 'undefined') {
+            $(originTypeSelectForReview).on('change', syncCsbUnderReviewMsg);
+        } else if (originTypeSelectForReview) {
+            originTypeSelectForReview.addEventListener('change', syncCsbUnderReviewMsg);
+        }
+        if (sameAsCustomerForReview) {
+            sameAsCustomerForReview.addEventListener('change', syncCsbUnderReviewMsg);
+        }
+        syncCsbUnderReviewMsg();
     });
     </script>
     <script>
