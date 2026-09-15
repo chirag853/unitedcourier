@@ -165,6 +165,90 @@
         }
     }
 
+    /* Math Captcha Modal */
+    .math-captcha-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 15px;
+    }
+    .math-captcha-overlay.d-none {
+        display: none !important;
+    }
+    .math-captcha-box {
+        background: #fff;
+        border-radius: 20px;
+        padding: 30px 28px;
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+        animation: captchaPop 0.25s ease;
+    }
+    @keyframes captchaPop {
+        from { transform: scale(0.92); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    .math-captcha-box h4 {
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 6px;
+    }
+    .math-captcha-box .captcha-sub {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 18px;
+    }
+    .math-captcha-question {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        padding: 14px;
+        font-size: 26px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 15px;
+    }
+    .math-captcha-question .captcha-refresh {
+        margin-left: auto;
+        border: 1px solid #dbeafe;
+        background: #eff6ff;
+        color: #2563eb;
+        border-radius: 50%;
+        width: 38px;
+        height: 38px;
+        font-size: 15px;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .math-captcha-question .captcha-refresh:hover {
+        background: #2563eb;
+        color: #fff;
+        transform: rotate(40deg);
+    }
+    .math-captcha-input {
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+    }
+    .math-captcha-error {
+        color: #dc2626;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 20px;
+        margin-top: 8px;
+    }
 
 </style>
 
@@ -362,6 +446,26 @@
         </div>
     </div>
 </section>
+
+<!-- Math Captcha Modal -->
+<div id="mathCaptchaOverlay" class="math-captcha-overlay d-none">
+    <div class="math-captcha-box">
+        <h4><i class="fa-solid fa-shield-halved me-2" style="color:#2563eb;"></i>Verify You're Human</h4>
+        <p class="captcha-sub">Please solve this simple math to get shipping rates</p>
+        <div class="math-captcha-question">
+            <span id="captchaQuestion">5 + 3 = ?</span>
+            <button type="button" class="captcha-refresh" id="captchaRefresh" title="New question">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+        </div>
+        <input type="number" id="captchaAnswer" class="form-control math-captcha-input" placeholder="Your answer" autocomplete="off">
+        <div class="math-captcha-error" id="captchaError"></div>
+        <div class="d-flex gap-2 mt-2">
+            <button type="button" id="captchaCancel" class="btn btn-outline-secondary flex-fill" style="border-radius:12px;padding:12px;font-weight:700;">Cancel</button>
+            <button type="button" id="captchaVerify" class="btn flex-fill text-white" style="border-radius:12px;padding:12px;font-weight:700;background:linear-gradient(to right,#2563eb,#9333ea);">Verify &amp; Get Rate</button>
+        </div>
+    </div>
+</div>
 
 <!-- Features cards section -->
 
@@ -870,12 +974,84 @@
                 }
             });
 
-            form.addEventListener('submit', async function (event) {
+            // ---- Math Captcha ----
+            const captchaOverlay = document.getElementById('mathCaptchaOverlay');
+            const captchaQuestion = document.getElementById('captchaQuestion');
+            const captchaAnswerInput = document.getElementById('captchaAnswer');
+            const captchaError = document.getElementById('captchaError');
+            const captchaVerifyBtn = document.getElementById('captchaVerify');
+            const captchaCancelBtn = document.getElementById('captchaCancel');
+            const captchaRefreshBtn = document.getElementById('captchaRefresh');
+            let captchaAnswer = 0;
+
+            function generateCaptcha() {
+                const operators = ['+', '-', '×'];
+                const op = operators[Math.floor(Math.random() * operators.length)];
+                let a, b;
+                if (op === '×') {
+                    a = Math.floor(Math.random() * 8) + 2; // 2-9
+                    b = Math.floor(Math.random() * 8) + 2; // 2-9
+                    captchaAnswer = a * b;
+                } else if (op === '-') {
+                    a = Math.floor(Math.random() * 20) + 1;
+                    b = Math.floor(Math.random() * 20) + 1;
+                    if (b > a) { const t = a; a = b; b = t; } // avoid negative
+                    captchaAnswer = a - b;
+                } else {
+                    a = Math.floor(Math.random() * 20) + 1;
+                    b = Math.floor(Math.random() * 20) + 1;
+                    captchaAnswer = a + b;
+                }
+                captchaQuestion.textContent = a + ' ' + op + ' ' + b + ' = ?';
+                captchaAnswerInput.value = '';
+                captchaError.textContent = '';
+            }
+
+            function openCaptcha() {
+                generateCaptcha();
+                captchaOverlay.classList.remove('d-none');
+                document.body.style.overflow = 'hidden';
+                setTimeout(function () { captchaAnswerInput.focus(); }, 100);
+            }
+
+            function closeCaptcha() {
+                captchaOverlay.classList.add('d-none');
+                document.body.style.overflow = '';
+            }
+
+            captchaRefreshBtn.addEventListener('click', generateCaptcha);
+            captchaCancelBtn.addEventListener('click', closeCaptcha);
+            captchaOverlay.addEventListener('click', function (e) {
+                if (e.target === captchaOverlay) closeCaptcha();
+            });
+            captchaAnswerInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); captchaVerifyBtn.click(); }
+            });
+            captchaVerifyBtn.addEventListener('click', function () {
+                const userAns = parseInt(captchaAnswerInput.value, 10);
+                if (isNaN(userAns)) {
+                    captchaError.textContent = 'Please enter your answer.';
+                    return;
+                }
+                if (userAns === captchaAnswer) {
+                    closeCaptcha();
+                    doFetchRates();
+                } else {
+                    captchaError.textContent = 'Wrong answer, try again.';
+                    generateCaptcha();
+                }
+            });
+
+            form.addEventListener('submit', function (event) {
                 event.preventDefault();
                 clearError();
 
                 if (!form.reportValidity()) return;
 
+                openCaptcha();
+            });
+
+            async function doFetchRates() {
                 getRateBtn.disabled = true;
                 getRateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Rates...';
                 results.innerHTML = '';
@@ -933,7 +1109,7 @@
                     getRateBtn.disabled = false;
                     getRateBtn.innerHTML = '<i class="fa-solid fa-arrow-right me-2"></i>Get Shipping Rate';
                 }
-            });
+            }
 
             form.addEventListener('reset', function () {
                 setTimeout(function () {
