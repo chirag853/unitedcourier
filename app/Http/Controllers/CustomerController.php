@@ -2480,7 +2480,7 @@ class CustomerController extends Controller
             // Create or update CSB Form record
             $csbData = [
                 'customer_id' => $customer->id,
-                'is_csb_v' => 0,
+                'is_csb_v' => $validated['is_csb_v'],
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
                 'gst_certificate_number' => $gstNumber
