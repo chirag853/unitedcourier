@@ -823,15 +823,6 @@
                                                             <input type="text" class="input-custom" id="aadharNumber" placeholder="Enter 12-digit Aadhaar Number *" name="aadhar_number" maxlength="12" inputmode="numeric" value="{{ old('aadhar_number') }}" required>
                                                             <i class="fas fa-id-card"></i>
                                                         </div>
-                                                        <div class="d-flex align-items-center flex-wrap gap-2">
-                                                            <button type="button" class="btn-verify mt-1" id="aadharVerifyBtn">
-                                                                <i class="fas fa-shield-halved me-1"></i> Verify Aadhaar
-                                                            </button>
-                                                            <span class="verified-badge" id="aadharVerifiedBadge" style="display: none;">
-                                                                <i class="fas fa-circle-check me-1"></i> Verified
-                                                            </span>
-                                                        </div>
-                                                        <div id="aadharVerifyStatus" class="kyc-alert" style="display: none;"></div>
                                                     </div>
                                                 </div>
 
@@ -889,6 +880,19 @@
                                                         <small class="text-muted">JPG, JPEG or PNG, up to 5 MB.</small>
                                                     </div>
                                                 </div>
+                                                <div class="row g-3 mt-2">
+                                                    <div class="col-12">
+                                                        <div class="d-flex align-items-center flex-wrap gap-2">
+                                                            <button type="button" class="btn-verify mt-1" id="aadharVerifyBtn">
+                                                                <i class="fas fa-shield-halved me-1"></i> Verify Aadhaar
+                                                            </button>
+                                                            <span class="verified-badge" id="aadharVerifiedBadge" style="display: none;">
+                                                                <i class="fas fa-circle-check me-1"></i> Verified
+                                                            </span>
+                                                        </div>
+                                                        <div id="aadharVerifyStatus" class="kyc-alert" style="display: none;"></div>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- PAN section (mandatory for both Individual and Business customers) -->
@@ -907,15 +911,6 @@
                                                             <input type="text" class="input-custom text-uppercase" id="panNumber" placeholder="Enter 10-character PAN Number *" name="pan_number" maxlength="10" style="text-transform: uppercase;" value="{{ old('pan_number') }}" required>
                                                             <i class="fas fa-credit-card"></i>
                                                         </div>
-                                                        <div class="d-flex align-items-center flex-wrap gap-2">
-                                                            <button type="button" class="btn-verify mt-1" id="panVerifyBtn">
-                                                                <i class="fas fa-shield-halved me-1"></i> Verify PAN
-                                                            </button>
-                                                            <span class="verified-badge" id="panVerifiedBadge" style="display: none;">
-                                                                <i class="fas fa-circle-check me-1"></i> Verified
-                                                            </span>
-                                                        </div>
-                                                        <div id="panVerifyStatus" class="kyc-alert" style="display: none;"></div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="section-label">Name as on PAN</label>
@@ -957,6 +952,19 @@
                                                         <small class="text-muted">JPG, JPEG or PNG, up to 5 MB.</small>
                                                     </div>
                                                 </div>
+                                                <div class="row g-3 mt-2">
+                                                    <div class="col-12">
+                                                        <div class="d-flex align-items-center flex-wrap gap-2">
+                                                            <button type="button" class="btn-verify mt-1" id="panVerifyBtn">
+                                                                <i class="fas fa-shield-halved me-1"></i> Verify PAN
+                                                            </button>
+                                                            <span class="verified-badge" id="panVerifiedBadge" style="display: none;">
+                                                                <i class="fas fa-circle-check me-1"></i> Verified
+                                                            </span>
+                                                        </div>
+                                                        <div id="panVerifyStatus" class="kyc-alert" style="display: none;"></div>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- GST section (shown when customer type = Business) -->
@@ -976,15 +984,6 @@
                                                             <input type="text" class="input-custom text-uppercase" id="gstKycNumber" placeholder="Enter 15-character GSTIN *" name="gst_kyc_number" maxlength="15" value="{{ old('gst_kyc_number') }}" required>
                                                             <i class="fas fa-receipt"></i>
                                                         </div>
-                                                        <div class="d-flex align-items-center flex-wrap gap-2">
-                                                            <button type="button" class="btn-verify mt-1" id="gstKycVerifyBtn">
-                                                                <i class="fas fa-shield-halved me-1"></i> Verify GST
-                                                            </button>
-                                                            <span class="verified-badge" id="gstKycVerifiedBadge" style="display: none;">
-                                                                <i class="fas fa-circle-check me-1"></i> Verified
-                                                            </span>
-                                                        </div>
-                                                        <div id="gstKycVerifyStatus" class="kyc-alert" style="display: none;"></div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="section-label">Registered Business Name</label>
@@ -1016,6 +1015,19 @@
                                                             </div>
                                                         </div>
                                                         <small class="text-muted">GST certificate in PDF format, up to 5 MB.</small>
+                                                    </div>
+                                                </div>
+                                                <div class="row g-3 mt-2">
+                                                    <div class="col-12">
+                                                        <div class="d-flex align-items-center flex-wrap gap-2">
+                                                            <button type="button" class="btn-verify mt-1" id="gstKycVerifyBtn">
+                                                                <i class="fas fa-shield-halved me-1"></i> Verify GST
+                                                            </button>
+                                                            <span class="verified-badge" id="gstKycVerifiedBadge" style="display: none;">
+                                                                <i class="fas fa-circle-check me-1"></i> Verified
+                                                            </span>
+                                                        </div>
+                                                        <div id="gstKycVerifyStatus" class="kyc-alert" style="display: none;"></div>
                                                     </div>
                                                 </div>
                                             </div>
