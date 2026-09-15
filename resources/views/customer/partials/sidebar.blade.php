@@ -139,9 +139,9 @@
                                 <li>
                                     <a href="{{ url('tracking') }}" target="_blank"><i class="ti ti-building-community"></i><span>Track Shipment</span></a>
                                 </li>
-                                <li>
+                                <!-- <li>
                                     <a href="{{ route('customer.kyc.summary') }}" class="{{ request()->routeIs('customer.kyc.*') ? 'active' : '' }}"><i class="ti ti-shield-check"></i><span>{{ $sidebarUserType === 'Business' ? 'Business KYC' : 'Personal KYC' }}</span></a>
-                                </li>
+                                </li> -->
                                 <li>
                                     <a href="{{ route('customer.my-profile') }}" class="{{ request()->routeIs('customer.my-profile') ? 'active' : '' }}"><i class="ti ti-medal"></i><span>My Profile</span></a>
                                 </li>
