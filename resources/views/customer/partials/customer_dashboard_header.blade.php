@@ -207,7 +207,7 @@
                             <div class="d-flex align-items-center bg-light rounded-3 p-2 mb-2">
                                 <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold fs-16" style="width:38px;background: linear-gradient(to right, #2563eb, #9333ea);height:38px;">{{ $customerInitial }}</div>
                                 <div class="ms-2">
-                                    <p class="fw-medium text-dark mb-0">{{ $customerFullName }}</p>
+                                    <p class="fw-medium text-dark mb-0">{{ ucwords(strtolower($customerFullName)) }}</p>
                                     <span class="d-block fs-13">{{ $customerCategoryName }}</span>
                                 </div>
                             </div>
