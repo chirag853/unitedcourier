@@ -1313,6 +1313,16 @@ class AdminController extends Controller
                         $destIn = 'ALL';
                     }
                     $service = (string) ($shipper->shipping_method ?? '');
+                    if (! empty($shipper->service_id)) {
+                        $courierService = \App\Models\CourierService::find($shipper->service_id);
+                        if ($courierService) {
+                            // Method + network + api_provider teeno jodo taaki
+                            // carrier-specific rows (UPS/DPD) match ho sakein.
+                            $service .= ' ' . (string) ($courierService->method ?? '')
+                                . ' ' . (string) ($courierService->network ?? '')
+                                . ' ' . (string) ($courierService->api_provider ?? '');
+                        }
+                    }
                     $charges = $charges->filter(function ($c) use ($destIn, $service) {
                         return \App\Services\ShipmentChargeService::matchDestination($c->destination, $destIn)
                             && \App\Services\ShipmentChargeService::matchService($c->service_id, $service);
