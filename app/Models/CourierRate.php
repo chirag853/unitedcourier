@@ -50,9 +50,12 @@ class CourierRate extends Model
     public function getInclusiveTotalAttribute(): float
     {
         $base = (float) $this->price;
-        $fuel = (float) $this->fuel_charge > 0
-            ? (float) $this->fuel_charge
-            : ($base * (float) $this->fuel_percentage / 100);
+        // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+        $fuelFixed = (float) $this->fuel_charge;
+        $fuelPct = (float) $this->fuel_percentage;
+        $fuel = $fuelFixed > 0
+            ? $fuelFixed + ($fuelFixed * $fuelPct / 100)
+            : ($base * $fuelPct / 100);
         $surcharges = $this->surcharge_amount;
         $gst = (float) $this->gst_amount > 0
             ? (float) $this->gst_amount

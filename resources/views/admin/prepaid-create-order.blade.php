@@ -9516,8 +9516,8 @@
                                                     <span class="breakdown-value">₹ ${totalFuelPrice.toFixed(2)}</span>
                                                 </div>
                                                 <div class="breakdown-row">
-                                                    <span class="breakdown-label">Fuel Percentage</span>
-                                                    <span class="breakdown-value">${fuelPct.toFixed(2)}%</span>
+                                                    <span class="breakdown-label">GST Amount</span>
+                                                    <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
                                                 </div>
                                             </div>
                                             <div class="breakdown-column">
@@ -9533,10 +9533,6 @@
                                                         '<span class="breakdown-value">₹ ' + (parseFloat(s.price) || 0).toFixed(2) + '</span>' +
                                                     '</div>';
                                                 }).join('') : ''}
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">GST Amount</span>
-                                                    <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
-                                                </div>
                                             </div>
                                         </div>
                                         <div class="total-breakdown">

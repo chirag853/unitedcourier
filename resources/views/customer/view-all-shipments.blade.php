@@ -2657,14 +2657,6 @@
                     totalChargeableWeight += num(pkg.chargeable);
                 });
 
-                // Goods value (Subtotal) from invoice items
-                let subtotal = 0;
-                items.forEach(function (item) {
-                    subtotal += num(item.amount);
-                });
-                const invoiceAmount = num(data.invoice_amount);
-                const goodsTotal = invoiceAmount > 0 ? invoiceAmount : subtotal;
-
                 // Shipping-side totals (mirrors rateDetails in the A4 invoice)
                 const shippingCost = pb && pb.base != null ? num(pb.base) : 0;
                 const fuelCharge = pb && pb.fuel != null ? num(pb.fuel) : 0;
@@ -2674,8 +2666,8 @@
                     ? num(pb.total)
                     : (shippingCost + fuelCharge + surchargeAmt + gstAmt);
 
-                // Grand Total = shipping total + goods subtotal (matches A4 invoice)
-                const grandTotal = shippingTotal + goodsTotal;
+                // Grand Total = shipping total only (goods subtotal excluded)
+                const grandTotal = shippingTotal;
 
                 const gstPct = (data.gst_percentage != null && data.gst_percentage !== '')
                     ? parseFloat(data.gst_percentage)
@@ -2734,9 +2726,8 @@
                 }).join('') : '<p class="text-center">No items</p>';
 
                 // Totals block mirrors the A4 invoice
-                // (Subtotal, Shipping Cost, Fuel Charge, GST and Grand Total).
+                // (Shipping Cost, Fuel Charge, GST and Grand Total).
                 let totalsHtml = '';
-                totalsHtml += '<tr><td>Subtotal (' + currency + '):</td><td class="text-right">' + fmt(goodsTotal) + '</td></tr>';
                 if (shippingCost > 0) {
                     totalsHtml += '<tr><td>Shipping Cost:</td><td class="text-right">' + fmt(shippingCost) + '</td></tr>';
                 }

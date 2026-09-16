@@ -8859,32 +8859,6 @@
                                 <div class="col-12"><strong>Selected Shipping Method:</strong> <span id="preview_selected_method"></span> <span id="preview_selected_tat"></span> </div>
                                 <div class="col-12 d-none"><strong>Network:</strong> <span id="preview_selected_network"></span></div>
                             </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-sm mb-0" style="max-width: 400px;">
-                                    <tbody>
-                                        <tr>
-                                            <td class="fw-semibold">Base Price</td>
-                                            <td class="text-end" id="preview_base_price">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold text-warning">Fuel Surcharge</td>
-                                            <td class="text-end text-warning" id="preview_fuel_charge">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold text-purple">GST</td>
-                                            <td class="text-end text-purple" id="preview_gst_amount">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td class="fw-semibold">Surcharges</td>
-                                            <td class="text-end" id="preview_surcharge_amount">-</td>
-                                        </tr>
-                                        <tr class="table-primary fw-bold">
-                                            <td>Total</td>
-                                            <td class="text-end" id="preview_rate_total">-</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -9375,7 +9349,27 @@
                         const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
-                        const totalPrice = totalBasePrice + totalFuelPrice + computedGst + totalSurcharge;
+                        // CSB-V dispute surcharge — server ne lagaya hai, breakup me dikhao
+                        const disputeMatched = !!r.dispute_matched;
+                        const disputeLabel = r.dispute_label || 'CSB-V Surcharge';
+                        const disputeTotal = parseFloat(r.dispute_total) || 0;
+                        const disputeGst = parseFloat(r.dispute_gst) || 0;
+                        const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0);
+                        const hasItemSurcharges = !!(r.surcharges && r.surcharges.length);
+                        const totalPrice = parseFloat(r.grand_total) || (totalBasePrice + totalFuelPrice + computedGst + totalSurcharge + disputeTotal);
+                        // Per-box tax: shipment GST ko (base + fuel) ke proportion me baanto,
+                        // taaki box tax ka sum neeche wali GST row se hamesha match kare
+                        const combinedTaxable = totalBasePrice + totalFuelPrice;
+                        const boxCount = (r.box_breakdown && r.box_breakdown.length) || 0;
+                        const boxTaxes = (r.box_breakdown || []).map(function(b) {
+                            const taxable = (parseFloat(b.base) || 0) + (parseFloat(b.fuel) || 0);
+                            if (combinedTaxable > 0) {
+                                return computedGst * taxable / combinedTaxable;
+                            }
+                            return boxCount > 0 ? computedGst / boxCount : 0;
+                        });
+                        const combinedBoxTax = boxTaxes.reduce(function(a, t) { return a + t; }, 0);
+                        const combinedSubTotal = totalBasePrice + totalFuelPrice + combinedBoxTax;
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
@@ -9384,6 +9378,9 @@
                             gst: computedGst.toFixed(2),
                             surcharge: totalSurcharge.toFixed(2),
                             surcharges: r.surcharges || [],
+                            dispute: disputeTotal.toFixed(2),
+                            dispute_label: disputeMatched ? disputeLabel : '',
+                            dispute_gst: disputeGst.toFixed(2),
                             demand: '0.00',
                             remote: '0.00',
                             oversize: '0.00',
@@ -9470,19 +9467,21 @@
                                                             <th>Chg. Wt (Kg)</th>
                                                             <th>Base (₹)</th>
                                                             <th>Fuel (₹)</th>
-                                                            <th>Surcharge (₹)</th>
-                                                            <th>Total (₹)</th>
+                                                            <th>Tax Amount (₹)</th>
+                                                            <th>Sub Total (₹)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        ${r.box_breakdown.map(function(b) {
+                                                        ${r.box_breakdown.map(function(b, bi) {
+                                                            const boxTax = boxTaxes[bi] || 0;
+                                                            const boxSub = (parseFloat(b.base) || 0) + (parseFloat(b.fuel) || 0) + boxTax;
                                                             return '<tr>' +
                                                                 '<td>#' + b.box + '</td>' +
                                                                 '<td>' + b.weight.toFixed(2) + '</td>' +
                                                                 '<td>' + b.base.toFixed(2) + '</td>' +
                                                                 '<td>' + b.fuel.toFixed(2) + '</td>' +
-                                                                '<td>' + (parseFloat(b.surcharge) || 0).toFixed(2) + '</td>' +
-                                                                '<td><strong>' + b.total.toFixed(2) + '</strong></td>' +
+                                                                '<td>' + boxTax.toFixed(2) + '</td>' +
+                                                                '<td><strong>' + boxSub.toFixed(2) + '</strong></td>' +
                                                             '</tr>';
                                                         }).join('')}
                                                     </tbody>
@@ -9492,19 +9491,15 @@
                                                             <th></th>
                                                             <th>${basePrice.toFixed(2)}</th>
                                                             <th>${computedFuel.toFixed(2)}</th>
-                                                            <th>${surchargeTotal.toFixed(2)}</th>
-                                                            <th>${totalPrice.toFixed(2)}</th>
-                                                        </tr>
-                                                        <tr>
-                                                            <th colspan="3" class="text-end">GST (${gstPct.toFixed(2)}%)</th>
-                                                            <th colspan="3" class="text-start">₹ ${computedGst.toFixed(2)}</th>
+                                                            <th>${combinedBoxTax.toFixed(2)}</th>
+                                                            <th>${combinedSubTotal.toFixed(2)}</th>
                                                         </tr>
                                                     </tfoot>
                                                 </table>
                                             </div>
                                         </div>
                                         ` : ''}
-                                        <div class="breakdown-grid">
+                                        <div class="breakdown-grid" style="${hasItemSurcharges ? '' : 'grid-template-columns: 1fr;'}">
                                             <div class="breakdown-column">
                                                 <div class="breakdown-title">Charges</div>
                                                 <div class="breakdown-row">
@@ -9516,28 +9511,22 @@
                                                     <span class="breakdown-value">₹ ${totalFuelPrice.toFixed(2)}</span>
                                                 </div>
                                                 <div class="breakdown-row">
-                                                    <span class="breakdown-label">Fuel Percentage</span>
-                                                    <span class="breakdown-value">${fuelPct.toFixed(2)}%</span>
+                                                    <span class="breakdown-label">Tax Amount</span>
+                                                    <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
+                                                </div>
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Total Surcharge (incl. GST)</span>
+                                                    <span class="breakdown-value">₹ ${combinedSurcharge.toFixed(2)}</span>
                                                 </div>
                                             </div>
-                                            <div class="breakdown-column">
-                                                <div class="breakdown-title">Tax & Surcharges</div>
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">Total Surcharge</span>
-                                                    <span class="breakdown-value">₹ ${totalSurcharge.toFixed(2)}</span>
-                                                </div>
-                                                
-                                                ${(r.surcharges && r.surcharges.length > 0) ? r.surcharges.map(function(s) {
+                                            ${hasItemSurcharges ? '<div class="breakdown-column">' +
+                                                '<div class="breakdown-title">Tax & Surcharges</div>' +
+                                                r.surcharges.map(function(s) {
                                                     return '<div class="breakdown-row">' +
                                                         '<span class="breakdown-label">' + s.name + '</span>' +
                                                         '<span class="breakdown-value">₹ ' + (parseFloat(s.price) || 0).toFixed(2) + '</span>' +
                                                     '</div>';
-                                                }).join('') : ''}
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">GST Amount</span>
-                                                    <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
-                                                </div>
-                                            </div>
+                                                }).join('') + '</div>' : ''}
                                         </div>
                                         <div class="total-breakdown">
                                             <div class="total-row">
@@ -11035,11 +11024,23 @@
                     rateData = JSON.parse(selectedRateRadio.dataset.rate);
                 } catch(e) {}
             }
-            document.getElementById('preview_base_price').textContent = 'INR ' + parseFloat(rateData.base).toFixed(2);
-            document.getElementById('preview_fuel_charge').textContent = 'INR ' + parseFloat(rateData.fuel).toFixed(2);
-            document.getElementById('preview_gst_amount').textContent = 'INR ' + parseFloat(rateData.gst).toFixed(2);
-            document.getElementById('preview_surcharge_amount').textContent = 'INR ' + parseFloat(rateData.surcharge || 0).toFixed(2);
-            document.getElementById('preview_rate_total').textContent = 'INR ' + parseFloat(rateData.total).toFixed(2);
+            const setPreviewText = function(id, text) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.textContent = text;
+                }
+            };
+            setPreviewText('preview_base_price', 'INR ' + parseFloat(rateData.base).toFixed(2));
+            setPreviewText('preview_fuel_charge', 'INR ' + parseFloat(rateData.fuel).toFixed(2));
+            setPreviewText('preview_gst_amount', 'INR ' + parseFloat(rateData.gst).toFixed(2));
+            setPreviewText('preview_surcharge_amount', 'INR ' + parseFloat(rateData.surcharge || 0).toFixed(2));
+            const previewDisputeAmt = parseFloat(rateData.dispute || 0);
+            const previewDisputeRow = document.getElementById('preview_dispute_row');
+            if (previewDisputeRow) {
+                previewDisputeRow.style.display = previewDisputeAmt > 0 ? '' : 'none';
+            }
+            setPreviewText('preview_dispute_amount', 'INR ' + previewDisputeAmt.toFixed(2));
+            setPreviewText('preview_rate_total', 'INR ' + parseFloat(rateData.total).toFixed(2));
 
             // Show the modal
             const previewModal = new bootstrap.Modal(document.getElementById('previewOrderModal'));

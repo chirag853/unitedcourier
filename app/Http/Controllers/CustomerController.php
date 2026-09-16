@@ -32,6 +32,7 @@ use App\Models\Zone;
 use App\Services\AdomantraApiClient;
 use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
+use App\Services\ShipmentChargeService;
 use App\Support\KycVerificationState;
 use App\Support\SystemLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -3293,6 +3294,24 @@ class CustomerController extends Controller
                     $hasGst = (bool) ($customerCsbForm?->is_gst);
                     $hasLut = (bool) ($customerCsbForm?->is_lut);
 
+                    // Fallback: own profile me GST/LUT dono empty ho to selected
+                    // saved customer ke flags dekho — is_gst / is_lut jo bhi 1
+                    // hoga wahi jayega.
+                    $useSavedFallback = false;
+                    $savedGstNumberFb = null;
+                    if (! $hasGst && ! $hasLut && $selectedExporterCustomer) {
+                        $savedGstNumberFb = ($selectedExporterCustomer->kyc_type === 'GST (Normal)' && ! empty($selectedExporterCustomer->kyc_number))
+                            ? $selectedExporterCustomer->kyc_number
+                            : ($selectedExporterCustomer->gst_certificate_number ?: null);
+                        $fbGst = (bool) ($selectedExporterCustomer->is_gst || ! empty($savedGstNumberFb));
+                        $fbLut = (bool) $selectedExporterCustomer->is_lut;
+                        if ($fbGst || $fbLut) {
+                            $hasGst = $fbGst;
+                            $hasLut = $fbLut;
+                            $useSavedFallback = true;
+                        }
+                    }
+
                     if (! $hasGst && ! $hasLut) {
                         throw ValidationException::withMessages([
                             'csb_tax_type' => 'GST or LUT information is not available in your CSB profile.',
@@ -3312,15 +3331,27 @@ class CustomerController extends Controller
                     }
                     $validatedData['csb_tax_type'] = $selectedTaxType;
                     $validatedData['bond_ut_igst'] = $selectedTaxType === 'lut' ? 'Bond UT' : 'IGST';
-                    $validatedData['lut_number'] = $selectedTaxType === 'lut'
-                        ? $customerCsbForm->lut_number
-                        : null;
-                    $validatedData['gst_number'] = $selectedTaxType === 'gst'
-                        ? ($customerCsbForm->gst_certificate_number ?: $customerCsbForm->billing_gst)
-                        : null;
-                    $validatedData['iec_code'] = $customerCsbForm->iec_number;
-                    $validatedData['ad_code'] = $customerCsbForm->ad_code;
-                    $validatedData['bank_account_number'] = $customerCsbForm->bank_account_number;
+                    if ($useSavedFallback) {
+                        $validatedData['lut_number'] = $selectedTaxType === 'lut'
+                            ? $selectedExporterCustomer->lut_number
+                            : null;
+                        $validatedData['gst_number'] = $selectedTaxType === 'gst'
+                            ? $savedGstNumberFb
+                            : null;
+                        $validatedData['iec_code'] = $selectedExporterCustomer->iec_number;
+                        $validatedData['ad_code'] = $selectedExporterCustomer->ad_code;
+                        $validatedData['bank_account_number'] = $selectedExporterCustomer->bank_account_number;
+                    } else {
+                        $validatedData['lut_number'] = $selectedTaxType === 'lut'
+                            ? $customerCsbForm->lut_number
+                            : null;
+                        $validatedData['gst_number'] = $selectedTaxType === 'gst'
+                            ? ($customerCsbForm->gst_certificate_number ?: $customerCsbForm->billing_gst)
+                            : null;
+                        $validatedData['iec_code'] = $customerCsbForm->iec_number;
+                        $validatedData['ad_code'] = $customerCsbForm->ad_code;
+                        $validatedData['bank_account_number'] = $customerCsbForm->bank_account_number;
+                    }
                 }
             }
 
@@ -3616,6 +3647,7 @@ class CustomerController extends Controller
             $fuelPrice = 0.0;
             $surchargeTotal = 0.0;
             $gstAmt = 0.0;
+            $disputeTotalWt = 0.0;
             $surchargeList = [];
 
             $parseSurchargeIds = function ($value): array {
@@ -3650,6 +3682,7 @@ class CustomerController extends Controller
                     (float) ($packageData['volumetric_weight'] ?? 0),
                     (float) ($packageData['chargeable_weight'] ?? 0)
                 );
+                $disputeTotalWt += $chargeableWeight;
                 $boxRate = $findBoxRate((int) $customer->id, $chargeableWeight)
                     ?: $findBoxRate(0, $chargeableWeight)
                     ?: $courierRate;
@@ -3659,9 +3692,12 @@ class CustomerController extends Controller
                 }
 
                 $boxBase = (float) $boxRate->price;
-                $boxFuel = (float) $boxRate->fuel_charge > 0
-                    ? (float) $boxRate->fuel_charge
-                    : ($boxBase * (float) $boxRate->fuel_percentage / 100);
+                // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+                $boxFuelFixed = (float) $boxRate->fuel_charge;
+                $boxFuelPct = (float) $boxRate->fuel_percentage;
+                $boxFuel = $boxFuelFixed > 0
+                    ? $boxFuelFixed + ($boxFuelFixed * $boxFuelPct / 100)
+                    : ($boxBase * $boxFuelPct / 100);
 
                 // Each box carries its own surcharges from its own matched rate.
                 $boxSurchargeIds = $parseSurchargeIds($boxRate->surcharge_id);
@@ -3695,6 +3731,45 @@ class CustomerController extends Controller
             $fuelPrice = round($fuelPrice, 2);
             $totalPrice = round($basePrice + $fuelPrice + $gstAmt + $surchargeTotal, 2);
 
+            // ---- CSB-V dispute charge (dispute_charges, place_of_apply = Shipment creation) ----
+            // disputeCalculation: chargeType -> wt slab + customer type -> destination -> values.
+            $disputeCategory = strtolower((string) ($customer->businessCategory?->category_name ?? ''));
+            if (str_contains($disputeCategory, 'cargo')) {
+                $disputeCustomerType = 'cargo';
+            } elseif (str_contains($disputeCategory, 'courier') || str_contains($disputeCategory, 'aggregator')) {
+                $disputeCustomerType = 'courier';
+            } elseif (str_contains($disputeCategory, 'ecommerce') || str_contains($disputeCategory, 'e-commerce') || str_contains($disputeCategory, 'e commerce')) {
+                $disputeCustomerType = 'ecommerce';
+            } else {
+                $disputeCustomerType = $disputeCategory;
+            }
+            $disputeResult = ShipmentChargeService::disputeCalculation(
+                'CSB-V Sucharges',
+                $disputeTotalWt,
+                '',
+                $this->resolveDestinationCountry($validatedData['delivery_destination'] ?? ''),
+                $disputeCustomerType,
+                'flat/awb',
+                ''
+            );
+            $disputeChargeTotal = 0.0;
+            if (! empty($disputeResult['matched'])) {
+                // values me apna 18% GST included hai, isliye seedha total jodo.
+                $disputeChargeTotal = round((float) $disputeResult['total'], 2);
+                $totalPrice = round($totalPrice + $disputeChargeTotal, 2);
+            }
+            \Log::info('CSB-V dispute charge', [
+                'awb' => $awbNumber,
+                'wt' => $disputeTotalWt,
+                'customer_type' => $disputeCustomerType,
+                'matched' => $disputeResult['matched'] ?? false,
+                'slab' => $disputeResult['slab'] ?? null,
+                'amount' => $disputeResult['amount'] ?? 0,
+                'gst' => $disputeResult['gst_amount'] ?? 0,
+                'total' => $disputeChargeTotal,
+                'reason' => $disputeResult['reason'] ?? null,
+            ]);
+
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
                 'awb_number' => $awbNumber,
@@ -3719,11 +3794,11 @@ class CustomerController extends Controller
                 'fuel_price' => $fuelPrice,
                 'gst_percentage' => $gstPct,
                 'gst_amount' => $gstAmt,
-                'surcharge' => ! empty($surchargeData) ? $surchargeData : null,
+                'surcharge' => (! empty($disputeResult['matched']) && ! empty($disputeResult['row_id'])) ? (int) $disputeResult['row_id'] : null,
                 'surcharge_total' => $surchargeTotal,
                 'total_base_price' => $basePrice,
                 'total_fuel_price' => $fuelPrice,
-                'total_surcharge' => $surchargeTotal,
+                'total_surcharge' => round($surchargeTotal + $disputeChargeTotal, 2),
                 'total_price' => $totalPrice,
             ]);
 
@@ -4233,18 +4308,17 @@ class CustomerController extends Controller
         if (is_array($value)) {
             return array_values(array_filter(array_map('intval', $value)));
         }
+
         if (is_string($value)) {
             $value = trim($value);
             if ($value === '' || $value === 'null' || $value === '[]') {
                 return [];
             }
-            // JSON array string like "[1,2]" (DB stores it as a JSON string).
             $decoded = json_decode($value, true);
             if (is_array($decoded)) {
                 return array_values(array_filter(array_map('intval', $decoded)));
             }
 
-            // Plain comma-separated string like "1,2".
             return array_values(array_filter(array_map('intval', explode(',', $value))));
         }
 
@@ -4288,6 +4362,37 @@ class CustomerController extends Controller
         // The frontend normally sends the destination name, but API/bulk
         // callers may send the numeric destinations.id instead.
         $destinationCountry = $this->resolveDestinationCountry($deliveryDestination);
+
+        // ---- Preview: CSB-V dispute charge (shipment creation wala same calc) ----
+        // Weight = entered total weight, customer type = business category se.
+        $previewCategory = strtolower((string) ($customer->businessCategory?->category_name ?? ''));
+        if (str_contains($previewCategory, 'cargo')) {
+            $previewCustomerType = 'cargo';
+        } elseif (str_contains($previewCategory, 'courier') || str_contains($previewCategory, 'aggregator')) {
+            $previewCustomerType = 'courier';
+        } elseif (str_contains($previewCategory, 'ecommerce') || str_contains($previewCategory, 'e-commerce') || str_contains($previewCategory, 'e commerce')) {
+            $previewCustomerType = 'ecommerce';
+        } else {
+            $previewCustomerType = $previewCategory;
+        }
+        $disputePreview = ShipmentChargeService::disputeCalculation(
+            'CSB-V Sucharges',
+            $totalWeight,
+            '',
+            $destinationCountry,
+            $previewCustomerType,
+            'flat/awb',
+            ''
+        );
+        \Log::info('Preview dispute calc', [
+            'customer_id' => $customer->id ?? null,
+            'category' => $previewCategory,
+            'mapped_type' => $previewCustomerType,
+            'wt' => $totalWeight,
+            'dest' => $destinationCountry,
+            'matched' => $disputePreview['matched'] ?? false,
+            'reason' => $disputePreview['reason'] ?? null,
+        ]);
         $destination = null;
         if (ctype_digit(trim((string) $deliveryDestination))) {
             $destination = Destination::find((int) $deliveryDestination);
@@ -4450,9 +4555,12 @@ class CustomerController extends Controller
                         // Calculate per-box amounts. Base, fuel and surcharge are
                         // box-specific; GST is applied once on the combined total.
                         $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0
-                            ? floatval($boxRate->fuel_charge)
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+                        // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+                        $fuelFixed = floatval($boxRate->fuel_charge);
+                        $fuelPctRate = floatval($boxRate->fuel_percentage);
+                        $fuel = $fuelFixed > 0
+                            ? $fuelFixed + ($fuelFixed * $fuelPctRate / 100)
+                            : ($base * $fuelPctRate / 100);
 
                         // Each box carries its own surcharges from its own matched rate.
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
@@ -4589,9 +4697,12 @@ class CustomerController extends Controller
                         // Calculate per-box amounts. Base, fuel and surcharge are
                         // box-specific; GST is applied once on the combined total.
                         $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0
-                            ? floatval($boxRate->fuel_charge)
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+                        // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+                        $fuelFixed = floatval($boxRate->fuel_charge);
+                        $fuelPctRate = floatval($boxRate->fuel_percentage);
+                        $fuel = $fuelFixed > 0
+                            ? $fuelFixed + ($fuelFixed * $fuelPctRate / 100)
+                            : ($base * $fuelPctRate / 100);
 
                         // Each box carries its own surcharges from its own matched rate.
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
@@ -4728,9 +4839,12 @@ class CustomerController extends Controller
                         // Calculate per-box amounts. Base, fuel and surcharge are
                         // box-specific; GST is applied once on the combined total.
                         $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0
-                            ? floatval($boxRate->fuel_charge)
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+                        // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+                        $fuelFixed = floatval($boxRate->fuel_charge);
+                        $fuelPctRate = floatval($boxRate->fuel_percentage);
+                        $fuel = $fuelFixed > 0
+                            ? $fuelFixed + ($fuelFixed * $fuelPctRate / 100)
+                            : ($base * $fuelPctRate / 100);
 
                         // Each box carries its own surcharges from its own matched rate.
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
@@ -4871,9 +4985,12 @@ class CustomerController extends Controller
                         // Calculate per-box amounts. Base, fuel and surcharge are
                         // box-specific; GST is applied once on the combined total.
                         $base = floatval($boxRate->price);
-                        $fuel = floatval($boxRate->fuel_charge) > 0
-                            ? floatval($boxRate->fuel_charge)
-                            : ($base * floatval($boxRate->fuel_percentage) / 100);
+                        // Fuel rule: fixed + uspe % (100 + 5% = 105); fixed 0 ho to base pe %.
+                        $fuelFixed = floatval($boxRate->fuel_charge);
+                        $fuelPctRate = floatval($boxRate->fuel_percentage);
+                        $fuel = $fuelFixed > 0
+                            ? $fuelFixed + ($fuelFixed * $fuelPctRate / 100)
+                            : ($base * $fuelPctRate / 100);
 
                         // Each box carries its own surcharges from its own matched rate.
                         $boxSurchargeIds = $this->normalizeSurchargeIds($boxRate->surcharge_id ?? null);
@@ -5011,6 +5128,32 @@ class CustomerController extends Controller
             }
             $rate['surcharges'] = $surcharges;
             $rate['surcharge_total'] = round($surchargeTotal, 2);
+
+            return $rate;
+        }, $allRates);
+
+        // Attach CSB-V dispute charge to every rate card so the preview
+        // order shows the same total the shipment creation will charge.
+        // values me apna 18% GST included hai — grand_total me seedha judta hai.
+        $disputeMatched = ! empty($disputePreview['matched']);
+        $disputeAmount = $disputeMatched ? round((float) $disputePreview['amount'], 2) : 0.0;
+        $disputeGst = $disputeMatched ? round((float) $disputePreview['gst_amount'], 2) : 0.0;
+        $disputeTotal = $disputeMatched ? round((float) $disputePreview['total'], 2) : 0.0;
+        $allRates = array_map(function ($rate) use ($disputeMatched, $disputePreview, $disputeAmount, $disputeGst, $disputeTotal) {
+            $rate['dispute_matched'] = $disputeMatched;
+            $rate['dispute_label'] = $disputeMatched ? 'CSB-V Sucharges' : null;
+            $rate['dispute_slab'] = $disputeMatched ? ($disputePreview['slab'] ?? null) : null;
+            $rate['dispute_charge'] = $disputeAmount;
+            $rate['dispute_gst'] = $disputeGst;
+            $rate['dispute_total'] = $disputeTotal;
+            $rate['grand_total'] = round(
+                (float) ($rate['price'] ?? 0)
+                + (float) ($rate['fuel_charge'] ?? 0)
+                + (float) ($rate['gst_amount'] ?? 0)
+                + (float) ($rate['surcharge_total'] ?? 0)
+                + $disputeTotal,
+                2
+            );
 
             return $rate;
         }, $allRates);
@@ -5237,7 +5380,7 @@ class CustomerController extends Controller
     //                     }
 
     //                     // Compute per-box amounts using the SAME formula as the frontend:
-    //                     //   fuel = fuel_charge > 0 ? fuel_charge : (base * fuel_pct / 100)
+    //                     //   fuel = fuel_charge > 0 ? fuel_charge + (fuel_charge * fuel_pct / 100) : (base * fuel_pct / 100)
     //                     //   gst  = gst_amount  > 0 ? gst_amount  : ((base + fuel) * gst_pct / 100)
     //                     $boxBase = floatval($boxMatched->price);
     //                     $boxFuelPct = floatval($boxMatched->fuel_percentage);

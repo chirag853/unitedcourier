@@ -271,7 +271,7 @@ class BulkUploadController extends Controller
                         'fuel_price' => ($rateDetails['fuel_charge'] ?? 0) > 0 ? $rateDetails['fuel_charge'] : null,
                         'gst_percentage' => ($rateDetails['gst_percentage'] ?? 0) > 0 ? $rateDetails['gst_percentage'] : null,
                         'gst_amount' => ($rateDetails['gst_amount'] ?? 0) > 0 ? $rateDetails['gst_amount'] : null,
-                        'surcharge' => !empty($rateDetails['surcharge']) ? $rateDetails['surcharge'] : null,
+                        'surcharge' => null, // dispute row id (customer-flow me set hota hai, bulk me koi dispute calc nahi)
                         'surcharge_total' => ($rateDetails['surcharge_total'] ?? 0) > 0 ? $rateDetails['surcharge_total'] : null,
                         'total_base_price' => ($rateDetails['price'] ?? 0) > 0 ? $rateDetails['price'] : null,
                         'total_fuel_price' => ($rateDetails['fuel_charge'] ?? 0) > 0 ? $rateDetails['fuel_charge'] : null,

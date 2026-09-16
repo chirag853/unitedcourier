@@ -769,7 +769,7 @@ class PrepaidController extends Controller
                 'fuel_price' => $fuelPrice,
                 'gst_percentage' => $gstPct,
                 'gst_amount' => $gstAmt,
-                'surcharge' => ! empty($surchargeData) ? $surchargeData : null,
+                'surcharge' => null, // dispute row id (customer-flow me set hota hai, yahan koi dispute calc nahi)
                 'surcharge_total' => $surchargeTotal,
                 'total_base_price' => $basePrice,
                 'total_fuel_price' => $fuelPrice,
