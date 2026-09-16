@@ -809,7 +809,7 @@ class AdminController extends Controller
                 ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
                 ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
                 ->leftJoin('admin_user', 'shipment_invoice.assigned_delivery_person', '=', 'admin_user.id')
-                ->where('shipper_info.status', $status)
+                ->whereIn('shipper_info.status', (array) $status)
                 ->select(
                     'shipment_invoice.id',
                     'shipment_invoice.invoice_number',
@@ -824,6 +824,7 @@ class AdminController extends Controller
                     'shipment_invoice.created_at',
                     'shipment_invoice.updated_at',
                     'shipper_info.id as shipper_id',
+                    'shipper_info.status as shipper_status',
                     'shipper_info.company_name as shipper_company',
                     'shipper_info.contact_person as shipper_contact',
                     'shipper_info.city as shipper_city',
@@ -847,6 +848,8 @@ class AdminController extends Controller
                     'consignee_info.city as consignee_city',
                     'consignee_info.state as consignee_state',
                     'consignee_info.zip_code as consignee_zip',
+                    'consignee_info.email as consignee_email',
+                    'consignee_info.phone_number as consignee_phone',
                     'consignee_info.delivery_destination as consignee_destination',
                     'admin_user.name as delivery_person_name'
                 )
@@ -902,7 +905,20 @@ class AdminController extends Controller
 
         $readyForPickupShipments = $baseQuery('ready_for_pickup');
         $assignedForPickupShipments = $baseQuery('assigned_for_pickup');
-        $printLabelShipments = $baseQuery('dispatched');
+        $printLabelShipments = $baseQuery(['dispatched', 'received']);
+
+        // Package Details column (draft-style) ke liye packages, shipper_id se grouped.
+        // Sirf Assigned + Print Label tabs ke shippers load hote hain.
+        $packagesByShipper = collect();
+        $pkgShipperIds = $assignedForPickupShipments->pluck('shipper_id')
+            ->merge($printLabelShipments->pluck('shipper_id'))
+            ->filter()->unique()->values()->all();
+        if (! empty($pkgShipperIds)) {
+            $packagesByShipper = \App\Models\PackageDimension::whereIn('shipper_id', $pkgShipperIds)
+                ->orderBy('id')
+                ->get()
+                ->groupBy('shipper_id');
+        }
         $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
 
         // Group ready-for-pickup shipments by manifest number so the tab shows
@@ -960,7 +976,7 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons'));
+        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons', 'packagesByShipper'));
     }
 
     /**
@@ -1132,7 +1148,7 @@ class AdminController extends Controller
     /**
      * Receive a shipment - mark as received in tracking table.
      * When "Yes" is selected, creates a tracking record with status "received"
-     * and updates shipper status to "dispatched" (moves shipment to Print Label tab).
+     * and updates shipper status to "received" (moves shipment to Print Label tab).
      * When "No" is selected, creates a tracking record with status "on_hold"
      * and updates shipper status to "on_hold".
      */
@@ -1163,7 +1179,7 @@ class AdminController extends Controller
             $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
 
             if ($request->received === 'yes') {
-                // Mark as received in tracking, but set shipper status to 'dispatched'
+                // Mark as received in tracking and set shipper status to 'received'
                 // so the shipment moves to the Print Label tab
                 \App\Models\Tracking::create([
                     'awb_number'  => $shipper->awb_number,
@@ -1173,7 +1189,7 @@ class AdminController extends Controller
                     'shipping_id' => $createShipment ? $createShipment->id : null,
                     'uwc_id'      => $shipper->awb_number,
                 ]);
-                $shipper->status = 'dispatched';
+                $shipper->status = 'received';
                 $shipper->save();
 
                 return response()->json([
@@ -1253,6 +1269,60 @@ class AdminController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Shipment marked as Ready to Dispatch successfully. It has been moved to the Ready to Dispatch tab.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Dispute charges dropdown list for the admin/companies Dispute popup.
+     * shipment_id mile to us shipment ke destination + shipping method ke
+     * hisaab se filter karke bhejta hai (USA-only rows CA shipment me nahi
+     * dikhengi). Bina shipment_id ke saari 'weighing at first scan' rows.
+     */
+    public function disputeChargesList(Request $request)
+    {
+        try {
+            $charges = \App\Models\DisputeCharge::where('place_of_apply', 'weighing at first scan')
+                ->orderBy('id')
+                ->get([
+                    'id',
+                    'additional_charges',
+                    'conditions',
+                    'destination',
+                    'service_id',
+                    'calculation_type',
+                    'values',
+                    'gst_percentage',
+                    'place_of_apply',
+                ]);
+
+            if ($request->filled('shipment_id')) {
+                $invoice = \App\Models\ShipmentInvoice::find($request->shipment_id);
+                $shipper = $invoice ? \App\Models\ShipperInfo::find($invoice->shipper_id) : null;
+                if ($shipper) {
+                    $consignee = \App\Models\ConsigneeInfo::where('shipper_id', $shipper->id)->first();
+                    $country = app(\App\Http\Controllers\CustomerController::class)
+                        ->resolveDestinationCountry($consignee->delivery_destination ?? '');
+                    $destIn = strtoupper(trim((string) ($country ?? '')));
+                    if ($destIn === '') {
+                        $destIn = 'ALL';
+                    }
+                    $service = (string) ($shipper->shipping_method ?? '');
+                    $charges = $charges->filter(function ($c) use ($destIn, $service) {
+                        return \App\Services\ShipmentChargeService::matchDestination($c->destination, $destIn)
+                            && \App\Services\ShipmentChargeService::matchService($c->service_id, $service);
+                    })->values();
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'charges' => $charges,
             ]);
         } catch (\Exception $e) {
             return response()->json([

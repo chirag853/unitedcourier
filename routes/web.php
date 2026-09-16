@@ -110,6 +110,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/receive-shipment', [AdminController::class, 'receiveShipment'])->name('admin.receive-shipment');
     Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
     Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');
+    Route::get('/dispute-charges-list', [AdminController::class, 'disputeChargesList'])->name('admin.dispute-charges-list');
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');

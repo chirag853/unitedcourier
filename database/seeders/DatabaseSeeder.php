@@ -39,6 +39,7 @@ class DatabaseSeeder extends Seeder
             PartnershipPageSeeder::class,
             DocumentDownloadPageSeeder::class,
             SurChargeSeeder::class,
+            DisputeSurchargeChargesSeeder::class,
         ]);
     }
 }
