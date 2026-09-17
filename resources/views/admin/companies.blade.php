@@ -1525,7 +1525,7 @@
                                                         <i class="ti ti-truck me-1"></i> Ready to Dispatch
                                                     </button>
                                                     <div class="mt-1">
-                                                        <button class="btn-dispute" onclick="openDisputeModal({{ $shipment->id }}, '{{ $shipment->awb_number ?? '' }}')">
+                                                        <button class="btn-dispute" onclick="openDisputeModal({{ $shipment->id }}, '{{ $shipment->awb_number ?? '' }}', 'weighing at first scan')">
                                                             <i class="ti ti-alert-triangle me-1"></i> Dispute
                                                         </button>
                                                     </div>
@@ -1538,7 +1538,7 @@
                             </div>
                         </div>
 
-                        <!-- ===== TAB 4: Ready to Dispatch ===== -->
+                        <!-- ===== TAB 4: Ready to Dispatch (Print Label jaisa table structure) ===== -->
                         <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
@@ -1547,86 +1547,94 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>HAWB Number</th>
-                                                <th>From / To</th>
-                                                <th>Customer Name</th>
-                                                <th>Shipper Company</th>
-                                                <th>Consignee</th>
-                                                <th>Invoice No.</th>
-                                                <th>Amount</th>
-                                                <th>Pickup Type</th>
+                                                <th>Order Date</th>
+                                                <th>Receiver Details</th>
+                                                <th>Package Details</th>
                                                 <th>Status</th>
-                                                <th>Created</th>
+                                                <th>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             @foreach($readyToDispatchShipments as $index => $shipment)
+                                            @php
+                                                $rtdPkgs = $packagesByShipper->get($shipment->shipper_id, collect());
+                                                $rtdBillable = 0.0; $rtdDead = 0.0; $rtdVol = 0.0;
+                                                foreach ($rtdPkgs as $rtdPkg) {
+                                                    if ($rtdPkg->chargeable_weight !== null && $rtdPkg->chargeable_weight !== '') { $rtdBillable += (float) $rtdPkg->chargeable_weight; }
+                                                    if ($rtdPkg->actual_weight_kg !== null && $rtdPkg->actual_weight_kg !== '') { $rtdDead += (float) $rtdPkg->actual_weight_kg; }
+                                                    if ($rtdPkg->volumetric_weight !== null && $rtdPkg->volumetric_weight !== '') { $rtdVol += (float) $rtdPkg->volumetric_weight; }
+                                                }
+                                            @endphp
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
-                                                </td>
-                                                <td class="from-to-cell" style="font-size:12px;white-space:normal;">
-                                                    @php
-                                                        $senderName = $shipment->shipper_company ?: ($shipment->shipper_contact ?: '-');
-                                                        $receiverName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-');
-                                                    @endphp
-                                                    <div class="align-items-center w-100" style="display:grid;grid-template-columns:minmax(0, 1fr) 90px minmax(0, 1fr);column-gap:12px;white-space:normal;">
-                                                        <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                            <div>{{ $shipment->shipper_state ?: '-' }}, {{ $shipment->shipper_city ?: '-' }}, India</div>
-                                                            <div class="text-muted">{{ $senderName }} - {{ $shipment->shipper_pincode ?: '-' }}</div>
+                                                    <div class="hawb-sub-info">
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Destination:</span>
+                                                            <span class="hawb-sub-value">{{ $shipment->consignee_destination ?: '-' }}{{ $shipment->consignee_zip ? ' · '.$shipment->consignee_zip : '' }}</span>
                                                         </div>
-                                                        <div class="d-flex align-items-center justify-content-center position-relative" style="width:90px;height:30px;">
-                                                            <span class="shipment-route-line" aria-hidden="true"></span>
-                                                            <span class="shipment-route-plane">
-                                                                <i class="ti ti-plane" aria-hidden="true" style="font-size:22px;color:#0d6efd;"></i>
-                                                            </span>
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Reference number:</span>
+                                                            <span class="hawb-sub-value">{{ $shipment->reference_number ?: '-' }}</span>
                                                         </div>
-                                                        <div class="text-end" style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                            <div>{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
-                                                            <div class="text-muted">{{ $receiverName }} - {{ $shipment->consignee_zip ?: '-' }}</div>
+                                                        <div class="hawb-sub-row">
+                                                            <span class="hawb-sub-label">Invoice number:</span>
+                                                            <span class="hawb-sub-value">{{ $shipment->invoice_number ?: '-' }}</span>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <span class="customer-name-link" title="Click to view details">
-                                                        {{ $shipment->first_name }} {{ $shipment->last_name }}
-                                                    </span>
+                                                    <div>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d M Y') }}</div>
+                                                    <div class="text-muted">{{ \Carbon\Carbon::parse($shipment->created_at)->format('h:i A') }}</div>
                                                 </td>
-                                                <td>{{ $shipment->shipper_company ?? 'N/A' }}</td>
-                                                <td class="consignee-cell" style="font-size:12px;white-space:normal;">
-                                                    @php
-                                                        $consigneeName = $shipment->consignee_name ?: ($shipment->consignee_contact ?: 'N/A');
-                                                    @endphp
-                                                    <div style="min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">
-                                                        <div style="font-weight:600;color:#0f172a;">{{ $consigneeName }}</div>
-                                                        @if($shipment->consignee_contact && $shipment->consignee_contact != $shipment->consignee_name)
-                                                            <div class="text-muted">{{ $shipment->consignee_contact }}</div>
+                                                <td>
+                                                    <div class="receiver-details-stack">
+                                                        <div class="receiver-name">{{ $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-') }}</div>
+                                                        @if($shipment->consignee_email)
+                                                            <div class="receiver-line">{{ $shipment->consignee_email }}</div>
                                                         @endif
-                                                        <div class="text-muted">{{ $shipment->consignee_city ?: '-' }}, {{ $shipment->consignee_state ?: '-' }}, {{ $shipment->consignee_destination ?: '-' }}</div>
-                                                        @if($shipment->consignee_zip)
-                                                            <div class="text-muted">{{ $shipment->consignee_zip }}</div>
+                                                        @if($shipment->consignee_phone)
+                                                            <div class="receiver-line">{{ $shipment->consignee_phone }}</div>
                                                         @endif
                                                     </div>
                                                 </td>
-                                                <td>{{ $shipment->invoice_number ?? 'N/A' }}</td>
                                                 <td>
-                                                    @if($shipment->shipper_total_price)
-                                                        {{ number_format($shipment->shipper_total_price, 2) }} {{ $shipment->invoice_currency ?? '' }}
+                                                    @if(count($rtdPkgs) > 0)
+                                                        <div class="package-details-card">
+                                                            @if(count($rtdPkgs) > 1)
+                                                                <div class="package-details-title">Total ({{ count($rtdPkgs) }} pkgs)</div>
+                                                            @endif
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Billable Wt.</span>
+                                                                <span class="package-details-value">{{ $rtdBillable > 0 ? number_format($rtdBillable, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Dead Wt.</span>
+                                                                <span class="package-details-value">{{ $rtdDead > 0 ? number_format($rtdDead, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                            <div class="package-details-row">
+                                                                <span class="package-details-label">Vol. Wt.</span>
+                                                                <span class="package-details-value">{{ $rtdVol > 0 ? number_format($rtdVol, 2).' kg' : '-' }}</span>
+                                                            </div>
+                                                        </div>
                                                     @else
-                                                        N/A
-                                                    @endif
-                                                </td>
-                                                <td>
-                                                    @if($shipment->delivery_type)
-                                                        <span class="badge bg-info">{{ $shipment->delivery_type }}</span>
-                                                    @else
-                                                        <span class="text-muted">N/A</span>
+                                                        <span class="text-muted">-</span>
                                                     @endif
                                                 </td>
                                                 <td>
                                                     <span class="status-ready-to-dispatch">Ready to Dispatch</span>
                                                 </td>
-                                                <td>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d-m-Y') }}</td>
+                                                <td class="table-actions">
+                                                    <button class="btn-print-label" onclick="printLabel({{ $shipment->id }})">
+                                                        <i class="ti ti-printer me-1"></i> Print
+                                                    </button>
+                                                    <div class="mt-1">
+                                                        <button class="btn-dispute" onclick="openDisputeModal({{ $shipment->id }}, '{{ $shipment->awb_number ?? '' }}', 'After Dispatched')">
+                                                            <i class="ti ti-alert-triangle me-1"></i> Dispute
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                             @endforeach
                                         </tbody>
@@ -2424,12 +2432,14 @@
         /**
          * Open the Dispute Charge modal and load the dropdown.
          * Dropdown me dispute_surcharge_charges wali saari rows aati hain
-         * jinka place_of_apply 'weighing at first scan' hai.
+         * jinka place_of_apply 'weighing at first scan' ya 'After Dispatched' hai.
          * @param {number} shipmentId
          * @param {string} awbNumber - AWB number for display
+         * @param {string} [place] - Agar diya ho (e.g. 'After Dispatched') toh sirf us stage ke rules load honge.
          */
         let disputeChargesCache = [];
         let disputeCurrentShipment = null;
+        let disputePlaceFilter = null;
         const escDispute = function (v) { return $('<div>').text(v ?? '-').html(); };
 
         function disputeSetDetail(html) {
@@ -2443,8 +2453,10 @@
                 '<span>' + escDispute(sub) + '</span></div>';
         }
 
-        function openDisputeModal(shipmentId, awbNumber) {
+        function openDisputeModal(shipmentId, awbNumber, place) {
             disputeCurrentShipment = shipmentId;
+            // Ready to Dispatch se khule toh sirf 'After Dispatched' rules dikhenge.
+            disputePlaceFilter = place || null;
             // Display AWB number
             $('#dispute_awb_display').text(awbNumber || '-');
 
@@ -2503,7 +2515,11 @@
             $.ajax({
                 url: '{{ route("admin.dispute-charges-list") }}',
                 type: 'GET',
-                data: { shipment_id: shipmentId },
+                data: (function () {
+                    const d = { shipment_id: shipmentId };
+                    if (disputePlaceFilter) { d.place_of_apply = disputePlaceFilter; }
+                    return d;
+                })(),
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
@@ -2557,9 +2573,10 @@
             const matches = disputeChargesCache.filter(function (c) { return (c.additional_charges || '') === selectedType; });
             let html = '';
             matches.forEach(function (c) {
+                const condTxt = (c.conditions || '').trim();
                 html += '<button type="button" class="dispute-cond-item" data-id="' + c.id + '">' +
                     '<span class="dispute-cond-radio"></span>' +
-                    '<span class="dispute-cond-text">' + escDispute(c.conditions || '-') +
+                    '<span class="dispute-cond-text">' + (condTxt ? escDispute(condTxt) : '') +
                         '<span class="dispute-cond-meta">' +
                             '<span>' + escDispute(c.destination || '-') + '</span>' +
                             '<span>' + escDispute(c.service_id || '-') + '</span>' +
@@ -2678,6 +2695,11 @@
                 extraRows = '';
             }
             const readyLabel = !boxesValid ? 'Need boxes' : (!customValid ? 'Need amount' : 'Ready');
+            // Conditions null ho toh Condition row dikhao hi mat.
+            const condTxt = (found.conditions || '').trim();
+            const condRow = condTxt
+                ? '<div class="dispute-kv"><span class="k"><i class="ti ti-file-text"></i>Condition</span><span class="v">' + escDispute(condTxt) + '</span></div>'
+                : '';
 
             $detail.html(
                 '<div class="dispute-summary">' +
@@ -2688,7 +2710,7 @@
                         '<span class="s-badge">' + readyLabel + '</span>' +
                     '</div>' +
                     '<div class="dispute-summary-grid">' +
-                        '<div class="dispute-kv"><span class="k"><i class="ti ti-file-text"></i>Condition</span><span class="v">' + escDispute(found.conditions) + '</span></div>' +
+                        condRow +
                         '<div class="dispute-kv"><span class="k"><i class="ti ti-map-pin"></i>Destination</span><span class="v">' + escDispute(found.destination) + '</span></div>' +
                         '<div class="dispute-kv"><span class="k"><i class="ti ti-truck"></i>Service</span><span class="v">' + escDispute(found.service_id) + '</span></div>' +
                         '<div class="dispute-kv"><span class="k"><i class="ti ti-calculator"></i>Calculation</span><span class="v">' + escDispute(calcTxt) + '</span></div>' +
@@ -2841,7 +2863,7 @@
                                 Swal.fire({
                                     icon: 'success',
                                     title: 'Dispute charge applied!',
-                                    html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span><br><span class="badge bg-danger mt-2">Shipment marked as Disputed</span>',
+                                    html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span><br><span class="badge mt-2" style="background:#f59e0b;color:#fff;">Shipment marked as Ready to Dispatch</span>',
                                     showCancelButton: true,
                                     confirmButtonText: 'View Dispute Orders',
                                     cancelButtonText: 'Stay here',

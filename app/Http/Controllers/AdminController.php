@@ -907,12 +907,13 @@ class AdminController extends Controller
         $readyForPickupShipments = $baseQuery('ready_for_pickup');
         $assignedForPickupShipments = $baseQuery('assigned_for_pickup');
         $printLabelShipments = $baseQuery(['dispatched', 'received']);
+        $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
 
         // Package Details column (draft-style) ke liye packages, shipper_id se grouped.
-        // Sirf Assigned + Print Label tabs ke shippers load hote hain.
+        // Print Label + Ready to Dispatch tabs ke shippers load hote hain.
         $packagesByShipper = collect();
-        $pkgShipperIds = $assignedForPickupShipments->pluck('shipper_id')
-            ->merge($printLabelShipments->pluck('shipper_id'))
+        $pkgShipperIds = $printLabelShipments->pluck('shipper_id')
+            ->merge($readyToDispatchShipments->pluck('shipper_id'))
             ->filter()->unique()->values()->all();
         if (! empty($pkgShipperIds)) {
             $packagesByShipper = \App\Models\PackageDimension::whereIn('shipper_id', $pkgShipperIds)
@@ -920,7 +921,6 @@ class AdminController extends Controller
                 ->get()
                 ->groupBy('shipper_id');
         }
-        $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
 
         // Group ready-for-pickup shipments by manifest number so the tab shows
         // one row per manifest (same as the Manifested tab). Each child keeps
@@ -1333,12 +1333,18 @@ class AdminController extends Controller
      * Dispute charges dropdown list for the admin/companies Dispute popup.
      * shipment_id mile to us shipment ke destination + shipping method ke
      * hisaab se filter karke bhejta hai (USA-only rows CA shipment me nahi
-     * dikhengi). Bina shipment_id ke saari 'weighing at first scan' rows.
+     * dikhengi). place_of_apply mile (e.g. Ready to Dispatch se 'After
+     * Dispatched') to sirf us stage ke rules; warna dono stages ke rules.
      */
     public function disputeChargesList(Request $request)
     {
         try {
-            $charges = \App\Models\DisputeCharge::where('place_of_apply', 'weighing at first scan')
+            $places = ['weighing at first scan', 'After Dispatched'];
+            if ($request->filled('place_of_apply') && in_array($request->place_of_apply, $places, true)) {
+                $places = [$request->place_of_apply];
+            }
+            $charges = \App\Models\DisputeCharge::whereIn('place_of_apply', $places)
+                ->where('status', 1)
                 ->orderBy('id')
                 ->get([
                     'id',
@@ -1436,7 +1442,9 @@ class AdminController extends Controller
      * Apply Dispute Charge modal se charge save karo (companies page).
      * flat/box calculation me boxes mandatory hai; Weight dispute ya
      * Custom-valued rule me custom amount mandatory hai (rule rate ki
-     * jagah wahi charge hota hai). Total GST-inclusive server par compute hota hai.
+     * jagah wahi charge hota hai). Total GST-inclusive server par compute
+     * hota hai, customer ke wallet se deduct hota hai, aur shipment ka
+     * status 'ready_to_dispatch' ho jata hai.
      */
     public function applyDisputeCharge(Request $request)
     {
@@ -1487,55 +1495,108 @@ class AdminController extends Controller
             $gstAmt = $base !== null ? round($base * $gstPct / 100, 2) : 0;
             $total = $base !== null ? round($base + $gstAmt, 2) : null;
 
-            // Same shipment + same rule ka duplicate rokne ke liye update-or-create.
-            $dispute = ShipmentDispute::updateOrCreate(
-                [
-                    'shipment_invoice_id' => $invoice->id,
-                    'dispute_charge_id' => $charge->id,
-                ],
-                [
-                    'shipper_id' => $invoice->shipper_id,
-                    'awb_number' => $shipper->awb_number ?? null,
-                    'charge_type' => $charge->additional_charges,
-                    'conditions' => $charge->conditions,
-                    'destination' => $charge->destination,
-                    'service_id' => $charge->service_id,
-                    'calculation_type' => $charge->calculation_type,
-                    'values' => $charge->values,
-                    'rate' => $rate,
-                    'boxes' => $boxes,
-                    'base_amount' => $base,
-                    'gst_percentage' => $gstPct,
-                    'gst_amount' => $gstAmt,
-                    'total_incl_gst' => $total,
-                    'currency' => $currency,
-                    'applied_by' => Auth::guard('admin')->id(),
-                    'status' => 'applied',
-                ]
-            );
+            // Har apply par poora total wallet se katega (same rule dobara
+            // lagane par bhi full amount, farak nahi).
+            $deductAmount = $total !== null ? round((float) $total, 2) : 0.0;
 
-            // Shipment ka status 'disputed' karo (receive/ready-to-dispatch jaisa flow):
-            // tracking entry + shipper status update taaki shipment Disputed state me chala jaye.
-            if ($shipper) {
-                $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
-                if (! empty($shipper->awb_number)) {
-                    \App\Models\Tracking::create([
-                        'awb_number' => $shipper->awb_number,
-                        'status' => 'disputed',
-                        'title' => 'Shipment Disputed - ' . (string) $charge->additional_charges,
-                        'shipper_id' => $shipper->id,
-                        'shipping_id' => $createShipment ? $createShipment->id : null,
-                        'uwc_id' => $shipper->awb_number,
+            // Wallet deduction ki taiyari — farak customer ke wallet se katega.
+            $customerId = $shipper ? (int) $shipper->customer_id : 0;
+            $wallet = $customerId > 0 ? Wallet::where('customer_id', $customerId)->first() : null;
+            if ($deductAmount > 0) {
+                if (! $wallet) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer wallet not found. Please contact support.',
+                    ], 422);
+                }
+                if ((float) $wallet->balance < $deductAmount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient wallet balance to apply this dispute charge. Current balance is ₹'.number_format((float) $wallet->balance, 2).', required ₹'.number_format($deductAmount, 2).'.',
+                    ], 422);
+                }
+            }
+
+            $adminId = Auth::guard('admin')->id();
+            $newBalance = $wallet ? (float) $wallet->balance : 0;
+
+            DB::transaction(function () use ($invoice, $shipper, $charge, $rate, $boxes, $base, $gstPct, $gstAmt, $total, $currency, $adminId, $wallet, $deductAmount, $customerId, &$dispute, &$newBalance) {
+                // Same shipment + same rule ka duplicate rokne ke liye update-or-create.
+                $dispute = ShipmentDispute::updateOrCreate(
+                    [
+                        'shipment_invoice_id' => $invoice->id,
+                        'dispute_charge_id' => $charge->id,
+                    ],
+                    [
+                        'shipper_id' => $invoice->shipper_id,
+                        'awb_number' => $shipper->awb_number ?? null,
+                        'charge_type' => $charge->additional_charges,
+                        'conditions' => $charge->conditions,
+                        'destination' => $charge->destination,
+                        'service_id' => $charge->service_id,
+                        'calculation_type' => $charge->calculation_type,
+                        'values' => $charge->values,
+                        'rate' => $rate,
+                        'boxes' => $boxes,
+                        'base_amount' => $base,
+                        'gst_percentage' => $gstPct,
+                        'gst_amount' => $gstAmt,
+                        'total_incl_gst' => $total,
+                        'currency' => $currency,
+                        'applied_by' => $adminId,
+                        'status' => 'applied',
+                    ]
+                );
+
+                // Dispute amount customer ke wallet se deduct karo.
+                if ($wallet && $deductAmount > 0) {
+                    $wallet->decrement('balance', $deductAmount);
+                    $wallet->refresh();
+                    $newBalance = (float) $wallet->balance;
+
+                    WalletTransaction::create([
+                        'customer_id' => $customerId,
+                        'type' => 'debit',
+                        'reason' => 'dispute_charge',
+                        'user_id' => $adminId,
+                        'user_type' => 'admin',
+                        'amount' => $deductAmount,
+                        'balance_after' => $wallet->balance,
+                        'reference' => $shipper->awb_number ?? ('DISPUTE-'.$dispute->id),
+                        'description' => 'Dispute charge ('.$charge->additional_charges.') of '.$currency.' '.number_format($deductAmount, 2).' for shipment '.($shipper->awb_number ?? '#'.$shipper->id),
                     ]);
                 }
-                $shipper->status = 'disputed';
-                $shipper->save();
+
+                // Shipment ka status 'ready_to_dispatch' karo: tracking entry +
+                // shipper status update taaki shipment Ready to Dispatch state me chala jaye.
+                if ($shipper) {
+                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                    if (! empty($shipper->awb_number)) {
+                        \App\Models\Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'status' => 'ready_to_dispatch',
+                            'title' => 'Ready to Dispatch - Dispute Applied ('.(string) $charge->additional_charges.')',
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                        ]);
+                    }
+                    $shipper->status = 'ready_to_dispatch';
+                    $shipper->save();
+                }
+            });
+
+            $message = 'Dispute charge applied successfully. Shipment marked as Ready to Dispatch.';
+            if ($deductAmount > 0) {
+                $message .= ' '.$currency.' '.number_format($deductAmount, 2).' deducted from customer wallet.';
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Dispute charge applied successfully. Shipment marked as Disputed.',
+                'message' => $message,
                 'dispute' => $dispute,
+                'deducted' => $deductAmount,
+                'new_balance' => $newBalance,
             ]);
         } catch (ValidationException $e) {
             return response()->json([
