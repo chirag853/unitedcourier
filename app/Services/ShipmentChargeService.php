@@ -69,9 +69,20 @@ class ShipmentChargeService
                 return $res ?? $noMatch('oversize ke liye actual scan dims chahiye');
 
             case 'weight dispute':
-                // Actual wt > declared wt — scan weight chahiye. Amount custom (manual).
+                // Actual wt > declared wt — scan weight needed. Amount is custom (manual).
                 $res = self::evaluateWeightDispute($chargeType, $wt, $actual, $destIn, $service);
-                return $res ?? $noMatch('weight dispute ke liye actual scan weight chahiye');
+                return $res ?? $noMatch('weight dispute needs an actual scan weight');
+
+            case 'ddp sucharges':
+            case 'ddp surcharges':
+                // Tariff type DDP selected at creation (passed via $actual['incoterms']).
+                $res = self::evaluateDdp($chargeType, $destIn, $service, $actual);
+                return $res ?? $noMatch('DDP surcharge needs incoterms DDP');
+
+            case 'go green plus charges':
+                // DHL service, per-kg charge on ceil(chargeable weight).
+                $res = self::evaluateGoGreen($chargeType, $wt, $destIn, $service);
+                return $res ?? $noMatch('Go Green needs DHL service and weight');
 
             case 'weighing at first scan':
                 // Master case: TABLE KE SAARE charge types evaluate karo
@@ -816,6 +827,59 @@ class ShipmentChargeService
             [$amount, $gstPct] = self::resolveRowAmounts($row, 'actual_gt_declared', true);
 
             return self::matchedRow($chargeType, $row, 'actual_gt_declared', $amount, $gstPct);
+        }
+
+        return null;
+    }
+
+    /**
+     * DDP Sucharges: applies when tariff type DDP is selected at shipment
+     * creation. Incoterms arrive via $actual['incoterms'] (creation flow).
+     * Testing rate is a flat $20 + 18% GST from the DB row.
+     */
+    protected static function evaluateDdp(string $chargeType, string $destIn, $service, $actual): ?array
+    {
+        $incoterms = strtoupper(trim((string) (is_array($actual) ? ($actual['incoterms'] ?? '') : '')));
+        if ($incoterms !== 'DDP') {
+            return null;
+        }
+
+        foreach (self::findDisputeRows($chargeType) as $row) {
+            if (! self::matchDestination($row->destination ?? 'ALL', $destIn)) {
+                continue;
+            }
+            if (! self::matchService($row->service_id ?? 'ALL', $service)) {
+                continue;
+            }
+            [$amount, $gstPct] = self::resolveRowAmounts($row, 'flat');
+
+            return self::matchedRow($chargeType, $row, 'ddp', $amount, $gstPct);
+        }
+
+        return null;
+    }
+
+    /**
+     * Go Green Plus Charges: DHL service only, Rs 30 per kg on
+     * ceil(chargeable weight) + rule GST.
+     */
+    protected static function evaluateGoGreen(string $chargeType, float $wt, string $destIn, $service): ?array
+    {
+        if ($wt <= 0) {
+            return null;
+        }
+
+        foreach (self::findDisputeRows($chargeType) as $row) {
+            if (! self::matchDestination($row->destination ?? 'ALL', $destIn)) {
+                continue;
+            }
+            if (! self::matchService($row->service_id ?? 'ALL', $service)) {
+                continue;
+            }
+            [$rate, $gstPct] = self::resolveRowAmounts($row, 'flat');
+            $amount = round($rate * (float) ceil($wt), 2);
+
+            return self::matchedRow($chargeType, $row, 'per_kg', $amount, $gstPct);
         }
 
         return null;

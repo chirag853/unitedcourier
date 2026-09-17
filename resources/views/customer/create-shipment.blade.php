@@ -9295,7 +9295,8 @@
                 consignee_state: consigneeState,
                 consignee_zip_code: getVal('input[name="consignee_zip_code"]'),
                 delivery_destination: deliveryDestination,
-                package_weights: packageWeights
+                package_weights: packageWeights,
+                incoterms: getVal('select[name="incoterms"]')
             })
         })
         .then(res => res.json())
@@ -9349,14 +9350,19 @@
                         const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
-                        // CSB-V dispute surcharge — server ne lagaya hai, breakup me dikhao
+                        // CSB-V dispute surcharge — applied by the server, show it in the breakup
                         const disputeMatched = !!r.dispute_matched;
                         const disputeLabel = r.dispute_label || 'CSB-V Surcharge';
                         const disputeTotal = parseFloat(r.dispute_total) || 0;
                         const disputeGst = parseFloat(r.dispute_gst) || 0;
-                        const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0);
+                        // DDP Sucharges (incoterms DDP par) + Go Green Plus (DHL par)
+                        const ddpMatched = !!r.ddp_matched;
+                        const ddpTotal = parseFloat(r.ddp_total) || 0;
+                        const greenMatched = !!r.green_matched;
+                        const greenTotal = parseFloat(r.green_total) || 0;
+                        const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0) + (ddpMatched ? ddpTotal : 0) + (greenMatched ? greenTotal : 0);
                         const hasItemSurcharges = !!(r.surcharges && r.surcharges.length);
-                        const totalPrice = parseFloat(r.grand_total) || (totalBasePrice + totalFuelPrice + computedGst + totalSurcharge + disputeTotal);
+                        const totalPrice = parseFloat(r.grand_total) || (totalBasePrice + totalFuelPrice + computedGst + totalSurcharge + disputeTotal + ddpTotal + greenTotal);
                         // Per-box tax: shipment GST ko (base + fuel) ke proportion me baanto,
                         // taaki box tax ka sum neeche wali GST row se hamesha match kare
                         const combinedTaxable = totalBasePrice + totalFuelPrice;
@@ -9381,10 +9387,12 @@
                             dispute: disputeTotal.toFixed(2),
                             dispute_label: disputeMatched ? disputeLabel : '',
                             dispute_gst: disputeGst.toFixed(2),
+                            ddp: ddpTotal.toFixed(2),
+                            ddp_matched: ddpMatched ? '1' : '',
                             demand: '0.00',
                             remote: '0.00',
                             oversize: '0.00',
-                            goGreen: '0.00',
+                            goGreen: greenTotal.toFixed(2),
                             misc: '',
                             miscAmount: '0.00',
                             total: totalPrice.toFixed(2)
@@ -9518,6 +9526,18 @@
                                                     <span class="breakdown-label">Total Surcharge (incl. GST)</span>
                                                     <span class="breakdown-value">₹ ${combinedSurcharge.toFixed(2)}</span>
                                                 </div>
+                                                ${ddpMatched && ddpTotal > 0 ? `
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">DDP Surcharge (incl. GST)</span>
+                                                    <span class="breakdown-value">₹ ${ddpTotal.toFixed(2)}</span>
+                                                </div>
+                                                ` : ''}
+                                                ${greenMatched && greenTotal > 0 ? `
+                                                <div class="breakdown-row">
+                                                    <span class="breakdown-label">Go Green Plus (incl. GST)</span>
+                                                    <span class="breakdown-value">₹ ${greenTotal.toFixed(2)}</span>
+                                                </div>
+                                                ` : ''}
                                             </div>
                                             ${hasItemSurcharges ? '<div class="breakdown-column">' +
                                                 '<div class="breakdown-title">Tax & Surcharges</div>' +

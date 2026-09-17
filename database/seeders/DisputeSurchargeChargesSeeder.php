@@ -171,14 +171,35 @@ class DisputeSurchargeChargesSeeder extends Seeder
                 'place_of_apply' => 'After Dispatched',
             ],
             [
-                'additional_charges' => 'Fumigation Sucharges',
-                'conditions' => 'when customer type is cargo',
+                'additional_charges' => 'Weight dispute',
+                'conditions' => 'when actual weight is greater than declared weight',
+                'destination' => 'ALL',
+                'service_id' => 'ALL',
+                'calculation_type' => 'flat/box',
+                'values' => 'Custom Amount + 18% GST',
+                'gst_percentage' => 18,
+                'place_of_apply' => 'weighing at first scan',
+            ],
+            [
+                'additional_charges' => 'DDP Sucharges',
+                'conditions' => 'When tariff type DDP is selected',
                 'destination' => 'ALL',
                 'service_id' => 'ALL',
                 'calculation_type' => 'flat',
-                'values' => 'Custom amount + 18% GST',
+                'values' => '$20 + 18% GST',
                 'gst_percentage' => 18,
-                'place_of_apply' => 'After Dispatched',
+                'place_of_apply' => 'Shipment creation',
+                'status' => 0,
+            ],
+            [
+                'additional_charges' => 'Go Green Plus Charges',
+                'conditions' => null,
+                'destination' => 'ALL',
+                'service_id' => 'DHL',
+                'calculation_type' => 'flat/kg',
+                'values' => 'Rs 30 + 18 % GST',
+                'gst_percentage' => 18,
+                'place_of_apply' => 'Shipment creation',
             ],
         ];
 
@@ -195,6 +216,7 @@ class DisputeSurchargeChargesSeeder extends Seeder
                     'values' => $entry['values'],
                     'gst_percentage' => $entry['gst_percentage'],
                     'place_of_apply' => $entry['place_of_apply'],
+                    'status' => $entry['status'] ?? 1,
                 ]
             );
         }

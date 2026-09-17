@@ -3770,6 +3770,63 @@ class CustomerController extends Controller
                 'reason' => $disputeResult['reason'] ?? null,
             ]);
 
+            // ---- DDP Sucharges + Go Green Plus Charges (place = Shipment creation) ----
+            // DDP triggers on incoterms DDP (testing rate $20 + 18% GST);
+            // Go Green triggers on DHL service (ceil(chargeable kg) x Rs 30 + 18% GST).
+            $creationCourierService = $courierService ?? ($serviceId ? CourierService::find($serviceId) : null);
+            $creationServiceStr = trim(
+                ($validatedData['shipping_method'] ?? '').' '.
+                ($creationCourierService->method ?? '').' '.
+                ($creationCourierService->network ?? '').' '.
+                ($creationCourierService->api_provider ?? '')
+            );
+            $creationDestCountry = $this->resolveDestinationCountry($validatedData['delivery_destination'] ?? '');
+            $creationIncoterms = strtoupper(trim((string) ($validatedData['incoterms'] ?? '')));
+
+            $ddpResult = ShipmentChargeService::disputeCalculation(
+                'DDP Sucharges',
+                $disputeTotalWt,
+                '',
+                $creationDestCountry,
+                '',
+                'flat',
+                '',
+                [],
+                ['incoterms' => $creationIncoterms],
+                $creationServiceStr
+            );
+            $ddpTotal = ! empty($ddpResult['matched']) ? round((float) $ddpResult['total'], 2) : 0.0;
+
+            $goGreenResult = ShipmentChargeService::disputeCalculation(
+                'Go Green Plus Charges',
+                $disputeTotalWt,
+                '',
+                $creationDestCountry,
+                '',
+                '',
+                '',
+                [],
+                [],
+                $creationServiceStr
+            );
+            $goGreenTotal = ! empty($goGreenResult['matched']) ? round((float) $goGreenResult['total'], 2) : 0.0;
+
+            $extraCreationDisputeTotal = round($ddpTotal + $goGreenTotal, 2);
+            if ($extraCreationDisputeTotal > 0) {
+                $totalPrice = round($totalPrice + $extraCreationDisputeTotal, 2);
+            }
+            \Log::info('Creation dispute charges (DDP + GoGreen)', [
+                'awb' => $awbNumber,
+                'incoterms' => $creationIncoterms,
+                'service' => $creationServiceStr,
+                'ddp_matched' => $ddpResult['matched'] ?? false,
+                'ddp_total' => $ddpTotal,
+                'ddp_reason' => $ddpResult['reason'] ?? null,
+                'green_matched' => $goGreenResult['matched'] ?? false,
+                'green_total' => $goGreenTotal,
+                'green_reason' => $goGreenResult['reason'] ?? null,
+            ]);
+
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
                 'awb_number' => $awbNumber,
@@ -3798,7 +3855,7 @@ class CustomerController extends Controller
                 'surcharge_total' => $surchargeTotal,
                 'total_base_price' => $basePrice,
                 'total_fuel_price' => $fuelPrice,
-                'total_surcharge' => round($surchargeTotal + $disputeChargeTotal, 2),
+                'total_surcharge' => round($surchargeTotal + $disputeChargeTotal + $extraCreationDisputeTotal, 2),
                 'total_price' => $totalPrice,
             ]);
 
@@ -5139,19 +5196,66 @@ class CustomerController extends Controller
         $disputeAmount = $disputeMatched ? round((float) $disputePreview['amount'], 2) : 0.0;
         $disputeGst = $disputeMatched ? round((float) $disputePreview['gst_amount'], 2) : 0.0;
         $disputeTotal = $disputeMatched ? round((float) $disputePreview['total'], 2) : 0.0;
-        $allRates = array_map(function ($rate) use ($disputeMatched, $disputePreview, $disputeAmount, $disputeGst, $disputeTotal) {
+        // DDP Sucharges need incoterms (sent by the rate form); same for all cards.
+        $previewIncoterms = strtoupper(trim((string) ($request->incoterms ?? '')));
+        $ddpPreview = ShipmentChargeService::disputeCalculation(
+            'DDP Sucharges',
+            (float) $totalWeight,
+            '',
+            $destinationCountry,
+            '',
+            'flat',
+            '',
+            [],
+            ['incoterms' => $previewIncoterms],
+            ''
+        );
+        $ddpMatched = ! empty($ddpPreview['matched']);
+        $ddpPreviewTotal = $ddpMatched ? round((float) $ddpPreview['total'], 2) : 0.0;
+        // Go Green is service-specific (DHL), so evaluate it per rate card.
+        // DDP is skipped in preview — incoterms are not known until creation.
+        $previewServiceMap = CourierService::whereIn('id', collect($allRates)->pluck('service_id')->filter()->unique()->values()->all())
+            ->get(['id', 'method', 'network', 'api_provider'])
+            ->keyBy('id');
+        $greenMemo = [];
+        $allRates = array_map(function ($rate) use ($disputeMatched, $disputePreview, $disputeAmount, $disputeGst, $disputeTotal, $ddpMatched, $ddpPreviewTotal, $previewServiceMap, $totalWeight, $destinationCountry, &$greenMemo) {
             $rate['dispute_matched'] = $disputeMatched;
             $rate['dispute_label'] = $disputeMatched ? 'CSB-V Sucharges' : null;
             $rate['dispute_slab'] = $disputeMatched ? ($disputePreview['slab'] ?? null) : null;
             $rate['dispute_charge'] = $disputeAmount;
             $rate['dispute_gst'] = $disputeGst;
             $rate['dispute_total'] = $disputeTotal;
+            $rate['ddp_matched'] = $ddpMatched;
+            $rate['ddp_total'] = $ddpPreviewTotal;
+            $previewSvc = $previewServiceMap->get($rate['service_id'] ?? 0);
+            $previewSvcStr = trim(($rate['method'] ?? '').' '.($rate['network'] ?? '').' '.($previewSvc->api_provider ?? ''));
+            if (! array_key_exists($previewSvcStr, $greenMemo)) {
+                $greenMemo[$previewSvcStr] = ShipmentChargeService::disputeCalculation(
+                    'Go Green Plus Charges',
+                    (float) $totalWeight,
+                    '',
+                    $destinationCountry,
+                    '',
+                    '',
+                    '',
+                    [],
+                    [],
+                    $previewSvcStr
+                );
+            }
+            $greenPreview = $greenMemo[$previewSvcStr];
+            $greenMatched = ! empty($greenPreview['matched']);
+            $greenTotal = $greenMatched ? round((float) $greenPreview['total'], 2) : 0.0;
+            $rate['green_matched'] = $greenMatched;
+            $rate['green_total'] = $greenTotal;
             $rate['grand_total'] = round(
                 (float) ($rate['price'] ?? 0)
                 + (float) ($rate['fuel_charge'] ?? 0)
                 + (float) ($rate['gst_amount'] ?? 0)
                 + (float) ($rate['surcharge_total'] ?? 0)
-                + $disputeTotal,
+                + $disputeTotal
+                + $ddpPreviewTotal
+                + $greenTotal,
                 2
             );
 
