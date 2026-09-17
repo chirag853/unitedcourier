@@ -131,7 +131,9 @@ class ShipmentChargeService
             }
         }
 
-        return $rows->first();
+        // Strict slab match: slab ki row disabled ya missing ho to koi charge nahi.
+        // Pehle yahan $rows->first() tha jo 1kg par 5-20 wali row utha leta tha.
+        return null;
     }
 
     /**
@@ -417,7 +419,12 @@ class ShipmentChargeService
         }
 
         // ---- STEP 2+3 ke liye DB row lao (values DB se, logic code se) ----
+        // Strict: jo slab ka wt hai usi slab ki active row chahiye.
+        // Row disabled/missing ho to charge mat dikhao (hardcoded fallback nahi).
         $row = self::findDisputeRow($chargeType, $slab);
+        if (! $row) {
+            return self::noMatchResult($chargeType, 'slab '.$slab.' ki active DB row nahi mili (disabled ya missing)');
+        }
 
         // ---- STEP 2: destination check ----
         $rowDest = strtoupper(trim((string) ($row->destination ?? 'ALL')));
@@ -441,7 +448,11 @@ class ShipmentChargeService
         }
 
         // ---- STEP 4: amount = values column, gst = gst_percentage column ----
-        [$amount, $gstPct] = self::resolveRowAmounts($row, $slab);
+        // Strict: sirf DB values use karo, hardcoded slab fallback nahi.
+        [$amount, $gstPct] = self::resolveRowAmounts($row, $slab, true);
+        if ($amount <= 0) {
+            return self::noMatchResult($chargeType, 'slab '.$slab.' ki row me valid amount nahi hai');
+        }
 
         return self::matchedRow($chargeType, $row, $slab, $amount, $gstPct);
     }
