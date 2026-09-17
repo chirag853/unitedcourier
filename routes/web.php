@@ -112,6 +112,8 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');
     Route::get('/dispute-charges-list', [AdminController::class, 'disputeChargesList'])->name('admin.dispute-charges-list');
     Route::get('/dispute-orders', [AdminController::class, 'disputeOrders'])->name('admin.dispute-orders');
+    Route::get('/wallet-transactions', [AdminController::class, 'walletTransactions'])->name('admin.wallet-transactions');
+    Route::get('/wallet-transactions/data', [AdminController::class, 'walletTransactionsData'])->name('admin.wallet-transactions.data');
     Route::post('/apply-dispute-charge', [AdminController::class, 'applyDisputeCharge'])->name('admin.apply-dispute-charge');
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');

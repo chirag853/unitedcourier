@@ -8200,7 +8200,7 @@
                                                             <span class="badge bg-secondary" id="countryServiceCount"></span>
                                                         </div>
                                                         <div id="countryServiceList" class="d-flex flex-wrap gap-2 mt-2"></div>
-                                                        <div class="text-muted small mt-1">Country select karte hi services dikhti hain — weight se filter nahi hoti. SELF static option rate list me sabse upar milta hai.</div>
+                                                        <div class="text-muted small mt-1">Services appear as soon as a country is selected — they are not filtered by weight. The SELF static option is listed at the top of the rate list.</div>
                                                     </div> -->
                                                     <!-- Rate Result (list layout, no outer card) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
@@ -9359,10 +9359,10 @@
                 if (data.all_rates && data.all_rates.length > 0) {
                     // Helper function to render a single rate card
                     function renderRateCard(r, idx, isChecked) {
-                        // NOTE: rate se selection block nahi hoti — har country
-                        // service selectable hai. Jiss service ka rate band na
-                        // mile woh ₹0.00 ke saath dikhta hai (backend usko list
-                        // me sabse neeche rakhta hai).
+                        // NOTE: selection is never blocked by rate — every country
+                        // service stays selectable. A service with no rate band
+                        // shows as ₹0.00 (the backend keeps it at the bottom of
+                        // the list).
                         const checked = isChecked ? 'checked' : '';
                         const selectedClass = isChecked ? ' selected' : '';
 

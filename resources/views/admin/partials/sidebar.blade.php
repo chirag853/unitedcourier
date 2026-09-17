@@ -272,6 +272,18 @@
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/wallet-transactions*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-cash"></i><span>Account</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.wallet-transactions') }}"
+                                        class="{{ request()->is('admin/wallet-transactions*') ? 'active' : '' }}">Wallet Transaction</a></li>
+                            </ul>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/all-customer*') ? 'active subdrop' : '' }}">
                                 <i class="ti ti-users-group"></i><span>Manage Customer</span><span class="menu-arrow"></span>
                             </a>

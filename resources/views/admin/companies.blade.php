@@ -124,7 +124,7 @@
             background-color: #c81e2b;
             color: #fff;
         }
-        /* ===== Draft-style columns (view-all-shipments?status=draft jaisa) ===== */
+        /* ===== Draft-style columns (same as view-all-shipments?status=draft) ===== */
         .hawb-sub-info {
             margin-top: 6px;
             padding-top: 6px;
@@ -1538,7 +1538,7 @@
                             </div>
                         </div>
 
-                        <!-- ===== TAB 4: Ready to Dispatch (Print Label jaisa table structure) ===== -->
+                        <!-- ===== TAB 4: Ready to Dispatch (same table structure as Print Label) ===== -->
                         <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
@@ -1861,7 +1861,7 @@
                         </div>
                         <div class="dispute-hint">
                             <i class="ti ti-info-circle"></i>
-                            <span id="dispute_type_hint">Shipment ke destination &amp; service ke hisaab se charges load honge</span>
+                            <span id="dispute_type_hint">Charges load based on the shipment's destination &amp; service</span>
                         </div>
                     </div>
 
@@ -1875,7 +1875,7 @@
                         <input type="hidden" id="dispute_condition_id" value="">
                     </div>
 
-                    <!-- Step 3 : boxes (sirf flat/box calculation par dikhega) -->
+                    <!-- Step 3 : boxes (shown only for flat/box calculation) -->
                     <div class="dispute-field d-none" id="dispute_boxes_wrap">
                         <div class="dispute-field-head">
                             <span class="dispute-step-num step-2">3</span>
@@ -1892,7 +1892,7 @@
                         </div>
                     </div>
 
-                    <!-- Custom Amount (Weight dispute ya Custom-valued rule par dikhega) -->
+                    <!-- Custom Amount (shown for Weight disputes or Custom-valued rules) -->
                     <div class="dispute-field d-none" id="dispute_custom_wrap">
                         <div class="dispute-field-head">
                             <span class="dispute-step-num step-2">3</span>
@@ -1905,7 +1905,7 @@
                         </div>
                         <div class="dispute-hint">
                             <i class="ti ti-info-circle"></i>
-                            <span>Is rule me rule rate ki jagah <b>ye amount</b> charge hoga (GST rule ke hisaab se alag se lagega)</span>
+                            <span>This <b>amount</b> will be charged instead of the rule rate (GST applies separately as per the rule)</span>
                         </div>
                     </div>
 
@@ -2431,11 +2431,11 @@
 
         /**
          * Open the Dispute Charge modal and load the dropdown.
-         * Dropdown me dispute_surcharge_charges wali saari rows aati hain
-         * jinka place_of_apply 'weighing at first scan' ya 'After Dispatched' hai.
+         * The dropdown lists all dispute_surcharge_charges rows
+         * with place_of_apply 'weighing at first scan' or 'After Dispatched'.
          * @param {number} shipmentId
          * @param {string} awbNumber - AWB number for display
-         * @param {string} [place] - Agar diya ho (e.g. 'After Dispatched') toh sirf us stage ke rules load honge.
+         * @param {string} [place] - If provided (e.g. 'After Dispatched'), only rules for that stage are loaded.
          */
         let disputeChargesCache = [];
         let disputeCurrentShipment = null;
@@ -2472,7 +2472,7 @@
             $typeSelect.html('<option value="">Loading charges...</option>');
             $condWrap.addClass('d-none');
             $('#dispute_apply_btn').prop('disabled', true);
-            $('#dispute_type_hint').text('Shipment ke destination & service ke hisaab se charges load ho rahe hain...');
+            $('#dispute_type_hint').text('Loading charges based on the shipment destination & service...');
             disputeSetDetail(
                 '<div class="dispute-loading">' +
                 '<div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>' +
@@ -2486,10 +2486,10 @@
                 disputeChargesCache = charges || [];
                 if (!disputeChargesCache.length) {
                     $typeSelect.html('<option value="">No dispute charges found</option>');
-                    $('#dispute_type_hint').text('Is shipment ke liye koi charge rule match nahi hua');
+                    $('#dispute_type_hint').text('No charge rule matched for this shipment');
                     disputeSetDetail(disputeEmptyState(
                         'No charges available',
-                        'Is shipment ke destination / service ke liye koi dispute rule nahi mila.',
+                        'No dispute rule found for this shipment destination / service.',
                         'ti-search-off'
                     ));
                     return;
@@ -2534,7 +2534,7 @@
                 },
                 error: function () {
                     $typeSelect.html('<option value="">Failed to load</option>');
-                    disputeSetDetail(disputeEmptyState('Load failed', 'Network issue — please retry karein.', 'ti-wifi-off'));
+                    disputeSetDetail(disputeEmptyState('Load failed', 'Network issue — please retry.', 'ti-wifi-off'));
                     showAlert('Could not load dispute charges. Please try again.', 'error');
                 }
             });
@@ -2542,7 +2542,7 @@
 
         const isBoxCalc = function (calc) { return /box/i.test(calc || ''); };
         const isWeightDispute = function (type) { return /weight/i.test(type || ''); };
-        // Custom amount tab chahiye jab charge type Weight ho YA rule values me "Custom" likha ho.
+        // Show the custom amount field when the charge type is Weight OR the rule values contain "Custom".
         const isCustomAmount = function (type, values) { return isWeightDispute(type) || /custom/i.test(values || ''); };
         const parseDisputeRate = function (values) {
             const m = String(values || '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
@@ -2564,8 +2564,8 @@
                 $condList.html('');
                 $condWrap.addClass('d-none');
                 disputeSetDetail(disputeEmptyState(
-                    'Charge preview yahan dikhega',
-                    'Step 1 me charge type, phir Step 2 me condition select karein.',
+                    'Charge preview will appear here',
+                    'Select a charge type in Step 1, then choose the applicable condition in Step 2.',
                     'ti-file-description'
                 ));
                 return;
@@ -2593,8 +2593,8 @@
             }
             $('#dispute_type_hint').text(matches.length + ' conditions available — select the condition');
             disputeSetDetail(disputeEmptyState(
-                'Ab condition select karein',
-                '"' + selectedType + '" ke ' + matches.length + ' rules me se ek chunein.',
+                'Now select a condition',
+                '"' + selectedType + '" — choose one of its ' + matches.length + ' rules.',
                 'ti-list-check'
             ));
         });
@@ -2615,7 +2615,7 @@
             const $apply = $('#dispute_apply_btn');
             const found = disputeChargesCache.find(function (c) { return String(c.id) === String(selectedId); });
             if (!found) {
-                $detail.html(disputeEmptyState('Ab condition select karein', 'Summary dekhne ke liye condition chunein.', 'ti-list-check'));
+                $detail.html(disputeEmptyState('Now select a condition', 'Choose a condition to view the summary.', 'ti-list-check'));
                 $apply.prop('disabled', true);
                 return;
             }
@@ -2628,7 +2628,7 @@
             const boxesRaw = $('#dispute_boxes_count').val();
             const boxes = parseInt(boxesRaw, 10);
             const boxesValid = boxMode ? (Number.isInteger(boxes) && boxes >= 1) : true;
-            // Weight dispute me rule rate ki jagah custom amount use hota hai.
+            // For Weight disputes the custom amount replaces the rule rate.
             const weightMode = isCustomAmount($('#dispute_charge_type').val(), found.values);
             const customAmt = parseFloat($('#dispute_custom_amount').val());
             const customValid = !weightMode || (!isNaN(customAmt) && customAmt > 0);
@@ -2672,7 +2672,7 @@
                     bandSub = fmtMoney(rate) + ' + ' + escDispute(gstTxt) + ' GST = ' + fmtMoney(perBoxIncl) + ' /box incl.';
                     bandAmount = fmtMoney(perBoxIncl) + ' /box';
                 } else {
-                    bandSub = 'Boxes enter karne par GST-inclusive total yahan dikhega';
+                    bandSub = 'Enter the number of boxes to see the GST-inclusive total here';
                     bandAmount = escDispute(found.values) + ' /box';
                 }
             } else if (!isNaN(rate)) {
@@ -2688,14 +2688,14 @@
                 }
             }
 
-            // Weight dispute me jab tak custom amount valid nahi, total prompt dikhao.
+            // Until a valid custom amount is entered for a Weight dispute, prompt for it.
             if (weightMode && !customValid) {
-                bandSub = 'Custom amount enter reflact here';
+                bandSub = 'Enter a custom amount to see the GST-inclusive total here';
                 bandAmount = '—';
                 extraRows = '';
             }
             const readyLabel = !boxesValid ? 'Need boxes' : (!customValid ? 'Need amount' : 'Ready');
-            // Conditions null ho toh Condition row dikhao hi mat.
+            // Hide the Condition row when conditions are null.
             const condTxt = (found.conditions || '').trim();
             const condRow = condTxt
                 ? '<div class="dispute-kv"><span class="k"><i class="ti ti-file-text"></i>Condition</span><span class="v">' + escDispute(condTxt) + '</span></div>'
@@ -2746,7 +2746,7 @@
                 $('#dispute_boxes_count').val('');
                 $('#dispute_boxes_wrap').addClass('d-none');
             }
-            // Custom-amount rule (Weight type ya values me "Custom") ho toh field dikhao.
+            // Show the field for custom-amount rules (Weight type or "Custom" in values).
             if (isCustomAmount($('#dispute_charge_type').val(), found.values)) {
                 $('#dispute_custom_wrap').removeClass('d-none').hide().slideDown(180);
             } else {
@@ -2774,7 +2774,7 @@
             renderDisputeSummary();
         });
 
-        // Small safe notifier (showAlert global har page par nahi milta).
+        // Small safe notifier (the global showAlert is not available on every page).
         function disputeNotify(msg, type) {
             try {
                 if (typeof showAlert === 'function') { showAlert(msg, type || 'success'); return; }
@@ -2784,7 +2784,7 @@
             } else { alert(msg); }
         }
 
-        // Apply button — backend me save karo, phir Dispute Orders page par dikhega.
+        // Apply button — save to backend, then it appears on the Dispute Orders page.
         $(document).on('click', '#dispute_apply_btn', function () {
             const condId = $('#dispute_condition_id').val();
             const type = $('#dispute_charge_type').val();
@@ -2792,7 +2792,7 @@
             const found = disputeChargesCache.find(function (c) { return String(c.id) === String(condId); });
             let boxesTxt = '';
             let boxesVal = null;
-            // Weight dispute me custom amount mandatory hai.
+            // Custom amount is mandatory for Weight disputes.
             const weightMode = isCustomAmount(type, found ? found.values : '');
             let customVal = null;
             if (weightMode) {

@@ -1439,6 +1439,44 @@ class AdminController extends Controller
     }
 
     /**
+     * Wallet Transactions page (sidebar: Account > Wallet Transaction).
+     * Customer select karne par uski wallet_transactions rows AJAX se aati hain.
+     */
+    public function walletTransactions()
+    {
+        $customers = Customer::select('id', 'first_name', 'last_name', 'email', 'phone_number')
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        return view('admin.wallet-transactions', compact('customers'));
+    }
+
+    /**
+     * Ek customer ki saari wallet transactions (JSON for the Wallet Transaction page).
+     */
+    public function walletTransactionsData(Request $request)
+    {
+        $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+        ]);
+
+        $wallet = Wallet::where('customer_id', $request->customer_id)->first();
+        $transactions = WalletTransaction::where('customer_id', $request->customer_id)
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'has_wallet' => (bool) $wallet,
+            'balance' => $wallet ? (float) $wallet->balance : 0,
+            'total_credit' => (float) $transactions->where('type', 'credit')->sum('amount'),
+            'total_debit' => (float) $transactions->where('type', 'debit')->sum('amount'),
+            'transactions' => $transactions,
+        ]);
+    }
+
+    /**
      * Apply Dispute Charge modal se charge save karo (companies page).
      * flat/box calculation me boxes mandatory hai; Weight dispute ya
      * Custom-valued rule me custom amount mandatory hai (rule rate ki

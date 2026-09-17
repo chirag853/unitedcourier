@@ -245,8 +245,8 @@
                                     <tr>
                                         <td colspan="13" class="text-center text-muted py-5">
                                             <i class="ti ti-receipt-off fs-30 d-block mb-2"></i>
-                                            Abhi koi dispute apply nahi hua.<br>
-                                            <small>admin/companies page par kisi shipment par <b>Dispute</b> dabakar Apply karein.</small>
+                                            No disputes applied yet.<br>
+                                            <small>Press <b>Dispute</b> on any shipment on the admin/companies page, then Apply.</small>
                                         </td>
                                     </tr>
                                 @endforelse

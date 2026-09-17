@@ -8200,7 +8200,7 @@
                                                             <span class="badge bg-secondary" id="countryServiceCount"></span>
                                                         </div>
                                                         <div id="countryServiceList" class="d-flex flex-wrap gap-2 mt-2"></div>
-                                                        <div class="text-muted small mt-1">Country select karte hi services dikhti hain — weight se filter nahi hoti.</div>
+                                                        <div class="text-muted small mt-1">Services appear as soon as a country is selected — they are not filtered by weight.</div>
                                                     </div> -->
                                                     <!-- Rate Result (list layout, no outer card) -->
                                                     <div class="row mt-3" id="upsRateResult" style="display:none;">
