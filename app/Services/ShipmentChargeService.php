@@ -205,8 +205,9 @@ class ShipmentChargeService
     }
 
     /**
-     * Declared boxes normalize karo: [[L, W, H], ...] (cm).
-     * Single box ['l'=>..,'w'=>..,'h'=>..] bhi chalega.
+     * Declared boxes normalize karo: [[L, W, H, weight], ...] (cm, kg).
+     * Single box ['l'=>..,'w'=>..,'h'=>..] bhi chalega. Weight keys:
+     * weight / chargeable_weight / actual_weight_kg.
      */
     protected static function normalizeBoxes($dims): array
     {
@@ -225,8 +226,9 @@ class ShipmentChargeService
             $l = (float) ($b['l'] ?? $b['length'] ?? 0);
             $w = (float) ($b['w'] ?? $b['width'] ?? 0);
             $h = (float) ($b['h'] ?? $b['height'] ?? 0);
-            if ($l > 0 || $w > 0 || $h > 0) {
-                $boxes[] = [$l, $w, $h];
+            $wt = (float) ($b['weight'] ?? $b['chargeable_weight'] ?? $b['actual_weight_kg'] ?? 0);
+            if ($l > 0 || $w > 0 || $h > 0 || $wt > 0) {
+                $boxes[] = [$l, $w, $h, $wt];
             }
         }
 
@@ -440,7 +442,11 @@ class ShipmentChargeService
     protected static function evaluateNonConveyable(string $chargeType, string $destIn, $service, $actual): ?array
     {
         $flag = is_array($actual) ? ($actual['non_conveyable'] ?? false) : false;
-        $confirmed = ($flag === true || $flag === 1 || $flag === '1' || strtolower((string) $flag) === 'yes');
+        if (is_array($flag)) {
+            $confirmed = ! empty($flag);
+        } else {
+            $confirmed = ($flag === true || $flag === 1 || $flag === '1' || strtolower((string) $flag) === 'yes');
+        }
         if (! $confirmed) {
             return null;
         }
@@ -458,6 +464,102 @@ class ShipmentChargeService
         }
 
         return null;
+    }
+
+    /**
+     * flat/box row ko boxes par expand karo. Har entry = matchedRow + 'box'
+     * (1-based box number, ya null jab box-wise data na ho).
+     * - oversize: actual box dims > declared box dims (pairwise; extra actual box = hit)
+     * - weight dispute: actual box wt > declared box wt (pairwise)
+     * - non-conveyable: flag true = saare boxes, flag [2,3] = wahi boxes
+     * Box-wise data na ho to single null-box entry (double-count nahi hoga).
+     */
+    protected static function expandFlatBoxCharge(string $key, $row, array $declBoxes, array $actBoxes, $actual): array
+    {
+        $entries = [];
+        $slabs = [
+            'oversize' => 'actual_gt_declared',
+            'weight' => 'actual_gt_declared',
+            'non-conveyable' => 'extra_large_boxes',
+        ];
+        $slab = $slabs[$key] ?? 'per_box';
+        $isCustom = ($key === 'weight');
+
+        $addEntry = function ($boxNo, $slab) use ($row, $isCustom) {
+            [$amount, $gstPct] = self::resolveRowAmounts($row, $slab, $isCustom);
+            $entry = self::matchedRow((string) ($row->additional_charges ?? ''), $row, $slab, $amount, $gstPct);
+            $entry['box'] = $boxNo;
+
+            return $entry;
+        };
+
+        if ($key === 'non-conveyable') {
+            $flag = is_array($actual) ? ($actual['non_conveyable'] ?? false) : false;
+            if (is_array($flag)) {
+                foreach ($flag as $boxNo) {
+                    $entries[] = $addEntry((int) $boxNo, $slab);
+                }
+            } elseif (empty($declBoxes)) {
+                $entries[] = $addEntry(null, $slab);
+            } else {
+                foreach ($declBoxes as $i => $b) {
+                    $entries[] = $addEntry($i + 1, $slab);
+                }
+            }
+
+            return $entries;
+        }
+
+        if ($key === 'oversize') {
+            if (empty($declBoxes) || empty($actBoxes)) {
+                $entries[] = $addEntry(null, $slab);
+
+                return $entries;
+            }
+            $n = max(count($declBoxes), count($actBoxes));
+            for ($i = 0; $i < $n; $i++) {
+                $d = $declBoxes[$i] ?? null;
+                $a = $actBoxes[$i] ?? null;
+                if ($a && ! $d) {
+                    $entries[] = $addEntry($i + 1, $slab); // undeclared extra box
+                } elseif ($a && $d && ($a[0] > $d[0] || $a[1] > $d[1] || $a[2] > $d[2])) {
+                    $entries[] = $addEntry($i + 1, $slab);
+                }
+            }
+
+            return $entries;
+        }
+
+        // weight dispute
+        $declHasWt = false;
+        foreach ($declBoxes as $b) {
+            if (($b[3] ?? 0) > 0) {
+                $declHasWt = true;
+                break;
+            }
+        }
+        $actHasWt = false;
+        foreach ($actBoxes as $b) {
+            if (($b[3] ?? 0) > 0) {
+                $actHasWt = true;
+                break;
+            }
+        }
+        if (! $declHasWt || ! $actHasWt) {
+            $entries[] = $addEntry(null, $slab);
+
+            return $entries;
+        }
+        $n = max(count($declBoxes), count($actBoxes));
+        for ($i = 0; $i < $n; $i++) {
+            $dw = isset($declBoxes[$i]) ? (float) ($declBoxes[$i][3] ?? 0) : 0.0;
+            $aw = isset($actBoxes[$i]) ? (float) ($actBoxes[$i][3] ?? 0) : 0.0;
+            if ($aw > $dw && $aw > 0) {
+                $entries[] = $addEntry($i + 1, $slab);
+            }
+        }
+
+        return $entries;
     }
 
     /**
@@ -491,10 +593,51 @@ class ShipmentChargeService
                 'weight dispute' => self::evaluateWeightDispute($type, $wt, $actual, $destIn, $service),
                 default => null, // unknown types skip
             };
-            if (is_array($res) && ! empty($res['matched'])) {
+            if (! is_array($res) || empty($res['matched'])) {
+                continue;
+            }
+            // flat/box rows box-wise expand hote hain (box_breakdown me jayenge),
+            // flat rows shipment-level single entry rehte hain.
+            $calc = strtolower((string) ($res['calculation_type'] ?? ''));
+            $isFlatBox = str_contains($calc, 'flat') && str_contains($calc, 'box');
+            if (! $isFlatBox) {
+                $res['box'] = null;
                 $all[] = $res;
+                continue;
+            }
+            $row = DisputeCharge::find($res['row_id'] ?? 0);
+            if (! $row) {
+                $res['box'] = null;
+                $all[] = $res;
+                continue;
+            }
+            $flatKey = str_contains($key, 'oversize') ? 'oversize'
+                : (str_contains($key, 'weight') ? 'weight' : 'non-conveyable');
+            $declBoxes = self::normalizeBoxes($dims);
+            $actBoxes = self::normalizeBoxes(is_array($actual) ? ($actual['boxes'] ?? []) : []);
+            $expanded = self::expandFlatBoxCharge($flatKey, $row, $declBoxes, $actBoxes, $actual);
+            if (empty($expanded)) {
+                $res['box'] = null;
+                $all[] = $res;
+            } else {
+                foreach ($expanded as $entry) {
+                    $all[] = $entry;
+                }
             }
         }
+
+        // Box-wise grouping view.
+        $boxBreakdown = [];
+        foreach ($all as $entry) {
+            $boxKey = $entry['box'] ?? null;
+            $groupKey = $boxKey === null ? 'unassigned' : ('box_' . $boxKey);
+            if (! isset($boxBreakdown[$groupKey])) {
+                $boxBreakdown[$groupKey] = ['box' => $boxKey, 'charges' => [], 'total' => 0.0];
+            }
+            $boxBreakdown[$groupKey]['charges'][] = $entry;
+            $boxBreakdown[$groupKey]['total'] = round($boxBreakdown[$groupKey]['total'] + (float) ($entry['total'] ?? 0), 2);
+        }
+        $boxBreakdown = array_values($boxBreakdown);
 
         $rowIds = array_values(array_filter(array_map(
             fn ($c) => $c['row_id'] ?? null,
@@ -517,6 +660,7 @@ class ShipmentChargeService
             'row_id' => null,
             'row_ids' => $rowIds,
             'charges' => $all,
+            'box_breakdown' => $boxBreakdown,
             'reason' => ! empty($all) ? 'ok' : 'koi first-scan charge match nahi hua',
         ];
     }
