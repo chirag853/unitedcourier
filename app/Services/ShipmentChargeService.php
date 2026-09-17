@@ -99,7 +99,7 @@ class ShipmentChargeService
                 $variants[] = str_replace(' ', '_', $v);
                 $variants[] = str_replace('_', ' ', $v);
             }
-            $rows = DisputeCharge::whereIn('additional_charges', array_values(array_unique($variants)))->get();
+            $rows = DisputeCharge::whereIn('additional_charges', array_values(array_unique($variants)))->where('status', 1)->get();
         } catch (\Throwable) {
             return null;
         }
@@ -196,6 +196,7 @@ class ShipmentChargeService
                 $variants[] = str_replace('_', ' ', $v);
             }
             return DisputeCharge::whereIn('additional_charges', array_values(array_unique($variants)))
+                ->where('status', 1)
                 ->orderBy('id')
                 ->get()
                 ->all();
@@ -570,6 +571,7 @@ class ShipmentChargeService
     {
         try {
             $types = DisputeCharge::distinct()
+                ->where('status', 1)
                 ->orderBy('additional_charges')
                 ->pluck('additional_charges')
                 ->all();
