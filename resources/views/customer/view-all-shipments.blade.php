@@ -861,13 +861,13 @@
                                 <p class="mt-3 text-muted">No shipments matched the selected filters.</p>
                                 <a href="{{ route('customer.view-all-shipments') }}" class="btn btn-primary">Clear Filters</a>
                             </div>
-                        @elseif(in_array($selectedStatus, ['manifested', 'ready_for_pickup'], true))
-                            {{-- Manifested / Ready for Pickup tabs: grouped manifest table
+                        @elseif(in_array($selectedStatus, ['manifested', 'ready_for_pickup', 'assigned_for_pickup', 'confirm_pickup', 'received'], true))
+                            {{-- Manifested / Ready for Pickup / Assigned for Pickup / Received tabs: grouped manifest table
                                 (one row per manifest number with all its shipments collapsed) --}}
                             @if($manifestGroups->isEmpty())
                                 <div class="text-center py-5">
                                     <i class="ti ti-package" style="font-size:48px;color:#ccc;"></i>
-                                    <p class="mt-3 text-muted">{{ $selectedStatus === 'ready_for_pickup' ? 'No shipments ready for pickup found.' : 'No manifested shipments found.' }}</p>
+                                    <p class="mt-3 text-muted">{{ $selectedStatus === 'ready_for_pickup' ? 'No shipments ready for pickup found.' : (($selectedStatus === 'assigned_for_pickup' || $selectedStatus === 'confirm_pickup') ? 'No shipments assigned for pickup found.' : ($selectedStatus === 'received' ? 'No received shipments found.' : 'No manifested shipments found.')) }}</p>
                                 </div>
                             @else
                                 <div class="table-responsive">

@@ -25,6 +25,7 @@ use App\Models\ExporterCustomer;
 use App\Models\KycDetail;
 use App\Models\NetworkOffice;
 use App\Models\PackageDimension;
+use App\Models\ShipmentDispute;
 use App\Models\ShipmentInvoice;
 use App\Models\ShipmentInvoiceItem;
 use App\Models\ShipmentLog;
@@ -970,13 +971,63 @@ class AdminController extends Controller
             ->sortByDesc('manifest_created_at')
             ->values();
 
+        // Group assigned-for-pickup shipments by manifest number so the tab shows
+        // one row per manifest (same as the Ready for Pickup tab). Each child
+        // keeps the fields needed by the Receive Shipment modal. Shipments
+        // without a manifest number fall back to single-shipment groups so no
+        // row is ever lost.
+        $assignedForPickupManifestGroups = collect($assignedForPickupShipments)
+            ->groupBy(function ($s) {
+                return ! empty($s->manifest_number) ? $s->manifest_number : 'SINGLE-'.$s->id;
+            })
+            ->map(function ($shipments, $manifestNumber) {
+                $first = $shipments->first();
+
+                return (object) [
+                    'manifest_number' => $first->manifest_number ?? null,
+                    'manifest_created_at' => $first->manifest_created_at ?? null,
+                    'pickup_date' => $first->pickup_date ?? null,
+                    'shipment_count' => $shipments->count(),
+                    'total_value' => (float) $shipments->sum('shipper_total_price'),
+                    'total_cost' => (float) $shipments->sum(function ($s) {
+                        return (float) $s->shipper_total_base_price
+                            + (float) $s->shipper_total_fuel_price
+                            + (float) $s->shipper_total_surcharge;
+                    }),
+                    'shipments' => $shipments->map(function ($s) {
+                        $customerName = trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? ''));
+                        $from = trim(($s->shipper_city ?? '-') . ', ' . ($s->shipper_state ?? '-'));
+                        $to = trim(($s->consignee_city ?? '-') . ', ' . ($s->consignee_state ?? '-'));
+
+                        return [
+                            'id' => $s->id,
+                            'delivery_type' => $s->delivery_type,
+                            'assigned_delivery_person' => $s->assigned_delivery_person,
+                            'awb_number' => $s->awb_number ?? 'N/A',
+                            'pickup_date' => $s->pickup_date,
+                            'invoice_number' => $s->invoice_number ?? 'N/A',
+                            'customer_name' => $customerName ?: 'N/A',
+                            'consignee_name' => $s->consignee_name ?: ($s->consignee_contact ?: 'N/A'),
+                            'from' => $from,
+                            'to' => $to,
+                            'amount' => (float) ($s->shipper_total_price ?? 0),
+                            'amount_formatted' => $s->shipper_total_price
+                                ? number_format((float) $s->shipper_total_price, 2) . ' ' . ($s->invoice_currency ?? '')
+                                : 'N/A',
+                        ];
+                    })->values()->all(),
+                ];
+            })
+            ->sortByDesc('manifest_created_at')
+            ->values();
+
         // Fetch delivery persons where type = 'Delivery_person'
         $deliveryPersons = Admin::where('type', 'Delivery_person')
             ->where('status', 1)
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons', 'packagesByShipper'));
+        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'assignedForPickupManifestGroups', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons', 'packagesByShipper'));
     }
 
     /**
@@ -1339,6 +1390,163 @@ class AdminController extends Controller
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Dispute Orders listing page (sidebar: Manage Orders > Orders > Dispute Orders).
+     * Apply Dispute Charge modal se save hui saari rows yahan table me dikhti hain.
+     */
+    public function disputeOrders()
+    {
+        $disputes = DB::table('shipment_disputes as sd')
+            ->leftJoin('shipment_invoice as si', 'si.id', '=', 'sd.shipment_invoice_id')
+            ->leftJoin('shipper_info as shp', 'shp.id', '=', 'sd.shipper_id')
+            ->leftJoin('customers as c', 'c.id', '=', 'shp.customer_id')
+            ->leftJoin('consignee_info as con', 'con.shipper_id', '=', 'shp.id')
+            ->leftJoin('admin_user as au', 'au.id', '=', 'sd.applied_by')
+            ->select(
+                'sd.*',
+                'si.invoice_number',
+                'si.invoice_currency',
+                'shp.company_name as shipper_company',
+                'shp.contact_person as shipper_contact',
+                'shp.city as shipper_city',
+                'shp.state as shipper_state',
+                'c.first_name',
+                'c.last_name',
+                'c.email as customer_email',
+                'con.consignee_name',
+                'con.city as consignee_city',
+                'con.state as consignee_state',
+                'con.delivery_destination as consignee_destination',
+                'au.name as applied_by_name'
+            )
+            ->orderByDesc('sd.created_at')
+            ->get();
+
+        $totalBase = (float) $disputes->sum('base_amount');
+        $totalGst = (float) $disputes->sum('gst_amount');
+        $totalIncl = (float) $disputes->sum('total_incl_gst');
+
+        return view('admin.dispute-orders', compact('disputes', 'totalBase', 'totalGst', 'totalIncl'));
+    }
+
+    /**
+     * Apply Dispute Charge modal se charge save karo (companies page).
+     * flat/box calculation me boxes mandatory hai; Weight dispute ya
+     * Custom-valued rule me custom amount mandatory hai (rule rate ki
+     * jagah wahi charge hota hai). Total GST-inclusive server par compute hota hai.
+     */
+    public function applyDisputeCharge(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+                'dispute_charge_id' => 'required|integer|exists:dispute_surcharge_charges,id',
+                'boxes' => 'nullable|integer|min:1|max:10000',
+                'custom_amount' => 'nullable|numeric|min:0|max:10000000',
+            ]);
+
+            $charge = \App\Models\DisputeCharge::findOrFail($request->dispute_charge_id);
+            $isBox = stripos((string) $charge->calculation_type, 'box') !== false;
+            $isCustom = stripos((string) $charge->additional_charges, 'weight') !== false
+                || stripos((string) $charge->values, 'custom') !== false;
+
+            if ($isBox && ! $request->filled('boxes')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please enter number of boxes.',
+                ], 422);
+            }
+
+            if ($isCustom && ! ($request->filled('custom_amount') && (float) $request->custom_amount > 0)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please enter custom amount for this dispute.',
+                ], 422);
+            }
+
+            $invoice = ShipmentInvoice::findOrFail($request->shipment_id);
+            $shipper = $invoice->shipper_id ? ShipperInfo::find($invoice->shipper_id) : null;
+
+            // Custom-amount rule me admin ka custom amount hi rate hai, warna
+            // rate values string se nikalo ("Rs 1900 + 18% GST" -> 1900, "$45" -> 45).
+            $rate = null;
+            if ($isCustom) {
+                $rate = round((float) $request->custom_amount, 2);
+            } elseif (preg_match('/(\d+(?:\.\d+)?)/', str_replace(',', '', (string) $charge->values), $m)) {
+                $rate = (float) $m[1];
+            }
+            $currency = str_starts_with(trim((string) $charge->values), '$') ? '$' : 'Rs';
+            $gstPct = (float) ($charge->gst_percentage ?? 0);
+            $boxes = $isBox ? (int) $request->boxes : null;
+            $qty = $isBox ? $boxes : 1;
+
+            $base = $rate !== null ? round($rate * $qty, 2) : null;
+            $gstAmt = $base !== null ? round($base * $gstPct / 100, 2) : 0;
+            $total = $base !== null ? round($base + $gstAmt, 2) : null;
+
+            // Same shipment + same rule ka duplicate rokne ke liye update-or-create.
+            $dispute = ShipmentDispute::updateOrCreate(
+                [
+                    'shipment_invoice_id' => $invoice->id,
+                    'dispute_charge_id' => $charge->id,
+                ],
+                [
+                    'shipper_id' => $invoice->shipper_id,
+                    'awb_number' => $shipper->awb_number ?? null,
+                    'charge_type' => $charge->additional_charges,
+                    'conditions' => $charge->conditions,
+                    'destination' => $charge->destination,
+                    'service_id' => $charge->service_id,
+                    'calculation_type' => $charge->calculation_type,
+                    'values' => $charge->values,
+                    'rate' => $rate,
+                    'boxes' => $boxes,
+                    'base_amount' => $base,
+                    'gst_percentage' => $gstPct,
+                    'gst_amount' => $gstAmt,
+                    'total_incl_gst' => $total,
+                    'currency' => $currency,
+                    'applied_by' => Auth::guard('admin')->id(),
+                    'status' => 'applied',
+                ]
+            );
+
+            // Shipment ka status 'disputed' karo (receive/ready-to-dispatch jaisa flow):
+            // tracking entry + shipper status update taaki shipment Disputed state me chala jaye.
+            if ($shipper) {
+                $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                if (! empty($shipper->awb_number)) {
+                    \App\Models\Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'status' => 'disputed',
+                        'title' => 'Shipment Disputed - ' . (string) $charge->additional_charges,
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                    ]);
+                }
+                $shipper->status = 'disputed';
+                $shipper->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispute charge applied successfully. Shipment marked as Disputed.',
+                'dispute' => $dispute,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 500);
         }
     }
 

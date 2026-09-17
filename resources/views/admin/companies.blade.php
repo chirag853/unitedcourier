@@ -390,6 +390,592 @@
                 animation: none;
             }
         }
+        /* ===== Dispute Charge Modal — premium UI ===== */
+        #disputeChargeModal .modal-content.dispute-modal-content {
+            border: none;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(153, 27, 27, 0.25), 0 8px 24px rgba(15, 23, 42, 0.12);
+        }
+        .dispute-modal-header {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 22px 22px 20px;
+            color: #fff;
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 55%, #7f1d1d 100%);
+            overflow: hidden;
+        }
+        .dispute-modal-header::before {
+            content: "";
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            right: -60px;
+            top: -80px;
+            background: radial-gradient(circle, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 70%);
+            pointer-events: none;
+        }
+        .dispute-modal-header::after {
+            content: "";
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            left: -40px;
+            bottom: -70px;
+            background: radial-gradient(circle, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 70%);
+            pointer-events: none;
+        }
+        .dispute-icon-wrap {
+            position: relative;
+            z-index: 1;
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(6px);
+            font-size: 24px;
+        }
+        .dispute-header-text {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            min-width: 0;
+        }
+        .dispute-header-text h5 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 0.1px;
+            line-height: 1.25;
+        }
+        .dispute-header-text p {
+            margin: 4px 0 0;
+            font-size: 12.5px;
+            line-height: 1.45;
+            color: rgba(255, 255, 255, 0.85);
+        }
+        .dispute-modal-header .btn-close {
+            position: relative;
+            z-index: 2;
+            filter: invert(1);
+            opacity: 0.85;
+            background-color: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 8px;
+            background-size: 12px;
+        }
+        .dispute-modal-header .btn-close:hover {
+            opacity: 1;
+            background-color: rgba(255,255,255,0.28);
+        }
+        .dispute-modal-body {
+            padding: 20px 22px 18px;
+            background: #fbfbfc;
+        }
+        .dispute-awb-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #fff;
+            border: 1px solid #f1d5d5;
+            box-shadow: 0 1px 2px rgba(220, 38, 38, 0.06);
+        }
+        .dispute-awb-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .dispute-awb-ic {
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: #fef2f2;
+            color: #dc2626;
+            font-size: 19px;
+            border: 1px solid #fecaca;
+        }
+        .dispute-awb-label {
+            display: block;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #9ca3af;
+            line-height: 1;
+        }
+        .dispute-awb-value {
+            display: block;
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            color: #111827;
+            font-variant-numeric: tabular-nums;
+        }
+        .dispute-live-pill {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 5px 10px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .dispute-live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+            animation: dispute-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes dispute-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.8); opacity: 0.7; }
+        }
+        .dispute-field {
+            margin-top: 16px;
+        }
+        .dispute-field-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .dispute-step-num {
+            width: 22px;
+            height: 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: #111827;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .dispute-step-num.step-2 {
+            background: #dc2626;
+        }
+        .dispute-field-head label {
+            margin: 0;
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+        .dispute-field-head .req {
+            color: #dc2626;
+        }
+        .dispute-select-wrap {
+            position: relative;
+        }
+        .dispute-select-wrap > i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            font-size: 17px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #disputeChargeModal .form-select.dispute-select {
+            padding-left: 38px;
+            padding-top: 11px;
+            padding-bottom: 11px;
+            border-radius: 12px;
+            border: 1.5px solid #e5e7eb;
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #1f2937;
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+            appearance: none;
+        }
+        #disputeChargeModal .form-select.dispute-select:focus {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+            outline: none;
+        }
+        .dispute-hint {
+            margin-top: 6px;
+            font-size: 11.5px;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dispute-hint i {
+            font-size: 14px;
+        }
+        .dispute-summary {
+            margin-top: 16px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+        }
+        .dispute-summary-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .dispute-summary-head .s-ic {
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: #dc2626;
+            color: #fff;
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+        .dispute-summary-head strong {
+            display: block;
+            font-size: 13.5px;
+            font-weight: 800;
+            color: #111827;
+            line-height: 1.2;
+        }
+        .dispute-summary-head small {
+            display: block;
+            font-size: 11.5px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .dispute-summary-head .s-badge {
+            margin-left: auto;
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #047857;
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            padding: 4px 10px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .dispute-summary-grid {
+            padding: 6px 16px 12px;
+        }
+        .dispute-kv {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 9px 0;
+            border-bottom: 1px dashed #eef0f3;
+            font-size: 12.5px;
+        }
+        .dispute-kv:last-child {
+            border-bottom: none;
+        }
+        .dispute-kv .k {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #6b7280;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .dispute-kv .k i {
+            font-size: 15px;
+            color: #9ca3af;
+        }
+        .dispute-kv .v {
+            text-align: right;
+            color: #111827;
+            font-weight: 700;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        .dispute-value-band {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 0 16px 14px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%);
+            border: 1px solid #fecaca;
+        }
+        .dispute-value-band .vb-label {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            color: #991b1b;
+        }
+        .dispute-value-band .vb-sub {
+            font-size: 11.5px;
+            color: #b45309;
+            margin-top: 2px;
+            font-weight: 600;
+        }
+        .dispute-value-band .vb-amount {
+            font-size: 20px;
+            font-weight: 900;
+            color: #b91c1c;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .dispute-empty {
+            margin-top: 16px;
+            border-radius: 14px;
+            border: 1.5px dashed #d1d5db;
+            background: #f9fafb;
+            padding: 22px 16px;
+            text-align: center;
+        }
+        .dispute-empty .e-ic {
+            width: 44px;
+            height: 44px;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            color: #9ca3af;
+            font-size: 22px;
+        }
+        .dispute-empty strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: #4b5563;
+        }
+        .dispute-empty span {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .dispute-loading {
+            margin-top: 16px;
+            border-radius: 14px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            padding: 18px 16px;
+            text-align: center;
+        }
+        .dispute-loading .spinner-border {
+            width: 28px;
+            height: 28px;
+            color: #dc2626;
+        }
+        .dispute-loading p {
+            margin: 10px 0 0;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #6b7280;
+        }
+        .dispute-note {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            font-size: 11.5px;
+            line-height: 1.5;
+            color: #92400e;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 10px;
+            padding: 9px 12px;
+        }
+        .dispute-note i {
+            font-size: 15px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .dispute-modal-footer {
+            display: flex;
+            gap: 10px;
+            padding: 14px 22px 18px;
+            background: #fbfbfc;
+            border-top: 1px solid #f1f2f4;
+        }
+        .dispute-btn-close {
+            flex: 1;
+            border-radius: 12px;
+            padding: 11px;
+            font-size: 13.5px;
+            font-weight: 700;
+            border: 1.5px solid #e5e7eb;
+            background: #fff;
+            color: #374151;
+            transition: all 0.18s ease;
+        }
+        .dispute-btn-close:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #111827;
+        }
+        .dispute-btn-apply {
+            flex: 1.4;
+            border: none;
+            border-radius: 12px;
+            padding: 11px;
+            font-size: 13.5px;
+            font-weight: 800;
+            color: #fff;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        }
+        .dispute-btn-apply:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 22px rgba(220, 38, 38, 0.38);
+            filter: brightness(1.03);
+            color: #fff;
+        }
+        .dispute-btn-apply:disabled {
+            background: #e5e7eb;
+            color: #9ca3af;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+        #disputeChargeModal .form-control.dispute-input {
+            padding-left: 38px;
+            padding-top: 11px;
+            padding-bottom: 11px;
+            border-radius: 12px;
+            border: 1.5px solid #e5e7eb;
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #1f2937;
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        #disputeChargeModal .form-control.dispute-input:focus {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+            outline: none;
+        }
+        #disputeChargeModal .modal-dialog {
+            max-width: 520px;
+        }
+        /* Condition list — full text wrap, no truncation */
+        .dispute-cond-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 2px;
+        }
+        .dispute-cond-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1.5px solid #e5e7eb;
+            background: #fff;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .dispute-cond-item:hover {
+            border-color: #fca5a5;
+            background: #fef2f2;
+        }
+        .dispute-cond-item.selected {
+            border-color: #dc2626;
+            background: #fef2f2;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+        }
+        .dispute-cond-radio {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            border-radius: 50%;
+            border: 2px solid #d1d5db;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.15s ease;
+        }
+        .dispute-cond-item.selected .dispute-cond-radio {
+            border-color: #dc2626;
+        }
+        .dispute-cond-item.selected .dispute-cond-radio::after {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #dc2626;
+        }
+        .dispute-cond-text {
+            flex: 1;
+            min-width: 0;
+            font-size: 12.5px;
+            font-weight: 600;
+            line-height: 1.5;
+            color: #1f2937;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .dispute-cond-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .dispute-cond-meta span {
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+        .dispute-cond-meta span.val {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
+        }
     </style>
 
 </head>
@@ -621,8 +1207,13 @@
                                                 <td>
                                                     <span class="badge bg-dark" style="font-size:12px;">{{ $manifest->manifest_number ?? 'N/A' }}</span>
                                                 </td>
-                                                <td>
-                                                    {{ $manifest->manifest_created_at ? \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') : '-' }}
+                                                <td style="white-space:nowrap;">
+                                                    @if($manifest->manifest_created_at)
+                                                        <div>{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') }}</div>
+                                                        <div class="text-muted" style="font-size:11px;">{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('h:i A') }}</div>
+                                                    @else
+                                                        -
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
@@ -713,7 +1304,10 @@
                             </div>
                         </div>
 
-                        <!-- ===== TAB 3: Assigned for Pickup ===== -->
+                        <!-- ===== TAB 3: Assigned for Pickup =====
+                             Grouped by manifest number (one row per manifest, same
+                             layout as the Ready for Pickup tab). Action keeps the
+                             existing Receive Shipment button. -->
                         <div class="tab-pane fade" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
@@ -721,95 +1315,113 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th>#</th>
-                                                <th>HAWB Number</th>
+                                                <th>Manifest Code</th>
                                                 <th>Order Date</th>
-                                                <th>Receiver Details</th>
-                                                <th>Package Details</th>
-                                                <th>Status</th>
+                                                <th>Shipments</th>
+                                                <th>Total Value</th>
+                                                <th>Pickup Date</th>
                                                 <th>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @foreach($assignedForPickupShipments as $index => $shipment)
-                                            @php
-                                                $asgPkgs = $packagesByShipper->get($shipment->shipper_id, collect());
-                                                $asgBillable = 0.0; $asgDead = 0.0; $asgVol = 0.0;
-                                                foreach ($asgPkgs as $asgPkg) {
-                                                    if ($asgPkg->chargeable_weight !== null && $asgPkg->chargeable_weight !== '') { $asgBillable += (float) $asgPkg->chargeable_weight; }
-                                                    if ($asgPkg->actual_weight_kg !== null && $asgPkg->actual_weight_kg !== '') { $asgDead += (float) $asgPkg->actual_weight_kg; }
-                                                    if ($asgPkg->volumetric_weight !== null && $asgPkg->volumetric_weight !== '') { $asgVol += (float) $asgPkg->volumetric_weight; }
-                                                }
-                                            @endphp
-                                            <tr>
+                                            @foreach($assignedForPickupManifestGroups as $index => $manifest)
+                                            <tr class="manifest-group-row">
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
-                                                    <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
-                                                    <div class="hawb-sub-info">
-                                                        <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Destination:</span>
-                                                            <span class="hawb-sub-value">{{ $shipment->consignee_destination ?: '-' }}{{ $shipment->consignee_zip ? ' · '.$shipment->consignee_zip : '' }}</span>
-                                                        </div>
-                                                        <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Reference number:</span>
-                                                            <span class="hawb-sub-value">{{ $shipment->reference_number ?: '-' }}</span>
-                                                        </div>
-                                                        <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Invoice number:</span>
-                                                            <span class="hawb-sub-value">{{ $shipment->invoice_number ?: '-' }}</span>
-                                                        </div>
-                                                    </div>
+                                                    <span class="badge bg-dark" style="font-size:12px;">{{ $manifest->manifest_number ?? 'N/A' }}</span>
                                                 </td>
-                                                <td>
-                                                    <div>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d M Y') }}</div>
-                                                    <div class="text-muted">{{ \Carbon\Carbon::parse($shipment->created_at)->format('h:i A') }}</div>
-                                                </td>
-                                                <td>
-                                                    <div class="receiver-details-stack">
-                                                        <div class="receiver-name">{{ $shipment->consignee_name ?: ($shipment->consignee_contact ?: '-') }}</div>
-                                                        @if($shipment->consignee_email)
-                                                            <div class="receiver-line">{{ $shipment->consignee_email }}</div>
-                                                        @endif
-                                                        @if($shipment->consignee_phone)
-                                                            <div class="receiver-line">{{ $shipment->consignee_phone }}</div>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    @if(count($asgPkgs) > 0)
-                                                        <div class="package-details-card">
-                                                            @if(count($asgPkgs) > 1)
-                                                                <div class="package-details-title">Total ({{ count($asgPkgs) }} pkgs)</div>
-                                                            @endif
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Billable Wt.</span>
-                                                                <span class="package-details-value">{{ $asgBillable > 0 ? number_format($asgBillable, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Dead Wt.</span>
-                                                                <span class="package-details-value">{{ $asgDead > 0 ? number_format($asgDead, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Vol. Wt.</span>
-                                                                <span class="package-details-value">{{ $asgVol > 0 ? number_format($asgVol, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                        </div>
+                                                <td style="white-space:nowrap;">
+                                                    @if($manifest->manifest_created_at)
+                                                        <div>{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') }}</div>
+                                                        <div class="text-muted" style="font-size:11px;">{{ \Carbon\Carbon::parse($manifest->manifest_created_at)->format('h:i A') }}</div>
                                                     @else
-                                                        <span class="text-muted">-</span>
+                                                        -
                                                     @endif
                                                 </td>
                                                 <td>
-                                                    <span class="badge bg-warning text-dark">In-Transit to Hub</span>
+                                                    <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;">
+                                                    {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
                                                 </td>
                                                 <td class="table-actions">
-                                                    <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment" onclick="openReceiveShipment({{ $shipment->id }}, '{{ $shipment->awb_number ?? '' }}')">
+                                                    @php $firstAssignedShipment = $manifest->shipments[0] ?? null; @endphp
+                                                    @if($firstAssignedShipment)
+                                                    <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment" onclick="openReceiveShipment({{ $firstAssignedShipment['id'] }}, '{{ $manifest->manifest_number ?? '' }}')">
                                                         <i class="ti ti-package"></i>
                                                     </button>
+                                                    @endif
+                                                    @if(!empty($manifest->manifest_number))
+                                                    <a href="{{ route('admin.manifest-detail', ['manifestNumber' => $manifest->manifest_number]) }}"
+                                                       target="_blank"
+                                                       class="btn btn-sm btn-outline-secondary btn-icon"
+                                                       title="View Manifest Details">
+                                                        <i class="ti ti-eye"></i>
+                                                    </a>
+                                                    @endif
                                                 </td>
                                             </tr>
                                             @endforeach
                                         </tbody>
                                     </table>
                                 </div>
+
+                                <!-- Hidden templates for expandable shipment details (DataTables child rows) -->
+                                @foreach($assignedForPickupManifestGroups as $index => $manifest)
+                                <template id="manifest-asg-child-{{ $index }}">
+                                    <div class="p-3">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>HAWB Number</th>
+                                                    <th>From / To</th>
+                                                    <th>Customer Name</th>
+                                                    <th>Consignee</th>
+                                                    <th>Invoice No.</th>
+                                                    <th>Amount</th>
+                                                    <th>Pickup Date</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($manifest->shipments as $shipment)
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge bg-dark">{{ $shipment['awb_number'] }}</span>
+                                                    </td>
+                                                    <td style="font-size:12px;white-space:normal;">
+                                                        <div>{{ $shipment['from'] }}</div>
+                                                        <div class="text-muted"><i class="ti ti-arrow-right"></i> {{ $shipment['to'] }}</div>
+                                                    </td>
+                                                    <td>{{ $shipment['customer_name'] }}</td>
+                                                    <td>{{ $shipment['consignee_name'] }}</td>
+                                                    <td>{{ $shipment['invoice_number'] }}</td>
+                                                    <td>{{ $shipment['amount_formatted'] }}</td>
+                                                    <td>
+                                                        @if(!empty($shipment['pickup_date']))
+                                                            <span class="badge" style="background:#6366f1;color:#fff;white-space:nowrap;">
+                                                                <i class="ti ti-calendar-event me-1"></i>{{ \Carbon\Carbon::parse($shipment['pickup_date'])->format('d-m-Y') }}
+                                                            </span>
+                                                        @else
+                                                            <span class="text-muted">N/A</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="table-actions">
+                                                        <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment"
+                                                                onclick="openReceiveShipment({{ $shipment['id'] }}, '{{ $manifest->manifest_number ?? '' }}')">
+                                                            <i class="ti ti-package"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                                @endforeach
                             </div>
                         </div>
 
@@ -1161,8 +1773,8 @@
                         <div id="receiveShipmentAlert" class="alert d-none"></div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">HAWB Number</label>
-                            <p class="mb-0" id="receive_awb_display">-</p>
+                            <label class="form-label fw-semibold">Manifest Number</label>
+                            <p class="mb-0" id="receive_manifest_display">-</p>
                         </div>
 
                         <div class="mb-4">
@@ -1196,40 +1808,114 @@
         </div>
     </div>
 
-    <!-- Dispute Charge Modal -->
+    <!-- Dispute Charge Modal — redesigned premium UI -->
     <div class="modal fade" id="disputeChargeModal" tabindex="-1" aria-labelledby="disputeChargeModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="disputeChargeModalLabel">
-                        <i class="ti ti-alert-triangle me-1"></i> Apply Dispute Charge
-                    </h5>
+            <div class="modal-content dispute-modal-content">
+                <div class="dispute-modal-header">
+                    <div class="dispute-icon-wrap">
+                        <i class="ti ti-alert-triangle"></i>
+                    </div>
+                    <div class="dispute-header-text">
+                        <h5 id="disputeChargeModalLabel" style="color:white">Apply Dispute Charge</h5>
+                        <p>Select a charge type to instantly preview the applicable surcharge.</p>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">HAWB Number</label>
-                        <p class="mb-0" id="dispute_awb_display">-</p>
+                <div class="modal-body dispute-modal-body">
+                    <!-- Shipment strip -->
+                    <div class="dispute-awb-card">
+                        <div class="dispute-awb-left">
+                            <div class="dispute-awb-ic">
+                                <i class="ti ti-barcode"></i>
+                            </div>
+                            <div style="min-width:0;">
+                                <span class="dispute-awb-label">HAWB Number</span>
+                                <span class="dispute-awb-value" id="dispute_awb_display">-</span>
+                            </div>
+                        </div>
+                        <span class="dispute-live-pill">
+                            <span class="dispute-live-dot"></span> Weighing Scan
+                        </span>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold" for="dispute_charge_type">Choose Charge Type <span class="text-danger">*</span></label>
-                        <select class="form-select" id="dispute_charge_type">
-                            <option value="">Loading...</option>
-                        </select>
+                    <!-- Step 1 -->
+                    <div class="dispute-field">
+                        <div class="dispute-field-head">
+                            <span class="dispute-step-num">1</span>
+                            <label for="dispute_charge_type">Choose Charge Type <span class="req">*</span></label>
+                        </div>
+                        <div class="dispute-select-wrap">
+                            <i class="ti ti-receipt-tax"></i>
+                            <select class="form-select dispute-select" id="dispute_charge_type">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="dispute-hint">
+                            <i class="ti ti-info-circle"></i>
+                            <span id="dispute_type_hint">Shipment ke destination &amp; service ke hisaab se charges load honge</span>
+                        </div>
                     </div>
 
-                    <div class="mb-3 d-none" id="dispute_condition_wrap">
-                        <label class="form-label fw-semibold" for="dispute_condition_id">Condition <span class="text-danger">*</span></label>
-                        <select class="form-select" id="dispute_condition_id">
-                            <option value="">-- Select condition --</option>
-                        </select>
+                    <!-- Step 2 -->
+                    <div class="dispute-field d-none" id="dispute_condition_wrap">
+                        <div class="dispute-field-head">
+                            <span class="dispute-step-num step-2">2</span>
+                            <label>Select Condition <span class="req">*</span></label>
+                        </div>
+                        <div id="dispute_condition_list" class="dispute-cond-list"></div>
+                        <input type="hidden" id="dispute_condition_id" value="">
                     </div>
 
-                    <div id="dispute_charge_detail" class="alert alert-info d-none mb-0"></div>
+                    <!-- Step 3 : boxes (sirf flat/box calculation par dikhega) -->
+                    <div class="dispute-field d-none" id="dispute_boxes_wrap">
+                        <div class="dispute-field-head">
+                            <span class="dispute-step-num step-2">3</span>
+                            <label for="dispute_boxes_count">Enter number of boxes <span class="req">*</span></label>
+                        </div>
+                        <div class="dispute-select-wrap">
+                            <i class="ti ti-package"></i>
+                            <input type="number" class="form-control dispute-input" id="dispute_boxes_count"
+                                min="1" step="1" placeholder="e.g. 2">
+                        </div>
+                        <div class="dispute-hint">
+                            <i class="ti ti-info-circle"></i>
+                            <span>Calculation <b>flat/box</b> hai — total = per-box rate &times; boxes</span>
+                        </div>
+                    </div>
+
+                    <!-- Custom Amount (Weight dispute ya Custom-valued rule par dikhega) -->
+                    <div class="dispute-field d-none" id="dispute_custom_wrap">
+                        <div class="dispute-field-head">
+                            <span class="dispute-step-num step-2">3</span>
+                            <label for="dispute_custom_amount">Enter custom amount <span class="req">*</span></label>
+                        </div>
+                        <div class="dispute-select-wrap">
+                            <i class="ti ti-currency-rupee"></i>
+                            <input type="number" class="form-control dispute-input" id="dispute_custom_amount"
+                                min="1" step="0.01" placeholder="e.g. 500">
+                        </div>
+                        <div class="dispute-hint">
+                            <i class="ti ti-info-circle"></i>
+                            <span>Is rule me rule rate ki jagah <b>ye amount</b> charge hoga (GST rule ke hisaab se alag se lagega)</span>
+                        </div>
+                    </div>
+
+                    <!-- Summary / states -->
+                    <div id="dispute_charge_detail" class="mb-0"></div>
+
+                    <div class="dispute-note">
+                        <i class="ti ti-bulb"></i>
+                        <span>This is a preview of the applicable charge. The final billed amount, including applicable GST, will be reflected on the invoice.</span>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="dispute-modal-footer">
+                    <button type="button" class="dispute-btn-close" data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="button" class="dispute-btn-apply" id="dispute_apply_btn" disabled>
+                        <i class="ti ti-check"></i> Apply Charge
+                    </button>
                 </div>
             </div>
         </div>
@@ -1355,20 +2041,45 @@
                 }
             });
 
-            $('#assignedTable').DataTable({
+            const assignedDt = $('#assignedTable').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
                 scrollX: true,
                 scrollY: '60vh',
                 scrollCollapse: true,
+                columnDefs: [
+                    { orderable: false, targets: 6 },
+                    { defaultContent: '-', targets: '_all' }
+                ],
                 language: {
-                    emptyTable: "No assigned for pickup shipments found",
-                    info: "Showing _START_ to _END_ of _TOTAL_ shipments",
-                    infoEmpty: "Showing 0 to 0 of 0 shipments",
-                    infoFiltered: "(filtered from _MAX_ total shipments)",
-                    lengthMenu: "Show _MENU_ shipments",
+                    emptyTable: "No assigned for pickup manifests found",
+                    info: "Showing _START_ to _END_ of _TOTAL_ manifests",
+                    infoEmpty: "Showing 0 to 0 of 0 manifests",
+                    infoFiltered: "(filtered from _MAX_ total manifests)",
+                    lengthMenu: "Show _MENU_ manifests",
                     search: "Search:",
-                    zeroRecords: "No matching shipments found"
+                    zeroRecords: "No matching manifests found"
+                }
+            });
+
+            // Expand / collapse assigned-for-pickup manifest shipment details (DataTables child rows)
+            $('#assignedTable tbody').on('click', '.manifest-asg-toggle', function (e) {
+                e.stopPropagation();
+                const tr = $(this).closest('tr');
+                const index = $(this).data('index');
+                const row = assignedDt.row(tr);
+                const icon = $(this).find('i');
+
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    icon.removeClass('ti-chevron-up').addClass('ti-chevron-down');
+                } else {
+                    const template = document.getElementById('manifest-asg-child-' + index);
+                    const content = template ? template.innerHTML : '<div class="p-3">No details available.</div>';
+                    row.child(content).show();
+                    tr.addClass('shown');
+                    icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
                 }
             });
 
@@ -1691,14 +2402,14 @@
         /**
          * Open the Receive Shipment modal.
          * @param {number} shipmentId
-         * @param {string} awbNumber - AWB number for display
+         * @param {string} manifestNumber - Manifest number for display
          */
-        function openReceiveShipment(shipmentId, awbNumber) {
+        function openReceiveShipment(shipmentId, manifestNumber) {
             // Set shipment ID
             $('#receive_shipment_id').val(shipmentId);
 
-            // Display AWB number
-            $('#receive_awb_display').text(awbNumber || '-');
+            // Display Manifest number
+            $('#receive_manifest_display').text(manifestNumber || '-');
 
             // Reset radio buttons
             $('input[name="received"]').prop('checked', false);
@@ -1718,18 +2429,43 @@
          * @param {string} awbNumber - AWB number for display
          */
         let disputeChargesCache = [];
+        let disputeCurrentShipment = null;
+        const escDispute = function (v) { return $('<div>').text(v ?? '-').html(); };
+
+        function disputeSetDetail(html) {
+            $('#dispute_charge_detail').html(html || '');
+        }
+
+        function disputeEmptyState(title, sub, icon) {
+            return '<div class="dispute-empty">' +
+                '<div class="e-ic"><i class="ti ' + (icon || 'ti-receipt-off') + '"></i></div>' +
+                '<strong>' + escDispute(title) + '</strong>' +
+                '<span>' + escDispute(sub) + '</span></div>';
+        }
+
         function openDisputeModal(shipmentId, awbNumber) {
+            disputeCurrentShipment = shipmentId;
             // Display AWB number
             $('#dispute_awb_display').text(awbNumber || '-');
 
             // Reset dropdowns + detail
             const $typeSelect = $('#dispute_charge_type');
             const $condWrap = $('#dispute_condition_wrap');
-            const $condSelect = $('#dispute_condition_id');
-            $typeSelect.html('<option value="">Loading...</option>');
-            $condSelect.html('<option value="">-- Select condition --</option>');
+            $('#dispute_condition_id').val('');
+            $('#dispute_condition_list').html('');
+            $('#dispute_boxes_count').val('');
+            $('#dispute_boxes_wrap').addClass('d-none');
+            $('#dispute_custom_amount').val('');
+            $('#dispute_custom_wrap').addClass('d-none');
+            $typeSelect.html('<option value="">Loading charges...</option>');
             $condWrap.addClass('d-none');
-            $('#dispute_charge_detail').addClass('d-none').html('');
+            $('#dispute_apply_btn').prop('disabled', true);
+            $('#dispute_type_hint').text('Shipment ke destination & service ke hisaab se charges load ho rahe hain...');
+            disputeSetDetail(
+                '<div class="dispute-loading">' +
+                '<div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>' +
+                '<p>Available dispute charges load ho rahe hain...</p></div>'
+            );
 
             // Open the modal
             $('#disputeChargeModal').modal('show');
@@ -1738,6 +2474,12 @@
                 disputeChargesCache = charges || [];
                 if (!disputeChargesCache.length) {
                     $typeSelect.html('<option value="">No dispute charges found</option>');
+                    $('#dispute_type_hint').text('Is shipment ke liye koi charge rule match nahi hua');
+                    disputeSetDetail(disputeEmptyState(
+                        'No charges available',
+                        'Is shipment ke destination / service ke liye koi dispute rule nahi mila.',
+                        'ti-search-off'
+                    ));
                     return;
                 }
                 const seen = {};
@@ -1746,9 +2488,16 @@
                     const t = c.additional_charges || '';
                     if (t === '' || seen[t]) return;
                     seen[t] = true;
-                    html += '<option value="' + $('<div>').text(t).html() + '">' + $('<div>').text(t).html() + '</option>';
+                    const count = disputeChargesCache.filter(function (x) { return (x.additional_charges || '') === t; }).length;
+                    html += '<option value="' + escDispute(t) + '">' + escDispute(t) + ' (' + count + ' rule' + (count > 1 ? 's' : '') + ')</option>';
                 });
                 $typeSelect.html(html);
+                $('#dispute_type_hint').text(disputeChargesCache.length + ' Select a charge type to view the applicable rules.');
+                disputeSetDetail(disputeEmptyState(
+                    'Charge Preview',
+                    'Select a charge type in Step 1, then choose the applicable condition in Step 2 to view the surcharge preview.',
+                    'ti-file-description'
+                ));
             };
 
             $.ajax({
@@ -1763,52 +2512,376 @@
                         renderTypes(response.charges);
                     } else {
                         $typeSelect.html('<option value="">Failed to load</option>');
+                        disputeSetDetail(disputeEmptyState('Load failed', response.message || 'Something went wrong.', 'ti-alert-circle'));
                         showAlert(response.message || 'Something went wrong.', 'error');
                     }
                 },
                 error: function () {
                     $typeSelect.html('<option value="">Failed to load</option>');
+                    disputeSetDetail(disputeEmptyState('Load failed', 'Network issue — please retry karein.', 'ti-wifi-off'));
                     showAlert('Could not load dispute charges. Please try again.', 'error');
                 }
             });
         }
 
-        // Charge Type select karne par uski saari conditions dusre dropdown me.
+        const isBoxCalc = function (calc) { return /box/i.test(calc || ''); };
+        const isWeightDispute = function (type) { return /weight/i.test(type || ''); };
+        // Custom amount tab chahiye jab charge type Weight ho YA rule values me "Custom" likha ho.
+        const isCustomAmount = function (type, values) { return isWeightDispute(type) || /custom/i.test(values || ''); };
+        const parseDisputeRate = function (values) {
+            const m = String(values || '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+            return m ? parseFloat(m[1]) : NaN;
+        };
+
+        // Charge Type select karne par uski saari conditions card list me (full text, no cut).
         $(document).on('change', '#dispute_charge_type', function () {
             const selectedType = $(this).val();
             const $condWrap = $('#dispute_condition_wrap');
-            const $condSelect = $('#dispute_condition_id');
-            $('#dispute_charge_detail').addClass('d-none').html('');
+            const $condList = $('#dispute_condition_list');
+            $('#dispute_condition_id').val('');
+            $('#dispute_boxes_count').val('');
+            $('#dispute_boxes_wrap').addClass('d-none');
+            $('#dispute_custom_amount').val('');
+            $('#dispute_custom_wrap').addClass('d-none');
+            $('#dispute_apply_btn').prop('disabled', true);
             if (!selectedType) {
-                $condSelect.html('<option value="">-- Select condition --</option>');
+                $condList.html('');
                 $condWrap.addClass('d-none');
+                disputeSetDetail(disputeEmptyState(
+                    'Charge preview yahan dikhega',
+                    'Step 1 me charge type, phir Step 2 me condition select karein.',
+                    'ti-file-description'
+                ));
                 return;
             }
             const matches = disputeChargesCache.filter(function (c) { return (c.additional_charges || '') === selectedType; });
-            let html = '<option value="">-- Select condition --</option>';
+            let html = '';
             matches.forEach(function (c) {
-                html += '<option value="' + c.id + '">' + $('<div>').text(c.conditions || '-').html() + '</option>';
+                html += '<button type="button" class="dispute-cond-item" data-id="' + c.id + '">' +
+                    '<span class="dispute-cond-radio"></span>' +
+                    '<span class="dispute-cond-text">' + escDispute(c.conditions || '-') +
+                        '<span class="dispute-cond-meta">' +
+                            '<span>' + escDispute(c.destination || '-') + '</span>' +
+                            '<span>' + escDispute(c.service_id || '-') + '</span>' +
+                            '<span class="val">' + escDispute(c.values || '-') + '</span>' +
+                        '</span>' +
+                    '</span>' +
+                '</button>';
             });
-            $condSelect.html(html);
-            $condWrap.removeClass('d-none');
+            $condList.html(html);
+            $condWrap.removeClass('d-none').hide().slideDown(180);
+            // Weight dispute ho toh custom amount field dikhao.
+            if (isWeightDispute(selectedType)) {
+                $('#dispute_custom_wrap').removeClass('d-none').hide().slideDown(180);
+            }
+            $('#dispute_type_hint').text(matches.length + ' conditions available — select the condition');
+            disputeSetDetail(disputeEmptyState(
+                'Ab condition select karein',
+                '"' + selectedType + '" ke ' + matches.length + ' rules me se ek chunein.',
+                'ti-list-check'
+            ));
         });
 
-        // Condition select karne par uski value + detail dikhao.
-        $(document).on('change', '#dispute_condition_id', function () {
-            const selectedId = $(this).val();
+        // Condition card click -> select + summary dikhao.
+        $(document).on('click', '.dispute-cond-item', function () {
+            const id = $(this).data('id');
+            $('.dispute-cond-item').removeClass('selected');
+            $(this).addClass('selected');
+            $('#dispute_condition_id').val(id);
+            $('#dispute_condition_id').trigger('change');
+        });
+
+        // Summary render — boxes ke saath total bhi dikhata hai.
+        function renderDisputeSummary() {
+            const selectedId = $('#dispute_condition_id').val();
             const $detail = $('#dispute_charge_detail');
+            const $apply = $('#dispute_apply_btn');
             const found = disputeChargesCache.find(function (c) { return String(c.id) === String(selectedId); });
             if (!found) {
-                $detail.addClass('d-none').html('');
+                $detail.html(disputeEmptyState('Ab condition select karein', 'Summary dekhne ke liye condition chunein.', 'ti-list-check'));
+                $apply.prop('disabled', true);
                 return;
             }
-            $detail.removeClass('d-none').html(
-                '<strong>' + $('<div>').text(found.additional_charges).html() + '</strong><br>' +
-                'Condition: ' + $('<div>').text(found.conditions || '-').html() + '<br>' +
-                'Destination: ' + $('<div>').text(found.destination || '-').html() +
-                ' | Service: ' + $('<div>').text(found.service_id || '-').html() + '<br>' +
-                'Value: <strong>' + $('<div>').text(found.values || '-').html() + '</strong>'
-            );
+            const gstPct = parseFloat(found.gst_percentage) || 0;
+            const gstTxt = (found.gst_percentage !== undefined && found.gst_percentage !== null && String(found.gst_percentage) !== '')
+                ? String(found.gst_percentage) + '%'
+                : '-';
+            const calcTxt = found.calculation_type || '-';
+            const boxMode = isBoxCalc(calcTxt);
+            const boxesRaw = $('#dispute_boxes_count').val();
+            const boxes = parseInt(boxesRaw, 10);
+            const boxesValid = boxMode ? (Number.isInteger(boxes) && boxes >= 1) : true;
+            // Weight dispute me rule rate ki jagah custom amount use hota hai.
+            const weightMode = isCustomAmount($('#dispute_charge_type').val(), found.values);
+            const customAmt = parseFloat($('#dispute_custom_amount').val());
+            const customValid = !weightMode || (!isNaN(customAmt) && customAmt > 0);
+            const ruleRate = parseDisputeRate(found.values);
+            const rate = (weightMode && customValid) ? customAmt : (weightMode ? NaN : ruleRate);
+            const curr = /^\s*\$/.test(String(found.values || '')) ? '$' : 'Rs ';
+            const fmtMoney = function (n) {
+                if (isNaN(n)) return '-';
+                const rounded = Math.round(n * 100) / 100;
+                return curr + (Number.isInteger(rounded)
+                    ? rounded.toLocaleString('en-IN')
+                    : rounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            };
+
+            let boxRow = '';
+            let extraRows = '';
+            let bandSub = 'GST ' + gstTxt + ' applicable';
+            let bandAmount = found.values || '-';
+            let customRow = '';
+            if (weightMode) {
+                customRow = '<div class="dispute-kv"><span class="k"><i class="ti ti-currency-rupee"></i>Custom Amount</span><span class="v">' + (customValid ? fmtMoney(customAmt) : '—') + '</span></div>';
+            }
+
+            if (boxMode) {
+                const boxesLabel = boxesValid ? String(boxes) + (boxes === 1 ? ' box' : ' boxes') : '—';
+                boxRow = '<div class="dispute-kv"><span class="k"><i class="ti ti-package"></i>Boxes</span><span class="v">' + escDispute(boxesLabel) + '</span></div>';
+                if (boxesValid && !isNaN(rate)) {
+                    const base = rate * boxes;
+                    const gstAmt = base * gstPct / 100;
+                    const totalIncl = base + gstAmt;
+                    bandSub = fmtMoney(rate) + ' × ' + boxes + ' + ' + escDispute(gstTxt) + ' GST incl.';
+                    bandAmount = fmtMoney(totalIncl);
+                    extraRows =
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-wallet"></i>Base (' + boxes + ' × ' + fmtMoney(rate) + ')</span><span class="v">' + fmtMoney(base) + '</span></div>' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-percent"></i>GST (' + escDispute(gstTxt) + ')</span><span class="v">+' + fmtMoney(gstAmt) + '</span></div>';
+                } else if (boxesValid && isNaN(rate)) {
+                    bandSub = boxes + ' boxes &nbsp;•&nbsp; GST ' + escDispute(gstTxt) + ' included on billing (custom rate)';
+                    bandAmount = escDispute(found.values);
+                } else if (!isNaN(rate)) {
+                    const perBoxIncl = rate * (1 + gstPct / 100);
+                    bandSub = fmtMoney(rate) + ' + ' + escDispute(gstTxt) + ' GST = ' + fmtMoney(perBoxIncl) + ' /box incl.';
+                    bandAmount = fmtMoney(perBoxIncl) + ' /box';
+                } else {
+                    bandSub = 'Boxes enter karne par GST-inclusive total yahan dikhega';
+                    bandAmount = escDispute(found.values) + ' /box';
+                }
+            } else if (!isNaN(rate)) {
+                // flat (per-shipment) — GST included total
+                const totalIncl = rate * (1 + gstPct / 100);
+                const gstAmt = totalIncl - rate;
+                bandSub = fmtMoney(rate) + ' + ' + escDispute(gstTxt) + ' GST incl.';
+                bandAmount = fmtMoney(totalIncl);
+                if (gstPct > 0) {
+                    extraRows =
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-wallet"></i>Base</span><span class="v">' + fmtMoney(rate) + '</span></div>' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-percent"></i>GST (' + escDispute(gstTxt) + ')</span><span class="v">+' + fmtMoney(gstAmt) + '</span></div>';
+                }
+            }
+
+            // Weight dispute me jab tak custom amount valid nahi, total prompt dikhao.
+            if (weightMode && !customValid) {
+                bandSub = 'Custom amount enter reflact here';
+                bandAmount = '—';
+                extraRows = '';
+            }
+            const readyLabel = !boxesValid ? 'Need boxes' : (!customValid ? 'Need amount' : 'Ready');
+
+            $detail.html(
+                '<div class="dispute-summary">' +
+                    '<div class="dispute-summary-head">' +
+                        '<div class="s-ic"><i class="ti ti-receipt"></i></div>' +
+                        '<div><strong>' + escDispute(found.additional_charges) + '</strong>' +
+                        '<small>Rule #' + escDispute(found.id) + ' &bull; ' + escDispute(found.place_of_apply || 'weighing at first scan') + '</small></div>' +
+                        '<span class="s-badge">' + readyLabel + '</span>' +
+                    '</div>' +
+                    '<div class="dispute-summary-grid">' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-file-text"></i>Condition</span><span class="v">' + escDispute(found.conditions) + '</span></div>' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-map-pin"></i>Destination</span><span class="v">' + escDispute(found.destination) + '</span></div>' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-truck"></i>Service</span><span class="v">' + escDispute(found.service_id) + '</span></div>' +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-calculator"></i>Calculation</span><span class="v">' + escDispute(calcTxt) + '</span></div>' +
+                        boxRow +
+                        customRow +
+                        '<div class="dispute-kv"><span class="k"><i class="ti ti-percent"></i>GST</span><span class="v">' + escDispute(gstTxt) + '</span></div>' +
+                        extraRows +
+                    '</div>' +
+                    '<div class="dispute-value-band">' +
+                        '<div><div class="vb-label">' + (boxMode ? 'Total Charge (incl. GST)' : 'Charge Value (incl. GST)') + '</div><div class="vb-sub">' + bandSub + '</div></div>' +
+                        '<div class="vb-amount">' + bandAmount + '</div>' +
+                    '</div>' +
+                '</div>'
+            ).hide().fadeIn(200);
+            $apply.prop('disabled', !(boxesValid && customValid));
+        }
+
+        // Condition select karne par boxes field (flat/box) + summary dikhao.
+        $(document).on('change', '#dispute_condition_id', function () {
+            const selectedId = $(this).val();
+            const found = disputeChargesCache.find(function (c) { return String(c.id) === String(selectedId); });
+            if (!found) {
+                $('#dispute_boxes_wrap').addClass('d-none');
+                $('#dispute_custom_amount').val('');
+                $('#dispute_custom_wrap').addClass('d-none');
+                renderDisputeSummary();
+                return;
+            }
+            if (isBoxCalc(found.calculation_type)) {
+                $('#dispute_boxes_count').val('');
+                $('#dispute_boxes_wrap').removeClass('d-none').hide().slideDown(180);
+            } else {
+                $('#dispute_boxes_count').val('');
+                $('#dispute_boxes_wrap').addClass('d-none');
+            }
+            // Custom-amount rule (Weight type ya values me "Custom") ho toh field dikhao.
+            if (isCustomAmount($('#dispute_charge_type').val(), found.values)) {
+                $('#dispute_custom_wrap').removeClass('d-none').hide().slideDown(180);
+            } else {
+                $('#dispute_custom_amount').val('');
+                $('#dispute_custom_wrap').addClass('d-none');
+            }
+            renderDisputeSummary();
+        });
+
+        // Boxes type karne par total live update.
+        $(document).on('input', '#dispute_boxes_count', function () {
+            let v = parseInt($(this).val(), 10);
+            if ($(this).val() !== '' && (isNaN(v) || v < 1)) {
+                $(this).val(1);
+            }
+            renderDisputeSummary();
+        });
+
+        // Custom amount type karne par total live update.
+        $(document).on('input', '#dispute_custom_amount', function () {
+            let v = parseFloat($(this).val());
+            if ($(this).val() !== '' && (isNaN(v) || v <= 0)) {
+                $(this).val('');
+            }
+            renderDisputeSummary();
+        });
+
+        // Small safe notifier (showAlert global har page par nahi milta).
+        function disputeNotify(msg, type) {
+            try {
+                if (typeof showAlert === 'function') { showAlert(msg, type || 'success'); return; }
+            } catch (e) {}
+            if (window.Swal) {
+                Swal.fire({ icon: type === 'error' ? 'error' : 'success', title: msg, timer: 2600, showConfirmButton: false });
+            } else { alert(msg); }
+        }
+
+        // Apply button — backend me save karo, phir Dispute Orders page par dikhega.
+        $(document).on('click', '#dispute_apply_btn', function () {
+            const condId = $('#dispute_condition_id').val();
+            const type = $('#dispute_charge_type').val();
+            if (!type || !condId) return;
+            const found = disputeChargesCache.find(function (c) { return String(c.id) === String(condId); });
+            let boxesTxt = '';
+            let boxesVal = null;
+            // Weight dispute me custom amount mandatory hai.
+            const weightMode = isCustomAmount(type, found ? found.values : '');
+            let customVal = null;
+            if (weightMode) {
+                const c = parseFloat($('#dispute_custom_amount').val());
+                if (isNaN(c) || c <= 0) {
+                    disputeNotify('Please enter custom amount for this dispute.', 'error');
+                    $('#dispute_custom_amount').focus();
+                    return;
+                }
+                customVal = Math.round(c * 100) / 100;
+            }
+            if (found && isBoxCalc(found.calculation_type)) {
+                const b = parseInt($('#dispute_boxes_count').val(), 10);
+                if (!Number.isInteger(b) || b < 1) {
+                    disputeNotify('Please enter number of boxes (min 1).', 'error');
+                    $('#dispute_boxes_count').focus();
+                    return;
+                }
+                boxesVal = b;
+                const rate = (weightMode && customVal !== null) ? customVal : parseDisputeRate(found.values);
+                const gstP = parseFloat(found.gst_percentage) || 0;
+                const curr = /^\s*\$/.test(String(found.values || '')) ? '$' : 'Rs ';
+                const fmtA = function (n) {
+                    const r = Math.round(n * 100) / 100;
+                    return curr + (Number.isInteger(r) ? r.toLocaleString('en-IN') : r.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                };
+                boxesTxt = ' × ' + b + ' boxes';
+                if (!isNaN(rate)) {
+                    boxesTxt += ' = ' + fmtA(rate * b * (1 + gstP / 100)) + ' incl. GST';
+                }
+            } else if (found) {
+                const rate0 = (weightMode && customVal !== null) ? customVal : parseDisputeRate(found.values);
+                const gstP0 = parseFloat(found.gst_percentage) || 0;
+                if (!isNaN(rate0) && gstP0 > 0) {
+                    const curr0 = /^\s*\$/.test(String(found.values || '')) ? '$' : 'Rs ';
+                    const tot0 = rate0 * (1 + gstP0 / 100);
+                    const r0 = Math.round(tot0 * 100) / 100;
+                    boxesTxt = ' = ' + curr0 + (Number.isInteger(r0) ? r0.toLocaleString('en-IN') : r0.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' incl. GST';
+                }
+            }
+            let label = found ? (found.additional_charges + ' — ' + found.values + boxesTxt) : type;
+            if (found && weightMode && customVal !== null) {
+                const currLbl = /^\s*\$/.test(String(found.values || '')) ? '$' : 'Rs ';
+                label = found.additional_charges + ' — Custom ' + currLbl + customVal.toLocaleString('en-IN') + boxesTxt;
+            }
+            const awb = $('#dispute_awb_display').text();
+
+            const doSave = function () {
+                const $btn = $('#dispute_apply_btn');
+                const orig = $btn.html();
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Applying...');
+                $.ajax({
+                    url: '{{ route("admin.apply-dispute-charge") }}',
+                    type: 'POST',
+                    data: {
+                        shipment_id: disputeCurrentShipment,
+                        dispute_charge_id: condId,
+                        boxes: boxesVal,
+                        custom_amount: customVal
+                    },
+                    headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                    success: function (response) {
+                        $btn.prop('disabled', false).html(orig);
+                        if (response && response.success) {
+                            $('#disputeChargeModal').modal('hide');
+                            const viewUrl = '{{ route("admin.dispute-orders") }}';
+                            if (window.Swal) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Dispute charge applied!',
+                                    html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span><br><span class="badge bg-danger mt-2">Shipment marked as Disputed</span>',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'View Dispute Orders',
+                                    cancelButtonText: 'Stay here',
+                                    confirmButtonColor: '#dc2626',
+                                    reverseButtons: true
+                                }).then(function (r) {
+                                    if (r.isConfirmed) { window.location.href = viewUrl; }
+                                });
+                            } else {
+                                disputeNotify('Dispute charge applied! (HAWB ' + awb + ')', 'success');
+                            }
+                        } else {
+                            disputeNotify((response && response.message) || 'Could not apply charge.', 'error');
+                        }
+                    },
+                    error: function (xhr) {
+                        $btn.prop('disabled', false).html(orig);
+                        let msg = 'Could not apply charge. Please try again.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                        disputeNotify(msg, 'error');
+                    }
+                });
+            };
+
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'Apply this charge?',
+                    html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span>',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, apply it',
+                    cancelButtonText: 'Review again',
+                    confirmButtonColor: '#dc2626',
+                    reverseButtons: true
+                }).then(function (result) {
+                    if (result.isConfirmed) { doSave(); }
+                });
+            } else if (confirm('Apply this charge? ' + label)) {
+                doSave();
+            }
         });
 
         /**

@@ -6424,11 +6424,11 @@ class CustomerController extends Controller
         // show the manifest code, order date, shipment count, total value
         // (customer charge incl. GST) and cost (base + fuel + surcharge).
         $manifestGroups = collect([]);
-        // The Manifested tab and the Ready for Pickup tab both render the
-        // grouped manifest table: every shipment that shares a manifest
-        // number is collapsed into a single row so the customer sees the
-        // manifest as one unit (mirroring the manifest detail page).
-        if (in_array($status, ['manifested', 'ready_for_pickup'], true)) {
+        // The Manifested, Ready for Pickup, Assigned for Pickup and Received tabs
+        // all render the grouped manifest table: every shipment that shares a
+        // manifest number is collapsed into a single row so the customer sees
+        // the manifest as one unit (mirroring the manifest detail page).
+        if (in_array($status, ['manifested', 'ready_for_pickup', 'assigned_for_pickup', 'confirm_pickup', 'received'], true)) {
             $manifestGroups = $invoices->getCollection()
                 ->filter(function ($invoice) {
                     return $invoice->shipperInfo
