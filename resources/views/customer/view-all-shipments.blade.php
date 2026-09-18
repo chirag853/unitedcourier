@@ -4337,7 +4337,12 @@
                 return;
             }
 
-            const sizeSelect = document.querySelector('.bulk-label-size');
+            // Label Size must come from the CURRENTLY VISIBLE bulk-action bar
+            // (ready / packed sections each have their own select). Reading the
+            // first `.bulk-label-size` in the DOM always returned the Ready
+            // section's value, so Packed prints used the wrong label format.
+            const visibleSizeSelect = document.querySelector('.bulk-action-bar.is-visible .bulk-label-size');
+            const sizeSelect = visibleSizeSelect || document.querySelector('.bulk-label-size');
             const labelSize = sizeSelect ? sizeSelect.value : 'a4';
             const is4x6 = labelSize === '4x6';
             let html = '<!DOCTYPE html><html><head><title>Print Selected Labels</title><style>' +
