@@ -10512,13 +10512,39 @@
                 setField('shipper_kyc_type', customerData.shipper_kyc_type || '');
                 setField('shipper_kyc_number', customerData.shipper_kyc_number || '');
                 setField('gst_number', customerData.gst_number || '');
-                setShipperFieldsLocked(sameCustomerAutofillFieldNames, true);
+                // Lock ONLY the fields that actually received a value from the
+                // customer profile. Empty ones stay editable so the user can
+                // fill the missing details manually (e.g. empty address).
+                var sameCustomerFillMap = {
+                    'shipper_company_names': customerData.company_names,
+                    'shipper_contact_person': customerData.contact_person,
+                    'shipper_address_line1': customerData.address_line1,
+                    'shipper_address_line2': customerData.address_line2,
+                    'shipper_address_line3': customerData.address_line3,
+                    'shipper_phone_number': customerData.phone_number,
+                    'shipper_emails': customerData.emails,
+                    'shipper_kyc_type': customerData.shipper_kyc_type,
+                    'shipper_kyc_number': customerData.shipper_kyc_number,
+                    'gst_number': customerData.gst_number
+                };
+                var sameCustomerToLock = [];
+                var sameCustomerToUnlock = [];
+                sameCustomerAutofillFieldNames.forEach(function (n) {
+                    var v = Object.prototype.hasOwnProperty.call(sameCustomerFillMap, n) ? sameCustomerFillMap[n] : '';
+                    (isSavedCustomerValueFilled(v) ? sameCustomerToLock : sameCustomerToUnlock).push(n);
+                });
+                savedValues.__sameCustomerLocked = sameCustomerToLock.slice();
+                setShipperFieldsLocked(sameCustomerToUnlock, false);
+                setShipperFieldsLocked(sameCustomerToLock, true);
                 syncSameCustomerCsbFields();
             } else {
-                // Restore previously entered values
+                // Restore only the fields we had locked; keep whatever the user
+                // typed into the unlocked (previously empty) fields.
+                var sameCustomerLockedNames = savedValues.__sameCustomerLocked || [];
                 fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (n) {
-                    if (savedValues[n] !== undefined) setField(n, savedValues[n]);
+                    if (savedValues[n] !== undefined && sameCustomerLockedNames.indexOf(n) !== -1) setField(n, savedValues[n]);
                 });
+                delete savedValues.__sameCustomerLocked;
                 setShipperFieldsLocked(savedCustomerCsbFieldNames, false);
             }
         });
