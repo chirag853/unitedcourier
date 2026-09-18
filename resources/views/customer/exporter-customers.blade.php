@@ -1441,7 +1441,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @forelse($exporterCustomers as $key => $savedCustomer)
+                                        @foreach($exporterCustomers as $key => $savedCustomer)
                                             @php
                                                 $fullCompany = trim((string) ($savedCustomer->company_name ?: $savedCustomer->contact_person ?: 'Customer'));
                                                 $nameWords = preg_split('/\s+/', $fullCompany, -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -1547,17 +1547,7 @@
                                                     </div>
                                                 </td>
                                             </tr>
-                                        @empty
-                                            <tr>
-                                                <td colspan="9" class="text-center text-muted py-4">
-                                                    <div class="empty-state">
-                                                        <div class="empty-icon mb-2"><i class="ti ti-users-off"></i></div>
-                                                        <div class="fw-semibold text-secondary">No customers found</div>
-                                                        <div class="small">Add your first customer using the Add Customer tab.</div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        @endforelse
+                                        @endforeach
                                     </tbody>
                                 </table>
                             </div>
@@ -2818,7 +2808,7 @@
                     search: 'Search Customers:',
                     lengthMenu: 'Show _MENU_ entries per page',
                     info: 'Showing _START_ to _END_ of _TOTAL_ entries',
-                    emptyTable: 'No customers found.',
+                    emptyTable: 'No customers found. Add your first customer using the Add Customer tab.',
                 },
                 columnDefs: [
                     { orderable: false, targets: [8] }
