@@ -71,9 +71,9 @@ class BulkUploadController extends Controller
                 return back()->with('error', 'The uploaded file does not contain any data rows.');
             }
 
-            // First row = headers. Normalize header names (remove spaces, underscores).
+            // First row = headers. Normalize header names (remove spaces, underscores, hyphens).
             $rawHeaders = array_map(function ($h) {
-                return trim(preg_replace('/\s+/', '', strtolower((string) $h)));
+                return trim(preg_replace('/[\s_\-]+/', '', strtolower((string) $h)));
             }, $rows[0]);
 
             // Build a map: normalized header => column index
@@ -88,6 +88,22 @@ class BulkUploadController extends Controller
             $getCol = function ($row, $name) use ($headerMap) {
                 if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
                     return trim((string) $row[$headerMap[$name]]);
+                }
+                return null;
+            };
+
+            // Helper to fetch the first non-empty value across header aliases.
+            // Handles variants like VolWeight / VolumetricWeight / VolWt,
+            // ActWeight / ActualWeight, ChgWeight / ChargeableWeight, etc.
+            // (Header normalization already strips spaces/underscores/hyphens.)
+            $getColAny = function ($row, array $names) use ($headerMap) {
+                foreach ($names as $name) {
+                    if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
+                        $val = trim((string) $row[$headerMap[$name]]);
+                        if ($val !== '' && strtolower($val) !== 'null') {
+                            return $val;
+                        }
+                    }
                 }
                 return null;
             };
@@ -164,12 +180,12 @@ class BulkUploadController extends Controller
                     // ---- Calculate total chargeable weight from ChgWeight column ----
                     $totalChgWeight = 0;
                     foreach ($rowGroup as $r) {
-                        $totalChgWeight += floatval($getCol($r, 'chgweight') ?: 0);
+                        $totalChgWeight += floatval($getColAny($r, ['chgweight', 'chargeableweight', 'chargeableweightkg', 'chgwt', 'chargeablewt']) ?: 0);
                     }
                     if ($totalChgWeight <= 0) {
                         // Fallback: sum of ActWeight
                         foreach ($rowGroup as $r) {
-                            $totalChgWeight += floatval($getCol($r, 'actweight') ?: 0);
+                            $totalChgWeight += floatval($getColAny($r, ['actweight', 'actualweight', 'actualweightkg', 'actwt']) ?: 0);
                         }
                     }
 
@@ -300,18 +316,35 @@ class BulkUploadController extends Controller
                     ]);
 
                     // ---- Create PackageDimension records (one per row) ----
+                    // VolWeight / ChgWeight from Excel are stored as-is. When VolWeight
+                    // is empty but L/B/H exist, derive it as (L*B*H)/5000; when
+                    // ChgWeight is empty, use max(ActWeight, VolWeight).
                     $packageIds = [];
                     $boxNo = 1;
                     foreach ($rowGroup as $r) {
+                        $actWt = floatval($getColAny($r, ['actweight', 'actualweight', 'actualweightkg', 'actwt']) ?: 0);
+                        $lenCm = floatval($getCol($r, 'l') ?: 0);
+                        $widCm = floatval($getCol($r, 'b') ?: 0);
+                        $hgtCm = floatval($getCol($r, 'h') ?: 0);
+                        $volWtRaw = $getColAny($r, ['volweight', 'volumetricweight', 'volwt', 'volumetricwt', 'volumetricweightkg']);
+                        $volWt = floatval($volWtRaw ?: 0);
+                        if ($volWt <= 0 && $lenCm > 0 && $widCm > 0 && $hgtCm > 0) {
+                            $volWt = round(($lenCm * $widCm * $hgtCm) / 5000, 2);
+                        }
+                        $chgWtRaw = $getColAny($r, ['chgweight', 'chargeableweight', 'chargeableweightkg', 'chgwt', 'chargeablewt']);
+                        $chgWt = floatval($chgWtRaw ?: 0);
+                        if ($chgWt <= 0) {
+                            $chgWt = max($actWt, $volWt);
+                        }
                         $package = PackageDimension::create([
                             'shipper_id' => $shipperId,
                             'shipping_method' => $shippingMethod,
-                            'actual_weight_kg' => floatval($getCol($r, 'actweight') ?: 0),
-                            'length_cm' => floatval($getCol($r, 'l') ?: 0),
-                            'width_cm' => floatval($getCol($r, 'b') ?: 0),
-                            'height_cm' => floatval($getCol($r, 'h') ?: 0),
-                            'volumetric_weight' => floatval($getCol($r, 'volweight') ?: 0),
-                            'chargeable_weight' => floatval($getCol($r, 'chgweight') ?: 0),
+                            'actual_weight_kg' => $actWt,
+                            'length_cm' => $lenCm,
+                            'width_cm' => $widCm,
+                            'height_cm' => $hgtCm,
+                            'volumetric_weight' => $volWt,
+                            'chargeable_weight' => $chgWt,
                         ]);
                         $packageIds[$boxNo] = $package->id;
                         $boxNo++;
@@ -442,7 +475,16 @@ class BulkUploadController extends Controller
                     );
 
                     // ---- Generate PDF invoice for this consignee ----
-                    $pdfPath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalChgWeight);
+                    // PDF failure (e.g. missing PHP GD extension for the logo PNG on the
+                    // server) must NOT fail the whole shipment - the shipper/consignee/
+                    // invoice rows above are already inserted. Record PDF as null and
+                    // still count the shipment as success.
+                    try {
+                        $pdfPath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalChgWeight);
+                    } catch (\Exception $pdfEx) {
+                        \Log::warning('Bulk upload PDF skipped for AwbNo ' . $awbNo . ': ' . $pdfEx->getMessage());
+                        $pdfPath = null;
+                    }
 
                     $createdShipments[] = [
                         'awb_number' => $newAwbNumber,
@@ -511,9 +553,9 @@ class BulkUploadController extends Controller
                 return response()->json(['success' => false, 'message' => 'The uploaded file does not contain any data rows.']);
             }
 
-            // Normalize headers
+            // Normalize headers (remove spaces, underscores, hyphens).
             $rawHeaders = array_map(function ($h) {
-                return trim(preg_replace('/\s+/', '', strtolower((string) $h)));
+                return trim(preg_replace('/[\s_\-]+/', '', strtolower((string) $h)));
             }, $rows[0]);
 
             $headerMap = [];
@@ -526,6 +568,21 @@ class BulkUploadController extends Controller
             $getCol = function ($row, $name) use ($headerMap) {
                 if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
                     return trim((string) $row[$headerMap[$name]]);
+                }
+                return null;
+            };
+
+            // Helper to fetch the first non-empty value across header aliases.
+            // Handles variants like VolWeight / VolumetricWeight / VolWt,
+            // ActWeight / ActualWeight, ChgWeight / ChargeableWeight, etc.
+            $getColAny = function ($row, array $names) use ($headerMap) {
+                foreach ($names as $name) {
+                    if (isset($headerMap[$name]) && array_key_exists($headerMap[$name], $row)) {
+                        $val = trim((string) $row[$headerMap[$name]]);
+                        if ($val !== '' && strtolower($val) !== 'null') {
+                            return $val;
+                        }
+                    }
                 }
                 return null;
             };
@@ -568,8 +625,8 @@ class BulkUploadController extends Controller
                 $totalActWeight = 0;
                 $totalPcs = 0;
                 foreach ($rowGroup as $r) {
-                    $totalChgWeight += floatval($getCol($r, 'chgweight') ?: 0);
-                    $totalActWeight += floatval($getCol($r, 'actweight') ?: 0);
+                    $totalChgWeight += floatval($getColAny($r, ['chgweight', 'chargeableweight', 'chargeableweightkg', 'chgwt', 'chargeablewt']) ?: 0);
+                    $totalActWeight += floatval($getColAny($r, ['actweight', 'actualweight', 'actualweightkg', 'actwt']) ?: 0);
                     $totalPcs += intval($getCol($r, 'pcs') ?: 0);
                 }
                 if ($totalChgWeight <= 0) {
@@ -873,6 +930,10 @@ class BulkUploadController extends Controller
             'packages' => $packages,
             'rateDetails' => $rateDetails,
             'totalWeight' => $totalWeight,
+            // Dompdf needs the PHP GD extension to render the logo PNG.
+            // When GD is missing (common on fresh servers), hide the logo so
+            // the PDF can still be generated instead of throwing.
+            'hideLogo' => !extension_loaded('gd'),
         ];
 
         $pdf = Pdf::loadView('customer.partials.bulk-invoice-pdf', $data);

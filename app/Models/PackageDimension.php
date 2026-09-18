@@ -67,14 +67,21 @@ class PackageDimension extends Model
         parent::boot();
 
         static::saving(function ($package) {
-            // Auto-calculate volumetric weight if dimensions are provided
-            if ($package->length_cm && $package->width_cm && $package->height_cm) {
+            // Only auto-calculate volumetric weight when it was NOT explicitly
+            // provided (e.g. bulk-upload Excel VolWeight column). An explicit
+            // Excel value must be stored as-is in the database.
+            $explicitVol = floatval($package->volumetric_weight) ?: 0;
+            if ($explicitVol <= 0 && $package->length_cm && $package->width_cm && $package->height_cm) {
                 $package->volumetric_weight = $package->calculateVolumetricWeight();
             }
-            // Auto-calculate chargeable weight (max of actual and volumetric)
-            $actual = floatval($package->actual_weight_kg) ?: 0;
-            $volumetric = floatval($package->volumetric_weight) ?: 0;
-            $package->chargeable_weight = max($actual, $volumetric);
+            // Only auto-calculate chargeable weight when it was NOT explicitly
+            // provided (e.g. bulk-upload Excel ChgWeight column).
+            $explicitChg = floatval($package->chargeable_weight) ?: 0;
+            if ($explicitChg <= 0) {
+                $actual = floatval($package->actual_weight_kg) ?: 0;
+                $volumetric = floatval($package->volumetric_weight) ?: 0;
+                $package->chargeable_weight = max($actual, $volumetric);
+            }
         });
     }
 }

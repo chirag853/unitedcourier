@@ -330,7 +330,6 @@
                                                         <th>Weight (kg)</th>
                                                         <th>Rate</th>
                                                         <th>Invoice</th>
-                                                        <th>Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -343,13 +342,6 @@
                                                             <td>{{ number_format($shipment['total_weight'], 2) }}</td>
                                                             <td>₹{{ number_format($shipment['rate'], 2) }}</td>
                                                             <td>{{ $shipment['invoice_number'] ?: '-' }}</td>
-                                                            <td>
-                                                                @if(!empty($shipment['invoice_pdf']))
-                                                                    <a href="{{ asset($shipment['invoice_pdf']) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                        <i class="ti ti-file-type-pdf me-1"></i> PDF
-                                                                    </a>
-                                                                @endif
-                                                            </td>
                                                         </tr>
                                                     @endforeach
                                                 </tbody>

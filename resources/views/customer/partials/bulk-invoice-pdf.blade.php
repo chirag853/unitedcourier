@@ -300,7 +300,9 @@
         <!-- Header: logo on top, company name + address below it -->
         <div class="invoice-header">
             <div class="brand-centered">
+                @if(empty($hideLogo))
                 <img src="{{ public_path('assets/img/logo.png') }}" alt="United Worldwide Couriers Pvt. Ltd." class="brand-logo-centered">
+                @endif
                 <div class="company-info">
                     <p class="brand-name">United Worldwide Couriers Pvt. Ltd.</p>
                     <span class="brand-tag">Global Logistics Since 1995</span>
