@@ -3016,7 +3016,7 @@ class CustomerController extends Controller
                 'consignee_address_line3' => 'nullable|string|max:255',
                 'consignee_zip_code' => 'required|string|max:20',
                 'consignee_city' => 'required|string|max:100',
-                'consignee_state' => 'nullable|string|max:100',
+                'consignee_state' => 'required|string|max:100',
                 'consignee_phone_number' => 'required|string|max:30',
                 'consignee_email' => 'required|email|max:150',
                 'consignee_email_opt_out' => 'boolean',

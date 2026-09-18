@@ -3864,7 +3864,8 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">State </label>
+                                                                <label class="form-label">State <span
+                                                                        class="text-danger">*</span></label>
                                                                 <select class="form-select" name="consignee_state">
                                                                     <option value="">-- Select State --</option>
                                                                     @foreach($zones as $zone)
@@ -10720,6 +10721,19 @@
             if (consigneeEmail && consigneeEmail.value.trim() && !emailPattern.test(consigneeEmail.value.trim())) {
                 addError(consigneeEmail, 'Enter a valid consignee email address.', 'address');
             }
+
+            // Consignee state is mandatory. NOTE: ZIP-autofill locks the visible
+            // select (disabled) and carries the value in a hidden input with the
+            // same name — accept that value instead of flagging the disabled select.
+            (function requireConsigneeState() {
+                const stateSelect = form.querySelector('select[name="consignee_state"]');
+                const stateApiHidden = form.querySelector('#consignee_state_api_value');
+                const hiddenVal = stateApiHidden ? String(stateApiHidden.value || '').trim() : '';
+                const selectVal = (stateSelect && !stateSelect.disabled) ? String(stateSelect.value || '').trim() : '';
+                if (!hiddenVal && !selectVal) {
+                    addError(stateSelect, 'Consignee state is required.', 'address');
+                }
+            })();
 
             const boxes = form.querySelector('[name="number_of_boxes"]');
             const boxCount = parseInt(boxes?.value || '0', 10);
