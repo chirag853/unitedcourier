@@ -10455,7 +10455,7 @@ class CustomerController extends Controller
         );
 
         if ($isUSA) {
-            return 'USA';
+            return 'US';
         }
 
 
