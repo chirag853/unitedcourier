@@ -3326,6 +3326,9 @@
                     return;
                 }
 
+                // Fresh bulk run => previous batch number no longer applies.
+                addressErrorQueueBatch = null;
+
                 const shipperIds = $checked.map(function () {
                     return $(this).data('shipper-id');
                 }).get();
@@ -3402,10 +3405,14 @@
                             const addressErrorCount = results.address_errors ? results.address_errors.length : 0;
 
                             if (addressErrorCount > 0) {
-                                // Set up the queue and show the modal for the first address error
+                                // Set up the queue and show the modal for the first address error.
+                                // Remember this bulk run's manifest number so every
+                                // fallback shipment joins the SAME manifest.
+                                addressErrorQueueBatch = response.manifest_number
+                                    || ((results.success && results.success[0] && results.success[0].manifest_number) || null);
                                 addressErrorQueue = results.address_errors;
                                 addressErrorQueueIndex = 0;
-                                showAddressErrorFallbackModal(addressErrorQueue[0]);
+                                showAddressErrorFallbackModal(addressErrorQueue[0], addressErrorQueueBatch);
 
                                 var summaryMsg = addressErrorCount + ' shipment(s) have address errors for UNITED ECO POST. Please review each and choose to ship via UNITED CLASSIC (Ship Global) or correct the address.';
                                 if (failedCount > 0) {
@@ -3448,11 +3455,18 @@
             // Queue for bulk address errors (processed one at a time)
             var addressErrorQueue = [];
             var addressErrorQueueIndex = 0;
+            // Batch manifest number of the bulk run that produced the current
+            // address-error queue. Fallbacks from that queue join THIS manifest
+            // instead of getting their own numbers. Null for single flows.
+            var addressErrorQueueBatch = null;
 
-            // Populate and show the address error fallback modal
-            function showAddressErrorFallbackModal(data) {
-                // Store the shipper ID for the confirm handler
+            // Populate and show the address error fallback modal.
+            // batchManifestNumber (bulk queue only): fallback joins that batch's
+            // manifest. Single-manifest callers omit it => fresh number.
+            function showAddressErrorFallbackModal(data, batchManifestNumber) {
+                // Store the shipper ID + batch number for the confirm handler
                 $('#confirmShipGlobalFallbackBtn').data('shipper-id', data.shipper_id);
+                $('#confirmShipGlobalFallbackBtn').data('manifest-number', batchManifestNumber || '');
 
                 // Populate rate details
                 $('#fbTotalWeight').text((data.total_weight || 0) + ' kg');
@@ -3579,13 +3593,20 @@
 
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
 
+                var fallbackData = {
+                    _token: $('meta[name="csrf-token"]').attr('content'),
+                    shipper_id: shipperId
+                };
+                // Bulk-batch fallback: join the same manifest as the batch.
+                var fallbackBatch = $btn.data('manifest-number') || null;
+                if (fallbackBatch) {
+                    fallbackData.manifest_number = fallbackBatch;
+                }
+
                 $.ajax({
                     url: '{{ url("/customer/manifest-ship-global-fallback") }}',
                     type: 'POST',
-                    data: {
-                        _token: $('meta[name="csrf-token"]').attr('content'),
-                        shipper_id: shipperId
-                    },
+                    data: fallbackData,
                     success: function (response) {
                         if (response.success) {
                             // Update the row in the table
@@ -3635,12 +3656,13 @@
                 if (addressErrorQueue.length > 0 && (addressErrorQueueIndex + 1) < addressErrorQueue.length) {
                     addressErrorQueueIndex++;
                     setTimeout(function () {
-                        showAddressErrorFallbackModal(addressErrorQueue[addressErrorQueueIndex]);
+                        showAddressErrorFallbackModal(addressErrorQueue[addressErrorQueueIndex], addressErrorQueueBatch);
                     }, 300);
                 } else {
                     // All address errors processed — reset queue
                     addressErrorQueue = [];
                     addressErrorQueueIndex = 0;
+                    addressErrorQueueBatch = null;
                 }
             });
 

@@ -9763,6 +9763,7 @@ class CustomerController extends Controller
                 'success' => true,
                 'message' => 'Bulk manifest completed. '.count($results['success']).' succeeded, '.count($results['failed']).' failed out of '.$results['total'].' shipments.',
                 'results' => $results,
+                'manifest_number' => $bulkManifestNumber,
                 'new_balance' => $bulkNewBalance,
             ]);
         } catch (\Exception $e) {
@@ -11604,7 +11605,10 @@ class CustomerController extends Controller
      * @param int         $customerId
      * @param string|null $manifestNumber When provided (bulk manifest flow) the
      *                                    shipment joins an existing batch that
-     *                                    shares this single manifest number.
+     *                                    shares this single manifest number. A
+     *                                    pre-existing row (e.g. from an earlier
+     *                                    attempt) is moved into this batch so a
+     *                                    bulk action never splits across numbers.
      * @return \App\Models\Manifest
      */
     private function createManifestRecord(int $shipperId, int $customerId, ?string $manifestNumber = null)
@@ -11612,6 +11616,16 @@ class CustomerController extends Controller
         $manifest = Manifest::where('shipper_id', $shipperId)->first();
 
         if ($manifest) {
+            // Bulk batch: pull a still-open pre-existing row into this batch.
+            // Closed/pickup batches are terminal — never rewrite those.
+            if ($manifestNumber
+                && $manifest->manifest_number !== $manifestNumber
+                && (int) $manifest->status === Manifest::STATUS_OPEN
+            ) {
+                $manifest->manifest_number = $manifestNumber;
+                $manifest->save();
+            }
+
             return $manifest;
         }
 
@@ -13539,7 +13553,7 @@ class CustomerController extends Controller
      * @param  int  $customerId
      * @return array
      */
-    private function executeShipGlobalFallback($shipper, $customerId)
+    private function executeShipGlobalFallback($shipper, $customerId, ?string $manifestNumber = null)
     {
         // 1. Find the UNITED CLASSIC courier service
         $classicService = CourierService::whereRaw('UPPER(method) LIKE ?', ['%UNITED CLASSIC%'])->first();
@@ -13654,8 +13668,11 @@ class CustomerController extends Controller
             $shipper->status = 'manifested';
             $shipper->save();
 
-            // Create a manifest record from the manifests table
-            $this->createManifestRecord($shipper->id, $customerId);
+            // Create a manifest record from the manifests table.
+            // When the fallback runs for a bulk-manifest batch, the caller
+            // passes that batch number so this shipment joins the SAME
+            // manifest instead of getting its own number.
+            $this->createManifestRecord($shipper->id, $customerId, $manifestNumber);
 
             // Create tracking record for manifested status
             Tracking::create([
@@ -13793,10 +13810,20 @@ class CustomerController extends Controller
 
             $validated = $request->validate([
                 'shipper_id' => 'required|integer',
+                'manifest_number' => 'nullable|string|max:50',
             ]);
 
             $customerId = auth()->guard('customer')->id();
             $shipperId = $validated['shipper_id'];
+
+            // Optional batch number (bulk-manifest fallback queue): only accept
+            // a manifest number that already belongs to this customer, otherwise
+            // fall back to a fresh number for this shipment.
+            $batchManifestNumber = $validated['manifest_number'] ?? null;
+            if ($batchManifestNumber && ! Manifest::where('manifest_number', $batchManifestNumber)
+                    ->where('customer_id', $customerId)->exists()) {
+                $batchManifestNumber = null;
+            }
 
             $shipper = ShipperInfo::where('id', $shipperId)
                 ->where('customer_id', $customerId)
@@ -13816,7 +13843,7 @@ class CustomerController extends Controller
                 ], 400);
             }
 
-            $result = $this->executeShipGlobalFallback($shipper, $customerId);
+            $result = $this->executeShipGlobalFallback($shipper, $customerId, $batchManifestNumber);
 
             if ($result['success']) {
                 return response()->json($result);
