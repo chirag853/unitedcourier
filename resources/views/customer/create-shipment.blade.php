@@ -11480,17 +11480,21 @@ if (rateRadio && rateRadio.dataset.rate) {
     <script>
     // Show "CSB5 is under review" when Same as customer + CSB V is selected
     // but the login account's csb_forms.is_csb_v is still 0.
+    // NOTE: only when a csb_forms row actually exists (i.e. the customer has
+    // enrolled and approval is pending). With no row at all the customer has
+    // never enrolled, so only the red "Please enroll" message must show.
     document.addEventListener('DOMContentLoaded', function() {
         const originTypeSelectForReview = document.getElementById('originType');
         const sameAsCustomerForReview = document.getElementById('sameAsCustomer');
         const underReviewMsg = document.getElementById('csbUnderReviewMsg');
+        const loginHasCsbForm = @json((bool) $csbForm);
         const loginIsCsbV = @json((bool) ($csbForm?->is_csb_v));
         function syncCsbUnderReviewMsg() {
             if (!originTypeSelectForReview || !underReviewMsg) return;
             const originVal = (typeof $ !== 'undefined' && typeof $(originTypeSelectForReview).val === 'function')
                 ? $(originTypeSelectForReview).val()
                 : originTypeSelectForReview.value;
-            const show = !!(sameAsCustomerForReview && sameAsCustomerForReview.checked && originVal === 'CSB V' && !loginIsCsbV);
+            const show = !!(loginHasCsbForm && sameAsCustomerForReview && sameAsCustomerForReview.checked && originVal === 'CSB V' && !loginIsCsbV);
             underReviewMsg.style.display = show ? 'block' : 'none';
             if (show) {
                 const csbInfoSectionForReview = document.getElementById('csbInfoSection');
