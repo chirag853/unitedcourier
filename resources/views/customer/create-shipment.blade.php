@@ -9296,7 +9296,9 @@
                 consignee_zip_code: getVal('input[name="consignee_zip_code"]'),
                 delivery_destination: deliveryDestination,
                 package_weights: packageWeights,
-                incoterms: getVal('select[name="incoterms"]')
+                incoterms: getVal('select[name="incoterms"]'),
+                // CSB-V surcharge sirf CSB V origin par lagta hai — current selection bhejo.
+                origin_type: getVal('select[name="origin_type"]')
             })
         })
         .then(res => res.json())

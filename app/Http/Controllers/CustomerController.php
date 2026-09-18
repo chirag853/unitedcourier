@@ -3741,6 +3741,8 @@ class CustomerController extends Controller
 
             // ---- CSB-V dispute charge (dispute_charges, place_of_apply = Shipment creation) ----
             // disputeCalculation: chargeType -> wt slab + customer type -> destination -> values.
+            // CSB-V surcharge sirf tab lagta hai jab shipment ka Origin Type CSB V ho.
+            $isCsbVOrigin = $this->isCsbVOriginType($validatedData['origin_type'] ?? null);
             $disputeCategory = strtolower((string) ($customer->businessCategory?->category_name ?? ''));
             if (str_contains($disputeCategory, 'cargo')) {
                 $disputeCustomerType = 'cargo';
@@ -3751,7 +3753,7 @@ class CustomerController extends Controller
             } else {
                 $disputeCustomerType = $disputeCategory;
             }
-            $disputeResult = ShipmentChargeService::disputeCalculation(
+            $disputeResult = $isCsbVOrigin ? ShipmentChargeService::disputeCalculation(
                 'CSB-V Sucharges',
                 $disputeTotalWt,
                 '',
@@ -3759,7 +3761,7 @@ class CustomerController extends Controller
                 $disputeCustomerType,
                 'flat/awb',
                 ''
-            );
+            ) : ['matched' => false, 'reason' => 'skipped: origin_type is not CSB V'];
             $disputeChargeTotal = 0.0;
             if (! empty($disputeResult['matched'])) {
                 // values me apna 18% GST included hai, isliye seedha total jodo.
@@ -4430,6 +4432,8 @@ class CustomerController extends Controller
 
         // ---- Preview: CSB-V dispute charge (shipment creation wala same calc) ----
         // Weight = entered total weight, customer type = business category se.
+        // CSB-V surcharge sirf tab lagta hai jab rate form me Origin Type CSB V select ho.
+        $isCsbVPreviewOrigin = $this->isCsbVOriginType($request->origin_type ?? null);
         $previewCategory = strtolower((string) ($customer->businessCategory?->category_name ?? ''));
         if (str_contains($previewCategory, 'cargo')) {
             $previewCustomerType = 'cargo';
@@ -4440,7 +4444,7 @@ class CustomerController extends Controller
         } else {
             $previewCustomerType = $previewCategory;
         }
-        $disputePreview = ShipmentChargeService::disputeCalculation(
+        $disputePreview = $isCsbVPreviewOrigin ? ShipmentChargeService::disputeCalculation(
             'CSB-V Sucharges',
             $totalWeight,
             '',
@@ -4448,7 +4452,7 @@ class CustomerController extends Controller
             $previewCustomerType,
             'flat/awb',
             ''
-        );
+        ) : ['matched' => false, 'reason' => 'skipped: origin_type is not CSB V'];
         \Log::info('Preview dispute calc', [
             'customer_id' => $customer->id ?? null,
             'category' => $previewCategory,
@@ -10432,6 +10436,16 @@ class CustomerController extends Controller
      * @param  string|null  $destination
      * @return string
      */
+    /**
+     * Normalize an Origin Type value and tell whether it means CSB V.
+     * Accepts "CSB V" (form value) plus stored variants "CSB 5" / "CSB5".
+     */
+    public function isCsbVOriginType($originType)
+    {
+        $normalized = strtoupper((string) preg_replace('/\s+/', ' ', trim((string) ($originType ?? ''))));
+        return in_array($normalized, ['CSB V', 'CSB 5', 'CSB5'], true);
+    }
+
     public function resolveDestinationCountry($destination)
     {
         $destinationValue = trim((string) ($destination ?? ''));
