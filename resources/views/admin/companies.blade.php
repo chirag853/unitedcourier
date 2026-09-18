@@ -1351,9 +1351,8 @@
                                                     {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
                                                 </td>
                                                 <td class="table-actions">
-                                                    @php $firstAssignedShipment = $manifest->shipments[0] ?? null; @endphp
-                                                    @if($firstAssignedShipment)
-                                                    <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment" onclick="openReceiveShipment({{ $firstAssignedShipment['id'] }}, '{{ $manifest->manifest_number ?? '' }}')">
+                                                    @if(!empty($manifest->shipments))
+                                                    <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment (whole manifest: {{ $manifest->shipment_count }} shipment(s))" onclick="openReceiveBulkShipment('{{ addslashes($manifest->manifest_number ?? '') }}', {{ (int) $manifest->shipment_count }})">
                                                         <i class="ti ti-package"></i>
                                                     </button>
                                                     @endif
@@ -1791,12 +1790,17 @@
                 </div>
                 <form id="receiveShipmentForm">
                     <input type="hidden" name="shipment_id" id="receive_shipment_id" value="">
+                    <input type="hidden" name="receive_mode" id="receive_mode" value="single">
+                    <input type="hidden" name="manifest_number" id="receive_manifest_number" value="">
                     <div class="modal-body">
                         <div id="receiveShipmentAlert" class="alert d-none"></div>
 
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Manifest Number</label>
-                            <p class="mb-0" id="receive_manifest_display">-</p>
+                            <p class="mb-0"><span id="receive_manifest_display">-</span>
+                                <span class="badge bg-primary ms-1 d-none" id="receive_bulk_count"></span>
+                            </p>
+                            <small class="text-muted d-none" id="receive_bulk_note">Whole manifest will be updated together.</small>
                         </div>
 
                         <div class="mb-4">
@@ -2320,7 +2324,9 @@
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Submitting...');
 
                 $.ajax({
-                    url: '{{ route("admin.receive-shipment") }}',
+                    url: $('#receive_mode').val() === 'bulk'
+                        ? '{{ route("admin.receive-shipment-bulk") }}'
+                        : '{{ route("admin.receive-shipment") }}',
                     type: 'POST',
                     data: $(this).serialize(),
                     headers: {
@@ -2360,6 +2366,11 @@
             $('#receiveShipmentModal').on('hidden.bs.modal', function() {
                 $('#receiveShipmentAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');
                 $('input[name="received"]').prop('checked', false);
+                $('#receive_mode').val('single');
+                $('#receive_shipment_id').val('');
+                $('#receive_manifest_number').val('');
+                $('#receive_bulk_count').addClass('d-none').text('');
+                $('#receive_bulk_note').addClass('d-none');
                 $('#receiveShipmentBtn').prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
             });
 
@@ -2480,11 +2491,43 @@
          * @param {string} manifestNumber - Manifest number for display
          */
         function openReceiveShipment(shipmentId, manifestNumber) {
+            // Single-shipment mode
+            $('#receive_mode').val('single');
             // Set shipment ID
             $('#receive_shipment_id').val(shipmentId);
+            $('#receive_manifest_number').val('');
 
             // Display Manifest number
             $('#receive_manifest_display').text(manifestNumber || '-');
+            $('#receive_bulk_count').addClass('d-none').text('');
+            $('#receive_bulk_note').addClass('d-none');
+
+            // Reset radio buttons
+            $('input[name="received"]').prop('checked', false);
+
+            // Reset alert
+            $('#receiveShipmentAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');
+
+            // Open the modal
+            $('#receiveShipmentModal').modal('show');
+        }
+
+        /**
+         * Open the Receive Shipment modal in BULK mode for a whole manifest.
+         * Yes/No applies to ALL Assigned-for-Pickup shipments of the manifest together.
+         * @param {string} manifestNumber
+         * @param {number} shipmentCount
+         */
+        function openReceiveBulkShipment(manifestNumber, shipmentCount) {
+            // Bulk-manifest mode
+            $('#receive_mode').val('bulk');
+            $('#receive_shipment_id').val('');
+            $('#receive_manifest_number').val(manifestNumber);
+
+            // Display manifest summary
+            $('#receive_manifest_display').text(manifestNumber || '-');
+            $('#receive_bulk_count').removeClass('d-none').text((shipmentCount || 0) + ' shipment(s)');
+            $('#receive_bulk_note').removeClass('d-none');
 
             // Reset radio buttons
             $('input[name="received"]').prop('checked', false);

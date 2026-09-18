@@ -1356,66 +1356,159 @@ class AdminController extends Controller
                 'received'    => 'required|string|in:yes,no',
             ]);
 
-            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
-            if (!$shipmentInvoice || !$shipmentInvoice->shipper_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Shipment not found or no shipper associated.'
-                ]);
-            }
+            $result = $this->applyReceiveShipment((int) $request->shipment_id, $request->received);
 
-            $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
-            if (!$shipper || !$shipper->awb_number) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Shipper info not found or AWB number missing.'
-                ]);
-            }
-
-            $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
-
-            if ($request->received === 'yes') {
-                // Mark as received in tracking and set shipper status to 'received'
-                // so the shipment moves to the Print Label tab
-                \App\Models\Tracking::create([
-                    'awb_number'  => $shipper->awb_number,
-                    'status'      => 'received',
-                    'title'       => 'Shipment Received',
-                    'shipper_id'  => $shipper->id,
-                    'shipping_id' => $createShipment ? $createShipment->id : null,
-                    'uwc_id'      => $shipper->awb_number,
-                ]);
-                $shipper->status = 'received';
-                $shipper->save();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Shipment received successfully. It has been moved to Print Label tab.'
-                ]);
-            } else {
-                // Mark as on hold (not received)
-                \App\Models\Tracking::create([
-                    'awb_number'  => $shipper->awb_number,
-                    'status'      => 'on_hold',
-                    'title'       => 'Shipment On Hold',
-                    'shipper_id'  => $shipper->id,
-                    'shipping_id' => $createShipment ? $createShipment->id : null,
-                    'uwc_id'      => $shipper->awb_number,
-                ]);
-                $shipper->status = 'on_hold';
-                $shipper->save();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Shipment marked as on hold (not received).'
-                ]);
-            }
+            return response()->json($result);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Receive a whole manifest in one go.
+     *
+     * All shipments of the manifest that are still in "assigned_for_pickup"
+     * move to "received" (Yes) or "on_hold" (No) together.
+     */
+    public function receiveBulkShipment(Request $request)
+    {
+        try {
+            $request->validate([
+                'manifest_number' => 'required|string|exists:manifests,manifest_number',
+                'received'        => 'required|string|in:yes,no',
+            ]);
+
+            $manifestNumber = trim((string) $request->manifest_number);
+
+            // All invoice ids of this manifest whose shipper is still assigned for pickup.
+            $shipmentIds = DB::table('shipment_invoice')
+                ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                ->join('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
+                ->where('manifests.manifest_number', $manifestNumber)
+                ->where('shipper_info.status', 'assigned_for_pickup')
+                ->distinct()
+                ->pluck('shipment_invoice.id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            if (empty($shipmentIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Is manifest me koi Assigned for Pickup shipment nahi mili (shayad sab already received/hold hain).'
+                ]);
+            }
+
+            $received = $request->received;
+            $done = 0;
+            $skipped = 0;
+            DB::transaction(function () use ($shipmentIds, $received, &$done, &$skipped) {
+                foreach ($shipmentIds as $sid) {
+                    $result = $this->applyReceiveShipment($sid, $received);
+                    if ($result['success']) {
+                        $done++;
+                    } else {
+                        $skipped++;
+                    }
+                }
+            });
+
+            if ($done === 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Koi shipment update nahi ho payi (shipper/AWB data missing).'
+                ]);
+            }
+
+            $message = $received === 'yes'
+                ? $done . ' shipment(s) received successfully, Print Label tab me chali gayi hain (Manifest ' . $manifestNumber . ').'
+                : $done . ' shipment(s) on hold mark ho gayi hain (Manifest ' . $manifestNumber . ').';
+            if ($skipped > 0) {
+                $message .= ' ' . $skipped . ' skipped (data missing).';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'manifest_number' => $manifestNumber,
+                'received_count' => $done,
+                'skipped_count' => $skipped,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Bulk receive failed for manifest ' . ($request->manifest_number ?? '-') . ': ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Shared per-shipment receive work (single + bulk flows).
+     *
+     * Yes → tracking "received" + shipper "received" (Print Label tab).
+     * No  → tracking "on_hold"   + shipper "on_hold".
+     *
+     * @return array{success: bool, message: string}
+     */
+    private function applyReceiveShipment($shipmentId, $received)
+    {
+        $shipmentInvoice = ShipmentInvoice::find($shipmentId);
+        if (!$shipmentInvoice || !$shipmentInvoice->shipper_id) {
+            return [
+                'success' => false,
+                'message' => 'Shipment not found or no shipper associated.'
+            ];
+        }
+
+        $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+        if (!$shipper || !$shipper->awb_number) {
+            return [
+                'success' => false,
+                'message' => 'Shipper info not found or AWB number missing.'
+            ];
+        }
+
+        $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+
+        if ($received === 'yes') {
+            // Mark as received in tracking and set shipper status to 'received'
+            // so the shipment moves to the Print Label tab
+            \App\Models\Tracking::create([
+                'awb_number'  => $shipper->awb_number,
+                'status'      => 'received',
+                'title'       => 'Shipment Received',
+                'shipper_id'  => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id'      => $shipper->awb_number,
+            ]);
+            $shipper->status = 'received';
+            $shipper->save();
+
+            return [
+                'success' => true,
+                'message' => 'Shipment received successfully. It has been moved to Print Label tab.'
+            ];
+        }
+
+        // Mark as on hold (not received)
+        \App\Models\Tracking::create([
+            'awb_number'  => $shipper->awb_number,
+            'status'      => 'on_hold',
+            'title'       => 'Shipment On Hold',
+            'shipper_id'  => $shipper->id,
+            'shipping_id' => $createShipment ? $createShipment->id : null,
+            'uwc_id'      => $shipper->awb_number,
+        ]);
+        $shipper->status = 'on_hold';
+        $shipper->save();
+
+        return [
+            'success' => true,
+            'message' => 'Shipment marked as on hold (not received).'
+        ];
     }
 
     /**
