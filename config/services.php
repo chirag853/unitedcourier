@@ -249,6 +249,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Manifest carrier booking
+    |--------------------------------------------------------------------------
+    | When true, manifest flows skip ALL carrier API calls (UPS, ShipGlobal,
+    | Primus, ...) and complete the manifest internally using the shipment's
+    | own AWB number. Status flow, manifest records, wallet charge and logs
+    | stay exactly the same. Can also be toggled per request with the
+    | `skip_carrier` request flag (used by the packed-page manifest buttons).
+    */
+    'manifest' => [
+        'skip_carrier' => filter_var(env('MANIFEST_SKIP_CARRIER', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Delhivery API (DDU pickup creation)
     |--------------------------------------------------------------------------
     | Called from AdminController::callDelhiveryApi() when admin assigns

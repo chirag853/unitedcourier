@@ -3255,7 +3255,9 @@
                     type: 'POST',
                     data: {
                         _token: $('meta[name="csrf-token"]').attr('content'),
-                        shipper_id: shipperId
+                        shipper_id: shipperId,
+                        // Carrier API hit nahi karni — internal manifest only.
+                        skip_carrier: true
                     },
                     success: function (response) {
                         if (response.success) {
@@ -3351,7 +3353,9 @@
                     type: 'POST',
                     data: {
                         _token: $('meta[name="csrf-token"]').attr('content'),
-                        shipper_ids: shipperIds
+                        shipper_ids: shipperIds,
+                        // Carrier API hit nahi karni — internal manifest only.
+                        skip_carrier: true
                     },
                     success: function (response) {
                         if (response.success) {

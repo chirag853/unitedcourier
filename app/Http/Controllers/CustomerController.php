@@ -8480,6 +8480,31 @@ class CustomerController extends Controller
                 }
             }
 
+            // Carrier booking skip (skip_carrier flag / MANIFEST_SKIP_CARRIER):
+            // koi carrier API hit nahi hogi — internal AWB par manifest complete.
+            $skipCarrier = $request->boolean('skip_carrier') || config('services.manifest.skip_carrier', false);
+            if ($skipCarrier) {
+                $internal = $this->persistInternalManifest($shipper, $customerId, $targetStatus);
+                $chargeNote = $internal['amount_charged'] > 0
+                    ? ' Payment of ₹'.number_format($internal['amount_charged'], 2).' deducted from your wallet.'
+                    : '';
+
+                \Log::info('manifestShipment: Shipper #'.$shipperId.' manifested internally (carrier skipped).');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully (carrier booking skipped)!'.$chargeNote,
+                    'tracking_number' => $internal['tracking_number'],
+                    'label_url' => null,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => $internal['manifest_number'],
+                    'network' => 'internal',
+                    'carrier_skipped' => true,
+                    'amount_charged' => $internal['amount_charged'],
+                    'new_balance' => $internal['new_balance'],
+                ]);
+            }
+
             // Ready flow me Primus ke liye custom label chahiye hota hai (jo normally Packed me banta hai).
             // Yahan auto-label bana kar store kar dete hain taaki manifest fail na ho, status change nahi hota.
             if ($targetStatus === 'ready' && empty($shipper->custom_label)) {
@@ -9178,6 +9203,10 @@ class CustomerController extends Controller
             // shipment in the batch (single manifest flow keeps unique numbers).
             $bulkManifestNumber = Manifest::generateManifestNumber();
 
+            // Carrier booking skip (skip_carrier flag / MANIFEST_SKIP_CARRIER):
+            // koi carrier API hit nahi hogi — internal AWB par manifest complete.
+            $skipCarrier = $request->boolean('skip_carrier') || config('services.manifest.skip_carrier', false);
+
             foreach ($shipperIds as $shipperId) {
                 try {
                     $shipper = ShipperInfo::where('id', $shipperId)
@@ -9197,6 +9226,26 @@ class CustomerController extends Controller
                     }
 
                     $bulkPreviousStatus = $shipper->status;
+
+                    // Carrier booking skipped: no carrier API, internal manifest.
+                    if ($skipCarrier) {
+                        $internal = $this->persistInternalManifest($shipper, $customerId, 'manifested', $bulkManifestNumber);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $internal['tracking_number'],
+                            'label_url' => null,
+                            'manifest_number' => $internal['manifest_number'],
+                            'network' => 'internal',
+                            'carrier_skipped' => true,
+                            'amount_charged' => $internal['amount_charged'],
+                            'new_balance' => $internal['new_balance'],
+                        ];
+
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested internally (carrier skipped).');
+
+                        continue;
+                    }
 
                     // Determine the network from the shipping method's CourierService
                     $shippingMethod = $this->resolveShippingMethod($shipper);
@@ -11593,6 +11642,84 @@ class CustomerController extends Controller
             $customerId,
             'customer'
         );
+    }
+
+    /**
+     * Persist a manifest WITHOUT any carrier API call.
+     *
+     * Used when the `skip_carrier` request flag (or MANIFEST_SKIP_CARRIER env)
+     * is set: no UPS/ShipGlobal/Primus/... booking happens. The shipment's own
+     * AWB number is used as the tracking number; status flow, manifest record,
+     * wallet charge and logs stay exactly the same as a carrier manifest.
+     *
+     * @return array{tracking_number: ?string, label_url: null, manifest_number: ?string, network: string, carrier_skipped: bool, amount_charged: float, new_balance: mixed}
+     */
+    private function persistInternalManifest($shipper, $customerId, $targetStatus = 'manifested', ?string $manifestNumber = null)
+    {
+        $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
+        $internalTracking = $shipper->awb_number ?: ('UWC'.$shipper->id);
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+
+        ShipmentTracking::updateOrCreate(
+            ['shipper_id' => $shipper->id],
+            [
+                'customer_id' => $customerId,
+                'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                'response_status_code' => '1',
+                'response_status_description' => 'Internal manifest (carrier booking skipped)',
+                'shipment_identification_number' => $internalTracking,
+                'total_charges_currency' => 'INR',
+                'total_charges_amount' => null,
+                'billing_weight_uom' => 'KGS',
+                'billing_weight' => null,
+                'package_results' => null,
+                'raw_response' => null,
+                'status' => 'created',
+            ]
+        );
+
+        $previousStatus = $shipper->status;
+        $shipper->status = $targetStatus;
+        $shipper->save();
+
+        // Bulk flow shares one manifest number; single flow gets a fresh one.
+        $this->createManifestRecord($shipper->id, $customerId, $manifestNumber);
+
+        Tracking::firstOrCreate(
+            [
+                'shipper_id' => $shipper->id,
+                'status' => $targetStatus,
+            ],
+            [
+                'awb_number' => $shipper->awb_number,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id' => $shipper->awb_number,
+                'title' => Tracking::getTitleForStatus($targetStatus),
+            ]
+        );
+
+        // Payment is cut only AFTER the manifest succeeds (same as carrier flow).
+        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+
+        ShipmentLog::logStatus(
+            $shipper->id,
+            $shipper->awb_number,
+            $targetStatus,
+            $previousStatus,
+            'Shipment manifested internally (carrier booking skipped). Tracking: '.($internalTracking ?? 'N/A'),
+            $customerId,
+            'customer'
+        );
+
+        return [
+            'tracking_number' => $internalTracking,
+            'label_url' => null,
+            'manifest_number' => Manifest::where('shipper_id', $shipper->id)->value('manifest_number'),
+            'network' => 'internal',
+            'carrier_skipped' => true,
+            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+            'new_balance' => $chargeResult['new_balance'],
+        ];
     }
 
     /**
