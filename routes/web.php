@@ -107,6 +107,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/all-customer/{customer}/view', [AdminController::class, 'exportCustomerView'])->name('admin.export-customers.view');
     Route::get('/all-customer/{customer}', [AdminController::class, 'exportCustomersDetail'])->name('admin.export-customers.detail');
     Route::post('/assign-delivery', [AdminController::class, 'assignDelivery'])->name('admin.assign-delivery');
+    Route::post('/assign-delivery-bulk', [AdminController::class, 'assignBulkDelivery'])->name('admin.assign-delivery-bulk');
     Route::post('/receive-shipment', [AdminController::class, 'receiveShipment'])->name('admin.receive-shipment');
     Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
     Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');

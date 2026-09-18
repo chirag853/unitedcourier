@@ -247,4 +247,29 @@ return [
         'chunk_size' => (int) env('SHIPMENT_TRACKING_CHUNK_SIZE', 100),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Delhivery API (DDU pickup creation)
+    |--------------------------------------------------------------------------
+    | Called from AdminController::callDelhiveryApi() when admin assigns
+    | delivery type DDU on admin/companies. Credentials come from .env so
+    | staging/production tokens can differ without code changes.
+    */
+    'delhivery' => [
+        'create_url' => env('DELHIVERY_CREATE_URL', 'https://track.delhivery.com/api/cmu/create.json'),
+        'token' => env('DELHIVERY_TOKEN', '462d4dd4644874ba774fa599aef160a97ed3fa7f'),
+        'pickup_location' => env('DELHIVERY_PICKUP_LOCATION', 'ac549e-UNITEDWORLDWIDECOURI-do'),
+        'timeout' => (int) env('DELHIVERY_TIMEOUT', 25),
+        'connect_timeout' => (int) env('DELHIVERY_CONNECT_TIMEOUT', 10),
+        'retries' => (int) env('DELHIVERY_RETRIES', 1),
+        'retry_delay' => (int) env('DELHIVERY_RETRY_DELAY', 1000),
+        // Waybill pre-fetch: Delhivery sometimes fails to auto-consume a
+        // waybill ("Unable to consume <waybill> for <pickup_location>").
+        // Passing an explicit pre-fetched waybill per shipment avoids that.
+        'waybill_url' => env('DELHIVERY_WAYBILL_URL', 'https://track.delhivery.com/waybill/api/bulk/json/'),
+        'client' => env('DELHIVERY_CLIENT', ''),
+        'waybill_prefetch' => filter_var(env('DELHIVERY_WAYBILL_PREFETCH', true), FILTER_VALIDATE_BOOLEAN),
+        'waybill_timeout' => (int) env('DELHIVERY_WAYBILL_TIMEOUT', 15),
+    ],
+
 ];

@@ -16,7 +16,9 @@ class DeliveryAssignedNotification extends Notification
         private readonly ?string $invoiceNumber,
         private readonly ?string $shipperCompany,
         private readonly ?string $destination,
-        private readonly ?string $assignedBy
+        private readonly ?string $assignedBy,
+        private readonly ?string $manifestNumber = null,
+        private readonly ?int $shipmentCount = null
     ) {
     }
 
@@ -29,10 +31,17 @@ class DeliveryAssignedNotification extends Notification
     {
         $reference = $this->awbNumber ?: ($this->invoiceNumber ?: '#' . $this->shipmentInvoiceId);
 
+        // Bulk (manifest-level) assignment: one consolidated message.
+        if ($this->manifestNumber && $this->shipmentCount) {
+            $message = 'Manifest ' . $this->manifestNumber . ' (' . $this->shipmentCount . ' shipments) has been assigned to you for pickup.';
+        } else {
+            $message = 'A new delivery (' . $reference . ') has been assigned to you.';
+        }
+
         return [
             'kind' => 'delivery_assigned',
             'title' => 'New Delivery Assigned',
-            'message' => 'A new delivery (' . $reference . ') has been assigned to you.',
+            'message' => $message,
             'shipment_invoice_id' => $this->shipmentInvoiceId,
             'shipper_id' => $this->shipperId,
             'awb_number' => $this->awbNumber,
@@ -40,6 +49,8 @@ class DeliveryAssignedNotification extends Notification
             'shipper_company' => $this->shipperCompany,
             'destination' => $this->destination,
             'assigned_by' => $this->assignedBy,
+            'manifest_number' => $this->manifestNumber,
+            'shipment_count' => $this->shipmentCount,
             'url' => route('admin.delivery-dashboard'),
         ];
     }

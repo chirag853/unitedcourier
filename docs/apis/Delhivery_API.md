@@ -24,9 +24,27 @@ Recommended env variables:
 DELHIVERY_CREATE_URL=https://track.delhivery.com/api/cmu/create.json
 DELHIVERY_TOKEN=your_delhivery_token
 DELHIVERY_PICKUP_LOCATION=your_pickup_location_name
+DELHIVERY_WAYBILL_URL=https://track.delhivery.com/waybill/api/bulk/json/
+DELHIVERY_CLIENT=your_delhivery_client_name
+DELHIVERY_WAYBILL_PREFETCH=true
+DELHIVERY_WAYBILL_TIMEOUT=15
 ```
 
-Current code note: token and pickup location name are hardcoded in `AdminController::callDelhiveryApi()` and should be moved to `.env`.
+Current code note: values come from `config/services.php` (`services.delhivery`), with the
+previous hardcoded values kept as defaults so existing servers keep working without `.env` changes.
+
+## Waybill Pre-fetch
+
+Some accounts fail Delhivery-side auto-consume (`Unable to consume <waybill> for
+<pickup_location>`). To avoid that, the code pre-fetches one unused waybill per shipment via
+the official Bulk Waybill endpoint and sends it explicitly in the `waybill` field:
+
+`GET https://track.delhivery.com/waybill/api/bulk/json/?cl={client}&token={token}&count={n}`
+
+- Single assign fetches 1 waybill; bulk assign fetches N for N shipments.
+- If pre-fetch is disabled (`DELHIVERY_WAYBILL_PREFETCH=false`) or returns nothing, the flow
+  falls back to Delhivery auto-assign (previous behavior) — pre-fetch never blocks pickup creation.
+- `DELHIVERY_CLIENT` is optional; when set it is sent as the `cl` query param.
 
 ## Form Payload
 

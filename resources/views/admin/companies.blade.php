@@ -1225,10 +1225,13 @@
                                                     {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
                                                 </td>
                                                 <td class="table-actions">
-                                                    @php $firstShipment = $manifest->shipments[0] ?? null; @endphp
-                                                    @if($firstShipment)
-                                                    <button class="btn btn-sm btn-outline-primary btn-icon" title="Assign Pickup"
-                                                            onclick="openAssignDelivery({{ $firstShipment['id'] }}, '{{ $firstShipment['delivery_type'] ?? '' }}', {{ $firstShipment['assigned_delivery_person'] ?? 'null' }}, '{{ $firstShipment['awb_number'] }}')">
+                                                    @php
+                                                        $bulkAwbs = collect($manifest->shipments ?? [])->pluck('awb_number')->filter()->values()->all();
+                                                        $bulkAwbCsv = implode(', ', $bulkAwbs);
+                                                    @endphp
+                                                    @if(!empty($manifest->shipments))
+                                                    <button class="btn btn-sm btn-outline-primary btn-icon" title="Assign Pickup (whole manifest: {{ $manifest->shipment_count }} shipment(s))"
+                                                            onclick="openAssignBulkDelivery('{{ addslashes($manifest->manifest_number ?? '') }}', {{ (int) $manifest->shipment_count }}, '{{ addslashes($bulkAwbCsv) }}')">
                                                         <i class="ti ti-truck-delivery"></i>
                                                     </button>
                                                     @endif
@@ -1668,12 +1671,23 @@
                 </div>
                 <form id="assignDeliveryForm">
                     <input type="hidden" name="shipment_id" id="assign_shipment_id" value="">
+                    <input type="hidden" name="assign_mode" id="assign_mode" value="single">
+                    <input type="hidden" name="manifest_number" id="assign_manifest_number" value="">
                     <div class="modal-body">
                         <div id="assignDeliveryAlert" class="alert d-none"></div>
 
-                        <div class="mb-3">
+                        <div class="mb-3" id="assignSingleInfo">
                             <label class="form-label fw-semibold">HAWB Number</label>
                             <p class="mb-0" id="assign_awb_display">-</p>
+                        </div>
+
+                        <div class="mb-3 d-none" id="assignBulkInfo">
+                            <label class="form-label fw-semibold">Manifest (whole manifest will be assigned)</label>
+                            <p class="mb-1"><span class="badge bg-dark" id="assign_manifest_display">-</span>
+                                <span class="badge bg-primary ms-1" id="assign_bulk_count"></span>
+                            </p>
+                            <small class="text-muted d-block">AWBs:</small>
+                            <p class="mb-0 small" id="assign_bulk_awbs" style="word-break:break-word;">-</p>
                         </div>
 
                         <div class="mb-4">
@@ -2177,7 +2191,9 @@
                 }
 
                 $.ajax({
-                    url: '{{ route("admin.assign-delivery") }}',
+                    url: $('#assign_mode').val() === 'bulk'
+                        ? '{{ route("admin.assign-delivery-bulk") }}'
+                        : '{{ route("admin.assign-delivery") }}',
                     type: 'POST',
                     data: $(this).serialize(),
                     headers: {
@@ -2186,6 +2202,14 @@
                     success: function(response) {
                         if (response.success) {
                             let alertMsg = response.message;
+
+                            // Bulk assign: list Delhivery-failed orders (if any) under the message.
+                            if (response.failed && response.failed.length > 0) {
+                                alertMsg += '<br><small class="text-danger">Delhivery failed for: ' +
+                                    response.failed.map(function (f) {
+                                        return (f.awb || f.order || '-') + (f.remarks ? ' (' + f.remarks + ')' : '');
+                                    }).join(', ') + '</small>';
+                            }
 
                             // If Delhivery API was called, show additional details
                             if (response.delhivery) {
@@ -2232,7 +2256,9 @@
                                     showAssignDeliveryAlert(failMsg, 'warning');
                                 }
                             } else {
-                                showAssignDeliveryAlert(alertMsg, 'success');
+                                // Bulk with partial Delhivery failures -> warning, else success.
+                                const alertType = (response.failed && response.failed.length > 0) ? 'warning' : 'success';
+                                showAssignDeliveryAlert(alertMsg, alertType);
                             }
 
                             $btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
@@ -2268,6 +2294,11 @@
                 $('input[name="delivery_type"]').prop('checked', false);
                 $('#delivery_person_id').val('');
                 $('#deliveryPersonSection').hide();
+                $('#assign_mode').val('single');
+                $('#assign_shipment_id').val('');
+                $('#assign_manifest_number').val('');
+                $('#assignSingleInfo').removeClass('d-none');
+                $('#assignBulkInfo').addClass('d-none');
                 $('#assignDeliveryBtn').prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i> Save Assignment');
             });
 
@@ -2374,8 +2405,12 @@
          * @param {string} awbNumber - AWB number for display
          */
         function openAssignDelivery(shipmentId, currentType, currentPersonId, awbNumber) {
-            // Set shipment ID
+            // Single-shipment mode
+            $('#assign_mode').val('single');
             $('#assign_shipment_id').val(shipmentId);
+            $('#assign_manifest_number').val('');
+            $('#assignSingleInfo').removeClass('d-none');
+            $('#assignBulkInfo').addClass('d-none');
 
             // Display AWB number
             $('#assign_awb_display').text(awbNumber || '-');
@@ -2399,6 +2434,38 @@
             } else {
                 $('#delivery_person_id').val('');
             }
+
+            // Reset alert
+            $('#assignDeliveryAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');
+
+            // Open the modal
+            $('#assignDeliveryModal').modal('show');
+        }
+
+        /**
+         * Open the Assign Delivery modal in BULK mode for a whole manifest.
+         * All Ready-for-Pickup shipments of the manifest are assigned together.
+         * @param {string} manifestNumber
+         * @param {number} shipmentCount
+         * @param {string} awbCsv - comma-separated AWB numbers for display
+         */
+        function openAssignBulkDelivery(manifestNumber, shipmentCount, awbCsv) {
+            // Bulk-manifest mode
+            $('#assign_mode').val('bulk');
+            $('#assign_shipment_id').val('');
+            $('#assign_manifest_number').val(manifestNumber);
+            $('#assignSingleInfo').addClass('d-none');
+            $('#assignBulkInfo').removeClass('d-none');
+
+            // Display manifest summary
+            $('#assign_manifest_display').text(manifestNumber || '-');
+            $('#assign_bulk_count').text((shipmentCount || 0) + ' shipment(s)');
+            $('#assign_bulk_awbs').text(awbCsv || '-');
+
+            // Fresh pickup-type selection for the bulk assignment
+            $('input[name="delivery_type"]').prop('checked', false);
+            $('#deliveryPersonSection').hide();
+            $('#delivery_person_id').val('');
 
             // Reset alert
             $('#assignDeliveryAlert').addClass('d-none').removeClass('alert-success alert-danger').html('');

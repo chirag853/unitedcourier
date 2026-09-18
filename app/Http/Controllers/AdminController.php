@@ -1043,87 +1043,31 @@ class AdminController extends Controller
                 'delivery_person_id' => 'nullable|integer|exists:admin_user,id',
             ]);
 
-            $shipmentBeforeUpdate = ShipmentInvoice::findOrFail($request->shipment_id);
-            $previousDeliveryPersonId = $shipmentBeforeUpdate->assigned_delivery_person;
-
-            $updateData = [
-                'delivery_type' => $request->delivery_type,
-            ];
-
             // If Self is selected, assign delivery person; otherwise set to null
-            if ($request->delivery_type === 'Self') {
-                if (!$request->delivery_person_id) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Please select a delivery person for Self delivery type.'
-                    ]);
-                }
-                $updateData['assigned_delivery_person'] = $request->delivery_person_id;
-            } else {
-                $updateData['assigned_delivery_person'] = null;
+            if ($request->delivery_type === 'Self' && !$request->delivery_person_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please select a delivery person for Self delivery type.'
+                ]);
             }
 
-            ShipmentInvoice::where('id', $request->shipment_id)->update($updateData);
+            $result = $this->applyPickupAssignment(
+                (int) $request->shipment_id,
+                $request->delivery_type,
+                $request->delivery_person_id ? (int) $request->delivery_person_id : null
+            );
 
-            // Create tracking record for pickup assignment and update shipper status
-            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
-            if ($shipmentInvoice && $shipmentInvoice->shipper_id) {
-                $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
-                if ($shipper) {
-                    // The tracking record needs an AWB, so it is only created
-                    // once the AWB exists. The pickup assignment itself always
-                    // moves the shipment to "Assigned for Pickup" so customers
-                    // see it under "In-Transit to Hub" right away.
-                    if ($shipper->awb_number) {
-                        $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
-                        \App\Models\Tracking::create([
-                            'awb_number' => $shipper->awb_number,
-                            'status'     => 'assigned_for_pickup',
-                            'title'      => 'Assigned for Pickup',
-                            'shipper_id' => $shipper->id,
-                            'shipping_id' => $createShipment ? $createShipment->id : null,
-                            'uwc_id'     => $shipper->awb_number,
-                        ]);
-                    }
-                    // Never downgrade shipments that already moved past pickup
-                    // (e.g. reassigning a delivered order must not reset it).
-                    $pastPickupStatuses = ['received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled', 'disputed'];
-                    if (!in_array($shipper->status, $pastPickupStatuses, true)) {
-                        $shipper->status = 'assigned_for_pickup';
-                        $shipper->save();
-                    }
-                }
-            }
-
-            $newDeliveryPersonId = $updateData['assigned_delivery_person'] ?? null;
-            if ($newDeliveryPersonId && (string) $previousDeliveryPersonId !== (string) $newDeliveryPersonId) {
-                $deliveryPerson = Admin::where('id', $newDeliveryPersonId)
-                    ->where('type', 'Delivery_person')
-                    ->where('status', 1)
-                    ->first();
-
-                if ($deliveryPerson) {
-                    $shipmentInvoice = $shipmentInvoice ?: ShipmentInvoice::find($request->shipment_id);
-                    $shipper = $shipmentInvoice?->shipper_id
-                        ? ShipperInfo::find($shipmentInvoice->shipper_id)
-                        : null;
-
-                    $deliveryPerson->notify(new DeliveryAssignedNotification(
-                        shipmentInvoiceId: (int) $request->shipment_id,
-                        shipperId: $shipmentInvoice?->shipper_id,
-                        awbNumber: $shipper?->awb_number,
-                        invoiceNumber: $shipmentInvoice?->invoice_number,
-                        shipperCompany: $shipper?->company_name,
-                        destination: null,
-                        assignedBy: Auth::guard('admin')->user()?->name
-                    ));
-                }
-            }
+            $this->notifyDeliveryPersonIfChanged(
+                $request->delivery_person_id ? (int) $request->delivery_person_id : null,
+                $result['previous_delivery_person_id'],
+                $result['shipment_invoice'],
+                $result['shipper']
+            );
 
             // If DDU (Delhivery) is selected, call the Delhivery API
             $delhiveryResponse = null;
             if ($request->delivery_type === 'DDU') {
-                $delhiveryResponse = $this->callDelhiveryApi($request->shipment_id);
+                $delhiveryResponse = $this->callDelhiveryApi((int) $request->shipment_id);
             }
 
             $response = [
@@ -1148,6 +1092,207 @@ class AdminController extends Controller
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Assign a whole manifest for pickup in one go.
+     *
+     * All shipments of the manifest that are still in "ready_for_pickup"
+     * move to "assigned_for_pickup" together. For DDU, Delhivery gets ONE
+     * bulk request with all shipments instead of one call per shipment.
+     */
+    public function assignBulkDelivery(Request $request)
+    {
+        try {
+            $request->validate([
+                'manifest_number' => 'required|string|exists:manifests,manifest_number',
+                'delivery_type' => 'required|string|in:DDU,DDP,Self',
+                'delivery_person_id' => 'nullable|integer|exists:admin_user,id',
+            ]);
+
+            $manifestNumber = trim((string) $request->manifest_number);
+
+            if ($request->delivery_type === 'Self' && !$request->delivery_person_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please select a delivery person for Self delivery type.'
+                ]);
+            }
+
+            // All invoice ids of this manifest whose shipper is still ready for pickup.
+            $shipmentIds = DB::table('shipment_invoice')
+                ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+                ->join('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
+                ->where('manifests.manifest_number', $manifestNumber)
+                ->where('shipper_info.status', 'ready_for_pickup')
+                ->distinct()
+                ->pluck('shipment_invoice.id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            if (empty($shipmentIds)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Is manifest me koi Ready for Pickup shipment nahi mili (shayad sab already assigned hain).'
+                ]);
+            }
+
+            $deliveryPersonId = $request->delivery_person_id ? (int) $request->delivery_person_id : null;
+            $assigned = [];
+            DB::transaction(function () use ($shipmentIds, $request, $deliveryPersonId, &$assigned) {
+                foreach ($shipmentIds as $sid) {
+                    $assigned[] = $this->applyPickupAssignment($sid, $request->delivery_type, $deliveryPersonId)
+                        + ['shipment_id' => $sid];
+                }
+            });
+
+            // Self: ONE consolidated notification to the pickup person
+            // (instead of one notification per shipment).
+            if ($request->delivery_type === 'Self' && $deliveryPersonId) {
+                $deliveryPerson = Admin::where('id', $deliveryPersonId)
+                    ->where('type', 'Delivery_person')
+                    ->where('status', 1)
+                    ->first();
+
+                if ($deliveryPerson) {
+                    $first = $assigned[0];
+                    $deliveryPerson->notify(new DeliveryAssignedNotification(
+                        shipmentInvoiceId: (int) $first['shipment_id'],
+                        shipperId: $first['shipment_invoice']?->shipper_id,
+                        awbNumber: $first['shipper']?->awb_number,
+                        invoiceNumber: $first['shipment_invoice']?->invoice_number,
+                        shipperCompany: $first['shipper']?->company_name,
+                        destination: null,
+                        assignedBy: Auth::guard('admin')->user()?->name,
+                        manifestNumber: $manifestNumber,
+                        shipmentCount: count($assigned),
+                    ));
+                }
+            }
+
+            // DDU: ONE bulk Delhivery call for all shipments of the manifest.
+            $delhiveryResponse = null;
+            if ($request->delivery_type === 'DDU') {
+                $delhiveryResponse = $this->callDelhiveryBulkApi(
+                    array_map(fn($a) => (int) $a['shipment_id'], $assigned)
+                );
+            }
+
+            $count = count($assigned);
+            $response = [
+                'success' => true,
+                'message' => $count . ' shipment(s) assigned for pickup successfully (Manifest ' . $manifestNumber . ').',
+                'manifest_number' => $manifestNumber,
+                'assigned_count' => $count,
+            ];
+
+            if ($delhiveryResponse !== null) {
+                $response['delhivery'] = $delhiveryResponse;
+                if (!$delhiveryResponse['success']) {
+                    $response['message'] = $count . ' shipment(s) assigned, but Delhivery API call failed: ' . $delhiveryResponse['message'];
+                } else {
+                    $response['message'] = $count . ' shipment(s) assigned and Delhivery pickup created successfully (Manifest ' . $manifestNumber . ').';
+                }
+                if (!empty($delhiveryResponse['failed_orders'])) {
+                    $response['failed'] = $delhiveryResponse['failed_orders'];
+                }
+            }
+
+            return response()->json($response);
+        } catch (\Exception $e) {
+            Log::error('Bulk assign for pickup failed for manifest ' . ($request->manifest_number ?? '-') . ': ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Shared per-shipment DB work for pickup assignment (single + bulk flows).
+     *
+     * Updates the invoice row, moves the shipper to "assigned_for_pickup"
+     * (unless already past pickup) and writes the tracking record.
+     *
+     * @return array{shipment_invoice: \App\Models\ShipmentInvoice|null, shipper: \App\Models\ShipperInfo|null, previous_delivery_person_id: mixed}
+     */
+    private function applyPickupAssignment($shipmentId, $deliveryType, $deliveryPersonId)
+    {
+        $shipmentBeforeUpdate = ShipmentInvoice::findOrFail($shipmentId);
+        $previousDeliveryPersonId = $shipmentBeforeUpdate->assigned_delivery_person;
+
+        $updateData = [
+            'delivery_type' => $deliveryType,
+            'assigned_delivery_person' => $deliveryType === 'Self' ? $deliveryPersonId : null,
+        ];
+
+        ShipmentInvoice::where('id', $shipmentId)->update($updateData);
+
+        // Create tracking record for pickup assignment and update shipper status
+        $shipmentInvoice = ShipmentInvoice::find($shipmentId);
+        $shipper = null;
+        if ($shipmentInvoice && $shipmentInvoice->shipper_id) {
+            $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+            if ($shipper) {
+                // The tracking record needs an AWB, so it is only created
+                // once the AWB exists. The pickup assignment itself always
+                // moves the shipment to "Assigned for Pickup" so customers
+                // see it under "In-Transit to Hub" right away.
+                if ($shipper->awb_number) {
+                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                    \App\Models\Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'status'     => 'assigned_for_pickup',
+                        'title'      => 'Assigned for Pickup',
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id'     => $shipper->awb_number,
+                    ]);
+                }
+                // Never downgrade shipments that already moved past pickup
+                // (e.g. reassigning a delivered order must not reset it).
+                $pastPickupStatuses = ['received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled', 'disputed'];
+                if (!in_array($shipper->status, $pastPickupStatuses, true)) {
+                    $shipper->status = 'assigned_for_pickup';
+                    $shipper->save();
+                }
+            }
+        }
+
+        return [
+            'shipment_invoice' => $shipmentInvoice,
+            'shipper' => $shipper,
+            'previous_delivery_person_id' => $previousDeliveryPersonId,
+        ];
+    }
+
+    /**
+     * Notify the pickup person when a single assignment changes the person.
+     */
+    private function notifyDeliveryPersonIfChanged($newDeliveryPersonId, $previousDeliveryPersonId, $shipmentInvoice, $shipper)
+    {
+        if (!$newDeliveryPersonId || (string) $previousDeliveryPersonId === (string) $newDeliveryPersonId) {
+            return;
+        }
+
+        $deliveryPerson = Admin::where('id', $newDeliveryPersonId)
+            ->where('type', 'Delivery_person')
+            ->where('status', 1)
+            ->first();
+
+        if (!$deliveryPerson) {
+            return;
+        }
+
+        $deliveryPerson->notify(new DeliveryAssignedNotification(
+            shipmentInvoiceId: (int) ($shipmentInvoice?->id ?? 0),
+            shipperId: $shipmentInvoice?->shipper_id,
+            awbNumber: $shipper?->awb_number,
+            invoiceNumber: $shipmentInvoice?->invoice_number,
+            shipperCompany: $shipper?->company_name,
+            destination: null,
+            assignedBy: Auth::guard('admin')->user()?->name
+        ));
     }
 
     /**
@@ -1942,11 +2087,15 @@ class AdminController extends Controller
      * @param int $shipmentId
      * @return array
      */
-    private function callDelhiveryApi($shipmentId)
+    /**
+     * Build ONE Delhivery CMU "shipments" entry for a shipment invoice.
+     *
+     * Returns null when the shipment data is not found.
+     */
+    private function buildDelhiveryShipmentPayload($shipmentId)
     {
-        try {
-            // Fetch shipment with all related data
-            $shipment = DB::table('shipment_invoice')
+        // Fetch shipment with all related data
+        $shipment = DB::table('shipment_invoice')
                 ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
                 // i want to join shipment_invoice_items
                 ->join('shipment_invoice_items', 'shipment_invoice.id', '=', 'shipment_invoice_items.invoice_id')
@@ -1982,7 +2131,7 @@ class AdminController extends Controller
                     'consignee_info.phone_number as consignee_phone',
                     'consignee_info.email as consignee_email',
                     'package_dimension.actual_weight_kg',
-                    'package_dimension.length_cm',
+                    'package_dimension.length_cm as pkg_length',
                     'package_dimension.width_cm as pkg_width',
                     'package_dimension.height_cm as pkg_height',
                     'shipment_invoice_items.description'
@@ -1990,7 +2139,7 @@ class AdminController extends Controller
                 ->first();
 
             if (!$shipment) {
-                return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
+                return null;
             }
 
             // Build the full address string for shipper (origin)
@@ -2003,34 +2152,250 @@ class AdminController extends Controller
             // Determine payment mode based on incoterms or default to prepaid
             $paymentMode = 'prepaid';
 
-            // Build shipments array for Delhivery API with shipper_info details
-            $shipmentsData = [
-                [
-                    'name' => $shipment->company_name ?? $shipment->contact_person ?? 'Shipper',
-                    'add' => $shipperAddress ?: 'Address not provided',
-                    'pin' => $shipment->pincode ?? '',
-                    'city' => $shipment->shipper_city ?? '',
-                    'state' => $shipment->shipper_state ?? '',
-                    'country' => 'India',
-                    'phone' => $shipment->shipper_phone ?? '',
-                    'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
-                    'payment_mode' => $paymentMode,
-                    'quantity' => 1,
-                    'weight' => $shipment->actual_weight_kg ?? 0,
-                    'total_amount' => $shipment->invoice_amount ?? 0,
-                    'products_desc' => $shipment->description ?? '',
-                    'cod_amount' => $paymentMode === 'COD' ? ($shipment->invoice_amount ?? 0) : 0,
-                    'shipping_mode' => 'Surface',
-                    'shipment_width' => $shipment->pkg_width ?? 0,
-                    'shipment_length' => $shipment->pkg_length ?? 0,
-                    'shipment_height' => $shipment->pkg_height ?? 0,
-                    'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
-                ]
+            // Build ONE shipment entry for the Delhivery API with shipper_info details
+            return [
+                'name' => $shipment->company_name ?? $shipment->contact_person ?? 'Shipper',
+                'add' => $shipperAddress ?: 'Address not provided',
+                'pin' => $shipment->pincode ?? '',
+                'city' => $shipment->shipper_city ?? '',
+                'state' => $shipment->shipper_state ?? '',
+                'country' => 'India',
+                'phone' => $shipment->shipper_phone ?? '',
+                'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
+                'payment_mode' => $paymentMode,
+                'quantity' => 1,
+                'weight' => $shipment->actual_weight_kg ?? 0,
+                'total_amount' => $shipment->invoice_amount ?? 0,
+                'products_desc' => $shipment->description ?? '',
+                'cod_amount' => $paymentMode === 'COD' ? ($shipment->invoice_amount ?? 0) : 0,
+                'shipping_mode' => 'Surface',
+                'shipment_width' => $shipment->pkg_width ?? 0,
+                'shipment_length' => $shipment->pkg_length ?? 0,
+                'shipment_height' => $shipment->pkg_height ?? 0,
+                'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
             ];
+    }
 
+    /**
+     * Call the Delhivery API to create a pickup/shipment (single shipment).
+     *
+     * @param int $shipmentId
+     * @return array
+     */
+    private function callDelhiveryApi($shipmentId)
+    {
+        $payload = $this->buildDelhiveryShipmentPayload($shipmentId);
+        if (!$payload) {
+            return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
+        }
+
+        // Explicit waybill avoids Delhivery auto-consume failures
+        // ("Unable to consume <waybill> for <pickup_location>").
+        $waybills = $this->fetchDelhiveryWaybills(1);
+        if (!empty($waybills)) {
+            $payload['waybill'] = $waybills[0];
+        }
+
+        return $this->postDelhiveryShipments([$payload], 'shipment #' . $shipmentId);
+    }
+
+    /**
+     * Call the Delhivery API ONCE for a whole manifest.
+     *
+     * All shipment entries go into a single CMU request's "shipments" array
+     * instead of one HTTP call per shipment. Per-package failures are mapped
+     * back to order ids in the "failed_orders" key of the response.
+     *
+     * @param int[] $shipmentIds
+     * @return array
+     */
+    private function callDelhiveryBulkApi(array $shipmentIds)
+    {
+        $shipmentsData = [];
+        $orderToAwb = [];
+        $missing = 0;
+
+        // Order key must match the payload builder exactly:
+        // reference_number ?? invoice_number ?? ''.
+        $rows = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->whereIn('shipment_invoice.id', $shipmentIds)
+            ->select('shipment_invoice.id', 'shipment_invoice.reference_number', 'shipment_invoice.invoice_number', 'shipper_info.awb_number')
+            ->get()
+            ->keyBy('id');
+
+        foreach ($shipmentIds as $sid) {
+            $payload = $this->buildDelhiveryShipmentPayload($sid);
+            if (!$payload) {
+                $missing++;
+                continue;
+            }
+            $shipmentsData[] = $payload;
+            $row = $rows->get($sid);
+            $orderKey = (string) ($payload['order'] ?? '');
+            $orderToAwb[$orderKey] = $row?->awb_number;
+        }
+
+        if (empty($shipmentsData)) {
+            return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
+        }
+
+        // One explicit waybill per shipment (same auto-consume fix as single).
+        // Shipments without a pre-fetched waybill fall back to auto-assign.
+        $waybills = $this->fetchDelhiveryWaybills(count($shipmentsData));
+        foreach ($shipmentsData as $i => $item) {
+            if (isset($waybills[$i]) && $waybills[$i] !== '') {
+                $shipmentsData[$i]['waybill'] = $waybills[$i];
+            }
+        }
+
+        $result = $this->postDelhiveryShipments(
+            $shipmentsData,
+            count($shipmentsData) . ' shipment(s)' . ($missing > 0 ? ' (' . $missing . ' skipped, data missing)' : '')
+        );
+
+        // Map per-package failures back to our order ids / AWBs.
+        $failed = [];
+        $packages = $result['data']['packages'] ?? null;
+        if (is_array($packages)) {
+            foreach ($packages as $pkg) {
+                if (($pkg['status'] ?? '') !== 'Fail') {
+                    continue;
+                }
+                $orderKey = (string) ($pkg['order'] ?? $pkg['refnum'] ?? $pkg['reference_number'] ?? '');
+                $remarks = isset($pkg['remarks']) && is_array($pkg['remarks'])
+                    ? implode(', ', array_filter($pkg['remarks']))
+                    : '';
+                $failed[] = [
+                    'order' => $orderKey !== '' ? $orderKey : null,
+                    'awb' => ($orderKey !== '' && array_key_exists($orderKey, $orderToAwb)) ? $orderToAwb[$orderKey] : null,
+                    'remarks' => $remarks,
+                ];
+            }
+        }
+        if (!empty($failed)) {
+            $result['failed_orders'] = $failed;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Pre-fetch unused Delhivery waybills for explicit use in the CMU payload.
+     *
+     * Official Bulk Waybill endpoint:
+     *   GET {waybill_url}?cl={client}&token={token}&count={n}
+     * Some accounts fail Delhivery-side auto-consume ("Unable to consume
+     * <waybill> for <pickup_location>"); sending an explicit pre-fetched
+     * waybill per shipment avoids that path.
+     *
+     * Returns an array of waybill strings — possibly fewer than requested,
+     * or empty when pre-fetch is disabled or fails. Callers then fall back
+     * to Delhivery auto-assign, so this never blocks the pickup creation.
+     *
+     * @param int $count
+     * @return string[]
+     */
+    private function fetchDelhiveryWaybills($count)
+    {
+        $count = max(1, (int) $count);
+        $cfg = config('services.delhivery', []);
+
+        if (empty($cfg['waybill_prefetch'])) {
+            return [];
+        }
+
+        try {
+            $token = $cfg['token'] ?? '';
+            if ($token === '') {
+                return [];
+            }
+            $url = rtrim($cfg['waybill_url'] ?? 'https://track.delhivery.com/waybill/api/bulk/json/', '/') . '/';
+            $timeout = (int) ($cfg['waybill_timeout'] ?? 15);
+
+            $query = ['token' => $token, 'count' => $count];
+            if (!empty($cfg['client'])) {
+                $query['cl'] = $cfg['client'];
+            }
+
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token ' . $token,
+            ])->timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->get($url, $query);
+
+            if (!$response->successful()) {
+                Log::warning('Delhivery waybill pre-fetch failed', [
+                    'status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+                return [];
+            }
+
+            $body = $response->json();
+
+            // Tolerant parsing: Delhivery returns a bare JSON string with
+            // COMMA-SEPARATED waybills ("wb1,wb2,..."), a plain list, or an
+            // object wrapped under a known key.
+            $splitWaybills = function ($s) {
+                return preg_split('/[\s,;]+/', trim((string) $s), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            };
+
+            $list = [];
+            if (is_scalar($body) && trim((string) $body) !== '') {
+                $list = $splitWaybills($body);
+            } elseif (is_array($body)) {
+                if (array_is_list($body)) {
+                    $list = $body;
+                } else {
+                    foreach (['waybills', 'wbns', 'data', 'waybill'] as $key) {
+                        if (isset($body[$key]) && is_array($body[$key])) {
+                            $list = array_is_list($body[$key]) ? $body[$key] : [$body[$key]];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            $waybills = [];
+            foreach ($list as $w) {
+                if (is_array($w)) {
+                    $w = $w['waybill'] ?? $w['wbn'] ?? '';
+                }
+                // Each element may itself be comma-joined; keep digits only
+                // so an error sentence never becomes a fake waybill.
+                foreach ($splitWaybills($w) as $one) {
+                    if (ctype_digit($one)) {
+                        $waybills[] = $one;
+                    }
+                }
+            }
+            $waybills = array_values(array_unique($waybills));
+
+            Log::info('Delhivery waybill pre-fetch: requested ' . $count . ', received ' . count($waybills));
+
+            return $waybills;
+        } catch (\Exception $e) {
+            Log::warning('Delhivery waybill pre-fetch exception: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * POST a "shipments" array to Delhivery CMU create.json and parse the reply.
+     *
+     * @param array[] $shipmentsData
+     * @param string $logContext Free text for log lines (e.g. "shipment #5" or "3 shipment(s)")
+     * @return array
+     */
+    private function postDelhiveryShipments(array $shipmentsData, $logContext)
+    {
+        try {
             // Build pickup_location object - name must remain unchanged as specified
+            $delhiveryCfg = config('services.delhivery', []);
             $pickupLocation = [
-                'name' => 'ac549e-UNITEDWORLDWIDECOURI-do',
+                'name' => $delhiveryCfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do',
             ];
 
             // Build the full data structure
@@ -2041,14 +2406,29 @@ class AdminController extends Controller
 
             // Make the API call to Delhivery
             // Note: asForm() sets Content-Type to application/x-www-form-urlencoded automatically
-            // The Delhivery API expects form-encoded body with Accept: application/json header
+            // The Delhivery API expects form-encoded body with Accept: application/json header.
+            // Explicit timeouts keep the admin UI from hanging ~30s when the
+            // server cannot reach Delhivery (firewall/DNS/proxy issue); one
+            // retry absorbs transient network blips. Delhivery dedupes on the
+            // order id ("Duplicate order id"), so a single retry is safe.
+            $createUrl = $delhiveryCfg['create_url'] ?? 'https://track.delhivery.com/api/cmu/create.json';
+            $token = $delhiveryCfg['token'] ?? '462d4dd4644874ba774fa599aef160a97ed3fa7f';
+            $timeout = (int) ($delhiveryCfg['timeout'] ?? 25);
+            $connectTimeout = (int) ($delhiveryCfg['connect_timeout'] ?? 10);
+            $retries = (int) ($delhiveryCfg['retries'] ?? 1);
+            $retryDelay = (int) ($delhiveryCfg['retry_delay'] ?? 1000);
+
             $response = Http::withHeaders([
                 'Accept' => 'application/json',
-                'Authorization' => 'Token 462d4dd4644874ba774fa599aef160a97ed3fa7f',
-            ])->asForm()->post('https://track.delhivery.com/api/cmu/create.json', [
-                'format' => 'json',
-                'data' => json_encode($data),
-            ]);
+                'Authorization' => 'Token ' . $token,
+            ])->asForm()
+                ->timeout($timeout)
+                ->connectTimeout($connectTimeout)
+                ->retry($retries, $retryDelay)
+                ->post($createUrl, [
+                    'format' => 'json',
+                    'data' => json_encode($data),
+                ]);
 
             if ($response->successful()) {
                 $apiResponse = $response->json();
@@ -2091,6 +2471,10 @@ class AdminController extends Controller
                 }
             } else {
                 $apiResponse = $response->json();
+                Log::warning('Delhivery API error for ' . $logContext, [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
                 $errorMessage = 'Delhivery API returned error.';
                 if (is_array($apiResponse)) {
                     // Delhivery sometimes returns errors in various formats
@@ -2109,7 +2493,19 @@ class AdminController extends Controller
                     'status_code' => $response->status(),
                 ];
             }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            // cURL error 28 (timeout) / DNS / connection refused: the app
+            // server itself cannot reach Delhivery. Surface an actionable
+            // message instead of the raw cURL dump.
+            Log::warning('Delhivery API unreachable for ' . $logContext . ': ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Delhivery server tak pahunch nahi ho paya (connection timeout). '
+                    . 'Server ka outbound HTTPS/firewall check karein — track.delhivery.com:443 open hona chahiye. '
+                    . 'Delivery assignment save ho gayi hai; Delhivery pickup baad me retry karein.',
+            ];
         } catch (\Exception $e) {
+            Log::error('Delhivery API call failed for ' . $logContext . ': ' . $e->getMessage());
             return [
                 'success' => false,
                 'message' => 'Delhivery API call failed: ' . $e->getMessage(),
