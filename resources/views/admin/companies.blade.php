@@ -1196,6 +1196,7 @@
                                                 <th>Order Date</th>
                                                 <th>Shipments</th>
                                                 <th>Total Value</th>
+                                                <th>Total Weight</th>
                                                 <th>Pickup Date</th>
                                                 <th>Action</th>
                                             </tr>
@@ -1220,6 +1221,9 @@
                                                 </td>
                                                 <td style="font-weight:600;color:#0f172a;">
                                                     {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;white-space:nowrap;">
+                                                    {{ number_format($manifest->total_weight ?? 0, 2) }} kg
                                                 </td>
                                                 <td style="font-weight:600;color:#0f172a;">
                                                     {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
@@ -1264,6 +1268,7 @@
                                                     <th>Consignee</th>
                                                     <th>Invoice No.</th>
                                                     <th>Amount</th>
+                                                    <th>Weight</th>
                                                     <th>Pickup Date</th>
                                                     <th>Action</th>
                                                 </tr>
@@ -1282,6 +1287,7 @@
                                                     <td>{{ $shipment['consignee_name'] }}</td>
                                                     <td>{{ $shipment['invoice_number'] }}</td>
                                                     <td>{{ $shipment['amount_formatted'] }}</td>
+                                                    <td style="white-space:nowrap;">{{ number_format($shipment['weight'] ?? 0, 2) }} kg</td>
                                                     <td>
                                                         @if(!empty($shipment['pickup_date']))
                                                             <span class="badge" style="background:#6f42c1;color:#fff;white-space:nowrap;">
@@ -1322,6 +1328,7 @@
                                                 <th>Order Date</th>
                                                 <th>Shipments</th>
                                                 <th>Total Value</th>
+                                                <th>Total Weight</th>
                                                 <th>Pickup Date</th>
                                                 <th>Action</th>
                                             </tr>
@@ -1346,6 +1353,9 @@
                                                 </td>
                                                 <td style="font-weight:600;color:#0f172a;">
                                                     {{ number_format($manifest->total_value, 2) }}
+                                                </td>
+                                                <td style="font-weight:600;color:#0f172a;white-space:nowrap;">
+                                                    {{ number_format($manifest->total_weight ?? 0, 2) }} kg
                                                 </td>
                                                 <td style="font-weight:600;color:#0f172a;">
                                                     {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
@@ -1384,6 +1394,7 @@
                                                     <th>Consignee</th>
                                                     <th>Invoice No.</th>
                                                     <th>Amount</th>
+                                                    <th>Weight</th>
                                                     <th>Pickup Date</th>
                                                     <th>Action</th>
                                                 </tr>
@@ -1402,6 +1413,7 @@
                                                     <td>{{ $shipment['consignee_name'] }}</td>
                                                     <td>{{ $shipment['invoice_number'] }}</td>
                                                     <td>{{ $shipment['amount_formatted'] }}</td>
+                                                    <td style="white-space:nowrap;">{{ number_format($shipment['weight'] ?? 0, 2) }} kg</td>
                                                     <td>
                                                         @if(!empty($shipment['pickup_date']))
                                                             <span class="badge" style="background:#6366f1;color:#fff;white-space:nowrap;">
@@ -1927,6 +1939,23 @@
                         </div>
                     </div>
 
+                    <!-- Remark (shown to the customer, mandatory) -->
+                    <div class="dispute-field" id="dispute_remark_wrap">
+                        <div class="dispute-field-head">
+                            <span class="dispute-step-num">4</span>
+                            <label for="dispute_remark">Remark for Customer <span class="req">*</span></label>
+                        </div>
+                        <div class="dispute-select-wrap">
+                            <i class="ti ti-message"></i>
+                            <textarea class="form-control dispute-input" id="dispute_remark" rows="2" maxlength="1000"
+                                placeholder="e.g. Extra weight found at hub weighing scan"></textarea>
+                        </div>
+                        <div class="dispute-hint">
+                            <i class="ti ti-info-circle"></i>
+                            <span>Ye remark customer ko dikhega. Customer accept karega tabhi amount deduct hoga.</span>
+                        </div>
+                    </div>
+
                     <!-- Summary / states -->
                     <div id="dispute_charge_detail" class="mb-0"></div>
 
@@ -1977,6 +2006,9 @@
 
     <!-- Datatable JS -->
     <script src="https://cdn.datatables.net/2.3.8/js/dataTables.js"></script>
+
+    <!-- SweetAlert2 (styled popups for dispute apply/notify/ready-to-dispatch confirms) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <!-- Main JS -->
     <script src="{{ asset('js/script.js') }}" type="text/javascript"></script>
@@ -2032,7 +2064,7 @@
                 scrollY: '60vh',
                 scrollCollapse: true,
                 columnDefs: [
-                    { orderable: false, targets: 6 },
+                    { orderable: false, targets: 7 },
                     { defaultContent: '-', targets: '_all' }
                 ],
                 language: {
@@ -2074,7 +2106,7 @@
                 scrollY: '60vh',
                 scrollCollapse: true,
                 columnDefs: [
-                    { orderable: false, targets: 6 },
+                    { orderable: false, targets: 7 },
                     { defaultContent: '-', targets: '_all' }
                 ],
                 language: {
@@ -2579,6 +2611,7 @@
             $('#dispute_boxes_wrap').addClass('d-none');
             $('#dispute_custom_amount').val('');
             $('#dispute_custom_wrap').addClass('d-none');
+            $('#dispute_remark').val('');
             $typeSelect.html('<option value="">Loading charges...</option>');
             $condWrap.addClass('d-none');
             $('#dispute_apply_btn').prop('disabled', true);
@@ -2769,7 +2802,7 @@
                     const base = rate * boxes;
                     const gstAmt = base * gstPct / 100;
                     const totalIncl = base + gstAmt;
-                    bandSub = fmtMoney(rate) + ' × ' + boxes + ' + ' + escDispute(gstTxt) + ' GST incl.';
+                    bandSub = 'GST included';
                     bandAmount = fmtMoney(totalIncl);
                     extraRows =
                         '<div class="dispute-kv"><span class="k"><i class="ti ti-wallet"></i>Base (' + boxes + ' × ' + fmtMoney(rate) + ')</span><span class="v">' + fmtMoney(base) + '</span></div>' +
@@ -2779,7 +2812,7 @@
                     bandAmount = escDispute(found.values);
                 } else if (!isNaN(rate)) {
                     const perBoxIncl = rate * (1 + gstPct / 100);
-                    bandSub = fmtMoney(rate) + ' + ' + escDispute(gstTxt) + ' GST = ' + fmtMoney(perBoxIncl) + ' /box incl.';
+                    bandSub = 'GST included /box';
                     bandAmount = fmtMoney(perBoxIncl) + ' /box';
                 } else {
                     bandSub = 'Enter the number of boxes to see the GST-inclusive total here';
@@ -2789,7 +2822,7 @@
                 // flat (per-shipment) — GST included total
                 const totalIncl = rate * (1 + gstPct / 100);
                 const gstAmt = totalIncl - rate;
-                bandSub = fmtMoney(rate) + ' + ' + escDispute(gstTxt) + ' GST incl.';
+                bandSub = 'GST included';
                 bandAmount = fmtMoney(totalIncl);
                 if (gstPct > 0) {
                     extraRows =
@@ -2949,6 +2982,12 @@
                 label = found.additional_charges + ' — Custom ' + currLbl + customVal.toLocaleString('en-IN') + boxesTxt;
             }
             const awb = $('#dispute_awb_display').text();
+            const remarkVal = ($('#dispute_remark').val() || '').trim();
+            if (!remarkVal) {
+                disputeNotify('Please enter a remark for the customer.', 'error');
+                $('#dispute_remark').focus();
+                return;
+            }
 
             const doSave = function () {
                 const $btn = $('#dispute_apply_btn');
@@ -2961,7 +3000,8 @@
                         shipment_id: disputeCurrentShipment,
                         dispute_charge_id: condId,
                         boxes: boxesVal,
-                        custom_amount: customVal
+                        custom_amount: customVal,
+                        remark: remarkVal
                     },
                     headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                     success: function (response) {
@@ -2972,8 +3012,8 @@
                             if (window.Swal) {
                                 Swal.fire({
                                     icon: 'success',
-                                    title: 'Dispute charge applied!',
-                                    html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span><br><span class="badge mt-2" style="background:#f59e0b;color:#fff;">Shipment marked as Ready to Dispatch</span>',
+                                    title: 'Dispute raised!',
+                                    // html: '<b>' + escDispute(label) + '</b><br><span style="font-size:13px;color:#6b7280;">HAWB: ' + escDispute(awb) + '</span><br><span class="badge mt-2" style="background:#f59e0b;color:#fff;">Customer acceptance pending — no amount deducted yet</span>',
                                     showCancelButton: true,
                                     confirmButtonText: 'View Dispute Orders',
                                     cancelButtonText: 'Stay here',
@@ -2983,7 +3023,7 @@
                                     if (r.isConfirmed) { window.location.href = viewUrl; }
                                 });
                             } else {
-                                disputeNotify('Dispute charge applied! (HAWB ' + awb + ')', 'success');
+                                disputeNotify('Dispute raised! (HAWB ' + awb + ')', 'success');
                             }
                         } else {
                             disputeNotify((response && response.message) || 'Could not apply charge.', 'error');

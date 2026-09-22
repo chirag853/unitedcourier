@@ -989,12 +989,12 @@
                                     if ($inv->status === 'cancelled') {
                                         return false;
                                     }
-                                    return $inv->shipperInfo && in_array($inv->shipperInfo->status, [
+                                     return $inv->shipperInfo && in_array($inv->shipperInfo->status, [
                                         'manifested', 'ready_for_pickup', 'assigned_for_pickup', 'received', 'confirm_pickup',
-                                        'dispatched', 'delivered', 'disputed', 'on_hold',
+                                        'dispatched', 'ready_to_dispatch', 'delivered', 'disputed', 'on_hold',
                                     ], true);
                                 });
-                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed'], true) || ! $hasManifestedRows;
+                                $hideManifestColumn = in_array($selectedStatus, ['draft', 'ready', 'packed', 'dispatched', 'disputed'], true) || ! $hasManifestedRows;
                                 $hideCancelColumn = $isAllOrdersView || in_array($selectedStatus, $postPackedStatuses, true);
                                 $hideTrackingColumn = $isDraftView || $selectedStatus === 'ready';
                             @endphp
@@ -1022,6 +1022,9 @@
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Incoterms</th>
                                             <!-- <th>Reference No.</th> -->
                                             <th class="status-col">Status</th>
+                                            @if(($selectedStatus ?? null) === 'disputed')
+                                            <th class="dispute-amount-col">Dispute Amount</th>
+                                            @endif
                                             {{-- Print Label / Pay Now columns merged into the Action column
                                             <th @class(['d-none' => $hidePrintLabelColumn])>Print Label</th>
                                             <th @class(['d-none' => $hideIncotermsAndPayColumns])>Pay Now</th>
@@ -1122,7 +1125,7 @@
                                             @if(!$hideTrackingColumn)
                                             <td class="tracking-col">
                                                 @php
-                                                    $rowTrackingNumber = in_array($rowStatus, ['packed', 'manifested'], true)
+                                                    $rowTrackingNumber = in_array($rowStatus, ['packed', 'manifested', 'dispatched', 'ready_to_dispatch', 'disputed', 'cancelled'], true)
                                                         ? $invoice->shipperInfo?->shipmentTracking?->shipment_identification_number
                                                         : null;
                                                 @endphp
@@ -1244,7 +1247,7 @@
                                             <!-- <td>{{ $invoice->reference_number ?: '-' }}</td> -->
                                             <td class="status-col">
                                                 @php
-                                                    $displayStatus = $invoice->status === 'cancelled' ? 'cancelled' : ($invoice->shipperInfo && $invoice->shipperInfo->status ? $invoice->shipperInfo->status : 'draft');
+                                                     $displayStatus = ($invoice->status === 'cancelled' || ($invoice->shipperInfo && $invoice->shipperInfo->status === 'cancelled')) ? 'cancelled' : ($invoice->shipperInfo && $invoice->shipperInfo->status ? $invoice->shipperInfo->status : 'draft');
                                                     $statusBadge = [
                                                         'draft' => 'badge bg-warning text-dark',
                                                         'ready' => 'badge bg-info',
@@ -1255,6 +1258,7 @@
                                                         'received' => 'badge bg-info',
                                                         'confirm_pickup' => 'badge bg-warning text-dark',
                                                         'dispatched' => 'badge bg-dark',
+                                                        'ready_to_dispatch' => 'badge bg-dark',
                                                         'delivered' => 'badge bg-success',
                                                         'cancelled' => 'badge bg-danger',
                                                         'disputed' => 'badge bg-warning',
@@ -1270,6 +1274,7 @@
                                                         'received' => 'Received',
                                                         'confirm_pickup' => 'In-Transit to Hub',
                                                         'dispatched' => 'Dispatched',
+                                                        'ready_to_dispatch' => 'Ready to Dispatch',
                                                         'delivered' => 'Delivered',
                                                         'cancelled' => 'Cancelled',
                                                         'disputed' => 'Disputed',
@@ -1278,6 +1283,16 @@
                                                 @endphp
                                                 <span class="shipment-status-badge {{ $statusBadge[$displayStatus] ?? 'badge bg-warning text-dark' }}">{{ $statusLabel[$displayStatus] ?? ucfirst($displayStatus) }}</span>
                                             </td>
+                                            @if(($selectedStatus ?? null) === 'disputed')
+                                            <td class="dispute-amount-col" style="font-weight:700;white-space:nowrap;color:#b91c1c;">
+                                                @php $pdAmt = ($pendingDisputesByShipper ?? [])[$invoice->shipperInfo->id ?? 0] ?? null; @endphp
+                                                @if($pdAmt)
+                                                    {{ $pdAmt['currency'] }} {{ number_format($pdAmt['total'], 2) }}
+                                                @else
+                                                    <span class="text-muted">-</span>
+                                                @endif
+                                            </td>
+                                            @endif
                                             {{-- Print Label column merged into Action column
                                             <td @class(['text-center', 'd-none' => $hidePrintLabelColumn])>
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
@@ -1401,6 +1416,29 @@
                                                                 aria-label="Manifest Shipment"
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-package-export" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endif
+                                                    @if($rowStatus === 'disputed' && !empty(($pendingDisputesByShipper ?? [])[$invoice->shipperInfo->id ?? 0]))
+                                                        @php $pdInfo = ($pendingDisputesByShipper ?? [])[$invoice->shipperInfo->id]; @endphp
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-success dispute-accept-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-shipper-id="{{ $invoice->shipperInfo->id }}"
+                                                                data-awb="{{ $invoice->shipperInfo->awb_number ?? '' }}"
+                                                                data-amount="{{ number_format($pdInfo['total'], 2, '.', '') }}"
+                                                                data-count="{{ $pdInfo['count'] }}"
+                                                                data-currency="{{ $pdInfo['currency'] }}"
+                                                                title="Accept dispute — {{ $pdInfo['currency'] }} {{ number_format($pdInfo['total'], 2) }} will be deducted from wallet"
+                                                                aria-label="Accept Dispute"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-check" aria-hidden="true"></i>
+                                                        </button>
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-danger dispute-reject-btn d-inline-flex align-items-center justify-content-center"
+                                                                data-shipper-id="{{ $invoice->shipperInfo->id }}"
+                                                                title="Reject dispute"
+                                                                aria-label="Reject Dispute"
+                                                                style="width:32px;height:32px;padding:0;border-radius:4px;">
+                                                            <i class="ti ti-x" aria-hidden="true"></i>
                                                         </button>
                                                     @endif
                                                     @if($rowStatus === 'draft')
@@ -1791,6 +1829,27 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
                     <button type="button" class="btn btn-primary" id="confirmManifestBtn">
                         <i class="ti ti-check me-1"></i>Yes, Manifest
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dispute Accept Confirm Modal -->
+    <div class="modal fade" id="disputeAcceptModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-alert-triangle me-2"></i>Accept Dispute</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" id="disputeAcceptText">Are you sure you want to accept this dispute?</p>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmDisputeAcceptBtn">
+                        <i class="ti ti-check me-1"></i>Yes, Accept & Deduct
                     </button>
                 </div>
             </div>
@@ -3202,6 +3261,77 @@
                     $('.alert').alert('close');
                 }, 5000);
             }
+
+            // =============================================
+            // DISPUTE: Accept (deduct from wallet) / Reject
+            // Disputed tab rows show Accept + Reject when pending
+            // disputes exist. Accept opens a confirm popup, then deducts
+            // the pending total immediately; Reject does nothing for now.
+            // =============================================
+            let pendingDisputeAcceptBtn = null;
+
+            function disputeEsc(v) {
+                return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            $(document).on('click', '.dispute-accept-btn', function () {
+                const $btn = $(this);
+                const shipperId = $btn.data('shipper-id');
+                const amount = parseFloat($btn.data('amount')) || 0;
+                const count = parseInt($btn.data('count'), 10) || 0;
+                const curr = $btn.data('currency') || 'Rs';
+                const awb = $btn.data('awb') || '';
+                if (!shipperId) return;
+                pendingDisputeAcceptBtn = $btn;
+                $('#disputeAcceptText').html(
+                    'Accept ' + count + ' dispute(s) for HAWB ' + disputeEsc(awb) + '?<br><strong>' +
+                    disputeEsc(curr) + ' ' + amount.toFixed(2) + '</strong> will be deducted from your wallet immediately.'
+                );
+                $('#disputeAcceptModal').modal('show');
+            });
+
+            // Popup dismissed without confirming -> drop the pending request.
+            $('#disputeAcceptModal').on('hidden.bs.modal', function () {
+                pendingDisputeAcceptBtn = null;
+            });
+
+            // Popup "Yes, Accept & Deduct" -> run the AJAX deduct flow.
+            $('#confirmDisputeAcceptBtn').on('click', function () {
+                $('#disputeAcceptModal').modal('hide');
+                const $btn = pendingDisputeAcceptBtn;
+                pendingDisputeAcceptBtn = null;
+                if (!$btn) return;
+                const shipperId = $btn.data('shipper-id');
+                const orig = $btn.html();
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+                $.ajax({
+                    url: '{{ route("customer.accept-dispute-deduct") }}',
+                    type: 'POST',
+                    data: {
+                        shipper_id: shipperId,
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    },
+                    success: function (response) {
+                        if (response && response.success) {
+                            showAlert('success', response.message);
+                            setTimeout(function () { location.reload(); }, 2000);
+                        } else {
+                            showAlert('danger', (response && response.message) || 'Could not accept dispute.');
+                            $btn.prop('disabled', false).html(orig);
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Could not accept dispute. Please try again.';
+                        if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                        showAlert('danger', msg);
+                        $btn.prop('disabled', false).html(orig);
+                    }
+                });
+            });
+
+            $(document).on('click', '.dispute-reject-btn', function () {
+                showAlert('warning', 'Reject option coming soon. No action performed.');
+            });
 
             // =============================================
             // MANIFEST: Single shipment manifest button

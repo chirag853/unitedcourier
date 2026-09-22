@@ -29,7 +29,6 @@ use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
 use App\Models\Zone;
-use App\Services\AdomantraApiClient;
 use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
 use App\Services\ShipmentChargeService;
@@ -2939,7 +2938,7 @@ class CustomerController extends Controller
     /**
      * Store shipment data from create-shipment form
      */
-    public function storeShipment(Request $request, AdomantraApiClient $adomantra)
+    public function storeShipment(Request $request)
     {
         $transactionStarted = false;
 
@@ -4046,31 +4045,10 @@ class CustomerController extends Controller
                 'customer'
             );
 
-            $adomantraPayload = $this->buildAdomantraOrderPayload(
-                $validatedData,
-                $customer,
-                $courierService ?? null,
-                $courierRate,
-                $awbNumber,
-                $oversizeCharge,
-                $handlingCharge
-            );
-
-            // Debug the exact payload generated when Create Now is submitted.
-            // This is intentionally server-side so the vendor contract is not
-            // exposed through browser-side code or a public debug response.
-            Log::info('Adomantra order payload generated.', [
-                'customer_id' => $customer->id,
-                'awb_number' => $awbNumber,
-                'payload' => $adomantraPayload,
-            ]);
-
-            $adomantraResponse = $adomantra->createOrder($adomantraPayload);
-
-            Log::info('Adomantra order created for shipment.', [
-                'customer_id' => $customer->id,
-                'awb_number' => $awbNumber,
-            ]);
+            // CMS (Adomantra order_create) is intentionally NOT called at creation
+            // time anymore. It is triggered later when the admin marks the
+            // shipment as received (admin/companies -> Assigned for Pickup ->
+            // Receive Shipment -> Yes). See AdminController::applyReceiveShipment.
 
             DB::commit();
             $transactionStarted = false;
@@ -4092,7 +4070,6 @@ class CustomerController extends Controller
                     'invoice_id' => $invoice->id,
                     'oversize_charge' => (float) $oversizeCharge,
                     'handling_charge' => (float) $handlingCharge,
-                    'adomantra' => $adomantraResponse,
                 ],
             ], 200);
 
@@ -4121,13 +4098,13 @@ class CustomerController extends Controller
                 $transactionStarted = false;
             }
 
-            Log::error('Adomantra shipment order submission failed.', [
+            Log::error('Shipment creation failed.', [
                 'customer_id' => $customer->id ?? null,
                 'awb_number' => $awbNumber ?? null,
                 'exception' => $e->getMessage(),
             ]);
 
-            $message = 'The shipment could not be submitted to the carrier. No shipment was saved. Please try again.';
+            $message = 'Failed to create shipment. No shipment was saved. Please try again.';
 
             if (! $request->expectsJson()) {
                 return back()
@@ -4138,7 +4115,7 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => $message,
-            ], 502);
+            ], 500);
 
         } catch (\Exception $e) {
             if ($transactionStarted) {
@@ -6313,6 +6290,13 @@ class CustomerController extends Controller
             ->when($status && $status !== 'all', function ($q) use ($status) {
                 if ($status === 'cancelled') {
                     $q->where('status', 'cancelled');
+                } elseif ($status === 'dispatched') {
+                    // Dispatched tab me 'dispatched' ke saath 'ready_to_dispatch'
+                    // bhi dikhta hai (dispute deduct/accept ke baad shipment
+                    // ready_to_dispatch me jati hai).
+                    $q->whereHas('shipperInfo', function ($shipperQuery) {
+                        $shipperQuery->whereIn('status', ['dispatched', 'ready_to_dispatch']);
+                    });
                 } elseif ($status === 'ready_for_pickup') {
                     // Shipments whose pickup date has been scheduled but the
                     // carrier has not yet assigned a delivery person.
@@ -6370,7 +6354,14 @@ class CustomerController extends Controller
         })->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
         $statusCounts['all'] = $countInvoices->count();
         foreach ($countInvoices as $countInvoice) {
-            $countStatus = $countInvoice->status === 'cancelled' ? 'cancelled' : ($countInvoice->shipperInfo?->status ?: 'draft');
+            $countStatus = ($countInvoice->status === 'cancelled' || ($countInvoice->shipperInfo?->status ?? '') === 'cancelled')
+                ? 'cancelled'
+                : ($countInvoice->shipperInfo?->status ?: 'draft');
+            // ready_to_dispatch Dispatched tab me dikhta hai, to uska count
+            // bhi dispatched badge me merge hota hai.
+            if ($countStatus === 'ready_to_dispatch') {
+                $countStatus = 'dispatched';
+            }
             if (isset($statusCounts[$countStatus])) {
                 $statusCounts[$countStatus]++;
             }
@@ -6603,7 +6594,31 @@ class CustomerController extends Controller
             ]);
         });
 
-        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap', 'manifestGroups'))
+        // Pending ('applied') disputes grouped by shipper, so the Disputed tab
+        // can show Accept/Reject buttons with the pending total per shipment.
+        $pendingDisputesByShipper = [];
+        $pageShipperIds = $invoices->getCollection()
+            ->map(function ($invoice) {
+                return $invoice->shipperInfo ? $invoice->shipperInfo->id : null;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        if (! empty($pageShipperIds)) {
+            $pendingDisputes = \App\Models\ShipmentDispute::whereIn('shipper_id', $pageShipperIds)
+                ->where('status', 'applied')
+                ->get(['id', 'shipper_id', 'charge_type', 'total_incl_gst', 'currency']);
+            foreach ($pendingDisputes->groupBy('shipper_id') as $shipperId => $group) {
+                $pendingDisputesByShipper[(int) $shipperId] = [
+                    'count' => $group->count(),
+                    'total' => round((float) $group->sum('total_incl_gst'), 2),
+                    'currency' => $group->first()->currency ?: 'Rs',
+                ];
+            }
+        }
+
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap', 'manifestGroups', 'pendingDisputesByShipper'))
             ->with('pickupDateOptions', $this->getPickupDateOptions());
     }
 
@@ -7048,34 +7063,22 @@ class CustomerController extends Controller
             }
         }
 
-        // Single delivery block: show the consignee when there is exactly one
-        // shipment, otherwise indicate multiple destinations.
-        $deliveryCompany = 'Multiple Destinations';
-        $deliveryAddress = $shipmentCount . ' shipments in this manifest';
+        // Delivery block: the manifest bag travels TO the United hub, so the
+        // Delivery Address is always the United hub address (not the consignee).
+        $deliveryCompany = 'United Worldwide Couriers Pvt Ltd';
+        $deliveryAddress = 'Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037';
         $deliveryPhone = '';
 
-        if ($shipmentCount === 1) {
-            $firstShipper = $manifestRows->first()->shipper;
-            $consignee = $firstShipper ? $firstShipper->consigneeInfo : null;
-
-            if ($consignee) {
-                $deliveryCompany = $consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A');
-                $deliveryAddress = trim(implode(', ', array_filter([
-                    $consignee->address_line1 ?? '',
-                    $consignee->address_line2 ?? '',
-                    $consignee->address_line3 ?? '',
-                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
-                    $consignee->delivery_destination ?? '',
-                ])));
-                $deliveryAddress = $deliveryAddress !== '' ? $deliveryAddress : '-';
-                $deliveryPhone = $consignee->phone_number ?? '';
-            }
-        }
+        $manifestCustomer = $firstManifest->customer;
+        $manifestCustomerCode = $manifestCustomer
+            ? (string) ($manifestCustomer->customer_code ?: 'UWC'.str_pad((string) $manifestCustomer->id, 6, '0', STR_PAD_LEFT))
+            : '';
 
         $labels = [[
             'manifest_number' => $firstManifest->manifest_number,
             'awb_number' => $firstManifest->manifest_number,
             'service' => $service,
+            'customer_code' => $manifestCustomerCode,
             'sender_company' => $senderCompany,
             'sender_address' => $senderAddress,
             'sender_phone' => $senderPhone,
@@ -7628,6 +7631,216 @@ class CustomerController extends Controller
             'walletBalance',
             'paymentNotice'
         ));
+    }
+
+    /**
+     * Show the logged-in customer's disputes (My Disputes page).
+     *
+     * Admin dwara raise kiye gaye saare disputes (remark + amount ke saath)
+     * yahan dikhte hain. 'applied' disputes par customer Accept kar sakta hai,
+     * uske baad hi admin wallet se deduct kar sakta hai.
+     */
+    public function myDisputes()
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $shipperIds = ShipperInfo::where('customer_id', $customerId)->pluck('id');
+
+        $disputes = \App\Models\ShipmentDispute::whereIn('shipper_id', $shipperIds)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('customer.my-disputes', compact('disputes'));
+    }
+
+    /**
+     * Accept an applied dispute (customer consent for wallet deduction).
+     *
+     * Sirf apni shipment ka 'applied' dispute accept ho sakta hai.
+     */
+    public function acceptDispute(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please log in to accept the dispute.',
+            ], 401);
+        }
+
+        try {
+            $request->validate([
+                'dispute_id' => 'required|integer|exists:shipment_disputes,id',
+            ]);
+
+            $customerId = auth()->guard('customer')->id();
+
+            $dispute = \App\Models\ShipmentDispute::findOrFail($request->dispute_id);
+
+            $shipper = $dispute->shipper_id ? ShipperInfo::find($dispute->shipper_id) : null;
+            if (! $shipper || (int) $shipper->customer_id !== (int) $customerId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dispute not found.',
+                ], 404);
+            }
+
+            if ($dispute->status !== 'applied') {
+                $state = $dispute->status === 'accepted'
+                    ? 'You have already accepted this dispute.'
+                    : 'This dispute is already closed.';
+                return response()->json([
+                    'success' => false,
+                    'message' => $state,
+                ], 422);
+            }
+
+            $dispute->status = 'accepted';
+            $dispute->accepted_at = now();
+            $dispute->accepted_by = $customerId;
+            $dispute->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispute accepted. Admin will now deduct the amount from your wallet.',
+                'dispute' => $dispute->fresh(),
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Accept + instantly deduct all pending disputes of one shipment.
+     *
+     * Disputed tab ke Accept button se call hota hai: apni shipment ke saare
+     * 'applied' disputes accept hote hain aur unka total turant customer ke
+     * wallet se deduct hota hai. Shipment 'ready_to_dispatch' me chali jati hai.
+     */
+    public function acceptDisputeDeduct(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please log in to accept the dispute.',
+            ], 401);
+        }
+
+        try {
+            $request->validate([
+                'shipper_id' => 'required|integer|exists:shipper_info,id',
+            ]);
+
+            $customerId = auth()->guard('customer')->id();
+
+            $shipper = ShipperInfo::find($request->shipper_id);
+            if (! $shipper || (int) $shipper->customer_id !== (int) $customerId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found.',
+                ], 404);
+            }
+
+            $disputes = \App\Models\ShipmentDispute::where('shipper_id', $shipper->id)
+                ->where('status', 'applied')
+                ->get();
+
+            if ($disputes->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Is shipment par koi pending dispute nahi hai.',
+                ], 422);
+            }
+
+            $deductAmount = round((float) $disputes->sum('total_incl_gst'), 2);
+            $currency = $disputes->first()->currency ?: 'Rs';
+
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+            if ($deductAmount > 0) {
+                if (! $wallet) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Wallet not found. Please contact support.',
+                    ], 422);
+                }
+                if ((float) $wallet->balance < $deductAmount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient wallet balance. Current balance is ₹'.number_format((float) $wallet->balance, 2).', required ₹'.number_format($deductAmount, 2).'.',
+                    ], 422);
+                }
+            }
+
+            $newBalance = $wallet ? (float) $wallet->balance : 0;
+            $disputeIds = $disputes->pluck('id')->all();
+            $disputeCount = $disputes->count();
+
+            DB::transaction(function () use ($shipper, $disputeIds, $wallet, $deductAmount, $currency, $customerId, &$newBalance) {
+                if ($wallet && $deductAmount > 0) {
+                    $wallet->decrement('balance', $deductAmount);
+                    $wallet->refresh();
+                    $newBalance = (float) $wallet->balance;
+
+                    WalletTransaction::create([
+                        'customer_id' => $customerId,
+                        'type' => 'debit',
+                        'reason' => 'dispute_charge',
+                        'user_id' => $customerId,
+                        'user_type' => 'customer',
+                        'amount' => $deductAmount,
+                        'balance_after' => $wallet->balance,
+                        'reference' => $shipper->awb_number ?? ('DISPUTE-'.$shipper->id),
+                        'description' => 'Dispute charge of '.$currency.' '.number_format($deductAmount, 2).' for shipment '.($shipper->awb_number ?? '#'.$shipper->id).' (accepted by customer)',
+                    ]);
+                }
+
+                // Deduct ho gaya — resolved dispute rows table se delete.
+                \App\Models\ShipmentDispute::whereIn('id', $disputeIds)->delete();
+
+                $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                if (! empty($shipper->awb_number)) {
+                    \App\Models\Tracking::create([
+                        'awb_number' => $shipper->awb_number,
+                        'status' => 'ready_to_dispatch',
+                        'title' => 'Ready to Dispatch - Dispute Accepted & Deducted by Customer',
+                        'shipper_id' => $shipper->id,
+                        'shipping_id' => $createShipment ? $createShipment->id : null,
+                        'uwc_id' => $shipper->awb_number,
+                    ]);
+                }
+                $shipper->status = 'ready_to_dispatch';
+                $shipper->save();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispute accepted. '.$currency.' '.number_format($deductAmount, 2).' deducted from your wallet. Shipment marked as Ready to Dispatch.',
+                'deducted' => $deductAmount,
+                'disputes_deleted' => $disputeCount,
+                'new_balance' => $newBalance,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

@@ -114,9 +114,13 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');
     Route::get('/dispute-charges-list', [AdminController::class, 'disputeChargesList'])->name('admin.dispute-charges-list');
     Route::get('/dispute-orders', [AdminController::class, 'disputeOrders'])->name('admin.dispute-orders');
+    Route::get('/cancel-orders', [AdminController::class, 'cancelOrders'])->name('admin.cancel-orders');
     Route::get('/wallet-transactions', [AdminController::class, 'walletTransactions'])->name('admin.wallet-transactions');
     Route::get('/wallet-transactions/data', [AdminController::class, 'walletTransactionsData'])->name('admin.wallet-transactions.data');
     Route::post('/apply-dispute-charge', [AdminController::class, 'applyDisputeCharge'])->name('admin.apply-dispute-charge');
+    Route::post('/deduct-dispute-charge', [AdminController::class, 'deductDisputeCharge'])->name('admin.deduct-dispute-charge');
+    Route::post('/update-dispute-amount', [AdminController::class, 'updateDisputeAmount'])->name('admin.update-dispute-amount');
+    Route::post('/cancel-dispute-charge', [AdminController::class, 'cancelDisputeCharge'])->name('admin.cancel-dispute-charge');
     Route::get('/delivery-persons', [AdminController::class, 'deliveryPersons'])->name('admin.delivery-persons');
     Route::post('/delivery-persons', [AdminController::class, 'storeDeliveryPerson'])->name('admin.delivery-persons.store');
     Route::put('/delivery-persons/{id}', [AdminController::class, 'updateDeliveryPerson'])->name('admin.delivery-persons.update');
@@ -725,6 +729,9 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
     Route::get('/shipment-label/{invoiceId}', [CustomerController::class, 'getShipmentLabel'])->name('shipment-label');
     Route::get('/transaction-history', [CustomerController::class, 'transactionHistory'])->name('transaction-history');
     Route::get('/wallet-history', [CustomerController::class, 'walletHistory'])->name('wallet-history');
+    Route::get('/my-disputes', [CustomerController::class, 'myDisputes'])->name('my-disputes');
+    Route::post('/accept-dispute', [CustomerController::class, 'acceptDispute'])->name('accept-dispute');
+    Route::post('/accept-dispute-deduct', [CustomerController::class, 'acceptDisputeDeduct'])->name('accept-dispute-deduct');
     Route::get('/my-profile', [CustomerController::class, 'myProfile'])->name('my-profile');
     Route::post('/pay-now', [CustomerController::class, 'payNow'])->name('pay-now');
     Route::post('/wallet-recharge', [CustomerController::class, 'walletRecharge'])->name('wallet-recharge');

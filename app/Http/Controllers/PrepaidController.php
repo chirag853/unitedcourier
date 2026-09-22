@@ -4327,7 +4327,7 @@ class PrepaidController extends Controller
             'shipper.shipmentTracking',
             'shipper.invoices.invoiceItems',
             'customer' => function ($q) {
-                $q->select('id', 'first_name', 'last_name', 'phone_number', 'email');
+                $q->select('id', 'first_name', 'last_name', 'phone_number', 'email', 'customer_code');
             },
         ])
             ->where('manifest_number', $manifestNumber)
@@ -4350,7 +4350,7 @@ class PrepaidController extends Controller
 
         $customerId = $shipper ? (int) ($shipper->customer_id ?? 0) : 0;
         if ($customerId > 0) {
-            return Customer::select('id', 'first_name', 'last_name', 'phone_number', 'email')->find($customerId);
+            return Customer::select('id', 'first_name', 'last_name', 'phone_number', 'email', 'customer_code')->find($customerId);
         }
 
         return null;
@@ -4656,32 +4656,22 @@ class PrepaidController extends Controller
             }
         }
 
-        $deliveryCompany = 'Multiple Destinations';
-        $deliveryAddress = $shipmentCount . ' shipments in this manifest';
+        // Delivery block: the manifest bag travels TO the United hub, so the
+        // Delivery Address is always the United hub address (not the consignee).
+        $deliveryCompany = 'United Worldwide Couriers Pvt Ltd';
+        $deliveryAddress = 'Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037';
         $deliveryPhone = '';
 
-        if ($shipmentCount === 1) {
-            $firstShipper = $manifestRows->first()->shipper;
-            $consignee = $firstShipper ? $firstShipper->consigneeInfo : null;
-
-            if ($consignee) {
-                $deliveryCompany = $consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A');
-                $deliveryAddress = trim(implode(', ', array_filter([
-                    $consignee->address_line1 ?? '',
-                    $consignee->address_line2 ?? '',
-                    $consignee->address_line3 ?? '',
-                    trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '')),
-                    $consignee->delivery_destination ?? '',
-                ])));
-                $deliveryAddress = $deliveryAddress !== '' ? $deliveryAddress : '-';
-                $deliveryPhone = $consignee->phone_number ?? '';
-            }
-        }
+        $firstCustomer = $this->resolvePrepaidManifestCustomer($firstManifest, $firstManifest->shipper);
+        $prepaidCustomerCode = $firstCustomer
+            ? (string) ($firstCustomer->customer_code ?: 'UWC'.str_pad((string) $firstCustomer->id, 6, '0', STR_PAD_LEFT))
+            : '';
 
         $labels = [[
             'manifest_number' => $firstManifest->manifest_number,
             'awb_number' => $firstManifest->manifest_number,
             'service' => $service,
+            'customer_code' => $prepaidCustomerCode,
             'sender_company' => $senderCompany,
             'sender_address' => $senderAddress,
             'sender_phone' => $senderPhone,
@@ -4698,7 +4688,6 @@ class PrepaidController extends Controller
             'date' => now('Asia/Kolkata')->format('Y-m-d H:i:s'),
         ]];
 
-        $firstCustomer = $this->resolvePrepaidManifestCustomer($firstManifest, $firstManifest->shipper);
         $manifest = (object) [
             'manifest_number' => $firstManifest->manifest_number,
             'shipment_count' => $shipmentCount,

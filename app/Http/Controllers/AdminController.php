@@ -910,10 +910,13 @@ class AdminController extends Controller
         $readyToDispatchShipments = $baseQuery('ready_to_dispatch');
 
         // Package Details column (draft-style) ke liye packages, shipper_id se grouped.
-        // Print Label + Ready to Dispatch tabs ke shippers load hote hain.
+        // Print Label + Ready to Dispatch tabs ke shippers load hote hain, plus
+        // Ready for Pickup + Assigned for Pickup tabs ke Total Weight column ke liye.
         $packagesByShipper = collect();
         $pkgShipperIds = $printLabelShipments->pluck('shipper_id')
             ->merge($readyToDispatchShipments->pluck('shipper_id'))
+            ->merge($readyForPickupShipments->pluck('shipper_id'))
+            ->merge($assignedForPickupShipments->pluck('shipper_id'))
             ->filter()->unique()->values()->all();
         if (! empty($pkgShipperIds)) {
             $packagesByShipper = \App\Models\PackageDimension::whereIn('shipper_id', $pkgShipperIds)
@@ -921,6 +924,20 @@ class AdminController extends Controller
                 ->get()
                 ->groupBy('shipper_id');
         }
+
+        // Manifest ke saare shippers ke saare packages ka total chargeable weight.
+        $manifestTotalWeight = function ($shipments) use ($packagesByShipper): float {
+            $total = 0.0;
+            foreach ($shipments as $s) {
+                foreach ($packagesByShipper->get($s->shipper_id, collect()) as $pkg) {
+                    if ($pkg->chargeable_weight !== null && $pkg->chargeable_weight !== '') {
+                        $total += (float) $pkg->chargeable_weight;
+                    }
+                }
+            }
+
+            return round($total, 2);
+        };
 
         // Group ready-for-pickup shipments by manifest number so the tab shows
         // one row per manifest (same as the Manifested tab). Each child keeps
@@ -930,7 +947,7 @@ class AdminController extends Controller
                 return ! empty($s->manifest_number);
             })
             ->groupBy('manifest_number')
-            ->map(function ($shipments, $manifestNumber) {
+            ->map(function ($shipments, $manifestNumber) use ($manifestTotalWeight, $packagesByShipper) {
                 $first = $shipments->first();
 
                 return (object) [
@@ -939,15 +956,22 @@ class AdminController extends Controller
                     'pickup_date' => $first->pickup_date ?? null,
                     'shipment_count' => $shipments->count(),
                     'total_value' => (float) $shipments->sum('shipper_total_price'),
+                    'total_weight' => $manifestTotalWeight($shipments),
                     'total_cost' => (float) $shipments->sum(function ($s) {
                         return (float) $s->shipper_total_base_price
                             + (float) $s->shipper_total_fuel_price
                             + (float) $s->shipper_total_surcharge;
                     }),
-                    'shipments' => $shipments->map(function ($s) {
+                    'shipments' => $shipments->map(function ($s) use ($packagesByShipper) {
                         $customerName = trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? ''));
                         $from = trim(($s->shipper_city ?? '-') . ', ' . ($s->shipper_state ?? '-'));
                         $to = trim(($s->consignee_city ?? '-') . ', ' . ($s->consignee_state ?? '-'));
+                        $weight = 0.0;
+                        foreach ($packagesByShipper->get($s->shipper_id, collect()) as $pkg) {
+                            if ($pkg->chargeable_weight !== null && $pkg->chargeable_weight !== '') {
+                                $weight += (float) $pkg->chargeable_weight;
+                            }
+                        }
 
                         return [
                             'id' => $s->id,
@@ -964,6 +988,7 @@ class AdminController extends Controller
                             'amount_formatted' => $s->shipper_total_price
                                 ? number_format((float) $s->shipper_total_price, 2) . ' ' . ($s->invoice_currency ?? '')
                                 : 'N/A',
+                            'weight' => round($weight, 2),
                         ];
                     })->values()->all(),
                 ];
@@ -980,7 +1005,7 @@ class AdminController extends Controller
             ->groupBy(function ($s) {
                 return ! empty($s->manifest_number) ? $s->manifest_number : 'SINGLE-'.$s->id;
             })
-            ->map(function ($shipments, $manifestNumber) {
+            ->map(function ($shipments, $manifestNumber) use ($manifestTotalWeight, $packagesByShipper) {
                 $first = $shipments->first();
 
                 return (object) [
@@ -989,15 +1014,22 @@ class AdminController extends Controller
                     'pickup_date' => $first->pickup_date ?? null,
                     'shipment_count' => $shipments->count(),
                     'total_value' => (float) $shipments->sum('shipper_total_price'),
+                    'total_weight' => $manifestTotalWeight($shipments),
                     'total_cost' => (float) $shipments->sum(function ($s) {
                         return (float) $s->shipper_total_base_price
                             + (float) $s->shipper_total_fuel_price
                             + (float) $s->shipper_total_surcharge;
                     }),
-                    'shipments' => $shipments->map(function ($s) {
+                    'shipments' => $shipments->map(function ($s) use ($packagesByShipper) {
                         $customerName = trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? ''));
                         $from = trim(($s->shipper_city ?? '-') . ', ' . ($s->shipper_state ?? '-'));
                         $to = trim(($s->consignee_city ?? '-') . ', ' . ($s->consignee_state ?? '-'));
+                        $weight = 0.0;
+                        foreach ($packagesByShipper->get($s->shipper_id, collect()) as $pkg) {
+                            if ($pkg->chargeable_weight !== null && $pkg->chargeable_weight !== '') {
+                                $weight += (float) $pkg->chargeable_weight;
+                            }
+                        }
 
                         return [
                             'id' => $s->id,
@@ -1014,6 +1046,7 @@ class AdminController extends Controller
                             'amount_formatted' => $s->shipper_total_price
                                 ? number_format((float) $s->shipper_total_price, 2) . ' ' . ($s->invoice_currency ?? '')
                                 : 'N/A',
+                            'weight' => round($weight, 2),
                         ];
                     })->values()->all(),
                 ];
@@ -1404,11 +1437,15 @@ class AdminController extends Controller
             $received = $request->received;
             $done = 0;
             $skipped = 0;
-            DB::transaction(function () use ($shipmentIds, $received, &$done, &$skipped) {
+            $cmsFailed = 0;
+            DB::transaction(function () use ($shipmentIds, $received, &$done, &$skipped, &$cmsFailed) {
                 foreach ($shipmentIds as $sid) {
                     $result = $this->applyReceiveShipment($sid, $received);
                     if ($result['success']) {
                         $done++;
+                        if ($received === 'yes' && array_key_exists('cms_success', $result) && $result['cms_success'] === false) {
+                            $cmsFailed++;
+                        }
                     } else {
                         $skipped++;
                     }
@@ -1428,6 +1465,9 @@ class AdminController extends Controller
             if ($skipped > 0) {
                 $message .= ' ' . $skipped . ' skipped (data missing).';
             }
+            if ($cmsFailed > 0) {
+                $message .= ' ' . $cmsFailed . ' me CMS sync fail hua (shipment received hai, retry ho sakta hai).';
+            }
 
             return response()->json([
                 'success' => true,
@@ -1435,6 +1475,7 @@ class AdminController extends Controller
                 'manifest_number' => $manifestNumber,
                 'received_count' => $done,
                 'skipped_count' => $skipped,
+                'cms_failed_count' => $cmsFailed,
             ]);
         } catch (\Exception $e) {
             Log::error('Bulk receive failed for manifest ' . ($request->manifest_number ?? '-') . ': ' . $e->getMessage());
@@ -1448,10 +1489,11 @@ class AdminController extends Controller
     /**
      * Shared per-shipment receive work (single + bulk flows).
      *
-     * Yes → tracking "received" + shipper "received" (Print Label tab).
-     * No  → tracking "on_hold"   + shipper "on_hold".
+     * Yes → tracking "received" + shipper "received" (Print Label tab) + CMS
+     *       order_create (non-blocking; CMS failure does not roll back receive).
+     * No  → tracking "on_hold"   + shipper "on_hold" (no CMS call).
      *
-     * @return array{success: bool, message: string}
+     * @return array{success: bool, message: string, cms_success?: bool|null, cms_message?: string|null}
      */
     private function applyReceiveShipment($shipmentId, $received)
     {
@@ -1487,9 +1529,26 @@ class AdminController extends Controller
             $shipper->status = 'received';
             $shipper->save();
 
+            // CMS (Adomantra order_create) now fires here instead of at
+            // create-shipment/create-order time. Non-blocking: a CMS failure
+            // must not move the shipment back — it stays received and the
+            // failure is only logged + surfaced as a warning.
+            $cms = $this->syncCmsOrderForShipper($shipper);
+
+            $message = 'Shipment received successfully. It has been moved to Print Label tab.';
+            if ($cms['skipped']) {
+                $message .= ' (CMS order was already synced earlier.)';
+            } elseif ($cms['success'] === false) {
+                $message .= ' (Warning: CMS order sync failed — '.$cms['message'].')';
+            } else {
+                $message .= ' (CMS order synced.)';
+            }
+
             return [
                 'success' => true,
-                'message' => 'Shipment received successfully. It has been moved to Print Label tab.'
+                'message' => $message,
+                'cms_success' => $cms['success'],
+                'cms_message' => $cms['message'],
             ];
         }
 
@@ -1508,6 +1567,266 @@ class AdminController extends Controller
         return [
             'success' => true,
             'message' => 'Shipment marked as on hold (not received).'
+        ];
+    }
+
+    /**
+     * Fire the CMS (Adomantra order_create) call for a received shipment.
+     *
+     * Non-blocking by design: the shipment is already physically received, so
+     * a CMS failure must never roll the status back. Idempotent: if a CMS
+     * sync was already logged for this shipper, the call is skipped.
+     *
+     * @return array{success: bool|null, skipped: bool, message: string|null}
+     */
+    private function syncCmsOrderForShipper(ShipperInfo $shipper): array
+    {
+        if ($this->isCmsOrderAlreadySynced((int) $shipper->id)) {
+            return ['success' => true, 'skipped' => true, 'message' => 'CMS order already synced.'];
+        }
+
+        try {
+            $payload = $this->buildAdomantraOrderPayloadFromShipment($shipper);
+
+            Log::info('Adomantra receive-time order payload generated.', [
+                'shipper_id' => $shipper->id,
+                'awb_number' => $shipper->awb_number,
+                'payload' => $payload,
+            ]);
+
+            $response = app(AdomantraApiClient::class)->createOrder($payload);
+
+            Log::info('Adomantra receive-time order created.', [
+                'shipper_id' => $shipper->id,
+                'awb_number' => $shipper->awb_number,
+            ]);
+
+            ShipmentLog::logStatus(
+                (int) $shipper->id,
+                (string) $shipper->awb_number,
+                'received',
+                'assigned_for_pickup',
+                'CMS order synced via Adomantra order_create.',
+                $shipper->customer_id,
+                'admin'
+            );
+
+            return ['success' => true, 'skipped' => false, 'message' => 'CMS order synced.'];
+        } catch (\Throwable $e) {
+            Log::error('Adomantra receive-time order failed.', [
+                'shipper_id' => $shipper->id,
+                'awb_number' => $shipper->awb_number,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return ['success' => false, 'skipped' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Check whether the CMS order was already synced for this shipper.
+     */
+    private function isCmsOrderAlreadySynced(int $shipperId): bool
+    {
+        return ShipmentLog::where('shipper_id', $shipperId)
+            ->where(function ($query) {
+                $query->where('description', 'like', '%CMS order synced%')
+                    ->orWhere('description', 'like', '%Adomantra order%');
+            })
+            ->exists();
+    }
+
+    /**
+     * Build the exact nested request contract expected by Adomantra
+     * order_create, sourced from the stored shipment rows (not request input).
+     */
+    private function buildAdomantraOrderPayloadFromShipment(ShipperInfo $shipper): array
+    {
+        $shipper->loadMissing(['consigneeInfo', 'packageDimensions', 'invoices.invoiceItems', 'csbInformation', 'serviceRate.service']);
+
+        $consignee = $shipper->consigneeInfo;
+        $packages = $shipper->packageDimensions ?? collect();
+        $invoice = $shipper->invoices->sortByDesc('id')->first();
+        $items = $invoice ? $invoice->invoiceItems : collect();
+        $csb = $shipper->csbInformation;
+        $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
+
+        $rate = $shipper->serviceRate;
+        $service = $rate?->service;
+        if (! $service && ! empty($shipper->service_id)) {
+            $service = CourierService::find($shipper->service_id);
+        }
+
+        $customer = null;
+        if (! empty($shipper->customer_id)) {
+            $customer = Customer::find($shipper->customer_id);
+        }
+        if (! $customer && $createShipment?->customer_id) {
+            $customer = Customer::find($createShipment->customer_id);
+        }
+
+        $baseAmount = (float) ($rate?->price ?? 0);
+        $fuelPercentage = (float) ($rate?->fuel_percentage ?? 0);
+        $fuel = (float) ($rate?->fuel_charge ?? 0);
+        if ($fuel <= 0) {
+            $fuel = $baseAmount * $fuelPercentage / 100;
+        }
+        $gstPercentage = (float) ($rate?->gst_percentage ?? 0);
+        $gst = (float) ($rate?->gst_amount ?? 0);
+        $surcharge = (float) ($rate?->surcharge_amount ?? 0);
+        if ($gst <= 0) {
+            $gst = ($baseAmount + $fuel + $surcharge) * $gstPercentage / 100;
+        }
+
+        $oversizeCharge = (float) ($createShipment?->oversize_charge ?? 0);
+        $handlingCharge = (float) ($createShipment?->handling_charge ?? 0);
+        $miscellaneous = $oversizeCharge + $handlingCharge;
+
+        $destination = (string) ($consignee?->delivery_destination ?? $createShipment?->delivery_destination ?? '');
+        $destinationRecord = $destination !== '' ? Destination::where('name', $destination)->first() : null;
+        $countryCode = strtoupper((string) ($destinationRecord?->country_code ?? ''));
+        $originType = (string) ($consignee?->origin_type ?? $createShipment?->origin_type ?? 'CSB IV');
+        $csbType = strtoupper($originType) === 'CSB V' ? 'CSB 5' : 'CSB 4';
+
+        $customerName = $customer
+            ? trim((string) ($customer->first_name.' '.$customer->last_name))
+            : trim((string) ($shipper->company_name ?: $shipper->contact_person ?: 'Customer'));
+        $accountCode = $customer
+            ? (string) ($customer->customer_code ?: 'UWC'.str_pad((string) $customer->id, 6, '0', STR_PAD_LEFT))
+            : 'UWC000000';
+
+        $awbNumber = (string) $shipper->awb_number;
+
+        $productDetails = $items->map(function ($item): array {
+            return [
+                'BoxNo' => (string) ($item->box_no ?? ''),
+                'Description' => (string) ($item->description ?? ''),
+                'HSNCode' => (string) ($item->hs_code ?? ''),
+                'HTSCode' => (string) ($item->hts_code ?? ''),
+                'UnitType' => (string) ($item->unit_type ?? 'PCS'),
+                'Qty' => (float) ($item->qty ?? 0),
+                'UnitRate' => (float) ($item->unit_rate ?? 0),
+                'ShipPieceIGST' => (float) ($item->igst_amount ?? 0),
+                'PieceWt' => 0,
+            ];
+        })->values()->all();
+
+        $packageDetails = $packages->map(function ($package): array {
+            return [
+                'Length' => (float) ($package->length_cm ?? 0),
+                'Width' => (float) ($package->width_cm ?? 0),
+                'Height' => (float) ($package->height_cm ?? 0),
+                'ActualWeight' => (float) ($package->actual_weight_kg ?? 0),
+            ];
+        })->values()->all();
+
+        $invoiceDate = 'now';
+        if ($invoice?->invoice_date) {
+            $invoiceDate = $invoice->invoice_date instanceof \DateTimeInterface
+                ? $invoice->invoice_date->format('Y-m-d')
+                : (string) $invoice->invoice_date;
+        } elseif ($createShipment?->invoice_date) {
+            $invoiceDate = $createShipment->invoice_date instanceof \DateTimeInterface
+                ? $createShipment->invoice_date->format('Y-m-d')
+                : (string) $createShipment->invoice_date;
+        }
+
+        return [
+            'Awbno' => $awbNumber,
+            'AccountCode' => $accountCode,
+            'AccountName' => $customerName,
+            'Origin' => 'DEL',
+            'PaymentType' => 'Credit',
+            'ShipDate' => now()->format('Y-m-d\\TH:i:s'),
+            'Sender' => [
+                'SenderName' => (string) ($shipper->company_name ?: $customerName),
+                'SenderContactPerson' => (string) ($shipper->contact_person ?: $customerName),
+                'SenderAddressLine1' => (string) ($shipper->address_line1 ?? ''),
+                'SenderAddressLine2' => (string) ($shipper->address_line2 ?? ''),
+                'SenderAddressLine3' => (string) ($shipper->address_line3 ?? ''),
+                'SenderPincode' => (string) ($shipper->pincode ?? ''),
+                'SenderCity' => (string) ($shipper->city ?? ''),
+                'SenderState' => (string) ($shipper->state ?? ''),
+                'SenderTelephone' => (string) ($shipper->phone_number ?? ''),
+                'SenderEmailId' => (string) ($shipper->email ?? ''),
+                'KYCType' => (string) ($shipper->kyc_type ?? ''),
+                'KYCNo' => (string) ($shipper->kyc_number ?? ''),
+            ],
+            'Receiver' => [
+                'ReceiverName' => (string) ($consignee?->consignee_name ?? ''),
+                'ReceiverContactPerson' => (string) ($consignee?->contact_person ?? ''),
+                'ReceiverAddressLine1' => (string) ($consignee?->address_line1 ?? ''),
+                'ReceiverAddressLine2' => (string) ($consignee?->address_line2 ?? ''),
+                'ReceiverAddressLine3' => (string) ($consignee?->address_line3 ?? ''),
+                'ReceiverZipcode' => (string) ($consignee?->zip_code ?? ''),
+                'ReceiverCity' => (string) ($consignee?->city ?? ''),
+                'ReceiverState' => (string) ($consignee?->state ?? ''),
+                'ReceiverCountry' => $countryCode !== '' ? $countryCode : $destination,
+                'ReceiverTelephone' => (string) ($consignee?->phone_number ?? ''),
+                'ReceiverEmailid' => (string) ($consignee?->email ?? ''),
+                'VatId' => '',
+            ],
+            'ServiceDetails' => [
+                'ServiceCode' => (string) ($service?->service_code ?? $service?->scode ?? ''),
+                'ServiceName' => (string) ($service?->method ?? $shipper->shipping_method ?? ''),
+                'Forwarder' => (string) ($service?->shipper_code ?? $service?->network ?? ''),
+                'NetworkCode' => (string) ($service?->network ?? ''),
+                'NetworkName' => (string) ($service?->description ?? $service?->network ?? ''),
+                'NetworkNo' => (string) ($service?->method_code ?? ''),
+                'GoodsType' => 'NDOX',
+                'PackageType' => 'PACKAGE',
+            ],
+            'PackageDetails' => ['PackageDetail' => $packageDetails],
+            'AdditionalDetails' => [
+                'IsThirdParty' => false,
+                'ProductDetails' => $productDetails,
+                'InvoiceCurrency' => (string) ($invoice?->invoice_currency ?? $createShipment?->invoice_currency ?? ''),
+                'InvoiceNo' => (string) ($invoice?->invoice_number ?? $createShipment?->invoice_number ?? ''),
+                'InvoiceDate' => date('Y-m-d\\T00:00:00', strtotime((string) $invoiceDate)),
+                'TermsOfSale' => (string) ($invoice?->incoterms ?? $createShipment?->incoterms ?? ''),
+                'ReasonForExport' => 'Sale',
+                'FreightCharge' => round($baseAmount, 2),
+                'InsuranceCharge' => 0,
+                'CSB_Type' => $csbType,
+                'CustomerRefNo' => (string) ($invoice?->reference_number ?? $createShipment?->reference_number ?? ''),
+                'DeliveryConfirmation' => '',
+                'DutyTax' => '',
+                'DutiesAccountNo' => '',
+                'TransactionId' => $awbNumber,
+                'IECNo' => (string) ($csb?->iec_code ?? $createShipment?->iec_code ?? ''),
+                'ADCode' => (string) ($csb?->ad_code ?? $createShipment?->ad_code ?? ''),
+                'BankType' => '',
+                'NFEI' => false,
+                'Ecom' => strtoupper((string) ($csb?->ecommerce ?? $createShipment?->ecommerce ?? 'No')) === 'YES',
+                'MEIS' => false,
+                'BankAccount' => (string) ($csb?->bank_account_number ?? $createShipment?->bank_account_number ?? ''),
+                'ProductType' => 'Commercial',
+                'BoundUT' => (string) ($csb?->bond_ut_igst ?? $createShipment?->bond_ut_igst ?? ''),
+                'IGSTAmount' => round((float) $items->sum('igst_amount'), 2),
+                'IGSTPaid' => strtoupper((string) ($csb?->bond_ut_igst ?? $createShipment?->bond_ut_igst ?? '')) === 'IGST' ? 'Yes' : 'No',
+                'ShipperImage' => '',
+                'ShipperKYC' => '',
+                'FileName' => '',
+            ],
+            'FreightDetails' => [
+                'BasicAmount' => round($baseAmount, 2),
+                'FuelPercentage' => round($fuelPercentage, 2),
+                'Fuel' => round($fuel, 2),
+                'MisFuel' => 0,
+                'Misc' => round($miscellaneous, 2),
+                'Demand' => 0,
+                'GreenSuch' => 0,
+                'Taxable' => round($baseAmount + $fuel + $surcharge + $miscellaneous, 2),
+                'SGST' => 0,
+                'CGST' => 0,
+                'IGST' => round($gst, 2),
+                'NTaxable' => 0,
+                'NetTotal' => round($baseAmount + $fuel + $gst + $surcharge + $miscellaneous, 2),
+            ],
+            'MiscDetailsTable' => array_values(array_filter([
+                $oversizeCharge > 0 ? ['MiscCode' => 'OVERSIZE', 'MiscName' => 'Oversize Charge', 'MisAmt' => round($oversizeCharge, 2), 'MisNTax' => 0, 'MisFuel' => 0] : null,
+                $handlingCharge > 0 ? ['MiscCode' => 'HANDLING', 'MiscName' => 'Handling Charge', 'MisAmt' => round($handlingCharge, 2), 'MisNTax' => 0, 'MisFuel' => 0] : null,
+            ])),
         ];
     }
 
@@ -1649,6 +1968,7 @@ class AdminController extends Controller
             ->leftJoin('customers as c', 'c.id', '=', 'shp.customer_id')
             ->leftJoin('consignee_info as con', 'con.shipper_id', '=', 'shp.id')
             ->leftJoin('admin_user as au', 'au.id', '=', 'sd.applied_by')
+            ->where('sd.status', '!=', 'cancelled')
             ->select(
                 'sd.*',
                 'si.invoice_number',
@@ -1674,6 +1994,62 @@ class AdminController extends Controller
         $totalIncl = (float) $disputes->sum('total_incl_gst');
 
         return view('admin.dispute-orders', compact('disputes', 'totalBase', 'totalGst', 'totalIncl'));
+    }
+
+    /**
+     * Cancel Orders listing page (sidebar: Manage Orders > Orders > Cancel Orders).
+     * Saare cancelled shipments (shipper ya invoice status cancelled) yahan
+     * table me dikhte hain — customer self-cancel + dispute-cancel dono.
+     */
+    public function cancelOrders()
+    {
+        $orders = DB::table('shipment_invoice as si')
+            ->join('shipper_info as shp', 'shp.id', '=', 'si.shipper_id')
+            ->leftJoin('customers as c', 'c.id', '=', 'shp.customer_id')
+            ->leftJoin('consignee_info as con', 'con.shipper_id', '=', 'shp.id')
+            ->where(function ($query) {
+                $query->where('shp.status', 'cancelled')
+                    ->orWhere('si.status', 'cancelled');
+            })
+            ->select(
+                'si.id',
+                'si.invoice_number',
+                'si.invoice_currency',
+                'si.created_at as order_date',
+                'shp.id as shipper_id',
+                'shp.awb_number',
+                'shp.company_name as shipper_company',
+                'shp.contact_person as shipper_contact',
+                'shp.city as shipper_city',
+                'shp.state as shipper_state',
+                'shp.status as shipper_status',
+                'shp.total_price',
+                'c.first_name',
+                'c.last_name',
+                'c.email as customer_email',
+                'con.consignee_name',
+                'con.city as consignee_city',
+                'con.state as consignee_state',
+                'con.delivery_destination as consignee_destination'
+            )
+            ->orderByDesc('si.created_at')
+            ->get();
+
+        // Latest 'cancelled' log per shipper: kab + kisne cancel kiya.
+        $cancelLogs = [];
+        if ($orders->isNotEmpty()) {
+            $logs = ShipmentLog::whereIn('shipper_id', $orders->pluck('shipper_id')->all())
+                ->where('status', 'cancelled')
+                ->orderBy('created_at')
+                ->get(['shipper_id', 'created_at', 'performed_by', 'description']);
+            foreach ($logs as $log) {
+                $cancelLogs[$log->shipper_id] = $log;
+            }
+        }
+
+        $totalAmount = (float) $orders->sum('total_price');
+
+        return view('admin.cancel-orders', compact('orders', 'cancelLogs', 'totalAmount'));
     }
 
     /**
@@ -1715,12 +2091,15 @@ class AdminController extends Controller
     }
 
     /**
-     * Apply Dispute Charge modal se charge save karo (companies page).
+     * Raise a Dispute Charge with a remark (companies page modal).
      * flat/box calculation me boxes mandatory hai; Weight dispute ya
      * Custom-valued rule me custom amount mandatory hai (rule rate ki
-     * jagah wahi charge hota hai). Total GST-inclusive server par compute
-     * hota hai, customer ke wallet se deduct hota hai, aur shipment ka
-     * status 'ready_to_dispatch' ho jata hai.
+     * jagah wahi charge hota hai). Remark mandatory hai.
+     *
+     * Raise par wallet se kuch deduct NAHI hota — dispute 'applied' me
+     * save hota hai aur shipment 'disputed' me chala jata hai. Customer
+     * accept kare tabhi admin deduct kar sakta hai (deductDisputeCharge).
+     * Total GST-inclusive server par compute hota hai.
      */
     public function applyDisputeCharge(Request $request)
     {
@@ -1730,6 +2109,7 @@ class AdminController extends Controller
                 'dispute_charge_id' => 'required|integer|exists:dispute_surcharge_charges,id',
                 'boxes' => 'nullable|integer|min:1|max:10000',
                 'custom_amount' => 'nullable|numeric|min:0|max:10000000',
+                'remark' => 'required|string|max:1000',
             ]);
 
             $charge = \App\Models\DisputeCharge::findOrFail($request->dispute_charge_id);
@@ -1771,13 +2151,131 @@ class AdminController extends Controller
             $gstAmt = $base !== null ? round($base * $gstPct / 100, 2) : 0;
             $total = $base !== null ? round($base + $gstAmt, 2) : null;
 
-            // Har apply par poora total wallet se katega (same rule dobara
-            // lagane par bhi full amount, farak nahi).
-            $deductAmount = $total !== null ? round((float) $total, 2) : 0.0;
+            $remark = trim((string) $request->remark);
 
-            // Wallet deduction ki taiyari — farak customer ke wallet se katega.
+            $adminId = Auth::guard('admin')->id();
+
+            DB::transaction(function () use ($invoice, $shipper, $charge, $rate, $boxes, $base, $gstPct, $gstAmt, $total, $currency, $adminId, $remark, &$dispute) {
+                // Same shipment + same rule ka purana row already deducted
+                // hai to use overwrite mat karo — naya raise row banao. Pending
+                // (applied/accepted) row hai to wahi update hogi.
+                $existing = ShipmentDispute::where('shipment_invoice_id', $invoice->id)
+                    ->where('dispute_charge_id', $charge->id)
+                    ->orderByDesc('id')
+                    ->first();
+
+                $attributes = [
+                    'shipper_id' => $invoice->shipper_id,
+                    'awb_number' => $shipper->awb_number ?? null,
+                    'charge_type' => $charge->additional_charges,
+                    'conditions' => $charge->conditions,
+                    'destination' => $charge->destination,
+                    'service_id' => $charge->service_id,
+                    'calculation_type' => $charge->calculation_type,
+                    'values' => $charge->values,
+                    'rate' => $rate,
+                    'boxes' => $boxes,
+                    'base_amount' => $base,
+                    'gst_percentage' => $gstPct,
+                    'gst_amount' => $gstAmt,
+                    'total_incl_gst' => $total,
+                    'currency' => $currency,
+                    'remark' => $remark,
+                    'applied_by' => $adminId,
+                    'accepted_at' => null,
+                    'accepted_by' => null,
+                    'deducted_at' => null,
+                    'deducted_by' => null,
+                    'status' => 'applied',
+                ];
+
+                if ($existing && in_array($existing->status, ['deducted', 'applied'], true) && (bool) $existing->deducted_at) {
+                    $dispute = ShipmentDispute::create(array_merge(
+                        ['shipment_invoice_id' => $invoice->id, 'dispute_charge_id' => $charge->id],
+                        $attributes
+                    ));
+                } else {
+                    $dispute = ShipmentDispute::updateOrCreate(
+                        [
+                            'shipment_invoice_id' => $invoice->id,
+                            'dispute_charge_id' => $charge->id,
+                        ],
+                        $attributes
+                    );
+                }
+
+                // Shipment ko 'disputed' karo: tracking entry + shipper status
+                // update taaki shipment Disputed state me chala jaye.
+                if ($shipper) {
+                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                    if (! empty($shipper->awb_number)) {
+                        \App\Models\Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'status' => 'disputed',
+                            'title' => 'Shipment Disputed - Charge Applied ('.(string) $charge->additional_charges.')',
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                        ]);
+                    }
+                    $shipper->status = 'disputed';
+                    $shipper->save();
+                }
+            });
+
+            $message = 'Dispute applied with remark. Shipment marked as Disputed. Amount will be deducted from wallet only after the customer accepts.';
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'dispute' => $dispute,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Deduct an accepted dispute charge from the customer wallet.
+     *
+     * Sirf 'accepted' (customer ne accept kiya hua) dispute deduct ho sakta
+     * hai. Deduct ke baad resolved dispute row table se delete ho jati hai
+     * aur shipment 'ready_to_dispatch' me chala jata hai.
+     */
+    public function deductDisputeCharge(Request $request)
+    {
+        try {
+            $request->validate([
+                'dispute_id' => 'required|integer|exists:shipment_disputes,id',
+            ]);
+
+            $dispute = ShipmentDispute::findOrFail($request->dispute_id);
+
+            if ($dispute->status !== 'accepted') {
+                $state = $dispute->status === 'applied'
+                    ? 'Customer ne abhi accept nahi kiya hai.'
+                    : 'Ye dispute already deduct ho chuka hai.';
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sirf accepted dispute deduct ho sakta hai. '.$state,
+                ], 422);
+            }
+
+            $deductAmount = round((float) ($dispute->total_incl_gst ?? 0), 2);
+            $currency = $dispute->currency ?: 'Rs';
+
+            $shipper = $dispute->shipper_id ? ShipperInfo::find($dispute->shipper_id) : null;
             $customerId = $shipper ? (int) $shipper->customer_id : 0;
             $wallet = $customerId > 0 ? Wallet::where('customer_id', $customerId)->first() : null;
+
             if ($deductAmount > 0) {
                 if (! $wallet) {
                     return response()->json([
@@ -1788,43 +2286,16 @@ class AdminController extends Controller
                 if ((float) $wallet->balance < $deductAmount) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Insufficient wallet balance to apply this dispute charge. Current balance is ₹'.number_format((float) $wallet->balance, 2).', required ₹'.number_format($deductAmount, 2).'.',
+                        'message' => 'Insufficient wallet balance to deduct this dispute charge. Current balance is ₹'.number_format((float) $wallet->balance, 2).', required ₹'.number_format($deductAmount, 2).'.',
                     ], 422);
                 }
             }
 
             $adminId = Auth::guard('admin')->id();
             $newBalance = $wallet ? (float) $wallet->balance : 0;
+            $disputeId = (int) $dispute->id;
 
-            DB::transaction(function () use ($invoice, $shipper, $charge, $rate, $boxes, $base, $gstPct, $gstAmt, $total, $currency, $adminId, $wallet, $deductAmount, $customerId, &$dispute, &$newBalance) {
-                // Same shipment + same rule ka duplicate rokne ke liye update-or-create.
-                $dispute = ShipmentDispute::updateOrCreate(
-                    [
-                        'shipment_invoice_id' => $invoice->id,
-                        'dispute_charge_id' => $charge->id,
-                    ],
-                    [
-                        'shipper_id' => $invoice->shipper_id,
-                        'awb_number' => $shipper->awb_number ?? null,
-                        'charge_type' => $charge->additional_charges,
-                        'conditions' => $charge->conditions,
-                        'destination' => $charge->destination,
-                        'service_id' => $charge->service_id,
-                        'calculation_type' => $charge->calculation_type,
-                        'values' => $charge->values,
-                        'rate' => $rate,
-                        'boxes' => $boxes,
-                        'base_amount' => $base,
-                        'gst_percentage' => $gstPct,
-                        'gst_amount' => $gstAmt,
-                        'total_incl_gst' => $total,
-                        'currency' => $currency,
-                        'applied_by' => $adminId,
-                        'status' => 'applied',
-                    ]
-                );
-
-                // Dispute amount customer ke wallet se deduct karo.
+            DB::transaction(function () use ($dispute, $shipper, $wallet, $deductAmount, $currency, $customerId, $adminId, &$newBalance) {
                 if ($wallet && $deductAmount > 0) {
                     $wallet->decrement('balance', $deductAmount);
                     $wallet->refresh();
@@ -1838,20 +2309,21 @@ class AdminController extends Controller
                         'user_type' => 'admin',
                         'amount' => $deductAmount,
                         'balance_after' => $wallet->balance,
-                        'reference' => $shipper->awb_number ?? ('DISPUTE-'.$dispute->id),
-                        'description' => 'Dispute charge ('.$charge->additional_charges.') of '.$currency.' '.number_format($deductAmount, 2).' for shipment '.($shipper->awb_number ?? '#'.$shipper->id),
+                        'reference' => $dispute->awb_number ?? ('DISPUTE-'.$dispute->id),
+                        'description' => 'Dispute charge ('.$dispute->charge_type.') of '.$currency.' '.number_format($deductAmount, 2).' for shipment '.($dispute->awb_number ?? '#'.$dispute->shipper_id).' (accepted by customer)',
                     ]);
                 }
 
-                // Shipment ka status 'ready_to_dispatch' karo: tracking entry +
-                // shipper status update taaki shipment Ready to Dispatch state me chala jaye.
+                // Deduct ho gaya — resolved dispute row table se delete.
+                $dispute->delete();
+
                 if ($shipper) {
                     $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
                     if (! empty($shipper->awb_number)) {
                         \App\Models\Tracking::create([
                             'awb_number' => $shipper->awb_number,
                             'status' => 'ready_to_dispatch',
-                            'title' => 'Ready to Dispatch - Dispute Applied ('.(string) $charge->additional_charges.')',
+                            'title' => 'Ready to Dispatch - Dispute Deducted ('.(string) $dispute->charge_type.')',
                             'shipper_id' => $shipper->id,
                             'shipping_id' => $createShipment ? $createShipment->id : null,
                             'uwc_id' => $shipper->awb_number,
@@ -1862,17 +2334,166 @@ class AdminController extends Controller
                 }
             });
 
-            $message = 'Dispute charge applied successfully. Shipment marked as Ready to Dispatch.';
-            if ($deductAmount > 0) {
-                $message .= ' '.$currency.' '.number_format($deductAmount, 2).' deducted from customer wallet.';
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispute charge deducted from customer wallet. Shipment marked as Ready to Dispatch.',
+                'dispute_id' => $disputeId,
+                'dispute_deleted' => true,
+                'deducted' => $deductAmount,
+                'new_balance' => $newBalance,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update a pending dispute's amount with a custom value (Dispute Orders page).
+     *
+     * Custom amount naya BASE (pre-GST) amount hota hai; GST dispute ke apne
+     * gst_percentage se recompute hota hai aur total wahi se banta hai.
+     * Sirf pending (applied/accepted) disputes edit ho sakti hain. Agar dispute
+     * 'accepted' thi to amount badalne par wapas 'applied' ho jati hai taaki
+     * customer naya amount phir se accept kare. Customer panel (My Disputes +
+     * Disputed tab) me wahi updated amount dikhta hai.
+     */
+    public function updateDisputeAmount(Request $request)
+    {
+        try {
+            $request->validate([
+                'dispute_id' => 'required|integer|exists:shipment_disputes,id',
+                'custom_amount' => 'required|numeric|min:0.01|max:10000000',
+            ]);
+
+            $dispute = ShipmentDispute::findOrFail($request->dispute_id);
+
+            if (! in_array($dispute->status, ['applied', 'accepted'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sirf pending disputes ka amount change ho sakta hai. Ye dispute already deduct ho chuka hai.',
+                ], 422);
+            }
+
+            $base = round((float) $request->custom_amount, 2);
+            $gstPct = (float) ($dispute->gst_percentage ?? 0);
+            $gstAmt = round($base * $gstPct / 100, 2);
+            $total = round($base + $gstAmt, 2);
+            $wasAccepted = $dispute->status === 'accepted';
+
+            DB::transaction(function () use ($dispute, $base, $gstAmt, $total, $wasAccepted) {
+                $dispute->rate = $base;
+                $dispute->boxes = null;
+                $dispute->base_amount = $base;
+                $dispute->gst_amount = $gstAmt;
+                $dispute->total_incl_gst = $total;
+                if ($wasAccepted) {
+                    $dispute->status = 'applied';
+                    $dispute->accepted_at = null;
+                    $dispute->accepted_by = null;
+                }
+                $dispute->save();
+            });
+
+            $message = 'Dispute amount updated. New total: '.$dispute->currency.' '.number_format($total, 2).' (incl. GST).';
+            if ($wasAccepted) {
+                $message .= ' Customer ne purana amount accept kiya tha, isliye dispute wapas Applied hua — customer ko naya amount phir se accept karna hoga.';
             }
 
             return response()->json([
                 'success' => true,
                 'message' => $message,
-                'dispute' => $dispute,
-                'deducted' => $deductAmount,
-                'new_balance' => $newBalance,
+                'dispute' => $dispute->fresh(),
+                'new_total' => $total,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => collect($e->errors())->flatten()->first() ?: 'Validation failed.',
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancel a pending dispute (Dispute Orders page).
+     *
+     * Sirf pending (applied/accepted) disputes cancel ho sakti hain. Cancel par
+     * koi wallet refund NAHI hota — dispute row table se delete ho jati hai
+     * aur shipper 'cancelled' ho jata hai taaki shipment customer panel ke
+     * Cancelled section me dikhe. shipment_invoice ka status NAHI badalta.
+     */
+    public function cancelDisputeCharge(Request $request)
+    {
+        try {
+            $request->validate([
+                'dispute_id' => 'required|integer|exists:shipment_disputes,id',
+            ]);
+
+            $dispute = ShipmentDispute::findOrFail($request->dispute_id);
+
+            if (! in_array($dispute->status, ['applied', 'accepted'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sirf pending disputes cancel ho sakti hain.',
+                ], 422);
+            }
+
+            $shipper = $dispute->shipper_id ? ShipperInfo::find($dispute->shipper_id) : null;
+            $adminId = Auth::guard('admin')->id();
+            $previousStatus = $shipper?->status;
+
+            DB::transaction(function () use ($dispute, $shipper, $adminId, $previousStatus) {
+                // Resolved dispute row table se delete.
+                $dispute->delete();
+
+                // NOTE: shipment_invoice ka status NAHI badalta — sirf shipper
+                // 'cancelled' hota hai. Customer Cancelled tab shipper status
+                // se match karta hai (viewAllShipments cancelled filter).
+                if ($shipper) {
+                    $shipper->status = 'cancelled';
+                    $shipper->save();
+
+                    $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+                    if (! empty($shipper->awb_number)) {
+                        \App\Models\Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'status' => 'cancelled',
+                            'title' => 'Shipment Cancelled - Dispute Cancelled by Admin',
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipment ? $createShipment->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                        ]);
+                    }
+
+                    ShipmentLog::logStatus(
+                        $shipper->id,
+                        (string) ($shipper->awb_number ?? ''),
+                        'cancelled',
+                        $previousStatus,
+                        'Dispute cancelled by admin. No wallet refund.',
+                        $shipper->customer_id,
+                        'admin'
+                    );
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispute cancelled and removed. Shipment moved to Cancelled (no wallet refund).',
+                'dispute_id' => (int) $request->dispute_id,
+                'dispute_deleted' => true,
             ]);
         } catch (ValidationException $e) {
             return response()->json([

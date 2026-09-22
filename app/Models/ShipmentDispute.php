@@ -26,7 +26,12 @@ class ShipmentDispute extends Model
         'gst_amount',
         'total_incl_gst',
         'currency',
+        'remark',
         'applied_by',
+        'accepted_at',
+        'accepted_by',
+        'deducted_at',
+        'deducted_by',
         'status',
     ];
 
@@ -36,6 +41,8 @@ class ShipmentDispute extends Model
         'gst_percentage' => 'decimal:2',
         'gst_amount' => 'decimal:2',
         'total_incl_gst' => 'decimal:2',
+        'accepted_at' => 'datetime',
+        'deducted_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

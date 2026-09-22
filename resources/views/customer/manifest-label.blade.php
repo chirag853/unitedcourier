@@ -233,10 +233,6 @@
                 <div class="company">
                     <div class="brand">United Worldwide Couriers </div>
                 </div>
-                <div class="service">
-                    <div class="svc-label">Service</div>
-                    <div class="svc-value">{{ $label['service'] }}</div>
-                </div>
             </div>
 
             <div class="barcode">
@@ -283,14 +279,12 @@
                 <div class="barcode-number">{{ $label['awb_number'] }}</div>
             </div>
 
-            <div class="date">{{ $label['date'] }}</div>
-
             <div class="sender">
                 <div class="sender-title">Sender & Return Details</div>
                 <div class="sender-line">
-                    {{ $label['sender_company'] }}<br>
-                    {{ $label['sender_address'] }}<br>
-                    {{ $label['sender_phone'] }}
+                    @if(!empty($label['customer_code']))
+                        Customer Code: {{ $label['customer_code'] }}
+                    @endif
                 </div>
             </div>
         </div>
