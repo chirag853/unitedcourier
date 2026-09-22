@@ -4908,6 +4908,7 @@ class AdminController extends Controller
         }
 
         $serviceId = $request->input('service_id');
+        $serviceKey = trim((string) $request->input('service_key', ''));
         $country = trim((string) $request->input('country', ''));
         $query = \App\Models\CourierRate::with(['service', 'customer'])
             ->whereIn('customer_id', $customerIds)
@@ -4917,6 +4918,16 @@ class AdminController extends Controller
             ->orderBy('wt_range_start');
         if ($serviceId !== null && $serviceId !== '') {
             $query->where('service_id', (int) $serviceId);
+        } elseif ($serviceKey !== '' && str_contains($serviceKey, '||')) {
+            // DISTINCT service group from the service-first dropdown
+            // (api_provider||service_code, same as Bulk Upload).
+            [$keyApi, $keyCode] = explode('||', $serviceKey, 2);
+            $keyApi = trim((string) $keyApi);
+            $keyCode = trim((string) $keyCode);
+            $query->whereHas('service', function ($serviceQuery) use ($keyApi, $keyCode) {
+                $serviceQuery->whereRaw('LOWER(api_provider) = ?', [strtolower($keyApi)])
+                    ->whereRaw('LOWER(service_code) = ?', [strtolower($keyCode)]);
+            });
         }
         if ($country !== '') {
             $query->whereHas('service', function ($serviceQuery) use ($country) {
@@ -4926,7 +4937,7 @@ class AdminController extends Controller
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $headers = ['Customer ID', 'Customer Name', 'Network', 'Service Code', 'Method', 'TAT', 'Weight Start (gm)', 'Weight End (gm)', 'Zone No', 'Zone Category', 'Price', 'Default', 'Start Date', 'End Date'];
+        $headers = ['Customer Code', 'Customer Name', 'Network', 'Country', 'Service Code', 'Method', 'TAT', 'Weight Start (gm)', 'Weight End (gm)', 'Zone No', 'Zone Category', 'Price', 'Default', 'Start Date', 'End Date'];
 
         // PhpSpreadsheet 2.x+ removed setCellValueByColumnAndRow(), so we
         // build column letters (A, B, C, ...) and use coordinate-based addressing.
@@ -4947,9 +4958,10 @@ class AdminController extends Controller
                 ? ($rate->end_date instanceof \DateTime ? $rate->end_date->format('Y-m-d') : (string) $rate->end_date)
                 : '';
             $values = [
-                $rate->customer_id,
+                $customer->customer_code ?? '',
                 trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
                 $service->network ?? '',
+                $service->country ?? '',
                 $service->service_code ?? '',
                 $service->method ?? '',
                 $service->tat ?? '',
@@ -5132,10 +5144,24 @@ class AdminController extends Controller
             'customer_ids' => 'required|array|min:1',
             'customer_ids.*' => 'integer|exists:customers,id',
             'service_id'  => 'nullable|integer|exists:courier_services,id',
+            // DISTINCT service group from the service-first dropdown
+            // (api_provider||service_code, same as Bulk Upload / Add Country).
+            'service_key' => 'nullable|string|max:255',
             'start_date'  => 'required|date',
             'end_date'    => 'required|date|after_or_equal:start_date',
             'rate_file'   => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
+
+        // Resolve DISTINCT service group (if picked) to api_provider + service_code.
+        $filterApiProvider = null;
+        $filterServiceCode = null;
+        if (!empty($validated['service_key']) && str_contains($validated['service_key'], '||')) {
+            [$filterApiProvider, $filterServiceCode] = explode('||', $validated['service_key'], 2);
+            // Normalize the same way the JS group key does (lower/trim); match
+            // case-insensitively so "OVerseas||aramex_ppx" still resolves.
+            $filterApiProvider = trim((string) $filterApiProvider);
+            $filterServiceCode = trim((string) $filterServiceCode);
+        }
 
         $filePath = $request->file('rate_file')->getRealPath();
 
@@ -5212,15 +5238,70 @@ class AdminController extends Controller
         $zoneNoCol  = $findColumn(['zone no', 'zone_no', 'zone number', 'zone']);
         $priceCol   = $findColumn(['price', 'rate', 'amount', 'cost']);
         $customerIdCol = $findColumn(['customer id', 'customer_id', 'customerid']);
+        $customerCodeCol = $findColumn(['customer code', 'customer_code', 'customercode', 'cust code', 'cust_code']);
         $serviceCodeCol = $findColumn(['service code', 'service_code', 'servicecode']);
         $networkCol = $findColumn(['network']);
         $methodCol = $findColumn(['method']);
 
-        if ($wtStartCol === null || $wtEndCol === null || $zoneNoCol === null || $priceCol === null || $customerIdCol === null
-            || (!$validated['service_id'] && $serviceCodeCol === null && $networkCol === null && $methodCol === null)) {
+        // Export now contains Customer Code (no Customer ID) + Country.
+        // Accept EITHER identifier for backward compatibility with old files.
+        // NOTE: service_id is no longer posted by the service-first modal
+        // (it posts service_key), so use ?? null to avoid undefined-key 500s.
+        $filterServiceId = $validated['service_id'] ?? null;
+        if ($wtStartCol === null || $wtEndCol === null || $zoneNoCol === null || $priceCol === null
+            || ($customerIdCol === null && $customerCodeCol === null)
+            || (!$filterServiceId && $serviceCodeCol === null && $networkCol === null && $methodCol === null)) {
             return response()->json([
                 'success' => false,
-                'message' => 'The file must contain Customer ID, Weight Start, Weight End, Zone No and Price. When All Services is selected, it must also contain Service Code, Network or Method.',
+                'message' => 'The file must contain Customer Code (or Customer ID), Weight Start, Weight End, Zone No and Price. When All Services is selected, it must also contain Service Code, Network or Method.',
+            ], 422);
+        }
+
+        // ---- Customer Code guard: the file must belong to the selected customer(s) ----
+        // Selected IDs -> codes.
+        $selectedCustomers = \App\Models\Customer::whereIn('id', $validated['customer_ids'])->get(['id', 'customer_code']);
+        $validatedCustomerIds = array_map('intval', (array) $validated['customer_ids']);
+        $selectedCodeSet = [];
+        foreach ($selectedCustomers as $sc) {
+            $code = strtoupper(trim((string) $sc->customer_code));
+            if ($code !== '') {
+                $selectedCodeSet[$code] = true;
+            }
+        }
+        // All customer codes in DB (for resolving file codes -> ids).
+        $codeToIdAll = [];
+        foreach (\App\Models\Customer::pluck('customer_code', 'id')->toArray() as $id => $code) {
+            $code = strtoupper(trim((string) $code));
+            if ($code !== '') {
+                $codeToIdAll[$code] = (int) $id;
+            }
+        }
+        // Scan file identifiers; abort if any row belongs to another customer.
+        $mismatched = [];
+        foreach (array_slice($rows, $headerRowIndex + 1) as $row) {
+            $wtStart = isset($row[$wtStartCol]) ? trim((string) $row[$wtStartCol]) : '';
+            $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
+            $zoneNo  = isset($row[$zoneNoCol]) ? trim((string) $row[$zoneNoCol]) : '';
+            $price   = isset($row[$priceCol]) ? trim((string) $row[$priceCol]) : '';
+            if ($wtStart === '' && $wtEnd === '' && $zoneNo === '' && $price === '') {
+                continue;
+            }
+            if ($customerCodeCol !== null && isset($row[$customerCodeCol]) && trim((string) $row[$customerCodeCol]) !== '') {
+                $fileCode = strtoupper(trim((string) $row[$customerCodeCol]));
+                if (!isset($selectedCodeSet[$fileCode])) {
+                    $mismatched[$fileCode] = true;
+                }
+            } elseif ($customerIdCol !== null && isset($row[$customerIdCol]) && trim((string) $row[$customerIdCol]) !== '') {
+                $fileId = (int) trim((string) $row[$customerIdCol]);
+                if (!in_array($fileId, $validatedCustomerIds, true)) {
+                    $mismatched['ID:' . $fileId] = true;
+                }
+            }
+        }
+        if (!empty($mismatched)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This file belongs to other customer(s): ' . implode(', ', array_keys($mismatched)) . '. Please upload only the selected customer(s) file (Customer Code must match).',
             ], 422);
         }
 
@@ -5228,7 +5309,7 @@ class AdminController extends Controller
         $skipped = 0;
         $notFound = 0;
 
-        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $serviceCodeCol, $networkCol, $methodCol, $validated, &$updated, &$skipped, &$notFound) {
+        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $customerCodeCol, $codeToIdAll, $serviceCodeCol, $networkCol, $methodCol, $validated, $filterApiProvider, $filterServiceCode, $filterServiceId, &$updated, &$skipped, &$notFound) {
             $normalizeValue = function ($value) {
                 return strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
             };
@@ -5238,10 +5319,18 @@ class AdminController extends Controller
 
             // Load the customer's rates once. Querying the database inside
             // the Excel-row loop makes large exports hit the request timeout.
+            // Scope: single service_id (legacy) OR DISTINCT api_provider +
+            // service_code group (service-first dropdown) OR all services.
             $existingRates = \App\Models\CourierRate::with('service')
                 ->whereIn('customer_id', $validated['customer_ids'])
-                ->when($validated['service_id'], function ($query) use ($validated) {
-                    $query->where('service_id', $validated['service_id']);
+                ->when($filterServiceId, function ($query) use ($filterServiceId) {
+                    $query->where('service_id', $filterServiceId);
+                })
+                ->when($filterApiProvider !== null && empty($filterServiceId), function ($query) use ($filterApiProvider, $filterServiceCode) {
+                    $query->whereHas('service', function ($sq) use ($filterApiProvider, $filterServiceCode) {
+                        $sq->whereRaw('LOWER(api_provider) = ?', [strtolower($filterApiProvider)])
+                           ->whereRaw('LOWER(service_code) = ?', [strtolower($filterServiceCode)]);
+                    });
                 })
                 ->get();
             $rateLookup = [];
@@ -5251,7 +5340,7 @@ class AdminController extends Controller
                     . (int) $existingRate->zone_no;
                 $rateLookup['id:' . $existingRate->customer_id . '|' . $existingRate->service_id . '|' . $weightKey] = $existingRate;
 
-                if (!$validated['service_id'] && $existingRate->service) {
+                if (!$filterServiceId && $existingRate->service) {
                     $service = $existingRate->service;
                     foreach ([$service->service_code, $service->scode] as $code) {
                         $code = $normalizeValue($code);
@@ -5273,7 +5362,15 @@ class AdminController extends Controller
                 $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
                 $zoneNo  = isset($row[$zoneNoCol]) ? trim((string) $row[$zoneNoCol]) : '';
                 $price   = isset($row[$priceCol]) ? trim((string) $row[$priceCol]) : '';
-                $customerId = isset($row[$customerIdCol]) ? (int) trim((string) $row[$customerIdCol]) : 0;
+                // Resolve customer via Customer Code first (new export format),
+                // falling back to Customer ID (old files).
+                $customerId = 0;
+                if ($customerCodeCol !== null && isset($row[$customerCodeCol]) && trim((string) $row[$customerCodeCol]) !== '') {
+                    $fileCode = strtoupper(trim((string) $row[$customerCodeCol]));
+                    $customerId = $codeToIdAll[$fileCode] ?? 0;
+                } elseif ($customerIdCol !== null && isset($row[$customerIdCol]) && trim((string) $row[$customerIdCol]) !== '') {
+                    $customerId = (int) trim((string) $row[$customerIdCol]);
+                }
                 $serviceCode = $serviceCodeCol !== null && isset($row[$serviceCodeCol]) ? trim((string) $row[$serviceCodeCol]) : '';
                 $network = $networkCol !== null && isset($row[$networkCol]) ? trim((string) $row[$networkCol]) : '';
                 $method = $methodCol !== null && isset($row[$methodCol]) ? trim((string) $row[$methodCol]) : '';
@@ -5292,9 +5389,11 @@ class AdminController extends Controller
                 // in_array(3, ["3","17"], true) return false, causing EVERY
                 // row to be skipped with "No matching customer rates found".
                 // Cast the validated IDs to int so the comparison is reliable.
+                // (Mismatch against other customers was already rejected in the
+                // pre-pass above; this is a second guard incl. unknown codes.)
                 $validatedCustomerIds = array_map('intval', $validated['customer_ids']);
-                if (!in_array($customerId, $validatedCustomerIds, true)
-                    || (!$validated['service_id'] && $serviceCode === '' && ($network === '' || $method === ''))) {
+                if ($customerId === 0 || !in_array($customerId, $validatedCustomerIds, true)
+                    || (!$filterServiceId && $serviceCode === '' && ($network === '' || $method === ''))) {
                     $skipped++;
                     continue;
                 }
@@ -5302,8 +5401,8 @@ class AdminController extends Controller
                 $weightKey = $normalizeNumber($wtStart) . '|'
                     . $normalizeNumber($wtEnd) . '|' . (int) $zoneNo;
                 $rate = null;
-                if ($validated['service_id']) {
-                    $rate = $rateLookup['id:' . $customerId . '|' . $validated['service_id'] . '|' . $weightKey] ?? null;
+                if ($filterServiceId) {
+                    $rate = $rateLookup['id:' . $customerId . '|' . $filterServiceId . '|' . $weightKey] ?? null;
                 } else {
                     $uploadedCode = $normalizeValue($serviceCode);
                     $rate = $uploadedCode !== ''
@@ -5504,7 +5603,8 @@ class AdminController extends Controller
     }
 
     /**
-     * Download a zoned horizontal sample or a plain sample for a no-zone country.
+     * Download a vertical sample (Weight Start, Weight End, Zone No, Price,
+     * Fuel Charge, Fuel %, GST %) or a plain sample for a no-zone country.
      *
      * Existing default rates are pre-filled where available.
      */
@@ -5513,6 +5613,31 @@ class AdminController extends Controller
         $serviceId = $request->query('service_id');
         $country = $request->query('country');
         $withoutZone = $request->boolean('without_zone');
+
+        // ---- Multi-country sample: all checked (service, country) targets ----
+        // Frontend sends service_ids[] + countries[] (aligned pairs, same as
+        // upload). When present, the sample contains a Country first column
+        // with one row-block per selected country.
+        $multiServiceIds = array_values(array_filter(array_map('intval', (array) $request->query('service_ids', []))));
+        $multiCountries = array_values(array_filter(array_map(function ($c) { return trim((string) $c); }, (array) $request->query('countries', []))));
+        $multiTargets = [];
+        if (!empty($multiServiceIds) || !empty($multiCountries)) {
+            $paired = (count($multiServiceIds) === count($multiCountries));
+            foreach ($multiServiceIds as $idx => $sid) {
+                $cc = $paired ? ($multiCountries[$idx] ?? null) : null;
+                if (!$cc) {
+                    $cc = \App\Models\CourierService::whereKey($sid)->value('country');
+                }
+                if (!$cc) {
+                    continue;
+                }
+                $multiTargets[] = ['service_id' => (int) $sid, 'country' => $cc];
+            }
+            if (!empty($multiTargets)) {
+                return $this->downloadMultiCountryRateSample($multiTargets, $request);
+            }
+        }
+
         $destinationId = $this->destinationIdForCountry($country);
 
         // Many courier_services.country values (e.g. "France", "China") have
@@ -5559,72 +5684,137 @@ class AdminController extends Controller
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $headers = ['Weight Start', 'Weight End'];
-        if ($withoutZone) {
-            $headers = array_merge($headers, ['Price', 'Fuel Charge', 'Fuel %', 'GST %']);
-        } else {
-            foreach ($zoneNos as $zoneNo) {
-                $headers[] = 'Zone ' . $zoneNo . ' Price';
-                $headers[] = 'Zone ' . $zoneNo . ' Fuel Charge';
-                $headers[] = 'Zone ' . $zoneNo . ' Fuel %';
-                $headers[] = 'Zone ' . $zoneNo . ' GST %';
-            }
-        }
+        // Vertical format: one row per (weight, zone) with a Zone No column.
+        $headers = ['Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel Charge', 'Fuel %', 'GST %'];
         foreach ($headers as $index => $header) {
             $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue($columnLetter . '1', $header);
         }
 
-        $ratesByWeight = [];
-        if ($serviceId) {
-            $ratesQuery = \App\Models\CourierRate::where('customer_id', 0)
-                ->where('service_id', $serviceId);
-
-            if ($withoutZone) {
-                $ratesQuery->where(function ($query) {
-                    $query->where('zone_no', 0)->orWhereNull('zone_no');
-                });
-            } else {
-                $ratesQuery->whereIn('zone_no', $zoneNos);
+        $row = 2;
+        $sampleZoneNos = $withoutZone ? [0] : $zoneNos;
+        foreach ($sampleZoneNos as $zoneNo) {
+            $rateRows = [];
+            if ($serviceId) {
+                $rates = \App\Models\CourierRate::where('customer_id', 0)
+                    ->where('service_id', $serviceId)
+                    ->where('zone_no', $zoneNo)
+                    ->orderBy('wt_range_start')
+                    ->get();
+                foreach ($rates as $rate) {
+                    $rateRows[] = [
+                        'start' => $rate->wt_range_start,
+                        'end'   => $rate->wt_range_end,
+                        'rate'  => $rate,
+                    ];
+                }
             }
-
-            $rates = $ratesQuery
-                ->orderBy('wt_range_start')
-                ->orderBy('zone_no')
-                ->get();
-
-            foreach ($rates as $rate) {
-                $key = $rate->wt_range_start . '|' . $rate->wt_range_end;
-                $ratesByWeight[$key]['start'] = $rate->wt_range_start;
-                $ratesByWeight[$key]['end'] = $rate->wt_range_end;
-                $ratesByWeight[$key]['zones'][(int) $rate->zone_no] = $rate;
+            if (empty($rateRows)) {
+                foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
+                    $rateRows[] = ['start' => $range[0], 'end' => $range[1], 'rate' => null];
+                }
+            }
+            foreach ($rateRows as $rateRow) {
+                $rate = $rateRow['rate'];
+                $values = [$rateRow['start'], $rateRow['end'], $zoneNo];
+                $values = array_merge($values, $rate
+                    ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
+                    : ['', '', '', '']);
+                foreach ($values as $colIdx => $value) {
+                    $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+                    $sheet->setCellValue($columnLetter . $row, $value);
+                }
+                $row++;
             }
         }
 
-        if (empty($ratesByWeight)) {
-            foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
-                $key = $range[0] . '|' . $range[1];
-                $ratesByWeight[$key] = ['start' => $range[0], 'end' => $range[1], 'zones' => []];
-            }
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $fileName = $withoutZone
+            ? 'rate-upload-sample-without-zone.xlsx'
+            : 'rate-upload-sample.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    /**
+     * Multi-country sample in vertical format: Country, Weight Start,
+     * Weight End, Zone No, Price, Fuel Charge, Fuel %, GST %. One row per
+     * (country, weight, zone) with example rows pre-filled per zone.
+     * Existing default rates are pre-filled where available. The upload
+     * parser reads the Country + Zone No columns and applies each row only
+     * to its matching target (files without the Country column are still
+     * replicated to every target as before).
+     */
+    private function downloadMultiCountryRateSample(array $targets, Request $request)
+    {
+        $withoutZone = $request->boolean('without_zone');
+        $zoneNos = $request->query('zone_nos', []);
+        $zoneNos = is_array($zoneNos) ? $zoneNos : [$zoneNos];
+        $zoneNos = array_values(array_unique(array_filter(array_map('intval', $zoneNos), function ($zone) {
+            return $zone >= 0 && $zone <= 13;
+        })));
+        if (empty($zoneNos) && !$withoutZone) {
+            $zoneNos = [1, 2];
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        // Vertical format: one row per (country, weight, zone) with a Zone No
+        // column. Zones are listed vertically with example rows pre-filled.
+        $headers = ['Country', 'Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel Charge', 'Fuel %', 'GST %'];
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter . '1', $header);
         }
 
         $row = 2;
-        foreach ($ratesByWeight as $weight) {
-            $sheet->setCellValue('A' . $row, $weight['start']);
-            $sheet->setCellValue('B' . $row, $weight['end']);
-            $column = 3;
+        foreach ($targets as $target) {
+            $sid = (int) $target['service_id'];
+            $cc = trim((string) $target['country']);
             $sampleZoneNos = $withoutZone ? [0] : $zoneNos;
             foreach ($sampleZoneNos as $zoneNo) {
-                $rate = $weight['zones'][$zoneNo] ?? null;
-                $values = $rate
-                    ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
-                    : ['', '', '', ''];
-                foreach ($values as $value) {
-                    $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($column++);
-                    $sheet->setCellValue($columnLetter . $row, $value);
+                $rates = \App\Models\CourierRate::where('customer_id', 0)
+                    ->where('service_id', $sid)
+                    ->where('zone_no', $zoneNo)
+                    ->orderBy('wt_range_start')
+                    ->get();
+                $rateRows = [];
+                foreach ($rates as $rate) {
+                    $rateRows[] = [
+                        'start' => $rate->wt_range_start,
+                        'end'   => $rate->wt_range_end,
+                        'rate'  => $rate,
+                    ];
+                }
+                if (empty($rateRows)) {
+                    foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
+                        $rateRows[] = ['start' => $range[0], 'end' => $range[1], 'rate' => null];
+                    }
+                }
+                foreach ($rateRows as $rateRow) {
+                    $rate = $rateRow['rate'];
+                    $values = [$cc, $rateRow['start'], $rateRow['end'], $zoneNo];
+                    $values = array_merge($values, $rate
+                        ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
+                        : ['', '', '', '']);
+                    foreach ($values as $colIdx => $value) {
+                        $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+                        $sheet->setCellValue($columnLetter . $row, $value);
+                    }
+                    $row++;
                 }
             }
-            $row++;
         }
 
         $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
@@ -5808,9 +5998,17 @@ class AdminController extends Controller
         $fuelChargeCol = null;
         $fuelPctCol    = null;
         $gstPctCol     = null;
+        // Multi-country samples carry a Country first column. When present,
+        // each row is applied only to its matching (service, country) target
+        // instead of being replicated to every target.
+        $countryHeaders = ['country', 'country_code', 'country code', 'destination'];
+        $countryCol = null;
         $horizontalGroups = [];
 
         foreach ($header as $idx => $h) {
+            if ($countryCol === null && in_array($h, $countryHeaders, true)) {
+                $countryCol = $idx;
+            }
             if ($wtStartCol === null && in_array($h, $wtStartHeaders, true)) {
                 $wtStartCol = $idx;
             }
@@ -5857,6 +6055,7 @@ class AdminController extends Controller
         if ($isHorizontal) {
             $normalizedRows = [$rows[0]];
             foreach (array_slice($rows, 1) as $sourceRow) {
+                $sourceCountry = $countryCol !== null ? ($sourceRow[$countryCol] ?? '') : '';
                 foreach ($horizontalGroups as $zoneNumber => $columns) {
                     // If zones were selected during upload, ignore every other
                     // horizontal zone group, including Zone 3 in a Zone 1/2 upload.
@@ -5871,6 +6070,7 @@ class AdminController extends Controller
                         $sourceRow[$columns['fuel charge'] ?? -1] ?? '',
                         $sourceRow[$columns['fuel %'] ?? -1] ?? '',
                         $sourceRow[$columns['gst %'] ?? -1] ?? '',
+                        $sourceCountry,
                     ];
                 }
             }
@@ -5882,6 +6082,7 @@ class AdminController extends Controller
             $fuelChargeCol = 4;
             $fuelPctCol = 5;
             $gstPctCol = 6;
+            $countryCol = 7;
         }
 
         // Weight Start, Weight End and Price are required for vertical files;
@@ -5970,32 +6171,43 @@ class AdminController extends Controller
             $fuelPct    = ($fuelPctCol !== null && isset($row[$fuelPctCol])) ? trim((string) $row[$fuelPctCol]) : '';
             $gstPct     = ($gstPctCol !== null && isset($row[$gstPctCol])) ? trim((string) $row[$gstPctCol]) : '';
 
+            // Multi-country file: this row belongs to a specific country —
+            // process it only for its matching target, silently skipping the
+            // other targets (without counting it as skipped).
+            if ($countryCol !== null) {
+                $rowCountry = isset($row[$countryCol]) ? strtoupper(trim((string) $row[$countryCol])) : '';
+                $targetCountry = strtoupper(trim((string) $target['country']));
+                if ($rowCountry !== '' && $rowCountry !== $targetCountry) {
+                    continue;
+                }
+            }
+
             // Skip completely empty rows.
             // $skipped is counted on the first target only so multi-country
             // uploads don't multiply the same invalid rows.
             if ($wtStart === '' && $wtEnd === '' && $price === '' && $zoneNo === '') {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
 
             // Validate required numeric fields.
             if ($wtStart === '' || $wtEnd === '' || $price === '') {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
             if (!is_numeric($wtStart) || !is_numeric($wtEnd) || !is_numeric($price)) {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
             if ((float) $wtEnd <= (float) $wtStart) {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
 
             // Zone No must be valid and must be one of the zones explicitly
             // checked in the modal. This also filters legacy vertical files.
             if ($zoneNo === '' || !is_numeric($zoneNo) || (int) $zoneNo < 0 || (int) $zoneNo > 13) {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
             $zoneNoInt = (int) $zoneNo;
@@ -6004,7 +6216,7 @@ class AdminController extends Controller
                 !empty($selectedZoneNos)
                 && !in_array($zoneNoInt, $selectedZoneNos, true)
             ) {
-                if ($isFirstTarget) $skipped++;
+                if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
             }
 
@@ -6848,59 +7060,202 @@ class AdminController extends Controller
     }
 
     /**
-     * Show the "Add Country" page.
+     * Show the "Country & Services" page (service-first flow).
      *
-     * A simple form where the admin enters a country name. The new country
-     * is added to the `destinations` table so it can be selected when adding
-     * zones or rates.
+     * New flow (reversed): the admin FIRST picks a courier service
+     * (template row from courier_services), THEN picks one or more
+     * countries from a dropdown. On submit each selected country is
+     * "added into" that service — i.e. the template service row is
+     * cloned with its `country` column set to the selected country's
+     * code, so the service becomes available for rate calculation
+     * against that destination. The original service row is untouched.
      *
-     * The admin can also pick one or more existing courier services (from the
-     * courier_services table) to clone for the new country. Cloning a service
-     * creates a brand-new courier_services row whose `country` column is set
-     * to the new country's short code, so the service becomes available for
-     * rate calculation against that destination — without touching the
-     * original service row.
+     * Missing destinations are auto-created so zones/rates keep working.
      */
     public function addCountry()
     {
         $destinations = \App\Models\Destination::orderBy('name')->get();
 
-        // Load every courier service so the admin can pick which ones to make
-        // available for the new country. We order by country then method so the
-        // list is grouped logically in the dropdown.
-        $courierServices = \App\Models\CourierService::orderBy('country')
-            ->orderBy('method')
+        // Step 1 dropdown source (as requested):
+        //   SELECT DISTINCT api_provider, service_code FROM `courier_services`
+        // 23 grouped services instead of 127 per-country rows.
+        $serviceOptions = \Illuminate\Support\Facades\DB::select(
+            'SELECT DISTINCT api_provider, service_code FROM `courier_services` ORDER BY api_provider, service_code'
+        );
+
+        // Coverage map keyed by "api_provider||service_code" => [country codes...].
+        // Plus representative meta per key so the UI can preview without AJAX.
+        $coverageMap = [];
+        $serviceMeta = [];
+        foreach ($serviceOptions as $opt) {
+            $api = $opt->api_provider ?? '';
+            $scode = $opt->service_code ?? '';
+            $key = $api . '||' . $scode;
+
+            $rows = \App\Models\CourierService::where('api_provider', $api)
+                ->where('service_code', $scode)
+                ->orderBy('id')
+                ->get();
+
+            $countries = [];
+            foreach ($rows as $r) {
+                $c = strtoupper(trim((string) $r->country));
+                if ($c !== '') {
+                    $countries[] = $c;
+                }
+            }
+            $countries = array_values(array_unique($countries));
+            sort($countries);
+            $coverageMap[$key] = $countries;
+
+            $rep = $rows->first();
+            $methods = $rows->pluck('method')->filter()->unique()->values()->take(3)->toArray();
+            $serviceMeta[$key] = [
+                'api_provider' => $api,
+                'service_code' => $scode,
+                'method'       => $rep ? $rep->method : null,
+                'network'      => $rep ? $rep->network : null,
+                'status'       => $rep ? (int) $rep->status : 1,
+                'total_rows'   => $rows->count(),
+                'methods'      => $methods,
+            ];
+        }
+
+        // Full per-country rows, only for the overview table count/context.
+        $courierServices = \App\Models\CourierService::orderBy('api_provider')
+            ->orderBy('service_code')
+            ->orderBy('country')
             ->get();
 
-        return view('admin.add-country', compact('destinations', 'courierServices'));
+        return view('admin.add-country', compact('destinations', 'courierServices', 'coverageMap', 'serviceMeta', 'serviceOptions'));
     }
 
     /**
-     * Store a new country (destination).
+     * Store countries INTO a service (service-first flow).
      *
-     * The admin supplies a country name. We auto-derive a short code from the
-     * name if one is not provided, and default is_active to true.
+     * New flow: `service_id` (template) + `country_codes[]` (one or more
+     * destination codes). For each code we ensure the destination exists
+     * (auto-create when missing) and clone the template service row with
+     * `country` set to that code. Duplicates (same method + service_code +
+     * country) are skipped.
      *
-     * Optionally the admin can select one or more existing courier services
-     * (from the courier_services table) to "add" to the new country. Each
-     * selected service is CLONED into a brand-new courier_services row whose
-     * `country` column is set to the new country's short code — so the service
-     * becomes available for rate calculation against that destination. The
-     * original service row is left untouched (it keeps its own country).
+     * Legacy fallback: old form posted `name` + `code` + `service_ids[]`
+     * (country-first). Still supported so old tabs/bookmarks keep working.
      */
     public function storeCountry(Request $request)
     {
+        // ---- Service-first flow (DISTINCT api_provider + service_code) ----
+        // Step 1 posts `service_key` = "api_provider||service_code".
+        // (Old `service_id` single-row flow still accepted as fallback.)
+        if ($request->filled('service_key') || $request->filled('service_id') || $request->has('country_codes')) {
+            $validated = $request->validate([
+                'service_key'     => 'nullable|string|max:255',
+                'service_id'      => 'nullable|integer|exists:courier_services,id',
+                'country_codes'   => 'required|array|min:1|max:100',
+                'country_codes.*' => 'required|string|max:10',
+            ]);
+            if (empty($validated['service_key']) && empty($validated['service_id'])) {
+                return redirect()->route('admin.add-country')
+                    ->with('error', 'Please select a service first.');
+            }
+
+            // Resolve template + canonical api_provider/service_code pair.
+            if (!empty($validated['service_key']) && str_contains($validated['service_key'], '||')) {
+                [$apiProvider, $serviceCode] = explode('||', $validated['service_key'], 2);
+                $template = \App\Models\CourierService::where('api_provider', $apiProvider)
+                    ->where('service_code', $serviceCode)
+                    ->orderBy('id')
+                    ->first();
+                if (!$template) {
+                    return redirect()->route('admin.add-country')
+                        ->with('error', 'Selected service not found.');
+                }
+            } else {
+                $template = \App\Models\CourierService::findOrFail($validated['service_id']);
+                $apiProvider = $template->api_provider;
+                $serviceCode = $template->service_code;
+            }
+
+            // Normalise codes: upper-case, trimmed, de-duplicated.
+            $codes = [];
+            foreach ((array) $validated['country_codes'] as $c) {
+                $c = strtoupper(trim((string) $c));
+                if ($c !== '' && !in_array($c, $codes, true)) {
+                    $codes[] = $c;
+                }
+            }
+            if (empty($codes)) {
+                return redirect()->route('admin.add-country')
+                    ->with('error', 'Please select at least one country.');
+            }
+
+            $created = 0;
+            $skipped = [];
+            $destCreated = 0;
+
+            foreach ($codes as $code) {
+                // Ensure the destination exists (match code / ISO / name).
+                $dest = \App\Models\Destination::whereRaw('UPPER(code) = ?', [$code])
+                    ->orWhereRaw('UPPER(country_code) = ?', [$code])
+                    ->orWhereRaw('UPPER(name) = ?', [$code])
+                    ->first();
+                if (!$dest) {
+                    // Auto-create a minimal destination so zones/rates work.
+                    $dest = \App\Models\Destination::create([
+                        'name'         => ucwords(strtolower($code)),
+                        'code'         => $code,
+                        'country_code' => $code,
+                        'is_active'    => true,
+                    ]);
+                    $destCreated++;
+                }
+                $targetCountry = strtoupper(trim((string) ($dest->country_code ?: $dest->code)));
+
+                // Duplicate check on the DISTINCT key: same api_provider +
+                // service_code already live for this country? Skip it.
+                $exists = \App\Models\CourierService::where('api_provider', $apiProvider)
+                    ->where('service_code', $serviceCode)
+                    ->whereRaw('UPPER(country) = ?', [$targetCountry])
+                    ->exists();
+                if ($exists) {
+                    $skipped[] = $dest->name . ' (' . $targetCountry . ')';
+                    continue;
+                }
+
+                $data = $template->getAttributes();
+                unset($data['id']);
+                $data['api_provider'] = $apiProvider;
+                $data['service_code'] = $serviceCode;
+                $data['country'] = $targetCountry;
+                \App\Models\CourierService::create($data);
+                $created++;
+            }
+
+            $svcLabel = ($apiProvider ? $apiProvider . ' — ' : '') . $serviceCode;
+            if ($created === 0) {
+                $msg = 'No new countries added — "' . $svcLabel . '" already covers: ' . implode(', ', $skipped) . '.';
+                return redirect()->route('admin.add-country')->with('error', $msg);
+            }
+            $msg = $created . ' countr' . ($created === 1 ? 'y' : 'ies') . ' added to "' . $svcLabel . '" successfully.';
+            if (!empty($skipped)) {
+                $msg .= ' Skipped (already added): ' . implode(', ', $skipped) . '.';
+            }
+            if ($destCreated > 0) {
+                $msg .= ' ' . $destCreated . ' new destination(s) auto-created.';
+            }
+            return redirect()->route('admin.add-country')->with('success', $msg);
+        }
+
+        // ---- Legacy country-first fallback (old form) ----
         $validated = $request->validate([
             'name'           => 'required|string|max:150|unique:destinations,name',
             'code'           => 'nullable|string|max:10|unique:destinations,code',
             'country_code'   => 'nullable|string|max:5',
             'is_active'      => 'nullable|boolean',
-            // Optional list of courier_services IDs to clone for this country.
             'service_ids'    => 'nullable|array',
             'service_ids.*'  => 'integer|exists:courier_services,id',
         ]);
 
-        // Auto-derive a short code from the name if none was provided.
         $code = $validated['code'] ?? '';
         if ($code === '') {
             $words = preg_split('/\s+/', trim($validated['name']));
@@ -6913,7 +7268,6 @@ class AdminController extends Controller
                 }
                 $code = substr($code, 0, 10);
             }
-            // Ensure uniqueness by appending a number if needed.
             $base = $code;
             $i = 1;
             while (\App\Models\Destination::where('code', $code)->exists()) {
@@ -6929,35 +7283,17 @@ class AdminController extends Controller
             'is_active'    => $validated['is_active'] ?? true,
         ]);
 
-        // -----------------------------------------------------------------
-        // Clone the selected courier services for the new country.
-        //
-        // Each selected service is duplicated into a new courier_services
-        // row. Every column is copied verbatim EXCEPT `country`, which is
-        // overwritten with the new country's ISO country code (falling back
-        // to the short code when no ISO code was supplied) so the cloned
-        // service is matched against this destination during rate
-        // calculation. The original service row is never modified.
-        // -----------------------------------------------------------------
         $clonedCount = 0;
         $serviceIds = $validated['service_ids'] ?? [];
         if (!empty($serviceIds)) {
             $services = \App\Models\CourierService::whereIn('id', $serviceIds)->get();
-
-            // Prefer the ISO country code; fall back to the short code when
-            // the admin did not provide an ISO code.
             $serviceCountry = $validated['country_code'] !== null && $validated['country_code'] !== ''
                 ? $validated['country_code']
                 : $code;
-
             foreach ($services as $service) {
-                // Build a fresh row from the source service's attributes.
                 $data = $service->getAttributes();
-
-                // Drop the primary key & country so we can set our own values.
                 unset($data['id']);
                 $data['country'] = $serviceCountry;
-
                 \App\Models\CourierService::create($data);
                 $clonedCount++;
             }

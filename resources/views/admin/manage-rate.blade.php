@@ -255,9 +255,9 @@
                         <button type="button" class="btn btn-success" id="defaultExportExcel">
                             <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
                         </button>
-                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRateModal">
+                        <!-- <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRateModal">
                             <i class="ti ti-plus me-1"></i>Add Rate
-                        </button>
+                        </button> -->
                         <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
                             <i class="ti ti-upload me-1"></i>Bulk Upload
                         </button>
@@ -435,18 +435,19 @@
                                                 <small class="text-muted" id="selectedCustomerCount">0 customers selected</small>
                                             </div>
                                             <div class="col-md-3">
+                                                <label class="form-label fw-bold">Service</label>
+                                                <select class="form-select" id="customerServiceFilter">
+                                                    <option value="">— All Services —</option>
+                                                </select>
+                                                <small class="text-muted">Pehle service chune — uske baad countries ayengi.</small>
+                                            </div>
+                                            <div class="col-md-3">
                                                 <label class="form-label fw-bold">Country</label>
                                                 <select class="form-select" id="customerCountryFilter">
                                                     <option value="">— All Countries —</option>
                                                     @foreach($destinations as $dest)
                                                         <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                                     @endforeach
-                                                </select>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label fw-bold">Service</label>
-                                                <select class="form-select" id="customerServiceFilter">
-                                                    <option value="">— All Services —</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-1">
@@ -674,7 +675,7 @@
                                     <div class="row g-2" id="bulkZoneCheckboxes">
                                         <div class="col-12 text-muted">Select a service and at least one country to view zones.</div>
                                     </div>
-                                    <small class="text-muted d-block mt-2">Only checked zones become horizontal columns in the sample and only those zones are imported from the uploaded file.</small>
+                                    <small class="text-muted d-block mt-2">Sample me har checked zone ki alag rows ayengi (Zone No column me zone pehle se bhara hoga). Sirf checked zones import honge.</small>
                                 </div>
                             </div>
                             <!-- File -->
@@ -723,20 +724,18 @@
                                 <input type="hidden" id="updateNewRateCustomerIds" name="customer_ids">
                             </div>
                             <div class="col-md-4">
+                                <label class="form-label fw-bold">Service</label>
+                                <select class="form-select" id="updateNewRateService" name="service_key">
+                                    <option value="">— All Services —</option>
+                                </select>
+                                <!-- <small class="text-muted">Pehle service chune — uske baad us service wali countries ayengi. All par file me Service Code/Network/Method hona chahiye.</small> -->
+                            </div>
+                            <div class="col-md-4">
                                 <label class="form-label fw-bold">Country</label>
                                 <select class="form-select" id="updateNewRateCountry">
                                     <option value="">— All Countries —</option>
-                                    @foreach($destinations as $dest)
-                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
-                                    @endforeach
                                 </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Service</label>
-                                <select class="form-select" id="updateNewRateService" name="service_id">
-                                    <option value="">— All Services —</option>
-                                </select>
-                                <small class="text-muted">Leave All Services selected to update every service included in the downloaded Excel file.</small>
+                                <!-- <small class="text-muted">Selected service wali countries (same as Bulk Upload).</small> -->
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Start Date</label>
@@ -751,7 +750,7 @@
                             <div class="col-12">
                                 <label class="form-label fw-bold">Upload Updated Rate <span class="text-danger">*</span></label>
                                 <input type="file" class="form-control" name="rate_file" accept=".xlsx,.xls,.csv" required>
-                                <small class="text-muted">Upload the Excel file downloaded from this customer's rate table. Update the Price column, then upload it here.</small>
+                                <small class="text-muted">Upload the Excel file downloaded from this customer's rate table. Update the Price column, then upload it here. The file's Customer Code must match the selected customer(s) — kisi aur customer ki file upload nahi hogi.</small>
                             </div>
                         </div>
                     </div>
@@ -902,11 +901,11 @@
             });
         }
 
-        // Display label for a service: api_provider first, method in brackets
-        // (e.g. "ups (UNITED AIREXPRESS)"). Falls back to network when
-        // api_provider is empty.
+        // Display label for a service — SAME as add-country Step 1:
+        // SELECT DISTINCT api_provider, service_code (e.g. "overseas — ARAMEX_PPX").
+        // No country count (per admin preference).
         function bulkServiceDisplayName(s) {
-            return (s.api_provider || s.network || '—') + ' (' + (s.method || '—') + ')';
+            return (s.api_provider || '—') + ' — ' + (s.service_code || '—');
         }
 
         // Populate a service <select>, optionally filtered by country.
@@ -992,15 +991,15 @@
                         extend: 'excelHtml5',
                         text: 'Export Excel',
                         title: 'Customer Rates',
-                        // Show the selected customer's name and ID at the
+                        // Show the selected customer's name at the
                         // top of the exported Excel sheet (above the title).
+                        // Customer ID is intentionally NOT included.
                         messageTop: function() {
                             var info = currentCustomerInfo || {};
                             var name = info.full_name
                                 || ((info.first_name || '') + ' ' + (info.last_name || '')).trim()
                                 || '—';
-                            var id = currentSelectedCustomerId || '—';
-                            return 'Customer Name: ' + name + '    |    Customer ID: ' + id;
+                            return 'Customer Name: ' + name;
                         },
                         exportOptions: {
                             columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
@@ -1058,10 +1057,10 @@
                 $('#selectedCustomerCount').text(countText);
                 updateCustomerDropdownText();
 
-                // Reset filters when customer changes
-                document.getElementById('customerCountryFilter').value = '';
-                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+                // Reset filters when customer changes (service FIRST, then country)
                 document.getElementById('customerServiceFilter').value = '';
+                populateCustomerCountryOptions('', '');
+                document.getElementById('customerCountryFilter').value = '';
                 if (selectedCustomerIds.length) {
                     loadCustomerRates(selectedCustomerIds[0]);
                 } else {
@@ -1149,9 +1148,11 @@
             // customerCountryFilter) are rendered server-side from the
             // destinations table, so no JS population is needed here.
 
-            // Populate service dropdowns (all services initially)
+            // Populate service dropdowns (all services initially).
+            // Default tab stays clone-level; customer tab is DISTINCT service-first.
             populateServiceDropdown(document.getElementById('defaultServiceFilter'), '');
-            populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
+            populateCustomerServiceGroups('');
+            populateCustomerCountryOptions('', '');
 
             // DataTables custom search plugin for Default Rate table
             // (global plugin — guarded by table ID so it only affects defaultRateTable)
@@ -1189,19 +1190,20 @@
                 defaultRateTable.draw();
             });
 
-            // Customer rate filter change handlers
-            $('#customerCountryFilter').on('change', function() {
-                populateServiceDropdown(document.getElementById('customerServiceFilter'), this.value);
-                document.getElementById('customerServiceFilter').value = '';
+            // Customer rate filter change handlers — Service FIRST, then Country
+            // (same as Bulk Upload / Update New Rate modal).
+            $('#customerServiceFilter').on('change', function() {
+                populateCustomerCountryOptions(this.value, '');
+                document.getElementById('customerCountryFilter').value = '';
                 renderFilteredCustomerRates();
             });
-            $('#customerServiceFilter').on('change', function() {
+            $('#customerCountryFilter').on('change', function() {
                 renderFilteredCustomerRates();
             });
             $('#customerClearFilter').on('click', function() {
-                document.getElementById('customerCountryFilter').value = '';
-                populateServiceDropdown(document.getElementById('customerServiceFilter'), '');
                 document.getElementById('customerServiceFilter').value = '';
+                populateCustomerCountryOptions('', '');
+                document.getElementById('customerCountryFilter').value = '';
                 renderFilteredCustomerRates();
             });
 
@@ -1219,10 +1221,10 @@
                 }
                 var params = new URLSearchParams();
                 selectedCustomerIds.forEach(function(id) { params.append('customer_ids[]', id); });
+                var serviceKey = $('#customerServiceFilter').val();
                 var country = $('#customerCountryFilter').val();
-                var serviceId = $('#customerServiceFilter').val();
+                if (serviceKey) params.set('service_key', serviceKey);
                 if (country) params.set('country', country);
-                if (serviceId) params.set('service_id', serviceId);
                 window.location.href = '{{ route("admin.manage-rate.export-customer-rates") }}?' + params.toString();
             });
 
@@ -1234,6 +1236,143 @@
                 date.setHours(0, 0, 0, 0);
                 date.setDate(date.getDate() + days);
                 return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+            }
+
+            // ===== Customer Rate tab filters — Service FIRST, then Country =====
+            // Same DISTINCT source as Bulk Upload / Update modal:
+            // SELECT DISTINCT api_provider, service_code FROM courier_services.
+            function customerTabGroupKey(s) {
+                return ((s.api_provider || '') + '||' + (s.service_code || ''))
+                    .toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+
+            function populateCustomerServiceGroups(preselectKey) {
+                var selectEl = document.getElementById('customerServiceFilter');
+                if (!selectEl) return;
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                var seen = {};
+                var opts = [];
+                allServices.forEach(function(s) {
+                    if (!s.api_provider && !s.service_code) return;
+                    var key = customerTabGroupKey(s);
+                    if (!key || key === '||' || seen[key]) return;
+                    seen[key] = true;
+                    opts.push({ key: key, label: bulkServiceDisplayName(s) });
+                });
+                opts.sort(function(a, b) { return a.label.localeCompare(b.label); });
+                opts.forEach(function(o) {
+                    var opt = document.createElement('option');
+                    opt.value = o.key;
+                    opt.textContent = o.label;
+                    selectEl.appendChild(opt);
+                });
+                if (preselectKey) selectEl.value = preselectKey;
+            }
+
+            function populateCustomerCountryOptions(serviceKey, preselectCountry) {
+                var selectEl = document.getElementById('customerCountryFilter');
+                if (!selectEl) return;
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                if (!serviceKey) {
+                    (bulkDestinations || []).slice().sort(function(a, b) {
+                        return (a.name || '').localeCompare(b.name || '');
+                    }).forEach(function(d) {
+                        var code = d.country_code || d.code;
+                        if (!code) return;
+                        var opt = document.createElement('option');
+                        opt.value = code;
+                        opt.textContent = d.name + ' (' + code + ')';
+                        selectEl.appendChild(opt);
+                    });
+                } else {
+                    var seenCanonical = {};
+                    var mapped = [];
+                    allServices.forEach(function(s) {
+                        if (customerTabGroupKey(s) !== serviceKey || !s.country) return;
+                        var canonical = bulkCanonicalCountry(s.country);
+                        var dedupeKey = (canonical || s.country || '').toLowerCase().trim();
+                        if (!dedupeKey || seenCanonical[dedupeKey]) return;
+                        seenCanonical[dedupeKey] = true;
+                        mapped.push({ canonical: canonical, name: bulkCountryName(s.country) });
+                    });
+                    mapped.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+                    mapped.forEach(function(m) {
+                        var opt = document.createElement('option');
+                        opt.value = m.canonical;
+                        opt.textContent = m.name + ' (' + m.canonical + ')';
+                        selectEl.appendChild(opt);
+                    });
+                }
+                if (preselectCountry) selectEl.value = preselectCountry;
+            }
+
+            // ===== Update New Rate modal — Service FIRST, then Country (same as Bulk Upload) =====
+            // Service options are DISTINCT api_provider + service_code
+            // (SELECT DISTINCT api_provider, service_code FROM courier_services).
+            // Country options are that service's countries, shown as Name (CODE).
+            function updateGroupKey(s) {
+                return ((s.api_provider || '') + '||' + (s.service_code || ''))
+                    .toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+
+            function populateUpdateServiceGroups(preselectKey) {
+                var selectEl = document.getElementById('updateNewRateService');
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                var seen = {};
+                var opts = [];
+                allServices.forEach(function(s) {
+                    if (!s.api_provider && !s.service_code) return;
+                    var key = updateGroupKey(s);
+                    if (!key || key === '||' || seen[key]) return;
+                    seen[key] = true;
+                    opts.push({ key: key, label: bulkServiceDisplayName(s) });
+                });
+                opts.sort(function(a, b) { return a.label.localeCompare(b.label); });
+                opts.forEach(function(o) {
+                    var opt = document.createElement('option');
+                    opt.value = o.key;
+                    opt.textContent = o.label;
+                    selectEl.appendChild(opt);
+                });
+                if (preselectKey) selectEl.value = preselectKey;
+            }
+
+            function populateUpdateCountryOptions(serviceKey, preselectCountry) {
+                var selectEl = document.getElementById('updateNewRateCountry');
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                if (!serviceKey) {
+                    // No service picked (All Services): list every destination like before.
+                    (bulkDestinations || []).slice().sort(function(a, b) {
+                        return (a.name || '').localeCompare(b.name || '');
+                    }).forEach(function(d) {
+                        var code = d.country_code || d.code;
+                        if (!code) return;
+                        var opt = document.createElement('option');
+                        opt.value = code;
+                        opt.textContent = d.name + ' (' + code + ')';
+                        selectEl.appendChild(opt);
+                    });
+                } else {
+                    // Only this distinct service's countries (canonical, deduped, sorted).
+                    var seenCanonical = {};
+                    var mapped = [];
+                    allServices.forEach(function(s) {
+                        if (updateGroupKey(s) !== serviceKey || !s.country) return;
+                        var canonical = bulkCanonicalCountry(s.country);
+                        var dedupeKey = (canonical || s.country || '').toLowerCase().trim();
+                        if (!dedupeKey || seenCanonical[dedupeKey]) return;
+                        seenCanonical[dedupeKey] = true;
+                        mapped.push({ canonical: canonical, name: bulkCountryName(s.country) });
+                    });
+                    mapped.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+                    mapped.forEach(function(m) {
+                        var opt = document.createElement('option');
+                        opt.value = m.canonical;
+                        opt.textContent = m.name + ' (' + m.canonical + ')';
+                        selectEl.appendChild(opt);
+                    });
+                }
+                selectEl.value = preselectCountry || '';
             }
 
             function openUpdateNewRateModal() {
@@ -1248,14 +1387,28 @@
 
                 var info = currentCustomerInfo || {};
                 var customerName = info.full_name || ((info.first_name || '') + ' ' + (info.last_name || '')).trim();
-                var selectedCountry = document.getElementById('customerCountryFilter').value || '';
-                var selectedService = document.getElementById('customerServiceFilter').value || '';
+                var tabCountry = document.getElementById('customerCountryFilter').value || '';
+                var tabService = document.getElementById('customerServiceFilter').value || '';
+
+                // Tab service filter is already a DISTINCT group key. Keep a
+                // fallback that maps a legacy clone-level service_id, if any.
+                var preselectKey = '';
+                if (tabService) {
+                    if (String(tabService).indexOf('||') !== -1) {
+                        preselectKey = tabService;
+                    } else {
+                        var found = null;
+                        allServices.forEach(function(s) {
+                            if (String(s.id) === String(tabService)) found = s;
+                        });
+                        if (found) preselectKey = updateGroupKey(found);
+                    }
+                }
 
                 $('#updateNewRateCustomer').val(selectedCustomerIds.length + ' customers selected');
                 $('#updateNewRateCustomerIds').val(selectedCustomerIds.join(','));
-                $('#updateNewRateCountry').val(selectedCountry);
-                populateServiceDropdown(document.getElementById('updateNewRateService'), selectedCountry);
-                $('#updateNewRateService').val(selectedService);
+                populateUpdateServiceGroups(preselectKey);
+                populateUpdateCountryOptions(preselectKey, tabCountry);
 
                 var startDate = addDaysToDate(currentCustomerEndDate || new Date().toISOString().slice(0, 10), 1);
                 $('#updateNewRateStartDate').val(startDate);
@@ -1264,9 +1417,13 @@
             }
 
             $('#customerNewRateBtn').on('click', openUpdateNewRateModal);
-            $('#updateNewRateCountry').on('change', function() {
-                populateServiceDropdown(document.getElementById('updateNewRateService'), this.value);
-                $('#updateNewRateService').val('').trigger('change');
+            // Service FIRST → Country second (reverse of the old country-first flow).
+            $('#updateNewRateService').on('change', function() {
+                populateUpdateCountryOptions(this.value, '');
+            });
+            document.getElementById('updateNewRateModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('updateNewRateService').value = '';
+                populateUpdateCountryOptions('', '');
             });
 
             $('#updateNewRateForm').on('submit', function(event) {
@@ -1586,42 +1743,27 @@
             });
 
             // ===== Bulk Upload Rate Modal (Service FIRST + multi-country checkboxes) =====
-            // Logical service grouping: clones across countries share every
-            // column except `country` + `id`, so group by
-            // network|method|service_code (normalized). The dropdown value is
-            // the group key; each group maps to N country-clones.
+            // SAME as add-country Step 1:
+            //   SELECT DISTINCT api_provider, service_code FROM `courier_services`
+            // Group key is api_provider||service_code (lower-cased). Each group
+            // maps to N country-clones. Label has NO country count.
             function bulkGroupKey(s) {
-                return ((s.network || '') + '|' + (s.method || '') + '|' + (s.service_code || ''))
+                return ((s.api_provider || '') + '||' + (s.service_code || ''))
                     .toLowerCase().replace(/\s+/g, ' ').trim();
             }
 
             function buildBulkServiceGroups() {
                 var groups = {};
                 allServices.forEach(function(s) {
+                    if (!s.api_provider && !s.service_code) return;
                     var key = bulkGroupKey(s);
                     if (!key || key === '||') return;
                     if (!groups[key]) {
-                        groups[key] = { key: key, label: bulkServiceDisplayName(s), network: s.network, method: s.method, service_code: s.service_code, api_provider: s.api_provider, members: [] };
+                        groups[key] = { key: key, label: bulkServiceDisplayName(s), service_code: s.service_code, api_provider: s.api_provider, members: [] };
                     }
                     groups[key].members.push({ id: s.id, country: s.country || '' });
                 });
                 var arr = Object.keys(groups).map(function(k) { return groups[k]; });
-                // Disambiguate duplicate labels (same api_provider + method but
-                // different service_code) with a [service_code] suffix.
-                var labelCounts = {};
-                arr.forEach(function(g) {
-                    labelCounts[g.label] = (labelCounts[g.label] || 0) + 1;
-                });
-                arr.forEach(function(g) {
-                    if (labelCounts[g.label] > 1 && g.service_code) {
-                        g.label += ' [' + g.service_code + ']';
-                    }
-                    // Unique countries for the count + stable sort.
-                    var seen = {};
-                    g.members.forEach(function(m) { if (m.country) seen[m.country] = true; });
-                    g.countryCount = Object.keys(seen).length;
-                    g.labelWithCount = g.label + ' — ' + g.countryCount + ' countr' + (g.countryCount === 1 ? 'y' : 'ies');
-                });
                 arr.sort(function(a, b) { return a.label.localeCompare(b.label); });
                 return arr;
             }
@@ -1638,7 +1780,7 @@
                     bulkGroupByKey[g.key] = g;
                     var opt = document.createElement('option');
                     opt.value = g.key;
-                    opt.textContent = g.labelWithCount;
+                    opt.textContent = g.label;
                     selectEl.appendChild(opt);
                 });
             }
@@ -1941,9 +2083,9 @@
                 document.querySelectorAll('.bulk-zone-checkbox').forEach(function(checkbox) { checkbox.checked = false; });
             });
 
-            // Download Sample: use the FIRST checked country + its clone ID so
-            // the sample includes existing rates. Same file works for all
-            // selected countries on upload.
+            // Download Sample: send ALL checked (service, country) targets so
+            // every selected country appears in the sample sheet (Country
+            // first column, one row-block per country, rates pre-filled).
             document.getElementById('bulkDownloadSampleBtn').addEventListener('click', function(e) {
                 e.preventDefault();
                 var serviceKey = document.getElementById('bulkService').value;
@@ -1954,18 +2096,19 @@
                 if (!checked.length) { showAlert('Please select at least one country.', 'warning'); return; }
                 if (!withoutZone && !zones.length) { showAlert('Please select at least one zone.', 'warning'); return; }
 
-                var first = checked[0];
                 var params = new URLSearchParams();
-                params.append('service_id', first.serviceId);
-                params.append('country', first.country);
+                checked.forEach(function(c) {
+                    params.append('service_ids[]', c.serviceId);
+                    params.append('countries[]', c.country);
+                });
                 params.append('without_zone', withoutZone ? '1' : '0');
                 zones.forEach(function(zone) { params.append('zone_nos[]', zone); });
                 window.location.href = "{{ route('admin.manage-rate.sample') }}" + '?' + params.toString();
             });
 
             // Submit: inject service_ids[] + countries[] pairs for every
-            // checked country, then POST. Backend replicates the same file to
-            // each (service_id, country) target.
+            // checked country, then POST. Rows with a Country column go only
+            // to their matching target; rows without it replicate to all.
             document.getElementById('bulkUploadSubmitBtn').addEventListener('click', function() {
                 var form = document.getElementById('bulkUploadForm');
                 var serviceKey = document.getElementById('bulkService').value;
@@ -2079,7 +2222,9 @@
             });
         }
 
-        // Render customer rates table, applying country & service filters
+        // Render customer rates table, applying service & country filters.
+        // Service filter is a DISTINCT group key (api_provider||service_code),
+        // matched case-insensitively against each rate's service.
         function renderFilteredCustomerRates() {
             var countryFilter = document.getElementById('customerCountryFilter').value;
             var serviceFilter = document.getElementById('customerServiceFilter').value;
@@ -2088,11 +2233,13 @@
 
             loadedCustomerRates.forEach(function(rate) {
                 var rateCountry = rate.service ? (rate.service.country || '') : '';
-                var rateServiceId = rate.service_id ? String(rate.service_id) : '';
+                var rateServiceKey = rate.service
+                    ? (((rate.service.api_provider || '') + '||' + (rate.service.service_code || '')).toLowerCase().replace(/\s+/g, ' ').trim())
+                    : '';
 
-                // Apply filters
+                // Apply filters (service FIRST, then country)
+                if (serviceFilter && rateServiceKey !== String(serviceFilter).toLowerCase().trim()) return;
                 if (countryFilter && rateCountry !== countryFilter) return;
-                if (serviceFilter && rateServiceId !== serviceFilter) return;
 
                 var isDefault = rate.is_default ? true : false;
                 var defaultBadge = isDefault
