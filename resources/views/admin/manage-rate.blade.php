@@ -623,30 +623,43 @@
                 <div class="modal-body">
                     <div class="alert alert-info py-2" id="bulkUploadInstructions">
                         <i class="ti ti-info-circle me-1"></i>
-                        Select a country and one or more zones, then download the sample. The Excel file places each selected zone horizontally with its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. During upload, only the currently checked zones are imported; all other zone columns are skipped. Existing duplicate rates are also skipped.
+                        Pehle <strong>Service</strong> chune, phir us service wali <strong>Countries</strong> (checkbox se ek ya kayi) select kare, phir zones select karke sample download kare. Wahi Excel sab selected countries me upload hoga — har country ke us service-clone me same rates banenge. Sirf checked zones import honge, duplicate rates skip honge.
                     </div>
                     <form id="bulkUploadForm" method="POST" action="{{ route('admin.manage-rate.upload') }}" enctype="multipart/form-data">
                         @csrf
                         <input type="hidden" name="without_zone" id="bulkWithoutZone" value="0">
+                        <div id="bulkMultiTargets"></div>
                         <div class="row g-3">
-                            <!-- Country (used to populate available zones) -->
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Country</label>
-                                <select class="form-select" id="bulkCountry" name="country">
-                                    <option value="">— All Countries —</option>
-                                    @foreach($destinations as $dest)
-                                        <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
-                                    @endforeach
-                                </select>
-                                <small class="text-muted">Determines the available zones below.</small>
-                            </div>
-                            <!-- Service (required, filtered by selected country) -->
-                            <div class="col-md-4">
+                            <!-- Service FIRST (select a logical service, then pick its countries) -->
+                            <div class="col-md-6">
                                 <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
-                                <select class="form-select" id="bulkService" name="service_id" required>
-                                    <option value="">— Select Country First —</option>
+                                <select class="form-select" id="bulkService" name="service_key" required>
+                                    <option value="">— Select Service —</option>
                                 </select>
-                                <small class="text-muted">Only services for the selected country are listed. Leave country as "All Countries" to see every service.</small>
+                                <small class="text-muted">Pehle service chune — uske baad us service wali countries neeche ayengi.</small>
+                            </div>
+                            <!-- Countries (checkbox dropdown, populated from the selected service) -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Countries <span class="text-danger">*</span></label>
+                                <div class="customer-dropdown" id="bulkCountryDropdown">
+                                    <button type="button" class="customer-dropdown-toggle" id="bulkCountryDropdownToggle">
+                                        <span class="customer-dropdown-text" id="bulkCountryDropdownText">— Select Service First —</span>
+                                        <i class="ti ti-chevron-down"></i>
+                                    </button>
+                                    <div class="customer-dropdown-menu" id="bulkCountryDropdownMenu">
+                                        <div class="customer-dropdown-search">
+                                            <input type="text" class="form-control form-control-sm" id="bulkCountryDropdownSearch" placeholder="Search countries...">
+                                        </div>
+                                        <div class="customer-dropdown-actions">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkCountrySelectAll">Select All</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkCountryClearAll">Clear</button>
+                                        </div>
+                                        <div class="customer-dropdown-list" id="bulkCountryCheckboxList">
+                                            <div class="customer-checkbox-no-result">Select a service to view its countries.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <small class="text-muted" id="bulkCountryCount">0 countries selected</small>
                             </div>
                             <!-- Multiple zones used by sample download and upload -->
                             <div class="col-12 d-none" id="bulkZoneSection">
@@ -659,7 +672,7 @@
                                         </div>
                                     </div>
                                     <div class="row g-2" id="bulkZoneCheckboxes">
-                                        <div class="col-12 text-muted">Select a country to view its zones.</div>
+                                        <div class="col-12 text-muted">Select a service and at least one country to view zones.</div>
                                     </div>
                                     <small class="text-muted d-block mt-2">Only checked zones become horizontal columns in the sample and only those zones are imported from the uploaded file.</small>
                                 </div>
@@ -788,6 +801,7 @@
                     'network' => $s->network,
                     'method' => $s->method,
                     'service_code' => $s->service_code ?? '',
+                    'api_provider' => $s->api_provider ?? '',
                     'country' => $s->country ?? '',
                 ];
             })->values();
@@ -802,6 +816,17 @@
         var currentCustomerInfo = null;
         var currentCustomerEndDate = null;
         var allServices = @json($servicesForJs);
+        @php
+            $bulkDestinationsForJs = $destinations->map(function($d) {
+                return [
+                    'id' => $d->id,
+                    'code' => $d->code,
+                    'country_code' => $d->country_code,
+                    'name' => $d->name,
+                ];
+            })->values();
+        @endphp
+        var bulkDestinations = @json($bulkDestinationsForJs);
         var zoneLookup = @json($zoneLookup);
         // serviceZoneNumbers: service_id -> sorted list of zone numbers that
         // apply to that service for its destination (shared zones where
@@ -877,22 +902,37 @@
             });
         }
 
-        // Populate a service <select>, optionally filtered by country
+        // Display label for a service: api_provider first, method in brackets
+        // (e.g. "ups (UNITED AIREXPRESS)"). Falls back to network when
+        // api_provider is empty.
+        function bulkServiceDisplayName(s) {
+            return (s.api_provider || s.network || '—') + ' (' + (s.method || '—') + ')';
+        }
+
+        // Populate a service <select>, optionally filtered by country.
+        // Duplicate labels (same api_provider + method, different service_code)
+        // get a [service_code] suffix so every option stays distinguishable.
         function populateServiceDropdown(selectEl, country) {
             while (selectEl.options.length > 1) {
                 selectEl.remove(1);
             }
-            allServices.forEach(function(s) {
-                if (!country || s.country === country) {
-                    var opt = document.createElement('option');
-                    opt.value = s.id;
-                    var label = s.network + ' — ' + s.method;
-                    if (s.service_code) {
-                        label += ' (' + s.service_code + ')';
-                    }
-                    opt.textContent = label;
-                    selectEl.appendChild(opt);
+            var filtered = allServices.filter(function(s) {
+                return !country || s.country === country;
+            });
+            var labelCounts = {};
+            filtered.forEach(function(s) {
+                var label = bulkServiceDisplayName(s);
+                labelCounts[label] = (labelCounts[label] || 0) + 1;
+            });
+            filtered.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = s.id;
+                var label = bulkServiceDisplayName(s);
+                if (labelCounts[label] > 1 && s.service_code) {
+                    label += ' [' + s.service_code + ']';
                 }
+                opt.textContent = label;
+                selectEl.appendChild(opt);
             });
         }
 
@@ -1545,7 +1585,210 @@
                 document.getElementById('addRateZoneHint').textContent = '';
             });
 
-            // ===== Bulk Upload Rate Modal =====
+            // ===== Bulk Upload Rate Modal (Service FIRST + multi-country checkboxes) =====
+            // Logical service grouping: clones across countries share every
+            // column except `country` + `id`, so group by
+            // network|method|service_code (normalized). The dropdown value is
+            // the group key; each group maps to N country-clones.
+            function bulkGroupKey(s) {
+                return ((s.network || '') + '|' + (s.method || '') + '|' + (s.service_code || ''))
+                    .toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+
+            function buildBulkServiceGroups() {
+                var groups = {};
+                allServices.forEach(function(s) {
+                    var key = bulkGroupKey(s);
+                    if (!key || key === '||') return;
+                    if (!groups[key]) {
+                        groups[key] = { key: key, label: bulkServiceDisplayName(s), network: s.network, method: s.method, service_code: s.service_code, api_provider: s.api_provider, members: [] };
+                    }
+                    groups[key].members.push({ id: s.id, country: s.country || '' });
+                });
+                var arr = Object.keys(groups).map(function(k) { return groups[k]; });
+                // Disambiguate duplicate labels (same api_provider + method but
+                // different service_code) with a [service_code] suffix.
+                var labelCounts = {};
+                arr.forEach(function(g) {
+                    labelCounts[g.label] = (labelCounts[g.label] || 0) + 1;
+                });
+                arr.forEach(function(g) {
+                    if (labelCounts[g.label] > 1 && g.service_code) {
+                        g.label += ' [' + g.service_code + ']';
+                    }
+                    // Unique countries for the count + stable sort.
+                    var seen = {};
+                    g.members.forEach(function(m) { if (m.country) seen[m.country] = true; });
+                    g.countryCount = Object.keys(seen).length;
+                    g.labelWithCount = g.label + ' — ' + g.countryCount + ' countr' + (g.countryCount === 1 ? 'y' : 'ies');
+                });
+                arr.sort(function(a, b) { return a.label.localeCompare(b.label); });
+                return arr;
+            }
+
+            var bulkServiceGroups = [];
+            var bulkGroupByKey = {};
+
+            function populateBulkServiceGroups() {
+                var selectEl = document.getElementById('bulkService');
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                bulkServiceGroups = buildBulkServiceGroups();
+                bulkGroupByKey = {};
+                bulkServiceGroups.forEach(function(g) {
+                    bulkGroupByKey[g.key] = g;
+                    var opt = document.createElement('option');
+                    opt.value = g.key;
+                    opt.textContent = g.labelWithCount;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            // Find the canonical destination for a raw courier_services.country
+            // string. Matches against code / country_code / name (case-insensitive,
+            // trimmed) plus common alias groups (USA<->US, AUS<->AU, UK<->GB...).
+            // Returns the destination object or null.
+            function bulkFindDestination(rawCountry) {
+                var key = (rawCountry || '').toLowerCase().trim();
+                if (!key) return null;
+                var list = bulkDestinations || [];
+                var i, d;
+                for (i = 0; i < list.length; i++) {
+                    d = list[i];
+                    if ((d.country_code || '').toLowerCase().trim() === key ||
+                        (d.code || '').toLowerCase().trim() === key ||
+                        (d.name || '').toLowerCase().trim() === key) {
+                        return d;
+                    }
+                }
+                var aliasGroups = [
+                    ['us', 'usa', 'united states', 'united states of america', 'america'],
+                    ['uk', 'gb', 'gbr', 'united kingdom', 'great britain', 'britain', 'england'],
+                    ['ca', 'can', 'canada'],
+                    ['au', 'aus', 'australia'],
+                    ['de', 'deu', 'germany'],
+                    ['fr', 'fra', 'france'],
+                    ['in', 'ind', 'india'],
+                    ['ae', 'are', 'uae', 'united arab emirates', 'dubai'],
+                    ['sg', 'sgp', 'singapore'],
+                    ['nz', 'nzl', 'new zealand'],
+                    ['za', 'zaf', 'south africa']
+                ];
+                var group = null;
+                for (i = 0; i < aliasGroups.length; i++) {
+                    if (aliasGroups[i].indexOf(key) !== -1) { group = aliasGroups[i]; break; }
+                }
+                if (!group) return null;
+                for (i = 0; i < list.length; i++) {
+                    d = list[i];
+                    var vals = [(d.country_code || '').toLowerCase().trim(), (d.code || '').toLowerCase().trim(), (d.name || '').toLowerCase().trim()];
+                    for (var j = 0; j < group.length; j++) {
+                        if (vals.indexOf(group[j]) !== -1) return d;
+                    }
+                }
+                return null;
+            }
+
+            // Canonical country_code sent to the backend (same value the old
+            // single-select used: destinations.country_code). Falls back to the
+            // raw service-country string when no destination matches.
+            function bulkCanonicalCountry(rawCountry) {
+                var dest = bulkFindDestination(rawCountry);
+                if (dest && dest.country_code) return dest.country_code;
+                if (dest && dest.code) return dest.code;
+                return rawCountry;
+            }
+
+            function bulkCountryName(code) {
+                var dest = bulkFindDestination(code);
+                if (dest && dest.name) return dest.name;
+                var found = null;
+                (bulkDestinations || []).forEach(function(d) {
+                    if ((d.code || '').toLowerCase() === (code || '').toLowerCase() ||
+                        (d.country_code || '').toLowerCase() === (code || '').toLowerCase()) found = d.name;
+                });
+                return found || code;
+            }
+
+            // Populate the country checkbox dropdown for the selected logical
+            // service. Each checkbox value = canonical destinations.country_code
+            // (backend-recognized), with data-service-id = the exact clone ID
+            // for that country and data-raw = the raw service-country string.
+            function populateBulkCountryCheckboxes(serviceKey) {
+                var container = document.getElementById('bulkCountryCheckboxList');
+                container.innerHTML = '';
+                updateBulkCountryText();
+                if (!serviceKey || !bulkGroupByKey[serviceKey]) {
+                    container.innerHTML = '<div class="customer-checkbox-no-result">Select a service to view its countries.</div>';
+                    document.getElementById('bulkCountryDropdownText').textContent = '— Select Service First —';
+                    refreshBulkZones();
+                    return;
+                }
+                var members = bulkGroupByKey[serviceKey].members.slice();
+                // Map to canonical destinations + dedupe (two raw variants like
+                // "USA"/"US" must not produce duplicate checkboxes).
+                var seenCanonical = {};
+                var mapped = [];
+                members.forEach(function(m) {
+                    var canonical = bulkCanonicalCountry(m.country);
+                    var dedupeKey = (canonical || m.country || '').toLowerCase().trim() || ('id:' + m.id);
+                    if (seenCanonical[dedupeKey]) return;
+                    seenCanonical[dedupeKey] = true;
+                    mapped.push({ id: m.id, raw: m.country, canonical: canonical, name: bulkCountryName(m.country) });
+                });
+                // Sort by country display name.
+                mapped.sort(function(a, b) {
+                    return (a.name || '').localeCompare(b.name || '');
+                });
+                if (!mapped.length) {
+                    container.innerHTML = '<div class="customer-checkbox-no-result">No countries found for this service.</div>';
+                    refreshBulkZones();
+                    return;
+                }
+                mapped.forEach(function(m) {
+                    var label = document.createElement('label');
+                    label.className = 'customer-checkbox-item';
+                    label.title = m.name + ' (' + m.canonical + ')';
+                    // Escape via textContent where possible; build with DOM.
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'customer-checkbox bulk-country-checkbox';
+                    cb.value = m.canonical;
+                    cb.setAttribute('data-service-id', String(m.id));
+                    cb.setAttribute('data-raw', String(m.raw || ''));
+                    var span = document.createElement('span');
+                    span.className = 'customer-checkbox-label';
+                    span.textContent = m.name + ' (' + m.canonical + ')';
+                    label.appendChild(cb);
+                    label.appendChild(span);
+                    container.appendChild(label);
+                });
+                updateBulkCountryText();
+                refreshBulkZones();
+            }
+
+            function getCheckedBulkCountries() {
+                return Array.from(document.querySelectorAll('.bulk-country-checkbox:checked')).map(function(cb) {
+                    return { country: cb.value, serviceId: cb.getAttribute('data-service-id') || '' };
+                });
+            }
+
+            function updateBulkCountryText() {
+                var checked = getCheckedBulkCountries();
+                var textEl = document.getElementById('bulkCountryDropdownText');
+                var countEl = document.getElementById('bulkCountryCount');
+                countEl.textContent = checked.length + (checked.length === 1 ? ' country selected' : ' countries selected');
+                if (!checked.length) {
+                    var svc = document.getElementById('bulkService').value;
+                    textEl.textContent = svc ? '— Select Countries —' : '— Select Service First —';
+                    textEl.style.color = '#6c757d';
+                } else if (checked.length === 1) {
+                    textEl.textContent = bulkCountryName(checked[0].country) + ' (' + checked[0].country + ')';
+                    textEl.style.color = '#495057';
+                } else {
+                    textEl.textContent = checked.length + ' countries selected';
+                    textEl.style.color = '#495057';
+                }
+            }
 
             function getBulkCountryZones(country) {
                 var destId = countryToDestinationId[(country || '').toLowerCase().trim()];
@@ -1558,62 +1801,62 @@
                 return { map: zoneMap || {}, keys: zoneKeys };
             }
 
-            // Return the sorted zone numbers that apply to the selected service
-            // for the selected country. Uses the server-built serviceZoneNumbers
-            // map (service_id -> zones), which already merges shared zones
-            // (zone.service_id IS NULL) with the service's own service-specific
-            // zones for its destination. A selected service that is absent from
-            // the map has NO zones for the country → the without-zone format is
-            // used. When no service is selected, fall back to all of the
-            // country's zones (existing behaviour).
-            function getBulkServiceZoneNumbers(country, serviceId) {
-                if (serviceId) {
-                    return (serviceZoneNumbers[serviceId] || []).slice();
-                }
-                return getBulkCountryZones(country).keys;
-            }
-
-            function populateBulkZoneCheckboxes(country, serviceId) {
+            // Union of applicable zones across ALL checked countries for the
+            // selected logical service (service-specific + shared zones per
+            // serviceZoneNumbers). Same file is replicated to every selected
+            // country, so the sample/zones are the union.
+            function refreshBulkZones() {
                 var zoneSection = document.getElementById('bulkZoneSection');
                 var container = document.getElementById('bulkZoneCheckboxes');
                 var withoutZoneInput = document.getElementById('bulkWithoutZone');
                 var instructions = document.getElementById('bulkUploadInstructions');
-                var defaultInstructions = '<i class="ti ti-info-circle me-1"></i>Select a country and one or more zones, then download the sample. The Excel file places each selected zone horizontally with its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. During upload, only the currently checked zones are imported; all other zone columns are skipped. Existing duplicate rates are also skipped.';
+                var serviceKey = document.getElementById('bulkService').value;
+                var checked = getCheckedBulkCountries();
                 container.innerHTML = '';
                 withoutZoneInput.value = '0';
-                instructions.innerHTML = defaultInstructions;
 
-                if (!country) {
+                if (!serviceKey) {
                     zoneSection.classList.add('d-none');
-                    container.innerHTML = '<div class="col-12 text-muted">Select a country to view its zones.</div>';
+                    container.innerHTML = '<div class="col-12 text-muted">Select a service and at least one country to view zones.</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Pehle <strong>Service</strong> chune, phir us service wali <strong>Countries</strong> (checkbox se ek ya kayi) select kare, phir zones select karke sample download kare. Wahi Excel sab selected countries me upload hoga — har country ke us service-clone me same rates banenge. Sirf checked zones import honge, duplicate rates skip honge.';
                     return;
                 }
-
-                var zoneData = getBulkCountryZones(country);
-                var zoneMap = zoneData.map;
-                var zoneKeys = getBulkServiceZoneNumbers(country, serviceId);
+                if (!checked.length) {
+                    zoneSection.classList.add('d-none');
+                    container.innerHTML = '<div class="col-12 text-muted">Select at least one country to view zones.</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Is service ke liye countries tick kare (ek ya kayi). Wahi Excel sab selected countries me upload hoga.';
+                    return;
+                }
 
                 zoneSection.classList.remove('d-none');
+                var union = {};
+                var zoneInfoPool = {};
+                checked.forEach(function(c) {
+                    var svcZones = (serviceZoneNumbers[c.serviceId] || []).slice();
+                    // Fallback: if service has no entry, use all country zones.
+                    if (!svcZones.length) {
+                        svcZones = getBulkCountryZones(c.country).keys;
+                    }
+                    svcZones.forEach(function(z) { union[z] = true; });
+                    var zd = getBulkCountryZones(c.country);
+                    Object.keys(zd.map).forEach(function(k) {
+                        if (!zoneInfoPool[k]) zoneInfoPool[k] = zd.map[k];
+                    });
+                });
+                var zoneKeys = Object.keys(union).map(function(k) { return parseInt(k, 10); })
+                    .filter(function(n) { return !isNaN(n); }).sort(function(a, b) { return a - b; });
+
                 if (!zoneKeys.length) {
                     withoutZoneInput.value = '1';
-                    container.innerHTML = '<div class="col-12 text-success">' +
-                        (serviceId
-                            ? 'This service has no configured zones for the selected country. The sample and uploaded rates will use the without-zone format.'
-                            : 'This country has no configured zones. The sample and uploaded rates will use the without-zone format.') +
-                        '</div>';
-                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>' +
-                        (serviceId
-                            ? 'The selected service has no zones for this country. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.'
-                            : 'This country has no configured zones. Download the without-zone sample containing <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Uploaded rates are saved without a zone, and existing duplicate rates are skipped.');
+                    container.innerHTML = '<div class="col-12 text-success">In selected countries me is service ke koi configured zones nahi hain. Without-zone sample/fomat use hoga (Price, Fuel Charge, Fuel %, GST %).</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Selected countries me is service ke koi zones nahi hain. Without-zone sample download kare — wahi file sab (' + checked.length + ') selected countries me upload hogi.';
                     return;
                 }
 
-                instructions.innerHTML = serviceId
-                    ? '<i class="ti ti-info-circle me-1"></i>This service has configured zones for the selected country. Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.'
-                    : '<i class="ti ti-info-circle me-1"></i>Select one or more zones, then download the sample. Each selected zone receives its own <strong>Price</strong>, <strong>Fuel Charge</strong>, <strong>Fuel %</strong>, and <strong>GST %</strong> columns. Only checked zones are imported, and existing duplicate rates are skipped.';
+                instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i><strong>' + checked.length + '</strong> countr' + (checked.length === 1 ? 'y' : 'ies') + ' selected. Zones tick kare, sample download kare — wahi Excel sab selected countries ke is service me upload hoga. Sirf checked zones import honge.';
 
                 zoneKeys.forEach(function(zone) {
-                    var info = zoneMap[zone] || {};
+                    var info = zoneInfoPool[zone] || {};
                     var category = info.category === 'zipcode' ? 'records' : (info.category === 'city' ? 'cities' : 'states');
                     var label = 'Zone ' + zone + (info.count ? ' (' + info.count + ' ' + category + ')' : '');
                     container.insertAdjacentHTML('beforeend',
@@ -1631,32 +1874,64 @@
                 });
             }
 
-            // When the bulk modal is shown, start with an empty service
-            // dropdown (placeholder only). Services are filtered by the
-            // selected country, so they appear once a country is chosen.
+            // When the bulk modal is shown, build logical service groups.
             document.getElementById('bulkUploadModal').addEventListener('shown.bs.modal', function() {
-                populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value, document.getElementById('bulkService').value);
-            });
-
-            // Country change → repopulate BOTH the service dropdown (only
-            // services for that country) and the zone dropdown. The service
-            // selection is cleared so a stale service from a previous country
-            // is never submitted. When no country is selected ("All Countries"),
-            // all services are listed.
-            document.getElementById('bulkCountry').addEventListener('change', function() {
-                var country = this.value;
-                var serviceCountry = resolveServiceCountry(country);
-                populateServiceDropdown(document.getElementById('bulkService'), serviceCountry);
+                populateBulkServiceGroups();
                 document.getElementById('bulkService').value = '';
-                populateBulkZoneCheckboxes(country, '');
+                populateBulkCountryCheckboxes('');
             });
 
-            // Service change → re-evaluate the zone section for the selected
-            // service. If the service has no zones for the chosen country the
-            // without-zone format is used and the zone section is hidden.
+            // Service change → show its countries (checkbox dropdown).
             document.getElementById('bulkService').addEventListener('change', function() {
-                populateBulkZoneCheckboxes(document.getElementById('bulkCountry').value, this.value);
+                populateBulkCountryCheckboxes(this.value);
+            });
+
+            // Country checkbox change (delegated — list is rebuilt per service).
+            $(document).on('change', '.bulk-country-checkbox', function() {
+                updateBulkCountryText();
+                refreshBulkZones();
+            });
+
+            // Bulk country dropdown open/close + search + select all/clear.
+            $('#bulkCountryDropdownToggle').on('click', function(e) {
+                e.stopPropagation();
+                $('#bulkCountryDropdown').toggleClass('open');
+            });
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#bulkCountryDropdown').length) {
+                    $('#bulkCountryDropdown').removeClass('open');
+                }
+            });
+            $('#bulkCountryDropdownMenu').on('click', function(e) {
+                e.stopPropagation();
+            });
+            $('#bulkCountryDropdownSearch').on('input', function() {
+                var term = $(this).val().toLowerCase().trim();
+                var visibleCount = 0;
+                $('#bulkCountryCheckboxList .customer-checkbox-item').each(function() {
+                    var label = $(this).find('.customer-checkbox-label').text().toLowerCase();
+                    var match = label.indexOf(term) !== -1;
+                    $(this).toggle(match);
+                    if (match) visibleCount++;
+                });
+                var noResult = $('#bulkCountryNoResult');
+                if (visibleCount === 0) {
+                    if (noResult.length === 0) {
+                        $('#bulkCountryCheckboxList').append('<div class="customer-checkbox-no-result" id="bulkCountryNoResult">No countries match your search.</div>');
+                    }
+                } else {
+                    noResult.remove();
+                }
+            });
+            $('#bulkCountrySelectAll').on('click', function() {
+                $('#bulkCountryCheckboxList .customer-checkbox-item').filter(':visible').find('.bulk-country-checkbox').prop('checked', true);
+                updateBulkCountryText();
+                refreshBulkZones();
+            });
+            $('#bulkCountryClearAll').on('click', function() {
+                $('.bulk-country-checkbox').prop('checked', false);
+                updateBulkCountryText();
+                refreshBulkZones();
             });
 
             document.getElementById('bulkSelectAllZones').addEventListener('click', function() {
@@ -1666,49 +1941,64 @@
                 document.querySelectorAll('.bulk-zone-checkbox').forEach(function(checkbox) { checkbox.checked = false; });
             });
 
-            // Download Sample: append selected service_id and zone_no so the
-            // sample includes existing rates for that service/zone.
+            // Download Sample: use the FIRST checked country + its clone ID so
+            // the sample includes existing rates. Same file works for all
+            // selected countries on upload.
             document.getElementById('bulkDownloadSampleBtn').addEventListener('click', function(e) {
                 e.preventDefault();
-                var country = document.getElementById('bulkCountry').value;
-                var serviceId = document.getElementById('bulkService').value;
+                var serviceKey = document.getElementById('bulkService').value;
+                var checked = getCheckedBulkCountries();
                 var zones = getCheckedBulkZones();
                 var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
-                if (!country) { showAlert('Please select a country first.', 'warning'); return; }
-                if (!serviceId) { showAlert('Please select a service.', 'warning'); return; }
+                if (!serviceKey) { showAlert('Please select a service first.', 'warning'); return; }
+                if (!checked.length) { showAlert('Please select at least one country.', 'warning'); return; }
                 if (!withoutZone && !zones.length) { showAlert('Please select at least one zone.', 'warning'); return; }
 
+                var first = checked[0];
                 var params = new URLSearchParams();
-                params.append('service_id', serviceId);
-                params.append('country', country);
+                params.append('service_id', first.serviceId);
+                params.append('country', first.country);
                 params.append('without_zone', withoutZone ? '1' : '0');
                 zones.forEach(function(zone) { params.append('zone_nos[]', zone); });
                 window.location.href = "{{ route('admin.manage-rate.sample') }}" + '?' + params.toString();
             });
 
-            // Submit the bulk upload form (regular POST — the controller
-            // redirects back with flash success/error messages). Show a
-            // loading state while the file is being processed.
+            // Submit: inject service_ids[] + countries[] pairs for every
+            // checked country, then POST. Backend replicates the same file to
+            // each (service_id, country) target.
             document.getElementById('bulkUploadSubmitBtn').addEventListener('click', function() {
                 var form = document.getElementById('bulkUploadForm');
-                var serviceId = document.getElementById('bulkService').value;
+                var serviceKey = document.getElementById('bulkService').value;
+                var checked = getCheckedBulkCountries();
                 var zones = getCheckedBulkZones();
                 var withoutZone = document.getElementById('bulkWithoutZone').value === '1';
                 var fileInput = form.querySelector('input[name="rate_file"]');
-                if (!serviceId) { showAlert('Please select a service.', 'warning'); return; }
+                if (!serviceKey) { showAlert('Please select a service.', 'warning'); return; }
+                if (!checked.length) { showAlert('Please select at least one country.', 'warning'); return; }
                 if (!withoutZone && !zones.length) { showAlert('Please select at least one zone to upload.', 'warning'); return; }
                 if (!fileInput.files || !fileInput.files.length) { showAlert('Please choose an Excel/CSV file.', 'warning'); return; }
+                var targets = document.getElementById('bulkMultiTargets');
+                targets.innerHTML = '';
+                checked.forEach(function(c) {
+                    var s = document.createElement('input');
+                    s.type = 'hidden'; s.name = 'service_ids[]'; s.value = c.serviceId;
+                    targets.appendChild(s);
+                    var cc = document.createElement('input');
+                    cc.type = 'hidden'; cc.name = 'countries[]'; cc.value = c.country;
+                    targets.appendChild(cc);
+                });
                 var btn = this;
                 btn.disabled = true;
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading...';
                 form.submit();
             });
 
-            // Reset bulk modal dropdowns when hidden so the next open starts clean.
+            // Reset bulk modal when hidden so the next open starts clean.
             document.getElementById('bulkUploadModal').addEventListener('hidden.bs.modal', function() {
                 document.getElementById('bulkUploadForm').reset();
-                populateServiceDropdown(document.getElementById('bulkService'), '');
-                populateBulkZoneCheckboxes('', '');
+                document.getElementById('bulkMultiTargets').innerHTML = '';
+                document.getElementById('bulkService').value = '';
+                populateBulkCountryCheckboxes('');
             });
         });
 

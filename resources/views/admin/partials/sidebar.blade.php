@@ -323,7 +323,7 @@
                             </a>
                             <ul>
                                 <li><a href="{{ url('/admin/add-country') }}"
-                                        class="{{ request()->is('admin/add-country') ? 'active' : '' }}">Add Country</a></li>
+                                        class="{{ request()->is('admin/add-country') ? 'active' : '' }}">Country & Services</a></li>
                                 <li><a href="{{ url('/admin/add-zone') }}"
                                         class="{{ request()->is('admin/add-zone') ? 'active' : '' }}">Add Zone</a></li>
                                 <li><a href="{{ url('/admin/manage-rate') }}"

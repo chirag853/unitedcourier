@@ -5515,8 +5515,20 @@ class AdminController extends Controller
         $withoutZone = $request->boolean('without_zone');
         $destinationId = $this->destinationIdForCountry($country);
 
+        // Many courier_services.country values (e.g. "France", "China") have
+        // no matching destinations row. For those, fall back to a
+        // destination-less sample as long as the sent country matches the
+        // service's own country string (case-insensitive). Zones are then
+        // treated as unconfigured (without-zone format works).
         if ($country && !$destinationId) {
-            abort(422, 'The selected country is not recognized.');
+            if (!$serviceId) {
+                abort(422, 'The selected country "' . $country . '" is not recognized.');
+            }
+            $svcCountry = \App\Models\CourierService::whereKey($serviceId)->value('country');
+            if (strtolower(trim((string) $svcCountry)) !== strtolower(trim((string) $country))) {
+                abort(422, 'The selected country "' . $country . '" is not recognized.');
+            }
+            $destinationId = null;
         }
 
         if ($serviceId && $destinationId && !$this->serviceBelongsToDestination($serviceId, $destinationId)) {
@@ -5529,7 +5541,7 @@ class AdminController extends Controller
                     ? $this->serviceHasConfiguredZones((int) $serviceId, $destinationId)
                     : $this->destinationHasConfiguredZones($destinationId))
                 : false;
-            if (!$destinationId || $hasConfiguredZones) {
+            if ($hasConfiguredZones) {
                 abort(422, 'The without-zone sample is available only for a selected country (and service) that has no configured zones.');
             }
         }
@@ -5642,9 +5654,18 @@ class AdminController extends Controller
      */
     public function uploadRateExcel(Request $request)
     {
+        // Supports BOTH legacy single-target (service_id + country) and the
+        // new service-first multi-country flow (service_ids[] + countries[]).
+        // The frontend sends one service_ids[] + countries[] pair per checked
+        // country — the same Excel file is replicated to every target.
         $validated = $request->validate([
-            'service_id'   => 'required|integer|exists:courier_services,id',
-            'country'      => 'required|string|max:100',
+            'service_id'   => 'nullable|integer|exists:courier_services,id',
+            'service_ids'  => 'nullable|array|min:1',
+            'service_ids.*' => 'integer|exists:courier_services,id',
+            'country'      => 'nullable|string|max:100',
+            'countries'    => 'nullable|array|min:1',
+            'countries.*'  => 'string|max:100',
+            'service_key'  => 'nullable|string|max:255',
             'without_zone' => 'nullable|boolean',
             'zone_nos'     => 'nullable|array',
             'zone_nos.*'   => 'integer|min:0|max:13',
@@ -5653,24 +5674,91 @@ class AdminController extends Controller
         ]);
 
         $withoutZone = $request->boolean('without_zone');
-        $destinationId = $this->destinationIdForCountry($validated['country']);
 
-        if (!$destinationId) {
-            return redirect()
-                ->route('admin.manage-rate')
-                ->with('error', 'The selected country is not recognized.');
+        // ---- Build the list of (service_id, country, destination_id) targets ----
+        $targets = [];
+        $multiServiceIds = array_values(array_filter(array_map('intval', (array) $request->input('service_ids', []))));
+        $multiCountries = array_values(array_filter(array_map(function ($c) { return trim((string) $c); }, (array) $request->input('countries', []))));
+
+        if (!empty($multiServiceIds) || !empty($multiCountries)) {
+            if (empty($multiServiceIds) || empty($multiCountries)) {
+                return redirect()->route('admin.manage-rate')
+                    ->with('error', 'Please select a service and at least one country.');
+            }
+            // Pair by index when both arrays are given (frontend sends them
+            // aligned). If counts differ, fall back to resolving each service
+            // ID's own country.
+            // NOTE: many services (e.g. "France", "China") have no destinations
+            // row — those targets get destination_id = null and are treated as
+            // zone-less (proven by frontend union logic). They are allowed as
+            // long as the sent country matches the service's own country.
+            $paired = (count($multiServiceIds) === count($multiCountries));
+            foreach ($multiServiceIds as $idx => $sid) {
+                $countryCode = $paired ? $multiCountries[$idx] : null;
+                if (!$countryCode) {
+                    $countryCode = \App\Models\CourierService::whereKey($sid)->value('country');
+                }
+                if (!$countryCode) {
+                    return redirect()->route('admin.manage-rate')
+                        ->with('error', 'Could not determine the country for a selected service.');
+                }
+                $destId = $this->destinationIdForCountry($countryCode);
+                if (!$destId) {
+                    $svcCountry = \App\Models\CourierService::whereKey($sid)->value('country');
+                    if (strtolower(trim((string) $svcCountry)) !== strtolower(trim((string) $countryCode))) {
+                        return redirect()->route('admin.manage-rate')
+                            ->with('error', 'The selected country "' . $countryCode . '" is not recognized.');
+                    }
+                    $targets[] = ['service_id' => (int) $sid, 'country' => $countryCode, 'destination_id' => null];
+                    continue;
+                }
+                if (!$this->serviceBelongsToDestination($sid, $destId)) {
+                    return redirect()->route('admin.manage-rate')
+                        ->with('error', 'The selected service does not belong to country "' . $countryCode . '". Please re-select the service and countries.');
+                }
+                $targets[] = ['service_id' => (int) $sid, 'country' => $countryCode, 'destination_id' => $destId];
+            }
+            // De-duplicate identical targets (same service twice).
+            $seen = [];
+            $targets = array_values(array_filter($targets, function ($t) use (&$seen) {
+                $k = $t['service_id'] . '|' . strtolower($t['country']);
+                if (isset($seen[$k])) return false;
+                $seen[$k] = true;
+                return true;
+            }));
+        } else {
+            // Legacy single-target flow.
+            if (empty($validated['service_id']) || empty($validated['country'])) {
+                return redirect()->route('admin.manage-rate')
+                    ->with('error', 'Please select a service and at least one country.');
+            }
+            $destinationId = $this->destinationIdForCountry($validated['country']);
+            if (!$destinationId) {
+                $svcCountry = \App\Models\CourierService::whereKey($validated['service_id'])->value('country');
+                if (strtolower(trim((string) $svcCountry)) !== strtolower(trim((string) $validated['country']))) {
+                    return redirect()
+                        ->route('admin.manage-rate')
+                        ->with('error', 'The selected country "' . $validated['country'] . '" is not recognized.');
+                }
+                $targets[] = ['service_id' => (int) $validated['service_id'], 'country' => $validated['country'], 'destination_id' => null];
+            } else {
+                if (!$this->serviceBelongsToDestination($validated['service_id'], $destinationId)) {
+                    return redirect()
+                        ->route('admin.manage-rate')
+                        ->with('error', 'The selected service does not belong to the selected country.');
+                }
+                $targets[] = ['service_id' => (int) $validated['service_id'], 'country' => $validated['country'], 'destination_id' => $destinationId];
+            }
         }
 
-        if (!$this->serviceBelongsToDestination($validated['service_id'], $destinationId)) {
-            return redirect()
-                ->route('admin.manage-rate')
-                ->with('error', 'The selected service does not belong to the selected country.');
-        }
-
-        if ($withoutZone && $this->serviceHasConfiguredZones($validated['service_id'], $destinationId)) {
-            return redirect()
-                ->route('admin.manage-rate')
-                ->with('error', 'The selected country has configured zones for this service. Select at least one zone and use the zoned sample file.');
+        if ($withoutZone) {
+            foreach ($targets as $t) {
+                if ($t['destination_id'] && $this->serviceHasConfiguredZones($t['service_id'], $t['destination_id'])) {
+                    return redirect()
+                        ->route('admin.manage-rate')
+                        ->with('error', 'Country "' . $t['country'] . '" has configured zones for this service. Select at least one zone and use the zoned sample file.');
+                }
+            }
         }
 
         $file = $request->file('rate_file');
@@ -5815,12 +5903,23 @@ class AdminController extends Controller
         $duplicates = 0;
         $dataRows = array_slice($rows, 1);
 
-        // Pre-fetch all existing default rates for this service so we can
-        // skip duplicates without running a query per row. Keys are
-        // "wtStart|wtEnd|zoneNo" for fast lookup.
-        $existingRates = \App\Models\CourierRate::where('customer_id', 0)
-            ->where('service_id', $validated['service_id'])
-            ->get(['wt_range_start', 'wt_range_end', 'zone_no']);
+        // Pre-fetch all customer IDs once (shared across every target).
+        $customerIds = \App\Models\Customer::pluck('id')->toArray();
+        $propagated = 0;
+
+        // Replicate the same file to EVERY selected (service, country)
+        // target. Invalid rows are counted once (first target only);
+        // duplicates/created are aggregated across all targets.
+        $isFirstTarget = true;
+        foreach ($targets as $target) {
+            $currentServiceId = (int) $target['service_id'];
+
+            // Pre-fetch all existing default rates for this service so we can
+            // skip duplicates without running a query per row. Keys are
+            // "wtStart|wtEnd|zoneNo" for fast lookup.
+            $existingRates = \App\Models\CourierRate::where('customer_id', 0)
+                ->where('service_id', $currentServiceId)
+                ->get(['wt_range_start', 'wt_range_end', 'zone_no']);
 
         $existingKeys = [];
         foreach ($existingRates as $r) {
@@ -5835,20 +5934,12 @@ class AdminController extends Controller
 
         $formZoneNo = $withoutZone ? 0 : ($validated['zone_no'] ?? null);
 
-        // Pre-fetch all customer IDs once so we can propagate every new
-        // default rate to all customers (is_default = 1) in a single batch
-        // insert per row. Customers who already have a rate for a given
-        // service + weight + zone combination are skipped so we never
-        // clobber a customized rate.
-        $customerIds = \App\Models\Customer::pluck('id')->toArray();
-        $propagated = 0;
-
         // Map of "wtStart|wtEnd|zoneNo" => [customerId => true] for every
-        // customer rate that already exists for this service.
+        // customer rate that already exists for THIS target service.
         $existingCustomerKeys = [];
         if (!empty($customerIds)) {
             $existingCustomerRates = \App\Models\CourierRate::whereIn('customer_id', $customerIds)
-                ->where('service_id', $validated['service_id'])
+                ->where('service_id', $currentServiceId)
                 ->get(['customer_id', 'wt_range_start', 'wt_range_end', 'zone_no']);
             foreach ($existingCustomerRates as $cr) {
                 $existingZoneNo = (int) ($cr->zone_no ?? 0);
@@ -5880,29 +5971,31 @@ class AdminController extends Controller
             $gstPct     = ($gstPctCol !== null && isset($row[$gstPctCol])) ? trim((string) $row[$gstPctCol]) : '';
 
             // Skip completely empty rows.
+            // $skipped is counted on the first target only so multi-country
+            // uploads don't multiply the same invalid rows.
             if ($wtStart === '' && $wtEnd === '' && $price === '' && $zoneNo === '') {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
 
             // Validate required numeric fields.
             if ($wtStart === '' || $wtEnd === '' || $price === '') {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
             if (!is_numeric($wtStart) || !is_numeric($wtEnd) || !is_numeric($price)) {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
             if ((float) $wtEnd <= (float) $wtStart) {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
 
             // Zone No must be valid and must be one of the zones explicitly
             // checked in the modal. This also filters legacy vertical files.
             if ($zoneNo === '' || !is_numeric($zoneNo) || (int) $zoneNo < 0 || (int) $zoneNo > 13) {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
             $zoneNoInt = (int) $zoneNo;
@@ -5911,7 +6004,7 @@ class AdminController extends Controller
                 !empty($selectedZoneNos)
                 && !in_array($zoneNoInt, $selectedZoneNos, true)
             ) {
-                $skipped++;
+                if ($isFirstTarget) $skipped++;
                 continue;
             }
 
@@ -5925,7 +6018,7 @@ class AdminController extends Controller
 
             \App\Models\CourierRate::create([
                 'customer_id'     => 0,
-                'service_id'      => $validated['service_id'],
+                'service_id'      => $currentServiceId,
                 'wt_range_start'  => $wtStart,
                 'wt_range_end'    => $wtEnd,
                 'zone_no'         => $zoneNoInt,
@@ -5953,10 +6046,10 @@ class AdminController extends Controller
 
                 if (!empty($customersNeedingRate)) {
                     $now = now();
-                    $rows = array_map(function ($customerId) use ($validated, $wtStart, $wtEnd, $zoneNoInt, $price, $fuelCharge, $fuelPct, $gstPct, $now) {
+                    $rows = array_map(function ($customerId) use ($currentServiceId, $wtStart, $wtEnd, $zoneNoInt, $price, $fuelCharge, $fuelPct, $gstPct, $now) {
                         return [
                             'customer_id'     => $customerId,
-                            'service_id'      => $validated['service_id'],
+                            'service_id'      => $currentServiceId,
                             'wt_range_start'  => $wtStart,
                             'wt_range_end'    => $wtEnd,
                             'zone_no'         => $zoneNoInt,
@@ -5984,9 +6077,14 @@ class AdminController extends Controller
                 }
             }
         }
+        $isFirstTarget = false;
+        } // end foreach ($targets as $target)
+
+        $targetCount = count($targets);
+        $targetSuffix = $targetCount > 1 ? ' across ' . $targetCount . ' countries' : '';
 
         if ($created === 0) {
-            $msg = 'No new rates were imported.';
+            $msg = 'No new rates were imported' . $targetSuffix . '.';
             if ($duplicates > 0) {
                 $msg .= ' ' . $duplicates . ' duplicate rate(s) already exist and were skipped.';
             }
@@ -5998,7 +6096,7 @@ class AdminController extends Controller
                 ->with('error', $msg);
         }
 
-        $msg = $created . ' rate(s) imported successfully.';
+        $msg = $created . ' rate(s) imported successfully' . $targetSuffix . '.';
         if ($duplicates > 0) {
             $msg .= ' ' . $duplicates . ' duplicate rate(s) already existed and were skipped.';
         }
@@ -6016,18 +6114,58 @@ class AdminController extends Controller
 
     private function destinationIdForCountry(?string $country): ?int
     {
-        $country = strtolower(trim((string) $country));
-        if ($country === '') {
+        $key = strtolower(trim((string) $country));
+        if ($key === '') {
             return null;
         }
 
-        $destinationId = \App\Models\Destination::where(function ($query) use ($country) {
-            $query->whereRaw('LOWER(country_code) = ?', [$country])
-                ->orWhereRaw('LOWER(code) = ?', [$country])
-                ->orWhereRaw('LOWER(name) = ?', [$country]);
+        $destinationId = \App\Models\Destination::where(function ($query) use ($key) {
+            $query->whereRaw('LOWER(country_code) = ?', [$key])
+                ->orWhereRaw('LOWER(code) = ?', [$key])
+                ->orWhereRaw('LOWER(name) = ?', [$key]);
         })->value('id');
 
-        return $destinationId ? (int) $destinationId : null;
+        if ($destinationId) {
+            return (int) $destinationId;
+        }
+
+        // Fallback for common code/name variants: courier_services.country
+        // stores short codes that don't always equal destinations.country_code
+        // (e.g. service "USA" vs destination "US", "AUS" vs "AU", "UK" vs
+        // "GB"/"United Kingdom"). Resolve via alias groups so the bulk
+        // sample/upload flow (which sends service-country strings) keeps
+        // working for multi-country selections.
+        $aliasGroups = [
+            ['us', 'usa', 'united states', 'united states of america', 'america'],
+            ['uk', 'gb', 'gbr', 'united kingdom', 'great britain', 'britain', 'england'],
+            ['ca', 'can', 'canada'],
+            ['au', 'aus', 'australia'],
+            ['de', 'deu', 'germany'],
+            ['fr', 'fra', 'france'],
+            ['in', 'ind', 'india'],
+            ['ae', 'are', 'uae', 'united arab emirates', 'dubai'],
+            ['sg', 'sgp', 'singapore'],
+            ['nz', 'nzl', 'new zealand'],
+            ['za', 'zaf', 'south africa'],
+        ];
+
+        foreach ($aliasGroups as $group) {
+            if (!in_array($key, $group, true)) {
+                continue;
+            }
+            $found = \App\Models\Destination::where(function ($query) use ($group) {
+                foreach ($group as $alias) {
+                    $query->orWhereRaw('LOWER(country_code) = ?', [$alias])
+                        ->orWhereRaw('LOWER(code) = ?', [$alias])
+                        ->orWhereRaw('LOWER(name) = ?', [$alias]);
+                }
+            })->value('id');
+            if ($found) {
+                return (int) $found;
+            }
+        }
+
+        return null;
     }
 
     private function destinationHasConfiguredZones(int $destinationId): bool
