@@ -114,7 +114,7 @@
                                         <!-- <li><a href="{{ url('#') }}">Sale Report</a></li> -->
                                         <li><a href="{{ route('customer.transaction-history') }}" class="{{ request()->routeIs('customer.transaction-history') ? 'active' : '' }}">Transaction History</a></li>
                                         <li><a href="{{ route('customer.wallet-history') }}" class="{{ request()->routeIs('customer.wallet-history') ? 'active' : '' }}">Wallet History</a></li>
-                                        <li><a href="{{ route('customer.my-disputes') }}" class="{{ request()->routeIs('customer.my-disputes') ? 'active' : '' }}">My Disputes</a></li>
+                                        <!-- <li><a href="{{ route('customer.my-disputes') }}" class="{{ request()->routeIs('customer.my-disputes') ? 'active' : '' }}">My Disputes</a></li> -->
                                     </ul>
                                 </li>
 
