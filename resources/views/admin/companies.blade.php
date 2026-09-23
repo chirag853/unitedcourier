@@ -1952,7 +1952,7 @@
                         </div>
                         <div class="dispute-hint">
                             <i class="ti ti-info-circle"></i>
-                            <span>Ye remark customer ko dikhega. Customer accept karega tabhi amount deduct hoga.</span>
+                            <span>This remark will be visible to the customer. The amount will be deducted only after the customer accepts.</span>
                         </div>
                     </div>
 

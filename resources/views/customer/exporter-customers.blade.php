@@ -1651,7 +1651,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-info small">CSB5 details bharne par is customer ka status <strong>CSB IV se CSB V</strong> me update ho jayega.</div>
+                    <div class="alert alert-info small">After submitting the CSB5 details, this customer's status will be updated from <strong>CSB IV to CSB V</strong>.</div>
                     <div id="csb5FormError" class="alert alert-danger small d-none"></div>
                     <div class="d-flex flex-wrap gap-4 align-items-center mb-3">
                         <div class="form-check mb-0">

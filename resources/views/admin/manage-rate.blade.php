@@ -307,7 +307,7 @@
                                                 <select class="form-select" id="defaultServiceFilter">
                                                     <option value="">— All Services —</option>
                                                 </select>
-                                                <small class="text-muted">Pehle service chune — uske baad countries ayengi.</small>
+                                                <small class="text-muted">Select a service first — its countries will appear afterwards.</small>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label fw-bold">Country</label>
@@ -440,7 +440,7 @@
                                                 <select class="form-select" id="customerServiceFilter">
                                                     <option value="">— All Services —</option>
                                                 </select>
-                                                <small class="text-muted">Pehle service chune — uske baad countries ayengi.</small>
+                                                <small class="text-muted">Select a service first — its countries will appear afterwards.</small>
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label fw-bold">Country</label>
@@ -625,7 +625,7 @@
                 <div class="modal-body">
                     <div class="alert alert-info py-2" id="bulkUploadInstructions">
                         <i class="ti ti-info-circle me-1"></i>
-                        Pehle <strong>Service</strong> chune, phir us service wali <strong>Countries</strong> (checkbox se ek ya kayi) select kare, phir zones select karke sample download kare. Wahi Excel sab selected countries me upload hoga — har country ke us service-clone me same rates banenge. Sirf checked zones import honge, duplicate rates skip honge.
+                        First select a <strong>Service</strong>, then select its <strong>Countries</strong> (tick one or more via checkboxes), then select zones and download the sample. The same Excel file will be uploaded to all selected countries — identical rates will be created in each country's clone of this service. Only checked zones are imported; duplicate rates are skipped.
                     </div>
                     <form id="bulkUploadForm" method="POST" action="{{ route('admin.manage-rate.upload') }}" enctype="multipart/form-data">
                         @csrf
@@ -638,7 +638,7 @@
                                 <select class="form-select" id="bulkService" name="service_key" required>
                                     <option value="">— Select Service —</option>
                                 </select>
-                                <small class="text-muted">Pehle service chune — uske baad us service wali countries neeche ayengi.</small>
+                                <small class="text-muted">Select a service first — its countries will appear below.</small>
                             </div>
                             <!-- Countries (checkbox dropdown, populated from the selected service) -->
                             <div class="col-md-6">
@@ -676,7 +676,7 @@
                                     <div class="row g-2" id="bulkZoneCheckboxes">
                                         <div class="col-12 text-muted">Select a service and at least one country to view zones.</div>
                                     </div>
-                                    <small class="text-muted d-block mt-2">Sample me har checked zone ki alag rows ayengi (Zone No column me zone pehle se bhara hoga). Sirf checked zones import honge.</small>
+                                    <small class="text-muted d-block mt-2">The sample will contain separate rows for each checked zone (Zone No column is pre-filled). Only checked zones are imported.</small>
                                 </div>
                             </div>
                             <!-- File -->
@@ -729,14 +729,14 @@
                                 <select class="form-select" id="updateNewRateService" name="service_key">
                                     <option value="">— All Services —</option>
                                 </select>
-                                <!-- <small class="text-muted">Pehle service chune — uske baad us service wali countries ayengi. All par file me Service Code/Network/Method hona chahiye.</small> -->
+                                <small class="text-muted">Select a service first — its countries will appear below. On All Services the file must contain Service Code / Network / Method.</small>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Country</label>
                                 <select class="form-select" id="updateNewRateCountry">
                                     <option value="">— All Countries —</option>
                                 </select>
-                                <!-- <small class="text-muted">Selected service wali countries (same as Bulk Upload).</small> -->
+                                <small class="text-muted">Countries of the selected service (same as Bulk Upload).</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Start Date</label>
@@ -751,7 +751,7 @@
                             <div class="col-12">
                                 <label class="form-label fw-bold">Upload Updated Rate <span class="text-danger">*</span></label>
                                 <input type="file" class="form-control" name="rate_file" accept=".xlsx,.xls,.csv" required>
-                                <small class="text-muted">Upload the Excel file downloaded from this customer's rate table. Update the Price column, then upload it here. The file's Customer Code must match the selected customer(s) — kisi aur customer ki file upload nahi hogi.</small>
+                                <small class="text-muted">Upload the Excel file downloaded from this customer's rate table. Update the Price column, then upload it here. The file's Customer Code must match the selected customer(s) — files from any other customer will not be uploaded.</small>
                             </div>
                         </div>
                     </div>
@@ -2046,13 +2046,13 @@
                 if (!serviceKey) {
                     zoneSection.classList.add('d-none');
                     container.innerHTML = '<div class="col-12 text-muted">Select a service and at least one country to view zones.</div>';
-                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Pehle <strong>Service</strong> chune, phir us service wali <strong>Countries</strong> (checkbox se ek ya kayi) select kare, phir zones select karke sample download kare. Wahi Excel sab selected countries me upload hoga — har country ke us service-clone me same rates banenge. Sirf checked zones import honge, duplicate rates skip honge.';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>First select a <strong>Service</strong>, then select its <strong>Countries</strong> (tick one or more via checkboxes), then select zones and download the sample. The same Excel file will be uploaded to all selected countries — identical rates will be created in each country\'s clone of this service. Only checked zones are imported; duplicate rates are skipped.';
                     return;
                 }
                 if (!checked.length) {
                     zoneSection.classList.add('d-none');
                     container.innerHTML = '<div class="col-12 text-muted">Select at least one country to view zones.</div>';
-                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Is service ke liye countries tick kare (ek ya kayi). Wahi Excel sab selected countries me upload hoga.';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Tick the countries for this service (one or more). The same Excel file will be uploaded to all selected countries.';
                     return;
                 }
 
@@ -2076,12 +2076,12 @@
 
                 if (!zoneKeys.length) {
                     withoutZoneInput.value = '1';
-                    container.innerHTML = '<div class="col-12 text-success">In selected countries me is service ke koi configured zones nahi hain. Without-zone sample/fomat use hoga (Price, Fuel Charge, Fuel %, GST %).</div>';
-                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>Selected countries me is service ke koi zones nahi hain. Without-zone sample download kare — wahi file sab (' + checked.length + ') selected countries me upload hogi.';
+                    container.innerHTML = '<div class="col-12 text-success">This service has no configured zones in the selected countries. The without-zone sample/format will be used (Price, Fuel Charge, Fuel %, GST %).</div>';
+                    instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>This service has no zones in the selected countries. Download the without-zone sample — the same file will be uploaded to all (' + checked.length + ') selected countries.';
                     return;
                 }
 
-                instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i><strong>' + checked.length + '</strong> countr' + (checked.length === 1 ? 'y' : 'ies') + ' selected. Zones tick kare, sample download kare — wahi Excel sab selected countries ke is service me upload hoga. Sirf checked zones import honge.';
+                instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i><strong>' + checked.length + '</strong> countr' + (checked.length === 1 ? 'y' : 'ies') + ' selected. Tick zones, download the sample — the same Excel file will be uploaded to this service in all selected countries. Only checked zones are imported.';
 
                 zoneKeys.forEach(function(zone) {
                     var info = zoneInfoPool[zone] || {};
