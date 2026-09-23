@@ -300,8 +300,15 @@
 
                                     <!-- Default Rate Tab -->
                                     <div class="tab-pane fade show active" id="default-rate-pane" role="tabpanel">
-                                        <!-- Filters -->
+                                        <!-- Filters: Service FIRST, then Country -->
                                         <div class="row mb-3 g-2 align-items-end">
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-bold">Service</label>
+                                                <select class="form-select" id="defaultServiceFilter">
+                                                    <option value="">— All Services —</option>
+                                                </select>
+                                                <small class="text-muted">Pehle service chune — uske baad countries ayengi.</small>
+                                            </div>
                                             <div class="col-md-4">
                                                 <label class="form-label fw-bold">Country</label>
                                                 <select class="form-select" id="defaultCountryFilter">
@@ -309,12 +316,6 @@
                                                     @foreach($destinations as $dest)
                                                         <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                                     @endforeach
-                                                </select>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label fw-bold">Service</label>
-                                                <select class="form-select" id="defaultServiceFilter">
-                                                    <option value="">— All Services —</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-4 text-md-end">
@@ -1148,14 +1149,27 @@
             // customerCountryFilter) are rendered server-side from the
             // destinations table, so no JS population is needed here.
 
+            // Service ID -> DISTINCT group key map (api_provider||service_code),
+            // built once so the Default table filter can match rows by group.
+            var serviceIdToGroupKey = {};
+            allServices.forEach(function(s) {
+                serviceIdToGroupKey[String(s.id)] =
+                    ((s.api_provider || '') + '||' + (s.service_code || ''))
+                        .toLowerCase().replace(/\s+/g, ' ').trim();
+            });
+
             // Populate service dropdowns (all services initially).
-            // Default tab stays clone-level; customer tab is DISTINCT service-first.
-            populateServiceDropdown(document.getElementById('defaultServiceFilter'), '');
+            // Both tabs are DISTINCT service-first (SELECT DISTINCT
+            // api_provider, service_code FROM courier_services).
+            populateDefaultServiceGroups('');
+            populateDefaultCountryOptions('', '');
             populateCustomerServiceGroups('');
             populateCustomerCountryOptions('', '');
 
             // DataTables custom search plugin for Default Rate table
-            // (global plugin — guarded by table ID so it only affects defaultRateTable)
+            // (global plugin — guarded by table ID so it only affects defaultRateTable).
+            // Service filter is a DISTINCT group key (api_provider||service_code),
+            // matched via the serviceIdToGroupKey map; country matches as before.
             $.fn.dataTable.ext.search.push(function(settings, searchData, index) {
                 if (settings.nTable.id !== 'defaultRateTable') {
                     return true;
@@ -1169,24 +1183,27 @@
                 if (!rowNode) return true;
                 var rowCountry = rowNode.getAttribute('data-country') || '';
                 var rowServiceId = rowNode.getAttribute('data-service-id') || '';
+                if (serviceFilter) {
+                    var rowKey = serviceIdToGroupKey[String(rowServiceId)] || '';
+                    if (rowKey !== String(serviceFilter).toLowerCase().trim()) return false;
+                }
                 if (countryFilter && rowCountry !== countryFilter) return false;
-                if (serviceFilter && rowServiceId !== serviceFilter) return false;
                 return true;
             });
 
-            // Default rate filter change handlers
-            $('#defaultCountryFilter').on('change', function() {
-                populateServiceDropdown(document.getElementById('defaultServiceFilter'), this.value);
-                document.getElementById('defaultServiceFilter').value = '';
+            // Default rate filter change handlers — Service FIRST, then Country.
+            $('#defaultServiceFilter').on('change', function() {
+                populateDefaultCountryOptions(this.value, '');
+                document.getElementById('defaultCountryFilter').value = '';
                 defaultRateTable.draw();
             });
-            $('#defaultServiceFilter').on('change', function() {
+            $('#defaultCountryFilter').on('change', function() {
                 defaultRateTable.draw();
             });
             $('#defaultClearFilter').on('click', function() {
-                document.getElementById('defaultCountryFilter').value = '';
-                populateServiceDropdown(document.getElementById('defaultServiceFilter'), '');
                 document.getElementById('defaultServiceFilter').value = '';
+                populateDefaultCountryOptions('', '');
+                document.getElementById('defaultCountryFilter').value = '';
                 defaultRateTable.draw();
             });
 
@@ -1236,6 +1253,75 @@
                 date.setHours(0, 0, 0, 0);
                 date.setDate(date.getDate() + days);
                 return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+            }
+
+            // ===== Default Rate tab filters — Service FIRST, then Country =====
+            // Same DISTINCT source (SELECT DISTINCT api_provider, service_code
+            // FROM courier_services). Country options are that service's
+            // countries, shown as Name (CODE).
+            function defaultTabGroupKey(s) {
+                return ((s.api_provider || '') + '||' + (s.service_code || ''))
+                    .toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+
+            function populateDefaultServiceGroups(preselectKey) {
+                var selectEl = document.getElementById('defaultServiceFilter');
+                if (!selectEl) return;
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                var seen = {};
+                var opts = [];
+                allServices.forEach(function(s) {
+                    if (!s.api_provider && !s.service_code) return;
+                    var key = defaultTabGroupKey(s);
+                    if (!key || key === '||' || seen[key]) return;
+                    seen[key] = true;
+                    opts.push({ key: key, label: bulkServiceDisplayName(s) });
+                });
+                opts.sort(function(a, b) { return a.label.localeCompare(b.label); });
+                opts.forEach(function(o) {
+                    var opt = document.createElement('option');
+                    opt.value = o.key;
+                    opt.textContent = o.label;
+                    selectEl.appendChild(opt);
+                });
+                if (preselectKey) selectEl.value = preselectKey;
+            }
+
+            function populateDefaultCountryOptions(serviceKey, preselectCountry) {
+                var selectEl = document.getElementById('defaultCountryFilter');
+                if (!selectEl) return;
+                while (selectEl.options.length > 1) { selectEl.remove(1); }
+                if (!serviceKey) {
+                    (bulkDestinations || []).slice().sort(function(a, b) {
+                        return (a.name || '').localeCompare(b.name || '');
+                    }).forEach(function(d) {
+                        var code = d.country_code || d.code;
+                        if (!code) return;
+                        var opt = document.createElement('option');
+                        opt.value = code;
+                        opt.textContent = d.name + ' (' + code + ')';
+                        selectEl.appendChild(opt);
+                    });
+                } else {
+                    var seenCanonical = {};
+                    var mapped = [];
+                    allServices.forEach(function(s) {
+                        if (defaultTabGroupKey(s) !== serviceKey || !s.country) return;
+                        var canonical = bulkCanonicalCountry(s.country);
+                        var dedupeKey = (canonical || s.country || '').toLowerCase().trim();
+                        if (!dedupeKey || seenCanonical[dedupeKey]) return;
+                        seenCanonical[dedupeKey] = true;
+                        mapped.push({ canonical: canonical, name: bulkCountryName(s.country) });
+                    });
+                    mapped.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+                    mapped.forEach(function(m) {
+                        var opt = document.createElement('option');
+                        opt.value = m.canonical;
+                        opt.textContent = m.name + ' (' + m.canonical + ')';
+                        selectEl.appendChild(opt);
+                    });
+                }
+                if (preselectCountry) selectEl.value = preselectCountry;
             }
 
             // ===== Customer Rate tab filters — Service FIRST, then Country =====
