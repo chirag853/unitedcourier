@@ -5784,10 +5784,12 @@ class AdminController extends Controller
      * Multi-country sample in vertical format: Country, Weight Start,
      * Weight End, Zone No, Price, Fuel Charge, Fuel %, GST %. One row per
      * (country, weight, zone) with example rows pre-filled per zone.
-     * Existing default rates are pre-filled where available. The upload
-     * parser reads the Country + Zone No columns and applies each row only
-     * to its matching target (files without the Country column are still
-     * replicated to every target as before).
+     * Countries without any configured zones get example rows with a null
+     * (empty) Zone No instead of per-zone rows. Existing default rates are
+     * pre-filled where available. The upload parser reads the Country +
+     * Zone No columns and applies each row only to its matching target
+     * (files without the Country column are still replicated to every
+     * target as before).
      */
     private function downloadMultiCountryRateSample(array $targets, Request $request)
     {
@@ -5816,6 +5818,30 @@ class AdminController extends Controller
             $sid = (int) $target['service_id'];
             $cc = trim((string) $target['country']);
             $sampleZoneNos = $withoutZone ? [0] : $zoneNos;
+            // Countries without any configured zones (in the selected zone
+            // set) get example rows with a null (empty) Zone No instead of
+            // per-zone rows. On upload those rows import as zone-free (0).
+            $sampleDestId = $this->destinationIdForCountry($cc);
+            $sampleHasZones = $withoutZone ? true : false;
+            if (!$withoutZone && $sampleDestId) {
+                $sampleHasZones = \App\Models\Zone::where('destination_id', $sampleDestId)
+                    ->whereIn('zone_number_testing', $zoneNos)
+                    ->where(function ($q) use ($sid) {
+                        $q->whereNull('service_id')->orWhere('service_id', $sid);
+                    })
+                    ->exists();
+            }
+            if (!$withoutZone && !$sampleHasZones) {
+                foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
+                    $values = [$cc, $range[0], $range[1], '', '', '', '', ''];
+                    foreach ($values as $colIdx => $value) {
+                        $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+                        $sheet->setCellValue($columnLetter . $row, $value);
+                    }
+                    $row++;
+                }
+                continue;
+            }
             foreach ($sampleZoneNos as $zoneNo) {
                 $rates = \App\Models\CourierRate::where('customer_id', 0)
                     ->where('service_id', $sid)
@@ -5880,7 +5906,9 @@ class AdminController extends Controller
         // Supports BOTH legacy single-target (service_id + country) and the
         // new service-first multi-country flow (service_ids[] + countries[]).
         // The frontend sends one service_ids[] + countries[] pair per checked
-        // country — the same Excel file is replicated to every target.
+        // country. Rows with a Country column go only to their matching
+        // target (empty Zone No on a zone-less target imports as zone-free);
+        // rows without it are replicated to every target.
         $validated = $request->validate([
             'service_id'   => 'nullable|integer|exists:courier_services,id',
             'service_ids'  => 'nullable|array|min:1',
@@ -6187,6 +6215,28 @@ class AdminController extends Controller
         // the file.
         $propagatedInUpload = [];
 
+        // Multi-country file: when THIS target has no configured zones (in
+        // the selected zone set), rows with an empty Zone No import as
+        // zone-free (0) instead of being skipped. Zoned targets keep the
+        // strict behavior (empty zone = invalid row).
+        $targetNoZone = false;
+        if (!$withoutZone && $countryCol !== null) {
+            $targetDestId = $target['destination_id'] ?? null;
+            if (!$targetDestId) {
+                $targetNoZone = true;
+            } else {
+                $zoneScope = !empty($selectedZoneNos) ? $selectedZoneNos : null;
+                $zoneCheck = \App\Models\Zone::where('destination_id', $targetDestId);
+                if ($zoneScope) {
+                    $zoneCheck->whereIn('zone_number_testing', $zoneScope);
+                }
+                $zoneCheck->where(function ($qq) use ($currentServiceId) {
+                    $qq->whereNull('service_id')->orWhere('service_id', $currentServiceId);
+                });
+                $targetNoZone = !$zoneCheck->exists();
+            }
+        }
+
         foreach ($dataRows as $row) {
             $wtStart = isset($row[$wtStartCol]) ? trim((string) $row[$wtStartCol]) : '';
             $wtEnd   = isset($row[$wtEndCol]) ? trim((string) $row[$wtEndCol]) : '';
@@ -6213,6 +6263,12 @@ class AdminController extends Controller
                 if ($rowCountry !== '' && $rowCountry !== $targetCountry) {
                     continue;
                 }
+            }
+
+            // No-zone target: an empty (null) Zone No means zone-free (0).
+            // Zoned targets keep the strict behavior below (empty = invalid).
+            if ($zoneNo === '' && $targetNoZone) {
+                $zoneNo = '0';
             }
 
             // Skip completely empty rows.
@@ -6245,9 +6301,13 @@ class AdminController extends Controller
             }
             $zoneNoInt = (int) $zoneNo;
 
+            // Zone must be one of the zones explicitly checked in the modal.
+            // Exception: zone 0 rows of a zone-less target (empty Zone No in
+            // the sample) are always allowed — they import as zone-free.
             if (
                 !empty($selectedZoneNos)
                 && !in_array($zoneNoInt, $selectedZoneNos, true)
+                && !($zoneNoInt === 0 && $targetNoZone)
             ) {
                 if ($countryCol !== null || $isFirstTarget) $skipped++;
                 continue;
@@ -6453,7 +6513,16 @@ class AdminController extends Controller
     public function addZone()
     {
         $destinations = \App\Models\Destination::orderBy('name')->get();
-        $services = \App\Models\CourierService::orderBy('real_name')->get();
+        $services = \App\Models\CourierService::orderBy('api_provider')
+            ->orderBy('service_code')
+            ->orderBy('country')
+            ->get();
+
+        // Service dropdown source (same query as manage-rate / add-country):
+        //   SELECT DISTINCT api_provider, service_code FROM `courier_services`
+        $serviceOptions = \Illuminate\Support\Facades\DB::select(
+            'SELECT DISTINCT api_provider, service_code FROM `courier_services` ORDER BY api_provider, service_code'
+        );
 
         // Build a service_id => destination_id map so the view can filter the
         // Service dropdown by the selected Country without extra DB queries.
@@ -6472,7 +6541,22 @@ class AdminController extends Controller
             $serviceDestMap[$svc->id] = $destinationIdByCountryKey[strtolower(trim((string) $svc->country))] ?? null;
         }
 
-        return view('admin.add-zone', compact('destinations', 'services', 'serviceDestMap'));
+        // Coverage map for the DISTINCT dropdown: "api||code" (lower-cased)
+        // => [destination_ids...]. The frontend shows only the pairs that
+        // exist for the selected country.
+        $serviceCoverage = [];
+        foreach ($services as $svc) {
+            $key = strtolower(trim((string) $svc->api_provider)) . '||' . strtolower(trim((string) $svc->service_code));
+            if ($key === '||') {
+                continue;
+            }
+            $destId = $destinationIdByCountryKey[strtolower(trim((string) $svc->country))] ?? null;
+            if ($destId && !in_array($destId, $serviceCoverage[$key] ?? [], true)) {
+                $serviceCoverage[$key][] = $destId;
+            }
+        }
+
+        return view('admin.add-zone', compact('destinations', 'services', 'serviceDestMap', 'serviceOptions', 'serviceCoverage'));
     }
 
     /**
@@ -6484,18 +6568,92 @@ class AdminController extends Controller
      * and the shared zones (service_id IS NULL) are returned, matching the
      * semantics used everywhere else in the rate system.
      */
+    /**
+     * Resolve a DISTINCT service group ("api_provider||service_code") to the
+     * exact courier_services clone for a destination.
+     *
+     * The add-zone dropdowns list DISTINCT pairs (same query as manage-rate),
+     * while zones/rates reference per-country clone rows. Since the country
+     * is always selected first on this page, the pair maps to exactly one
+     * clone (first by id when duplicates exist). A legacy single service_id
+     * is accepted as-is for backward compatibility.
+     *
+     * @return int|null The clone service id, or null when unavailable.
+     */
+    private function resolveZoneServiceId(?string $serviceKey, $serviceIdFallback, int $destinationId): ?int
+    {
+        if (!empty($serviceIdFallback)
+            && \App\Models\CourierService::whereKey((int) $serviceIdFallback)->exists()) {
+            return (int) $serviceIdFallback;
+        }
+        if (empty($serviceKey) || !str_contains($serviceKey, '||')) {
+            return null;
+        }
+        [$api, $code] = explode('||', $serviceKey, 2);
+        $candidates = \App\Models\CourierService::whereRaw('LOWER(api_provider) = ?', [strtolower(trim((string) $api))])
+            ->whereRaw('LOWER(service_code) = ?', [strtolower(trim((string) $code))])
+            ->orderBy('id')
+            ->get();
+        foreach ($candidates as $svc) {
+            if ($this->destinationIdForCountry($svc->country) === $destinationId) {
+                return (int) $svc->id;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Expand a DISTINCT service group ("api_provider||service_code") to every
+     * clone service id that belongs to a destination (for the Zone List tab).
+     *
+     * @return int[]
+     */
+    private function expandZoneServiceIds(?string $serviceKey, int $destinationId): array
+    {
+        if (empty($serviceKey) || !str_contains($serviceKey, '||')) {
+            return [];
+        }
+        [$api, $code] = explode('||', $serviceKey, 2);
+        $ids = [];
+        $candidates = \App\Models\CourierService::whereRaw('LOWER(api_provider) = ?', [strtolower(trim((string) $api))])
+            ->whereRaw('LOWER(service_code) = ?', [strtolower(trim((string) $code))])
+            ->orderBy('id')
+            ->get(['id', 'country']);
+        foreach ($candidates as $svc) {
+            if ($this->destinationIdForCountry($svc->country) === $destinationId) {
+                $ids[] = (int) $svc->id;
+            }
+        }
+        return $ids;
+    }
+
     public function listZones(Request $request)
     {
         $validated = $request->validate([
             'destination_id' => 'required|integer|exists:destinations,id',
             'service_id'     => 'nullable|integer|exists:courier_services,id',
+            'service_key'    => 'nullable|string|max:255',
         ]);
+
+        // DISTINCT group (service_key) expands to every clone of that pair
+        // for the destination; a legacy single service_id still works.
+        $serviceIds = [];
+        if (!empty($validated['service_id'])) {
+            $serviceIds[] = (int) $validated['service_id'];
+        }
+        if (!empty($validated['service_key'])) {
+            $serviceIds = array_merge(
+                $serviceIds,
+                $this->expandZoneServiceIds($validated['service_key'], (int) $validated['destination_id'])
+            );
+        }
+        $serviceIds = array_values(array_unique($serviceIds));
 
         $zones = \App\Models\Zone::with('service:id,method,service_code')
             ->where('destination_id', $validated['destination_id'])
-            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
-                $q->where(function ($query) use ($validated) {
-                    $query->where('service_id', $validated['service_id'])
+            ->when(!empty($serviceIds), function ($q) use ($serviceIds) {
+                $q->where(function ($query) use ($serviceIds) {
+                    $query->whereIn('service_id', $serviceIds)
                         ->orWhereNull('service_id');
                 });
             })
@@ -6558,11 +6716,27 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
-            'service_id'     => 'required|integer|exists:courier_services,id',
+            'service_id'     => 'nullable|integer|exists:courier_services,id',
+            // DISTINCT pair from the service-first dropdown
+            // (api_provider||service_code, same query as manage-rate).
+            'service_key'    => 'nullable|string|max:255',
             'entries'        => 'required|array|min:1',
             'entries.*.zone_name' => 'required|string|max:100',
             'entries.*.zone_code' => 'nullable|string|max:10',
         ]);
+
+        // The dropdown posts a DISTINCT pair; resolve it to the exact clone
+        // for the selected country (a legacy single service_id still works).
+        $serviceId = $this->resolveZoneServiceId(
+            $validated['service_key'] ?? null,
+            $validated['service_id'] ?? null,
+            (int) $validated['destination_id']
+        );
+        if (!$serviceId) {
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', 'The selected service is not available for the selected country. Please re-select the service and country.');
+        }
 
         $created = 0;
         $skipped = 0;
@@ -6584,8 +6758,8 @@ class AdminController extends Controller
         //   + category + service.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
-            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
-                $q->where('service_id', $validated['service_id']);
+            ->when(!empty($serviceId), function ($q) use ($serviceId) {
+                $q->where('service_id', $serviceId);
             }, function ($q) {
                 $q->whereNull('service_id');
             })
@@ -6652,7 +6826,7 @@ class AdminController extends Controller
 
             \App\Models\Zone::create([
                 'destination_id'      => $validated['destination_id'],
-                'service_id'          => $validated['service_id'] ?? null,
+                'service_id'          => $serviceId,
                 'zone_category'       => $validated['zone_category'],
                 'zone_number'         => $validated['zone_number'],
                 'zone_number_testing' => $validated['zone_number'],
@@ -6779,9 +6953,25 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'zone_category'  => 'required|in:state,zipcode,city',
             'zone_number'    => 'required|integer|min:0|max:13',
-            'service_id'     => 'required|integer|exists:courier_services,id',
+            'service_id'     => 'nullable|integer|exists:courier_services,id',
+            // DISTINCT pair from the service-first dropdown
+            // (api_provider||service_code, same query as manage-rate).
+            'service_key'    => 'nullable|string|max:255',
             'zone_file'      => 'required|file|mimes:xlsx,xls,csv|max:5120',
         ]);
+
+        // The dropdown posts a DISTINCT pair; resolve it to the exact clone
+        // for the selected country (a legacy single service_id still works).
+        $serviceId = $this->resolveZoneServiceId(
+            $validated['service_key'] ?? null,
+            $validated['service_id'] ?? null,
+            (int) $validated['destination_id']
+        );
+        if (!$serviceId) {
+            return redirect()
+                ->route('admin.add-zone')
+                ->with('error', 'The selected service is not available for the selected country. Please re-select the service and country.');
+        }
 
         $file = $request->file('zone_file');
         $filePath = $file->getRealPath();
@@ -6872,14 +7062,14 @@ class AdminController extends Controller
         //
         // CODE UNIQUENESS SCOPE:
         //   zone_code uniqueness is scoped to the SELECTED COUNTRY +
-        //   SELECTED SERVICE only, for every category (state, zipcode, city).
+        //   SELECTED SERVICE only, for every category (state,zipcode, city).
         //   The same code may exist in different countries or under different
         //   services; it is only a duplicate within the same selected country
         //   + category + service.
         $existingZones = \App\Models\Zone::where('destination_id', $validated['destination_id'])
             ->where('zone_category', $validated['zone_category'])
-            ->when(!empty($validated['service_id']), function ($q) use ($validated) {
-                $q->where('service_id', $validated['service_id']);
+            ->when(!empty($serviceId), function ($q) use ($serviceId) {
+                $q->where('service_id', $serviceId);
             }, function ($q) {
                 $q->whereNull('service_id');
             })
@@ -6974,7 +7164,7 @@ class AdminController extends Controller
 
             \App\Models\Zone::create([
                 'destination_id'      => $validated['destination_id'],
-                'service_id'          => $validated['service_id'] ?? null,
+                'service_id'          => $serviceId,
                 'zone_category'       => $validated['zone_category'],
                 'zone_number'         => $validated['zone_number'],
                 'zone_number_testing' => $validated['zone_number'],

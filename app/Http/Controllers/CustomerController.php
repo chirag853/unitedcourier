@@ -4972,7 +4972,8 @@ class CustomerController extends Controller
             // rates). The query below is fully parameterized by
             // $destinationCountry, so adding 'AUS' here makes the
             // ARAMEX GPX ALL IN service rates resolve correctly.
-            if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE' || $destinationCountry === 'BD' || $destinationCountry === 'ZW') {
+            // if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE' || $destinationCountry === 'BD' || $destinationCountry === 'ZW') {
+            else{
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;

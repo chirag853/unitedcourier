@@ -246,32 +246,28 @@
                                 <form id="addZoneForm" method="POST" action="{{ route('admin.add-zone.store') }}">
                                     @csrf
 
-                                    <!-- Step 1: Country & Service -->
+                                    <!-- Step 1: Service & Country (service FIRST) -->
                                     <div class="mb-4">
-                                        <h6 class="mb-3"><span class="step-badge">1</span>Select Country & Service</h6>
+                                        <h6 class="mb-3"><span class="step-badge">1</span>Select Service & Country</h6>
                                         <div class="row g-3">
                                             <div class="col-md-6">
-                                                <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
-                                                <select class="form-select" id="destination_id" name="destination_id" required>
-                                                    <option value="">— Select Country —</option>
-                                                    @foreach($destinations as $dest)
-                                                        <option value="{{ $dest->id }}">{{ $dest->name }} ({{ $dest->code }})</option>
-                                                    @endforeach
-                                                </select>
-                                                <small class="text-muted">Choose the country these zones belong to. Need a new country? <a href="{{ route('admin.add-country') }}">Add Country</a>.</small>
-                                            </div>
-                                            <div class="col-md-6">
                                                 <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
-                                                <select class="form-select" id="service_id" name="service_id" required>
+                                                <select class="form-select" id="service_id" name="service_key" required>
                                                     <option value="">— Select Service —</option>
-                                                    @foreach($services as $svc)
-                                                        <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
-                                                            {{ $svc->method ?? ('Service #' . $svc->id) }}
-                                                            @if(!empty($svc->service_code)) - ({{ $svc->service_code }}) @endif
+                                                    @foreach($serviceOptions as $opt)
+                                                        <option value="{{ ($opt->api_provider ?? '') . '||' . ($opt->service_code ?? '') }}">
+                                                            {{ $opt->api_provider ?? '—' }} — {{ $opt->service_code ?? '—' }}
                                                         </option>
                                                     @endforeach
                                                 </select>
-                                                <small class="text-muted">Only services for the selected country are shown. Select a courier service for these zones.</small>
+                                                <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
+                                                <select class="form-select" id="destination_id" name="destination_id" required disabled>
+                                                    <option value="">— Select Service First —</option>
+                                                </select>
+                                                <small class="text-muted">Choose the country these zones belong to. Need a new country? <a href="{{ route('admin.add-country') }}">Add Country</a>.</small>
                                             </div>
                                         </div>
                                     </div>
@@ -361,18 +357,27 @@
                             <div class="card-body">
                                 <div class="alert alert-info">
                                     <i class="ti ti-info-circle me-1"></i>
-                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>A single zone name can have multiple zone codes</strong> — repeat the same zone name on multiple rows with a different zone code each time. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country <strong>and the selected Service</strong> (if a Service is chosen). <strong>Tip:</strong> select the Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. The Country, Zone Category, Zone Number and Service you select below will be applied to <em>every</em> row in the file.
+                                    Upload an Excel (.xlsx) or CSV file to add many zones at once. The file must have a header row with <strong>Zone Name</strong> (required) and <strong>Zone Code</strong> (optional). <strong>A single zone name can have multiple zone codes</strong> — repeat the same zone name on multiple rows with a different zone code each time. <strong>For the "Zipcode" category, a zone code must be unique across <em>all</em> countries</strong> (it is used to look up rates globally), so a zipcode code that already exists in any country will be skipped as a duplicate. For "State"/"City", duplicate codes are only checked within the selected country <strong>and the selected Service</strong> (if a Service is chosen). <strong>Tip:</strong> select the Service, Country and Zone Category below first, then click <em>Download Sample Format</em> — the sample will include the zones that already exist for that country/category so you can see what's already there and avoid duplicates. The Service, Country, Zone Category and Zone Number you select below will be applied to <em>every</em> row in the file.
                                 </div>
                                 <form id="uploadZoneForm" method="POST" action="{{ route('admin.add-zone.upload') }}" enctype="multipart/form-data">
                                     @csrf
                                     <div class="row g-3 align-items-end">
                                         <div class="col-md-3">
-                                            <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
-                                            <select class="form-select" id="upload_destination_id" name="destination_id" required>
-                                                <option value="">— Select Country —</option>
-                                                @foreach($destinations as $dest)
-                                                    <option value="{{ $dest->id }}">{{ $dest->name }} ({{ $dest->code }})</option>
+                                            <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="upload_service_id" name="service_key" required>
+                                                <option value="">— Select Service —</option>
+                                                @foreach($serviceOptions as $opt)
+                                                    <option value="{{ ($opt->api_provider ?? '') . '||' . ($opt->service_code ?? '') }}">
+                                                        {{ $opt->api_provider ?? '—' }} — {{ $opt->service_code ?? '—' }}
+                                                    </option>
                                                 @endforeach
+                                            </select>
+                                            <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="upload_destination_id" name="destination_id" required disabled>
+                                                <option value="">— Select Service First —</option>
                                             </select>
                                         </div>
                                         <div class="col-md-2">
@@ -391,18 +396,6 @@
                                                 @for($i = 0; $i <= 13; $i++)
                                                     <option value="{{ $i }}">{{ $i }}</option>
                                                 @endfor
-                                            </select>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label fw-bold">Service <span class="text-danger">*</span></label>
-                                            <select class="form-select" id="upload_service_id" name="service_id" required>
-                                                <option value="">— Select Service —</option>
-                                                @foreach($services as $svc)
-                                                    <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
-                                                        {{ $svc->method ?? ('Service #' . $svc->id) }}
-                                                        @if(!empty($svc->service_code)) [{{ $svc->service_code }}] @endif
-                                                    </option>
-                                                @endforeach
                                             </select>
                                         </div>
                                         <div class="col-md-2">
@@ -429,6 +422,21 @@
                         <div class="zl-filter-card p-4 mb-3">
                             <div class="row g-3 align-items-end">
                                 <div class="col-lg-4 col-md-6">
+                                    <label class="form-label fw-bold" for="list_service_id">
+                                        <i class="ti ti-truck-delivery me-1 text-primary"></i>Service
+                                    </label>
+
+                                    <select class="form-select" id="list_service_id">
+                                        <option value="">— All Services —</option>
+                                        @foreach($serviceOptions as $opt)
+                                            <option value="{{ ($opt->api_provider ?? '') . '||' . ($opt->service_code ?? '') }}">
+                                                {{ $opt->api_provider ?? '—' }} — {{ $opt->service_code ?? '—' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                </div>
+                                <div class="col-lg-4 col-md-6">
                                     <label class="form-label fw-bold" for="list_destination_id">
                                         <i class="ti ti-world me-1 text-primary"></i>Country <span class="text-danger">*</span>
                                     </label>
@@ -438,22 +446,6 @@
                                             <option value="{{ $dest->id }}">{{ $dest->name }} ({{ $dest->code }})</option>
                                         @endforeach
                                     </select>
-                                </div>
-                                <div class="col-lg-4 col-md-6">
-                                    <label class="form-label fw-bold" for="list_service_id">
-                                        <i class="ti ti-truck-delivery me-1 text-primary"></i>Service
-                                    </label>
-                                    
-                                    <select class="form-select" id="list_service_id">
-                                        <option value="">— All Services —</option>
-                                        @foreach($services as $svc)
-                                            <option value="{{ $svc->id }}" data-country-id="{{ $serviceDestMap[$svc->id] ?? '' }}">
-                                                {{ $svc->method ?? ('Service #' . $svc->id) }}
-                                                @if(!empty($svc->service_code)) ({{ $svc->service_code }}) @endif
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    
                                 </div>
                                 <div class="col-lg-4 d-flex gap-2">
                                     <button type="button" class="btn btn-primary flex-fill" id="zoneListLoadBtn">
@@ -592,6 +584,49 @@
         $(document).ready(function() {
             var rowCounter = 0;
 
+            // DISTINCT service coverage (same query as manage-rate):
+            // "api_provider||service_code" (lower-cased) => [destination_ids].
+            // Options in the Service dropdowns carry the group key as value.
+            var serviceCoverage = @json($serviceCoverage ?? []);
+            @php
+                $destinationsForJs = $destinations->map(function($d) {
+                    return [
+                        'id' => $d->id,
+                        'name' => $d->name,
+                        'code' => $d->code,
+                        'country_code' => $d->country_code,
+                    ];
+                })->values();
+            @endphp
+            var allDestinations = @json($destinationsForJs);
+            function serviceGroupKey(value) {
+                return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+            // Fill a Country select with the destinations covered by a service
+            // group (or every destination when no service is picked). Options
+            // render as "Name (CODE)", same as the server-side lists.
+            function populateCountrySelect($select, serviceKey, placeholder) {
+                $select.empty().append($('<option>', {
+                    value: '',
+                    text: placeholder || '— Select Country —'
+                }));
+                var ids = serviceKey ? (serviceCoverage[serviceGroupKey(serviceKey)] || []) : null;
+                var list = [];
+                (allDestinations || []).forEach(function(d) {
+                    if (!ids || ids.map(String).indexOf(String(d.id)) !== -1) {
+                        list.push(d);
+                    }
+                });
+                list.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+                list.forEach(function(d) {
+                    var code = d.country_code || d.code || '';
+                    $select.append($('<option>', {
+                        value: d.id,
+                        text: d.name + (code ? ' (' + code + ')' : '')
+                    }));
+                });
+            }
+
             // Add a new zone entry row.
             function addRow(name, code) {
                 rowCounter++;
@@ -617,62 +652,43 @@
                 });
             }
 
-            // Show only the services that belong to the selected country.
-            // Each option carries a data-country-id attribute (the matching
-            // destination id), populated server-side via $serviceDestMap.
-            function filterServicesByCountry(countryId, $serviceSelect) {
-                $serviceSelect.find('option').each(function() {
-                    var $opt = $(this);
-                    if ($opt.val() === '') {
-                        $opt.show(); // keep the "— No Service —" placeholder
-                        return;
-                    }
-                    if (String($opt.data('country-id')) === String(countryId)) {
-                        $opt.show();
-                    } else {
-                        $opt.hide();
-                    }
-                });
-            }
+            // Step 1 (service FIRST): when a service is selected, fill the
+            // Country dropdown with that service's countries and enable it.
+            // Step 2 (category) appears only after a country is picked.
+            $('#service_id').on('change', function() {
+                var key = this.value;
+                populateCountrySelect($('#destination_id'), key, key ? '— Select Country —' : '— Select Service First —');
+                $('#destination_id').prop('disabled', !key);
+                $('#categorySection').hide();
+                $('#entriesSection').hide();
+                $('#submitSection').hide();
+                $('#zone_category').val('');
+                $('#zone_number').val('');
+            });
 
-            function showAllServices($serviceSelect) {
-                $serviceSelect.find('option').each(function() {
-                    $(this).show();
-                });
-            }
-
-            // Step 1 -> Step 2: when a country is selected, reveal the category
-            // section and filter the Service dropdown to that country only.
             $('#destination_id').on('change', function() {
-                if (this.value) {
+                if (this.value && $('#service_id').val()) {
                     $('#categorySection').show();
-                    $('#service_id').val('');
-                    filterServicesByCountry(this.value, $('#service_id'));
                 } else {
                     $('#categorySection').hide();
                     $('#entriesSection').hide();
                     $('#submitSection').hide();
                     $('#zone_category').val('');
                     $('#zone_number').val('');
-                    $('#service_id').val('');
-                    showAllServices($('#service_id'));
                 }
             });
 
-            // Keep the bulk upload form's Service dropdown in sync with its
-            // Country selection.
-            $('#upload_destination_id').on('change', function() {
-                $('#upload_service_id').val('');
-                if (this.value) {
-                    filterServicesByCountry(this.value, $('#upload_service_id'));
-                } else {
-                    showAllServices($('#upload_service_id'));
-                }
+            // Bulk upload form (service FIRST): fill its Country dropdown
+            // with the selected service's countries.
+            $('#upload_service_id').on('change', function() {
+                var key = this.value;
+                populateCountrySelect($('#upload_destination_id'), key, key ? '— Select Country —' : '— Select Service First —');
+                $('#upload_destination_id').prop('disabled', !key);
             });
 
             // Step 2 -> Step 3: when category is selected, reveal entries and add the first row.
             $('#zone_category').on('change', function() {
-                if (this.value && $('#destination_id').val()) {
+                if (this.value && $('#destination_id').val() && $('#service_id').val()) {
                     $('#entriesSection').show();
                     $('#submitSection').show();
                     if ($('#zoneEntriesBody tr').length === 0) {
@@ -710,8 +726,7 @@
                 $('#entriesSection').hide();
                 $('#submitSection').hide();
                 $('#zoneEntriesBody').empty();
-                $('#service_id').val('');
-                showAllServices($('#service_id'));
+                $('#service_id').val('').trigger('change');
             });
 
             // Form submit guard: ensure at least one non-empty entry exists.
@@ -763,21 +778,18 @@
             // Currently active category chip: 'all' | 'state' | 'zipcode' | 'city'.
             var zoneListActiveCat = 'all';
 
-            // Only show the services that belong to the selected country in the
-            // Zone List tab's Service dropdown.
-            function filterZoneListServices(countryId) {
-                $('#list_service_id option').each(function() {
-                    var $opt = $(this);
-                    if ($opt.val() === '') { // "All Services"
-                        $opt.show();
-                        return;
-                    }
-                    if (String($opt.data('country-id')) === String(countryId)) {
-                        $opt.show();
-                    } else {
-                        $opt.hide();
-                    }
+            // Zone List tab (service FIRST): rebuild the Country dropdown
+            // with the selected service's countries. Keeps the previous
+            // country when it is still covered, otherwise resets it.
+            function refreshZoneListCountries() {
+                var key = $('#list_service_id').val();
+                var prev = $('#list_destination_id').val();
+                populateCountrySelect($('#list_destination_id'), key, '— Select Country —');
+                var stillThere = false;
+                $('#list_destination_id option').each(function() {
+                    if (String(this.value) === String(prev) && prev) stillThere = true;
                 });
+                $('#list_destination_id').val(stillThere ? prev : '');
             }
 
             // Escape a value safely for use inside HTML strings.
@@ -920,15 +932,15 @@
                 if (!destId) {
                     zoneListData = [];
                     showZoneListEmpty('No zones to show yet',
-                        'Select a country and optionally a service above, then click "Show Zones" to browse all the zones configured for that destination.');
+                        'Select a service and a country above, then click "Show Zones" to browse all the zones configured for that destination.');
                     return;
                 }
 
                 var $btn = $('#zoneListLoadBtn');
-                var serviceId = $('#list_service_id').val();
+                var serviceKey = $('#list_service_id').val();
                 var params = { destination_id: destId };
-                if (serviceId) {
-                    params.service_id = serviceId;
+                if (serviceKey) {
+                    params.service_key = serviceKey;
                 }
 
                 // Reset the client-side search & category for the new data set.
@@ -946,7 +958,7 @@
                         zoneListData = res.zones || [];
                         if (zoneListData.length === 0) {
                             showZoneListEmpty('No zones found',
-                                'No zones are configured for the selected country' + (serviceId ? ' and service' : '') +
+                                'No zones are configured for the selected country' + (serviceKey ? ' and service' : '') +
                                 '. Add some zones using the "Add Zones" tab.');
                         } else {
                             hideZoneListEmpty();
@@ -984,25 +996,23 @@
                 renderZoneList();
             });
 
-            // When a country is picked in the Zone List tab, restrict the
-            // Service dropdown to that country's services and auto-load the
-            // zone list straight away.
-            $('#list_destination_id').on('change', function() {
-                $('#list_service_id').val('');
-                if (this.value) {
-                    filterZoneListServices(this.value);
-                    loadZoneList();
-                } else {
-                    showAllServices($('#list_service_id'));
-                    zoneListData = [];
-                    showZoneListEmpty('No zones to show yet',
-                        'Select a country and optionally a service above, then click "Show Zones" to browse all the zones configured for that destination.');
-                }
+            // When a service is picked in the Zone List tab, restrict the
+            // Country dropdown to that service's countries (keeping the
+            // previous country when still covered) and reload the list.
+            $('#list_service_id').on('change', function() {
+                refreshZoneListCountries();
+                loadZoneList();
             });
 
-            // When a service is selected, reload the list for that service.
-            $('#list_service_id').on('change', function() {
-                loadZoneList();
+            // When a country is picked, auto-load the zone list straight away.
+            $('#list_destination_id').on('change', function() {
+                if (this.value) {
+                    loadZoneList();
+                } else {
+                    zoneListData = [];
+                    showZoneListEmpty('No zones to show yet',
+                        'Select a service and a country above, then click "Show Zones" to browse all the zones configured for that destination.');
+                }
             });
 
             // Manual trigger buttons.
