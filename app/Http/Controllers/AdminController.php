@@ -5242,6 +5242,10 @@ class AdminController extends Controller
         $serviceCodeCol = $findColumn(['service code', 'service_code', 'servicecode']);
         $networkCol = $findColumn(['network']);
         $methodCol = $findColumn(['method']);
+        // Country column (present in current exports). When filled, each row
+        // is matched to its exact country clone so same-code rows for
+        // different countries (e.g. AF vs AL) never collide.
+        $fileCountryCol = $findColumn(['country', 'country_code', 'country code', 'destination']);
 
         // Export now contains Customer Code (no Customer ID) + Country.
         // Accept EITHER identifier for backward compatibility with old files.
@@ -5309,7 +5313,7 @@ class AdminController extends Controller
         $skipped = 0;
         $notFound = 0;
 
-        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $customerCodeCol, $codeToIdAll, $serviceCodeCol, $networkCol, $methodCol, $validated, $filterApiProvider, $filterServiceCode, $filterServiceId, &$updated, &$skipped, &$notFound) {
+        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $customerCodeCol, $fileCountryCol, $codeToIdAll, $serviceCodeCol, $networkCol, $methodCol, $validated, $filterApiProvider, $filterServiceCode, $filterServiceId, &$updated, &$skipped, &$notFound) {
             $normalizeValue = function ($value) {
                 return strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
             };
@@ -5352,6 +5356,21 @@ class AdminController extends Controller
                     $method = $normalizeValue($service->method);
                     if ($network !== '' && $method !== '') {
                         $rateLookup['method:' . $existingRate->customer_id . '|' . $network . '|' . $method . '|' . $weightKey] = $existingRate;
+                    }
+                    // Country-scoped keys so same-code rows for different
+                    // countries (e.g. AF vs AL clones) resolve to their own
+                    // exact rate record instead of colliding on one key.
+                    $svcCountry = strtoupper(trim((string) ($service->country ?? '')));
+                    if ($svcCountry !== '') {
+                        foreach ([$service->service_code, $service->scode] as $code) {
+                            $code = $normalizeValue($code);
+                            if ($code !== '') {
+                                $rateLookup['ccode:' . $existingRate->customer_id . '|' . $svcCountry . '|' . $code . '|' . $weightKey] = $existingRate;
+                            }
+                        }
+                        if ($network !== '' && $method !== '') {
+                            $rateLookup['cmethod:' . $existingRate->customer_id . '|' . $svcCountry . '|' . $network . '|' . $method . '|' . $weightKey] = $existingRate;
+                        }
                     }
                 }
             }
@@ -5400,9 +5419,23 @@ class AdminController extends Controller
 
                 $weightKey = $normalizeNumber($wtStart) . '|'
                     . $normalizeNumber($wtEnd) . '|' . (int) $zoneNo;
+                // File country (upper-trimmed). When filled, the row matches
+                // its exact country clone; otherwise legacy behavior applies.
+                $fileCountry = '';
+                if ($fileCountryCol !== null && isset($row[$fileCountryCol])) {
+                    $fileCountry = strtoupper(trim((string) $row[$fileCountryCol]));
+                }
                 $rate = null;
                 if ($filterServiceId) {
                     $rate = $rateLookup['id:' . $customerId . '|' . $filterServiceId . '|' . $weightKey] ?? null;
+                } elseif ($fileCountry !== '') {
+                    $uploadedCode = $normalizeValue($serviceCode);
+                    $rate = $uploadedCode !== ''
+                        ? ($rateLookup['ccode:' . $customerId . '|' . $fileCountry . '|' . $uploadedCode . '|' . $weightKey] ?? null)
+                        : null;
+                    if (!$rate && $network !== '' && $method !== '') {
+                        $rate = $rateLookup['cmethod:' . $customerId . '|' . $fileCountry . '|' . $normalizeValue($network) . '|' . $normalizeValue($method) . '|' . $weightKey] ?? null;
+                    }
                 } else {
                     $uploadedCode = $normalizeValue($serviceCode);
                     $rate = $uploadedCode !== ''

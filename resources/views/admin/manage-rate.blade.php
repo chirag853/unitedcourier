@@ -218,6 +218,206 @@
             color: #6c757d;
             font-size: 13px;
         }
+
+        /* ================= Manage Rate premium layer ================= */
+        @keyframes mrFadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Hero header */
+        .mr-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 16px;
+            background: linear-gradient(115deg, #0a2a5e 0%, #0b5cd6 62%, #38bdf8 130%);
+            color: #fff;
+            box-shadow: 0 18px 40px -18px rgba(10, 42, 94, .55);
+            animation: mrFadeUp .5s ease both;
+        }
+        .mr-hero::before,
+        .mr-hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            border: 30px solid rgba(255, 255, 255, .07);
+        }
+        .mr-hero::before { width: 260px; height: 260px; top: -110px; right: -70px; }
+        .mr-hero::after { width: 170px; height: 170px; bottom: -80px; left: 32%; border-color: rgba(255, 255, 255, .05); }
+        .mr-hero-icon {
+            width: 54px;
+            height: 54px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .25);
+            flex-shrink: 0;
+        }
+        .mr-hero h4 { color: #fff; }
+        .mr-hero .text-muted { color: rgba(255, 255, 255, .72) !important; }
+        .mr-stat {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, .12);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 999px;
+            padding: 5px 14px 5px 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .mr-stat i {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, .18);
+            font-size: 14px;
+        }
+        .mr-hero .btn-success,
+        .mr-hero .btn-warning {
+            box-shadow: 0 8px 18px rgba(0, 0, 0, .25);
+            border: none;
+        }
+        .mr-hero .btn-icon {
+            background: rgba(255, 255, 255, .14);
+            border-color: rgba(255, 255, 255, .3) !important;
+            color: #fff !important;
+        }
+        /* Tabs */
+        #rateTabs {
+            gap: 8px;
+            border-bottom: none;
+            background: #f2f6fc;
+            border-radius: 14px;
+            padding: 6px;
+        }
+        #rateTabs .nav-link {
+            border: none;
+            border-radius: 10px;
+            color: #5b6b7f;
+            transition: all .18s ease;
+        }
+        #rateTabs .nav-link:hover { color: #0b5cd6; background: rgba(11, 92, 214, .07); }
+        #rateTabs .nav-link.active {
+            background: linear-gradient(115deg, #0a2a5e, #0b5cd6);
+            color: #fff;
+            box-shadow: 0 8px 18px -8px rgba(11, 92, 214, .6);
+        }
+        /* Entrance */
+        #rateTabsContent { animation: mrFadeUp .5s .1s ease both; }
+        /* Filter cards */
+        .mr-filter-card {
+            background: linear-gradient(160deg, #f6faff 0%, #ffffff 65%);
+            border: 1px solid #e3eaf3;
+            border-radius: 14px;
+            padding: 16px 18px;
+            box-shadow: 0 6px 18px -12px rgba(10, 42, 94, .25);
+        }
+        .mr-filter-card .form-label { color: #0a2a5e; }
+        /* Keep helper texts equal height so all dropdowns stay aligned */
+        .mr-filter-card small.text-muted { display: block; min-height: 36px; }
+        .mr-filter-card .form-select:focus,
+        .mr-filter-card .form-control:focus {
+            border-color: #0b5cd6;
+            box-shadow: 0 0 0 .2rem rgba(11, 92, 214, .15);
+        }
+        /* Tables */
+        #defaultRateTable thead th,
+        #customerRatesDataTable thead th {
+            background: linear-gradient(180deg, #0a2a5e, #14418f);
+            color: #fff;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            white-space: nowrap;
+            border: none !important;
+            padding: 11px 12px;
+        }
+        #defaultRateTable thead th:first-child,
+        #customerRatesDataTable thead th:first-child { border-radius: 10px 0 0 0; }
+        #defaultRateTable thead th:last-child,
+        #customerRatesDataTable thead th:last-child { border-radius: 0 10px 0 0; }
+        #defaultRateTable tbody td,
+        #customerRatesDataTable tbody td {
+            vertical-align: middle;
+            font-size: 13px;
+            padding: 9px 12px;
+        }
+        #defaultRateTable tbody tr,
+        #customerRatesDataTable tbody tr { transition: background .12s; }
+        #defaultRateTable tbody tr:hover td,
+        #customerRatesDataTable tbody tr:hover td { background-color: #f2f7ff; }
+        .rate-display {
+            font-weight: 700;
+            color: #0a2a5e;
+            background: #eaf1ff;
+            border-radius: 8px;
+            padding: 3px 10px;
+            display: inline-block;
+        }
+        .edit-icon, .save-icon, .cancel-icon {
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            margin-left: 6px;
+            transition: all .15s;
+        }
+        .edit-icon { background: rgba(11, 92, 214, .1); }
+        .edit-icon:hover { background: #0b5cd6; color: #fff !important; }
+        .save-icon { background: rgba(25, 135, 84, .12); }
+        .save-icon:hover { background: #198754; color: #fff !important; }
+        .cancel-icon { background: rgba(220, 53, 69, .1); }
+        .cancel-icon:hover { background: #dc3545; color: #fff !important; }
+        /* Action buttons lift */
+        .mr-hero .btn { transition: transform .15s ease, box-shadow .2s ease; }
+        .mr-hero .btn:hover { transform: translateY(-1px); }
+        .customer-rate-actions .btn { transition: transform .15s ease, box-shadow .2s ease; }
+        .customer-rate-actions .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px -10px rgba(10, 42, 94, .5); }
+        /* Modal headers */
+        .mr-modal-header {
+            background: linear-gradient(115deg, #0a2a5e 0%, #0b5cd6 80%);
+            color: #fff;
+            border-bottom: none;
+            border-radius: calc(.5rem - 1px) calc(.5rem - 1px) 0 0;
+        }
+        .mr-modal-header .modal-title { color: #fff; font-weight: 700; }
+        .mr-modal-header .btn-close { filter: invert(1) grayscale(1) brightness(2); }
+        .mr-modal-header .ti { color: #fbbf24; }
+        /* DataTables polish */
+        .dataTables_wrapper .dataTables_filter input,
+        .dataTables_wrapper .dataTables_length select {
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+            padding: 6px 12px;
+        }
+        .dataTables_wrapper .dataTables_filter input:focus,
+        .dataTables_wrapper .dataTables_length select:focus {
+            border-color: #0b5cd6;
+            outline: none;
+            box-shadow: 0 0 0 .2rem rgba(11, 92, 214, .15);
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            border-radius: 8px !important;
+            border: 1px solid transparent !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: linear-gradient(115deg, #0a2a5e, #0b5cd6) !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .mr-hero, #rateTabsContent { animation: none; }
+        }
     </style>
 </head>
 
@@ -247,11 +447,23 @@
             <div class="content pb-0">
 
                 <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
-                    <div>
-                        <h4 class="mb-1">Manage Rate</h4>
+                <div class="mr-hero d-flex align-items-center justify-content-between gap-3 mb-4 flex-wrap p-4">
+                    <div class="d-flex align-items-center gap-3 position-relative" style="z-index:1;">
+                        <div class="mr-hero-icon">
+                            <i class="ti ti-currency-rupee"></i>
+                        </div>
+                        <div>
+                            <h4 class="mb-1">Manage Rate</h4>
+                            <p class="text-muted mb-2 small">Country-wise default rates, customer rates and bulk Excel uploads.</p>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <span class="mr-stat"><i class="ti ti-truck-delivery"></i>{{ $services->count() }} services</span>
+                                <span class="mr-stat"><i class="ti ti-world"></i>{{ $destinations->count() }} countries</span>
+                                <span class="mr-stat"><i class="ti ti-file-spreadsheet"></i>{{ $defaultRates->count() }} default rates</span>
+                                <span class="mr-stat"><i class="ti ti-users"></i>{{ $customers->count() }} customers</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="gap-2 d-flex align-items-center flex-wrap">
+                    <div class="gap-2 d-flex align-items-center flex-wrap position-relative" style="z-index:1;">
                         <button type="button" class="btn btn-success" id="defaultExportExcel">
                             <i class="ti ti-file-spreadsheet me-1"></i>Export Excel
                         </button>
@@ -301,7 +513,7 @@
                                     <!-- Default Rate Tab -->
                                     <div class="tab-pane fade show active" id="default-rate-pane" role="tabpanel">
                                         <!-- Filters: Service FIRST, then Country -->
-                                        <div class="row mb-3 g-2 align-items-end">
+                                        <div class="row mb-3 g-2 align-items-end mr-filter-card">
                                             <div class="col-md-4">
                                                 <label class="form-label fw-bold">Service</label>
                                                 <select class="form-select" id="defaultServiceFilter">
@@ -317,6 +529,7 @@
                                                         <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
                                                     @endforeach
                                                 </select>
+                                                <small class="text-muted">&nbsp;</small>
                                             </div>
                                             <div class="col-md-4 text-md-end">
                                                 <label class="form-label fw-bold d-block">&nbsp;</label>
@@ -407,7 +620,7 @@
 
                                     <!-- Customer Rate Tab -->
                                     <div class="tab-pane fade" id="customer-rate-pane" role="tabpanel">
-                                        <div class="row mb-3 g-2 align-items-end">
+                                        <div class="row mb-3 g-3 align-items-start mr-filter-card">
                                             <div class="col-md-3 customer-select-wrapper">
                                                 <label class="form-label fw-bold">Select Customers</label>
                                                 <div class="customer-dropdown" id="customerDropdown">
@@ -452,6 +665,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-1">
+                                                <label class="form-label fw-bold d-block">&nbsp;</label>
                                                 <button type="button" class="btn btn-outline-secondary w-100" id="customerClearFilter" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear Filters">
                                                     <i class="ti ti-filter-x"></i>
                                                 </button>
@@ -518,7 +732,7 @@
     <div class="modal fade" id="addRateModal" tabindex="-1" aria-labelledby="addRateModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header mr-modal-header">
                     <h5 class="modal-title" id="addRateModalLabel">
                         <i class="ti ti-plus me-1"></i>Add Default Rate
                     </h5>
@@ -616,7 +830,7 @@
     <div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-labelledby="bulkUploadModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header mr-modal-header">
                     <h5 class="modal-title" id="bulkUploadModalLabel">
                         <i class="ti ti-file-spreadsheet me-1"></i>Bulk Upload Default Rates (Excel)
                     </h5>
@@ -709,7 +923,7 @@
     <div class="modal fade" id="updateNewRateModal" tabindex="-1" aria-labelledby="updateNewRateModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header mr-modal-header">
                     <h5 class="modal-title" id="updateNewRateModalLabel">
                         <i class="ti ti-refresh me-1"></i>Update New Rate
                     </h5>
@@ -729,14 +943,14 @@
                                 <select class="form-select" id="updateNewRateService" name="service_key">
                                     <option value="">— All Services —</option>
                                 </select>
-                                <small class="text-muted">Select a service first — its countries will appear below. On All Services the file must contain Service Code / Network / Method.</small>
+                                <!-- <small class="text-muted">Select a service first — its countries will appear below. On All Services the file must contain Service Code / Network / Method.</small> -->
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Country</label>
                                 <select class="form-select" id="updateNewRateCountry">
                                     <option value="">— All Countries —</option>
                                 </select>
-                                <small class="text-muted">Countries of the selected service (same as Bulk Upload).</small>
+                                <!-- <small class="text-muted">Countries of the selected service (same as Bulk Upload).</small> -->
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Start Date</label>
