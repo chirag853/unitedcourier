@@ -2274,11 +2274,10 @@
                 var union = {};
                 var zoneInfoPool = {};
                 checked.forEach(function(c) {
+                    // ONLY this service's own zones (shared + service-specific
+                    // from serviceZoneNumbers). No fallback to all country
+                    // zones — a service without zones contributes nothing.
                     var svcZones = (serviceZoneNumbers[c.serviceId] || []).slice();
-                    // Fallback: if service has no entry, use all country zones.
-                    if (!svcZones.length) {
-                        svcZones = getBulkCountryZones(c.country).keys;
-                    }
                     svcZones.forEach(function(z) { union[z] = true; });
                     var zd = getBulkCountryZones(c.country);
                     Object.keys(zd.map).forEach(function(k) {
@@ -2289,8 +2288,11 @@
                     .filter(function(n) { return !isNaN(n); }).sort(function(a, b) { return a - b; });
 
                 if (!zoneKeys.length) {
+                    // This service has no zones in the selected countries:
+                    // hide the zone section entirely (without-zone format).
                     withoutZoneInput.value = '1';
-                    container.innerHTML = '<div class="col-12 text-success">This service has no configured zones in the selected countries. The without-zone sample/format will be used (Price, Fuel Charge, Fuel %, GST %).</div>';
+                    zoneSection.classList.add('d-none');
+                    container.innerHTML = '';
                     instructions.innerHTML = '<i class="ti ti-info-circle me-1"></i>This service has no zones in the selected countries. Download the without-zone sample — the same file will be uploaded to all (' + checked.length + ') selected countries.';
                     return;
                 }
