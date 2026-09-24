@@ -24,7 +24,13 @@ Artisan::command('shipments:track', function (ShipmentTrackingController $contro
 
 Schedule::useCache('file');
 
+// Schedule::command('shipments:track')
+//     ->hourly()
+//     ->withoutOverlapping()
+//     ->name('shipment-tracking-sync');
+
 Schedule::command('shipments:track')
-    ->hourly()
+    ->dailyAt('09:00')
+    ->timezone('Asia/Kolkata')
     ->withoutOverlapping()
     ->name('shipment-tracking-sync');

@@ -4967,13 +4967,16 @@ class CustomerController extends Controller
                 ];
             }
 
-            // Australia uses the same box-wise rate calculation as Canada
-            // (both are zipcode-category destinations with zone_no-based
-            // rates). The query below is fully parameterized by
-            // $destinationCountry, so adding 'AUS' here makes the
-            // ARAMEX GPX ALL IN service rates resolve correctly.
-            // if ($destinationCountry === 'CA' || $destinationCountry === 'AUS' || $destinationCountry === 'NZ' || $destinationCountry === 'UAE' || $destinationCountry === 'SG' || $destinationCountry === 'MY' || $destinationCountry === 'DE' || $destinationCountry === 'BD' || $destinationCountry === 'ZW') {
-            else{
+            // Box-wise rate calculation for every destination in the
+            // destinations table (zone_no-based rates). US and UK are
+            // intentionally NOT in this list — they have their own dedicated
+            // branches above, so adding them here would duplicate rate cards.
+            // 'AUS' (Australia, table has 'AU') and 'UAE' (UAE, table has
+            // 'AE') are the resolver's custom codes, hence listed explicitly.
+            // The query below is fully parameterized by $destinationCountry.
+            $boxWiseDestinations = ['AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AN', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AUS', 'AW', 'AZ', 'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS', 'BT', 'BV', 'BW', 'BY', 'BZ', 'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ', 'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ', 'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET', 'FI', 'FJ', 'FK', 'FM', 'FO', 'FR', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GT', 'GU', 'GW', 'GY', 'HK', 'HM', 'HN', 'HR', 'HT', 'HU', 'IC', 'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS', 'IT', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY', 'MA', 'MC', 'MD', 'ME', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ', 'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ', 'OM', 'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY', 'QA', 'RE', 'RO', 'RS', 'RU', 'RW', 'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS', 'ST', 'SV', 'SX', 'SY', 'SZ', 'TC', 'TD', 'TF', 'TG', 'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TP', 'TR', 'TT', 'TV', 'TW', 'TZ', 'UA', 'UAE', 'UG', 'UM', 'UY', 'UZ', 'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'XK', 'YE', 'YT', 'YU', 'ZA', 'ZM', 'ZR', 'ZW'];
+            if (in_array($destinationCountry, $boxWiseDestinations, true)) {
+            // else{
                 $boxBreakdown = [];
                 $combinedBase = 0;
                 $combinedFuel = 0;
@@ -6624,6 +6627,409 @@ class CustomerController extends Controller
     }
 
     /**
+     * Customer Status Report (read-only).
+     *
+     * Shows every shipment of the logged-in customer with its current
+     * status — which shipments were created/shipped and which were not
+     * (draft / cancelled). No actions are available here; the page only
+     * lists and exports (Excel download) the data.
+     */
+    public function statusReport(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $invoices = $this->baseStatusReportQuery($request, $customerId)
+            ->orderBy('created_at', 'desc')
+            ->paginate(25)
+            ->withQueryString();
+
+        $statusCounts = $this->statusReportCounts($customerId);
+        $statusOptions = $this->statusReportOptions();
+
+        return view('customer.status-report', compact('invoices', 'statusCounts', 'statusOptions'));
+    }
+
+    /**
+     * Download the (filtered) Status Report as an Excel file.
+     */
+    public function exportStatusReport(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $invoices = $this->baseStatusReportQuery($request, $customerId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = ['AWB Number', 'Date', 'Shipper', 'Consignee', 'Destination', 'Service', 'Manifest No', 'Status', 'Amount'];
+
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter . '1', $header);
+        }
+
+        $rowNumber = 2;
+        foreach ($invoices as $invoice) {
+            $shipper = $invoice->shipperInfo;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $manifest = $shipper ? $shipper->manifest : null;
+            $service = ($shipper && $shipper->serviceRate && $shipper->serviceRate->service)
+                ? $shipper->serviceRate->service
+                : null;
+            $amount = ($shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0)
+                ? (float) $shipper->total_price
+                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+            $values = [
+                $shipper->awb_number ?? '—',
+                $invoice->created_at ? $invoice->created_at->format('d-m-Y') : '—',
+                trim(($shipper->company_name ?? '') . ' ' . ($shipper->contact_person ?? '')) ?: '—',
+                $consignee->consignee_name ?? $consignee->contact_person ?? '—',
+                $consignee->delivery_destination ?? '—',
+                $service ? trim(($service->network ?? '') . ' ' . ($service->service_code ?? '')) : '—',
+                $manifest->manifest_number ?? '—',
+                $this->resolveStatusReportStatus($invoice),
+                $amount,
+            ];
+            foreach ($values as $index => $value) {
+                $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+                $sheet->setCellValue($columnLetter . $rowNumber, $value);
+            }
+            $rowNumber++;
+        }
+
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $fileName = 'status-report-' . date('Y-m-d-His') . '.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    /**
+     * Customer Un-Manifest Report (read-only).
+     *
+     * Same look as view-all-shipments but strictly read-only: no pay /
+     * cancel / manifest / print actions. Only un-manifested shipments are
+     * listed — All Orders (= draft + ready + packed), Draft, Ready, Packed.
+     * Report can be downloaded as Excel.
+     */
+    public function unManifestReport(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $status = $request->input('status', 'all');
+        $allowed = ['all', 'draft', 'ready', 'packed'];
+        if (! in_array($status, $allowed, true)) {
+            $status = 'all';
+        }
+        // Normalise the request so the shared query + pagination links
+        // stay on the allowed set.
+        $request->merge(['status' => $status]);
+
+        $invoices = $this->baseUnManifestReportQuery($request, $customerId)
+            ->orderBy('created_at', 'desc')
+            ->paginate(25)
+            ->withQueryString();
+
+        $statusCounts = $this->unManifestReportCounts($customerId);
+        $statusOptions = $this->unManifestReportOptions();
+
+        return view('customer.un-manifest-report', compact('invoices', 'statusCounts', 'statusOptions'));
+    }
+
+    /**
+     * Download the (filtered) Un-Manifest Report as an Excel file.
+     */
+    public function exportUnManifestReport(Request $request)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $status = $request->input('status', 'all');
+        if (! in_array($status, ['all', 'draft', 'ready', 'packed'], true)) {
+            $status = 'all';
+        }
+        $request->merge(['status' => $status]);
+
+        $invoices = $this->baseUnManifestReportQuery($request, $customerId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = ['HAWB Number', 'Order Date', 'Shipper', 'Consignee', 'Destination', 'Service', 'Status', 'Amount'];
+
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter . '1', $header);
+        }
+
+        $rowNumber = 2;
+        foreach ($invoices as $invoice) {
+            $shipper = $invoice->shipperInfo;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $service = ($shipper && $shipper->serviceRate && $shipper->serviceRate->service)
+                ? $shipper->serviceRate->service
+                : null;
+            $amount = ($shipper && $shipper->total_price !== null && (float) $shipper->total_price > 0)
+                ? (float) $shipper->total_price
+                : round((float) $invoice->invoiceItems->sum('amount'), 2);
+            $values = [
+                $shipper->awb_number ?? $invoice->invoice_number ?? '—',
+                $invoice->created_at ? $invoice->created_at->format('d-m-Y h:i A') : '—',
+                trim(($shipper->company_name ?? '') . ' ' . ($shipper->contact_person ?? '')) ?: '—',
+                ($consignee->consignee_name ?? $consignee->contact_person ?? '—'),
+                $consignee->delivery_destination ?? '—',
+                $service ? trim(($service->network ?? '') . ' ' . ($service->service_code ?? '')) : '—',
+                ucfirst($this->resolveStatusReportStatus($invoice)),
+                $amount,
+            ];
+            foreach ($values as $index => $value) {
+                $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+                $sheet->setCellValue($columnLetter . $rowNumber, $value);
+            }
+            $rowNumber++;
+        }
+
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $fileName = 'un-manifest-report-' . date('Y-m-d-His') . '.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    /**
+     * Status filter options for the Un-Manifest Report.
+     * "All Orders" means all un-manifested (draft + ready + packed).
+     */
+    private function unManifestReportOptions(): array
+    {
+        return [
+            'all'    => 'All Orders',
+            'draft'  => 'Draft',
+            'ready'  => 'Ready',
+            'packed' => 'Packed',
+        ];
+    }
+
+    /**
+     * Shared filtered query for the Un-Manifest Report list + export.
+     * Always restricted to draft / ready / packed.
+     */
+    private function baseUnManifestReportQuery(Request $request, int $customerId)
+    {
+        $status = $request->input('status', 'all');
+
+        return ShipmentInvoice::query()
+            ->whereHas('shipperInfo', function ($q) use ($customerId, $request, $status) {
+                $q->where('customer_id', $customerId)
+                    ->when($request->filled('shipper_name'), function ($q) use ($request) {
+                        $q->where(function ($nameQuery) use ($request) {
+                            $nameQuery->where('company_name', 'like', '%' . $request->shipper_name . '%')
+                                ->orWhere('contact_person', 'like', '%' . $request->shipper_name . '%');
+                        });
+                    })
+                    ->when($request->filled('awb_number'), function ($q) use ($request) {
+                        $q->where('awb_number', 'like', '%' . $request->awb_number . '%');
+                    })
+                    ->when($status && $status !== 'all', function ($q) use ($status) {
+                        $q->where('status', $status);
+                    }, function ($q) {
+                        // "All Orders" in this report = only un-manifested.
+                        $q->whereIn('status', ['draft', 'ready', 'packed']);
+                    });
+            })
+            ->when($request->filled('customer_name'), function ($q) use ($request) {
+                $q->whereHas('shipperInfo.consigneeInfo', function ($consigneeQuery) use ($request) {
+                    $consigneeQuery->where('consignee_name', 'like', '%' . $request->customer_name . '%');
+                });
+            })
+            ->when($request->filled('date_from'), function ($q) use ($request) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->filled('date_to'), function ($q) use ($request) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            })
+            ->where('status', '!=', 'cancelled')
+            ->with([
+                'invoiceItems:id,invoice_id,amount',
+                'shipperInfo:id,awb_number,company_name,contact_person,status,total_price,city,state,pincode,updated_at',
+                'shipperInfo.consigneeInfo:shipper_id,consignee_name,contact_person,delivery_destination,city,state,zip_code',
+                'shipperInfo.serviceRate:id,service_id',
+                'shipperInfo.serviceRate.service:id,network,service_code',
+            ]);
+    }
+
+    /**
+     * Per-status counts for the Un-Manifest Report (draft/ready/packed only).
+     */
+    private function unManifestReportCounts(int $customerId): array
+    {
+        $counts = ['all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0];
+
+        $rows = ShipmentInvoice::whereHas('shipperInfo', function ($q) use ($customerId) {
+            $q->where('customer_id', $customerId)->whereIn('status', ['draft', 'ready', 'packed']);
+        })->where('status', '!=', 'cancelled')
+            ->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
+
+        $counts['all'] = $rows->count();
+        foreach ($rows as $row) {
+            $effective = $this->resolveStatusReportStatus($row);
+            if (isset($counts[$effective])) {
+                $counts[$effective]++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Effective display status of an invoice for the Status Report.
+     * Mirrors the view-all-shipments mapping (cancelled wins, missing
+     * shipper status falls back to draft).
+     */
+    private function resolveStatusReportStatus($invoice): string
+    {
+        $shipperStatus = $invoice->shipperInfo?->status ?? '';
+        if ($invoice->status === 'cancelled' || $shipperStatus === 'cancelled') {
+            return 'cancelled';
+        }
+
+        return $shipperStatus ?: 'draft';
+    }
+
+    /**
+     * Status filter options (value => label) for the Status Report.
+     */
+    private function statusReportOptions(): array
+    {
+        return [
+            'all'                => 'All',
+            'draft'              => 'Draft (Not Shipped)',
+            'ready'              => 'Ready',
+            'packed'             => 'Packed',
+            'manifested'         => 'Manifested',
+            'ready_for_pickup'   => 'Ready for Pickup',
+            'assigned_for_pickup'=> 'In-Transit to Hub',
+            'received'           => 'Received at Hub',
+            'dispatched'         => 'Dispatched',
+            'delivered'          => 'Delivered',
+            'disputed'           => 'Disputed',
+            'on_hold'            => 'On Hold',
+            'cancelled'          => 'Cancelled (Not Shipped)',
+        ];
+    }
+
+    /**
+     * Shared filtered query for the Status Report list + export.
+     */
+    private function baseStatusReportQuery(Request $request, int $customerId)
+    {
+        $status = $request->input('status');
+
+        return ShipmentInvoice::query()
+            ->whereHas('shipperInfo', function ($q) use ($customerId, $request) {
+                $q->where('customer_id', $customerId)
+                    ->when($request->filled('awb_number'), function ($q) use ($request) {
+                        $q->where('awb_number', 'like', '%' . $request->awb_number . '%');
+                    });
+            })
+            ->when($request->filled('date_from'), function ($q) use ($request) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->filled('date_to'), function ($q) use ($request) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            })
+            ->when($status && $status !== 'all', function ($q) use ($status) {
+                if ($status === 'cancelled') {
+                    $q->where('status', 'cancelled');
+                } elseif ($status === 'dispatched') {
+                    $q->whereHas('shipperInfo', function ($shipperQuery) {
+                        $shipperQuery->whereIn('status', ['dispatched', 'ready_to_dispatch']);
+                    });
+                } elseif ($status === 'assigned_for_pickup') {
+                    $q->whereHas('shipperInfo', function ($shipperQuery) {
+                        $shipperQuery->whereIn('status', ['assigned_for_pickup', 'confirm_pickup']);
+                    });
+                } else {
+                    $q->whereHas('shipperInfo', function ($shipperQuery) use ($status) {
+                        $shipperQuery->where('status', $status);
+                    });
+                }
+            })
+            ->with([
+                'invoiceItems:id,invoice_id,amount',
+                'shipperInfo:id,awb_number,company_name,contact_person,status,total_price',
+                'shipperInfo.manifest:shipper_id,manifest_number',
+                'shipperInfo.consigneeInfo:shipper_id,consignee_name,contact_person,delivery_destination',
+                'shipperInfo.serviceRate:id,service_id',
+                'shipperInfo.serviceRate.service:id,network,service_code',
+            ]);
+    }
+
+    /**
+     * Per-status counts for the logged-in customer's shipments.
+     */
+    private function statusReportCounts(int $customerId): array
+    {
+        $counts = [
+            'all' => 0, 'draft' => 0, 'ready' => 0, 'packed' => 0,
+            'manifested' => 0, 'ready_for_pickup' => 0, 'assigned_for_pickup' => 0,
+            'received' => 0, 'dispatched' => 0, 'delivered' => 0,
+            'disputed' => 0, 'on_hold' => 0, 'cancelled' => 0,
+        ];
+
+        $rows = ShipmentInvoice::whereHas('shipperInfo', function ($q) use ($customerId) {
+            $q->where('customer_id', $customerId);
+        })->with('shipperInfo:id,status')->get(['id', 'shipper_id', 'status']);
+
+        $counts['all'] = $rows->count();
+        foreach ($rows as $row) {
+            $effective = $this->resolveStatusReportStatus($row);
+            if ($effective === 'ready_to_dispatch') {
+                $effective = 'dispatched';
+            }
+            if ($effective === 'confirm_pickup') {
+                $effective = 'assigned_for_pickup';
+            }
+            if (isset($counts[$effective])) {
+                $counts[$effective]++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
      * Build the list of selectable pickup dates based on the current India time.
      *
      * Before 12:00 PM IST the customer may pick Today, Tomorrow or the day
@@ -7452,6 +7858,30 @@ class CustomerController extends Controller
         }
 
         \Log::info('Manifest '.$manifestNumber.' assigned for pickup by customer #'.$customerId.' ('.$rows->count().' manifest rows, '.$updatedShippers.' shipments marked ready for pickup).');
+
+        // Notify admin panel (Admin + Super Admin users) that this manifest
+        // was assigned for pickup. Failures here must never break the assign flow.
+        try {
+            $customer = Customer::find($customerId);
+            $customerName = $customer
+                ? trim(($customer->first_name ?? '').' '.($customer->last_name ?? '')) ?: null
+                : null;
+
+            $admins = \App\Models\Admin::whereIn('type', ['Admin', 'Super Admin'])
+                ->where('status', 1)
+                ->get();
+
+            foreach ($admins as $admin) {
+                $admin->notify(new \App\Notifications\ManifestPickupAssignedNotification(
+                    manifestNumber: $manifestNumber,
+                    shipmentCount: $rows->count(),
+                    customerName: $customerName,
+                    pickupDate: $pickupDate !== '' ? $pickupDate : null,
+                ));
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to send manifest pickup notification for '.$manifestNumber.': '.$e->getMessage());
+        }
 
         return response()->json([
             'success' => true,

@@ -298,6 +298,18 @@
                         @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
                         <li class="submenu">
                             <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/customer-report*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-file-analytics"></i><span>Reports</span><span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <li><a href="{{ route('admin.customer-report') }}"
+                                        class="{{ request()->is('admin/customer-report*') ? 'active' : '' }}">Shipment Report</a></li>
+                            </ul>
+                        </li>
+                        @endif
+                        @if($authAdmin && $authAdmin->hasModuleAccess('customer'))
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
                                 class="{{ request()->is('admin/csb5-form*') || request()->is('admin/kyc-pending*') || request()->is('admin/kyc-approved*') || request()->is('admin/kyc-rejected*') || request()->is('admin/kyc-export*') || request()->is('admin/customer-profile*') ? 'active subdrop' : '' }}">
                                 <i class="ti ti-id-badge-2"></i><span>Manage KYC</span><span class="menu-arrow"></span>
                             </a>

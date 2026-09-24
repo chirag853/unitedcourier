@@ -94,7 +94,32 @@
             
 
             <!-- Notification Dropdown -->
-           
+            <div class="header-item me-2">
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="btn topbar-link position-relative"
+                        data-bs-toggle="dropdown" data-bs-offset="0,22" aria-haspopup="true" aria-expanded="false"
+                        title="Notifications">
+                        <i class="ti ti-bell fs-16"></i>
+                        <span id="notificationUnreadBadge"
+                            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-md p-0" style="width: 360px;">
+                        <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
+                            <span class="fw-semibold text-dark">Notifications</span>
+                            <button type="button" id="markAllNotificationsRead"
+                                class="btn btn-link btn-sm text-decoration-none p-0 d-none">Mark all read</button>
+                        </div>
+                        <div id="notificationList" style="max-height: 380px; overflow-y: auto;"></div>
+                        <div class="d-flex align-items-center justify-content-between border-top px-3 py-2">
+                            <a href="{{ route('admin.notifications') }}"
+                                class="text-decoration-none small">View all notifications</a>
+                            <button type="button" id="clearNotificationsBtn"
+                                class="btn btn-link btn-sm text-danger text-decoration-none p-0">Clear</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- /Notification Dropdown -->
 
             <!-- User Dropdown -->
             <div class="dropdown profile-dropdown d-flex align-items-center justify-content-center">
@@ -160,6 +185,43 @@
     </div>
 </div>
 
+<!-- Clear Notifications Confirm Popup -->
+<div class="modal fade" id="clearNotificationsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger mb-3"
+                    style="width: 56px; height: 56px;">
+                    <i class="ti ti-trash fs-24"></i>
+                </span>
+                <h6 class="mb-1">Clear all notifications?</h6>
+                <p class="text-muted small mb-4">All notifications will be permanently removed. This action cannot be undone.</p>
+                <div class="d-flex gap-2 justify-content-center">
+                    <button type="button" class="btn btn-light flex-fill" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="confirmClearNotificationsBtn" class="btn btn-danger flex-fill">Yes, Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #notificationList .notification-item {
+        overflow: hidden;
+        max-height: 220px;
+        transition: opacity .3s ease, transform .3s ease, max-height .4s ease,
+            padding-top .4s ease, padding-bottom .4s ease;
+    }
+    #notificationList .notification-item.notification-clearing {
+        opacity: 0;
+        transform: translateX(50px);
+        max-height: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        border-bottom: 0 !important;
+    }
+</style>
+
 <script>
     const BASE_URL = '{{ url('/') }}';
 
@@ -213,6 +275,10 @@
             badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
             badge.classList.toggle('d-none', unreadCount === 0);
             markAllButton.classList.toggle('d-none', unreadCount === 0);
+            const clearFooterBtn = document.getElementById('clearNotificationsBtn');
+            if (clearFooterBtn) {
+                clearFooterBtn.classList.toggle('d-none', notifications.length === 0);
+            }
             list.replaceChildren();
 
             if (!notifications.length) {
@@ -334,6 +400,58 @@
             });
             await loadNotifications();
         });
+
+        const clearBtn = document.getElementById('clearNotificationsBtn');
+        const clearUrl = @json(route('admin.notifications.clear'));
+        const clearModalEl = document.getElementById('clearNotificationsModal');
+        const confirmClearBtn = document.getElementById('confirmClearNotificationsBtn');
+        if (clearBtn && clearModalEl && confirmClearBtn) {
+            clearBtn.addEventListener('click', function () {
+                const items = list.querySelectorAll('.notification-item');
+                if (!items.length || clearBtn.disabled) {
+                    return;
+                }
+                if (window.bootstrap && bootstrap.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(clearModalEl).show();
+                }
+            });
+            confirmClearBtn.addEventListener('click', async function () {
+                if (window.bootstrap && bootstrap.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(clearModalEl).hide();
+                }
+                const items = list.querySelectorAll('.notification-item');
+                if (!items.length) {
+                    return;
+                }
+                clearBtn.disabled = true;
+                confirmClearBtn.disabled = true;
+                // Staggered slide-out animation for every notification.
+                items.forEach(function (item, index) {
+                    setTimeout(function () {
+                        item.classList.add('notification-clearing');
+                    }, index * 100);
+                });
+                const totalDelay = items.length * 100 + 450;
+                try {
+                    await fetch(clearUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        credentials: 'same-origin'
+                    });
+                } catch (error) {
+                    // List still animates out; next poll will re-sync on failure.
+                }
+                setTimeout(function () {
+                    knownNotificationIds = new Set();
+                    renderNotifications([], 0);
+                    clearBtn.disabled = false;
+                    confirmClearBtn.disabled = false;
+                }, totalDelay);
+            });
+        }
 
         loadNotifications();
         window.setInterval(loadNotifications, 10000);

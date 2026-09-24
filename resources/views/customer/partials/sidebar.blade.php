@@ -119,14 +119,16 @@
                                 </li>
 
                                 <li class="submenu">
-                                    <a href="javascript:void(0);">
+                                    <a href="javascript:void(0);" class="{{ request()->routeIs('customer.status-report*', 'customer.un-manifest-report*') ? 'active subdrop' : '' }}">
                                         <i class="ti ti-report-analytics"></i><span>Reports</span>
                                         <span class="menu-arrow"></span>
                                     </a>
                                     <ul>
-                                        <li><a href="{{ url('#') }}">Status Report</a></li>
-                                        <li><a href="{{ url('#') }}">Hold Report</a></li>
-                                        <li><a href="{{ url('#') }}">Un Manifest Report</a></li>
+                                        <!-- all data view here -->
+                                        <li><a href="{{ route('customer.status-report') }}" class="{{ request()->routeIs('customer.status-report*') ? 'active' : '' }}">Status Report</a></li>
+                                        <!-- <li><a href="{{ url('#') }}">Hold Report</a></li> -->
+                                        <!-- only manifested data -->
+                                        <li><a href="{{ route('customer.un-manifest-report') }}" class="{{ request()->routeIs('customer.un-manifest-report*') ? 'active' : '' }}">Un Manifest Report</a></li>
                                     </ul>
                                 </li>
                             </ul>

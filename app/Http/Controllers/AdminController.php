@@ -133,6 +133,17 @@ class AdminController extends Controller
         // Delivered shipments count
         $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
 
+        // COD / Prepaid / General split (order-type analytics).
+        // COD = shipment_type 2, Prepaid = 4 or 5 (codebase uses both),
+        // General = everything else (incl. type 1 / null).
+        $orderTypeCounts = ShipperInfo::select('shipment_type', DB::raw('count(*) as count'))
+            ->groupBy('shipment_type')
+            ->pluck('count', 'shipment_type')
+            ->toArray();
+        $codCount = (int) ($orderTypeCounts[2] ?? 0);
+        $prepaidCount = (int) ($orderTypeCounts[4] ?? 0) + (int) ($orderTypeCounts[5] ?? 0);
+        $generalCount = $totalShipments - $codCount - $prepaidCount;
+
         $thisMonthRegistrations = Customer::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
         $lastMonthRegistrations = Customer::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
         $registrationsChangePercent = $lastMonthRegistrations > 0 ? round(($thisMonthRegistrations - $lastMonthRegistrations) / $lastMonthRegistrations * 100, 1) : ($thisMonthRegistrations > 0 ? 100 : 0);
@@ -195,6 +206,7 @@ class AdminController extends Controller
             'totalRegistrations', 'kycPending', 'onboardedCustomers', 'csb5Enabled',
             'shipmentStatusCounts', 'shipRocketCount', 'selfCount', 'otherNetworkCount', 'deliveredCount',
             'networkCounts',
+            'codCount', 'prepaidCount', 'generalCount',
             'registrationsChangePercent', 'kycPendingChangePercent', 'onboardedChangePercent', 'csb5ChangePercent',
             'kycPendingList',
             'totalShipments', 'inTransit', 'deliverySuccessRate',
@@ -317,6 +329,34 @@ class AdminController extends Controller
                 ->toArray();
         }
 
+        // COD / Prepaid / General split for the selected period.
+        // COD = shipment_type 2, Prepaid = 4 or 5, General = rest.
+        $periodTypeCounts = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+            ->select('shipment_type', DB::raw('count(*) as count'))
+            ->groupBy('shipment_type')
+            ->pluck('count', 'shipment_type')
+            ->toArray();
+        $periodCod = (int) ($periodTypeCounts[2] ?? 0);
+        $periodPrepaid = (int) ($periodTypeCounts[4] ?? 0) + (int) ($periodTypeCounts[5] ?? 0);
+        $periodGeneral = $totalPeriodShipments - $periodCod - $periodPrepaid;
+
+        // Date-wise COD vs Prepaid trend for the selected period.
+        $periodFormat = $filter === 'last_year' ? '%Y-%m' : '%Y-%m-%d';
+        $trendRows = ShipperInfo::whereBetween('created_at', [$startDate, $endDate])
+            ->select(
+                DB::raw("DATE_FORMAT(created_at, '{$periodFormat}') as period"),
+                DB::raw("SUM(CASE WHEN shipment_type = 2 THEN 1 ELSE 0 END) as cod"),
+                DB::raw("SUM(CASE WHEN shipment_type IN (4, 5) THEN 1 ELSE 0 END) as prepaid")
+            )
+            ->groupBy('period')
+            ->orderBy('period')
+            ->get();
+        $orderTypeTrend = [
+            'labels' => $trendRows->pluck('period')->all(),
+            'cod' => $trendRows->pluck('cod')->map(fn ($v) => (int) $v)->all(),
+            'prepaid' => $trendRows->pluck('prepaid')->map(fn ($v) => (int) $v)->all(),
+        ];
+
         $statusMap = Tracking::getStatusTitleMap();
 
         return response()->json([
@@ -343,6 +383,12 @@ class AdminController extends Controller
                 'inTransit' => $periodInTransit,
                 'successRate' => $periodSuccessRate,
             ],
+            'orderTypeSummary' => [
+                'cod' => $periodCod,
+                'prepaid' => $periodPrepaid,
+                'general' => $periodGeneral,
+            ],
+            'orderTypeTrend' => $orderTypeTrend,
             'dateWiseCounts' => $dateWiseCounts,
         ]);
     }
@@ -1372,6 +1418,27 @@ class AdminController extends Controller
         Auth::guard('admin')->user()->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Permanently clear all notifications of the authenticated admin user.
+     */
+    public function clearNotifications()
+    {
+        Auth::guard('admin')->user()->notifications()->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Full notifications listing page for the authenticated admin user.
+     */
+    public function notifications()
+    {
+        $admin = Auth::guard('admin')->user();
+        $notifications = $admin->notifications()->latest()->paginate(20);
+
+        return view('admin.notifications', compact('notifications'));
     }
 
     /**
@@ -7702,6 +7769,248 @@ class AdminController extends Controller
         $parentCustomer = $exporterCustomer->exporter;
 
         return view('admin.export-customer-view', compact('exporterCustomer', 'parentCustomer'));
+    }
+
+    /**
+     * Customer Report (read-only, admin side).
+     *
+     * Sidebar > Reports > Customer Report. Customer-wise saari shipment
+     * details — kaunsi shipment kis step (draft/ready/packed/manifested/
+     * ready_for_pickup/assigned_for_pickup/received/dispatched/delivered/
+     * cancelled/disputed/on_hold) par hai — bilkul view-all-shipments jaisa
+     * table, lekin yahan koi action (pay/cancel/print/manifest/assign)
+     * available nahi hai. Sirf dekhne + filter karne ke liye.
+     */
+    /**
+     * Customer Report listing + Excel export dono ke liye shared filtered query.
+     * Saare filters (customer, awb, invoice, dates, status) yahin apply hote
+     * hain taaki jo screen par dikhe wahi Excel me export ho.
+     */
+    private function baseCustomerReportQuery(Request $request)
+    {
+        $status = $request->input('status', 'all');
+        $customerId = $request->input('customer_id');
+        $awbNumber = $request->input('awb_number');
+        $invoiceNumber = $request->input('invoice_number');
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        return ShipmentInvoice::query()
+            ->with([
+                'shipperInfo' => function ($q) {
+                    $q->select('id', 'customer_id', 'awb_number', 'company_name', 'contact_person', 'city', 'state', 'pincode', 'status', 'total_price', 'created_at');
+                },
+                'shipperInfo.manifest' => function ($q) {
+                    $q->select('id', 'shipper_id', 'manifest_number', 'status', 'created_at');
+                },
+                'shipperInfo.consigneeInfo' => function ($q) {
+                    $q->select('id', 'shipper_id', 'consignee_name', 'contact_person', 'city', 'state', 'zip_code', 'delivery_destination');
+                },
+            ])
+            ->when($customerId, function ($q) use ($customerId) {
+                $q->whereHas('shipperInfo', function ($sq) use ($customerId) {
+                    $sq->where('customer_id', $customerId);
+                });
+            })
+            ->when($awbNumber, function ($q) use ($awbNumber) {
+                $q->whereHas('shipperInfo', function ($sq) use ($awbNumber) {
+                    $sq->where('awb_number', 'like', '%'.$awbNumber.'%');
+                });
+            })
+            ->when($invoiceNumber, function ($q) use ($invoiceNumber) {
+                $q->where('invoice_number', 'like', '%'.$invoiceNumber.'%');
+            })
+            ->when($dateFrom, function ($q) use ($dateFrom) {
+                $q->whereDate('created_at', '>=', $dateFrom);
+            })
+            ->when($dateTo, function ($q) use ($dateTo) {
+                $q->whereDate('created_at', '<=', $dateTo);
+            })
+            ->when($status && $status !== 'all', function ($q) use ($status) {
+                if ($status === 'cancelled') {
+                    $q->where('status', 'cancelled');
+                } elseif ($status === 'dispatched') {
+                    $q->whereHas('shipperInfo', function ($sq) {
+                        $sq->whereIn('status', ['dispatched', 'ready_to_dispatch']);
+                    });
+                } elseif ($status === 'assigned_for_pickup') {
+                    $q->whereHas('shipperInfo', function ($sq) {
+                        $sq->whereIn('status', ['assigned_for_pickup', 'confirm_pickup']);
+                    });
+                } else {
+                    $q->whereHas('shipperInfo', function ($sq) use ($status) {
+                        $sq->where('status', $status);
+                    });
+                }
+            });
+    }
+
+    public function customerReport(Request $request)
+    {
+        $status = $request->input('status', 'all');
+        $customerId = $request->input('customer_id');
+
+        $invoices = $this->baseCustomerReportQuery($request)
+            ->orderBy('created_at', 'desc')
+            ->paginate(25)
+            ->withQueryString();
+
+        // Status-wise counts (customer filter ko respect karte hue) — tabs ke liye.
+        $countBase = ShipmentInvoice::query()
+            ->when($customerId, function ($q) use ($customerId) {
+                $q->whereHas('shipperInfo', function ($sq) use ($customerId) {
+                    $sq->where('customer_id', $customerId);
+                });
+            })
+            ->with('shipperInfo:id,status')
+            ->get(['id', 'shipper_id', 'status']);
+
+        $statusCounts = [
+            'all' => $countBase->count(),
+            'draft' => 0, 'ready' => 0, 'packed' => 0, 'manifested' => 0,
+            'ready_for_pickup' => 0, 'assigned_for_pickup' => 0, 'received' => 0,
+            'dispatched' => 0, 'cancelled' => 0, 'delivered' => 0,
+            'disputed' => 0, 'on_hold' => 0,
+        ];
+        foreach ($countBase as $row) {
+            $rowStatus = ($row->status === 'cancelled' || ($row->shipperInfo?->status ?? '') === 'cancelled')
+                ? 'cancelled'
+                : ($row->shipperInfo?->status ?: 'draft');
+            if ($rowStatus === 'ready_to_dispatch' || $rowStatus === 'confirm_pickup') {
+                $rowStatus = $rowStatus === 'confirm_pickup' ? 'assigned_for_pickup' : 'dispatched';
+            }
+            if (isset($statusCounts[$rowStatus])) {
+                $statusCounts[$rowStatus]++;
+            }
+        }
+
+        // Customer dropdown ke liye — sirf wahi customers jinki koi shipment hai + saare active customers.
+        $customers = Customer::orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'customer_code']);
+
+        $statusOptions = [
+            'all' => 'All Orders',
+            'draft' => 'Drafts',
+            'ready' => 'Ready',
+            'packed' => 'Packed',
+            'manifested' => 'Manifested',
+            'ready_for_pickup' => 'Ready for Pickup',
+            'assigned_for_pickup' => 'In-Transit to Hub',
+            'received' => 'Received',
+            'dispatched' => 'Dispatched',
+            'delivered' => 'Delivered',
+            'cancelled' => 'Cancelled',
+            'disputed' => 'Disputed',
+            'on_hold' => 'On Hold',
+        ];
+
+        return view('admin.customer-report', compact('invoices', 'statusCounts', 'statusOptions', 'customers', 'status', 'customerId'));
+    }
+
+    /**
+     * Customer Report ka Excel (.xlsx) export.
+     *
+     * Wahi filters apply hote hain jo listing page par lage hain, taaki
+     * screen wali filtered list hi download ho. Table wale saare columns
+     * (HAWB, date, customer, from/to, consignee, invoice, amount,
+     * manifest, status) Excel me aate hain.
+     */
+    public function exportCustomerReport(Request $request)
+    {
+        $invoices = $this->baseCustomerReportQuery($request)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $customerIds = $invoices
+            ->map(function ($invoice) {
+                return $invoice->shipperInfo ? $invoice->shipperInfo->customer_id : null;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $customerMap = Customer::whereIn('id', $customerIds)
+            ->get(['id', 'first_name', 'last_name', 'email', 'customer_code'])
+            ->keyBy('id');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Customer Report');
+        $headers = [
+            '#', 'HAWB Number', 'Order Date', 'Customer Name', 'Customer Email',
+            'Customer Code', 'Shipper Company', 'From City', 'From State', 'From Pincode',
+            'To City', 'To State', 'To Pincode', 'Destination', 'Consignee',
+            'Invoice No.', 'Amount', 'Manifest No.', 'Status',
+        ];
+
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter.'1', $header);
+        }
+
+        $rowNumber = 2;
+        foreach ($invoices as $serial => $invoice) {
+            $shipper = $invoice->shipperInfo;
+            $consignee = $shipper ? $shipper->consigneeInfo : null;
+            $manifest = $shipper ? $shipper->manifest : null;
+            $rowStatus = 'draft';
+            if (($invoice->status ?? '') === 'cancelled') {
+                $rowStatus = 'cancelled';
+            } elseif ($shipper && $shipper->status) {
+                $rowStatus = $shipper->status;
+            }
+            if ($rowStatus === 'ready_to_dispatch') {
+                $rowStatus = 'dispatched';
+            } elseif ($rowStatus === 'confirm_pickup') {
+                $rowStatus = 'assigned_for_pickup';
+            }
+            $cust = $shipper && $shipper->customer_id ? ($customerMap->get($shipper->customer_id)) : null;
+
+            $values = [
+                $serial + 1,
+                $shipper->awb_number ?? '-',
+                $invoice->created_at ? $invoice->created_at->format('d-m-Y H:i') : '-',
+                $cust ? trim(($cust->first_name ?? '').' '.($cust->last_name ?? '')) : '-',
+                $cust->email ?? '-',
+                $cust->customer_code ?? '-',
+                $shipper->company_name ?? '-',
+                $shipper->city ?? '-',
+                $shipper->state ?? '-',
+                $shipper->pincode ?? '-',
+                $consignee->city ?? '-',
+                $consignee->state ?? '-',
+                $consignee->zip_code ?? '-',
+                $consignee->delivery_destination ?? '-',
+                $consignee->consignee_name ?? ($consignee->contact_person ?? '-'),
+                $invoice->invoice_number ?? '-',
+                $shipper && $shipper->total_price ? (float) $shipper->total_price : 0,
+                $manifest->manifest_number ?? '-',
+                str_replace('_', ' ', (string) $rowStatus),
+            ];
+            foreach ($values as $index => $value) {
+                $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+                $sheet->setCellValue($columnLetter.$rowNumber, $value);
+            }
+            $rowNumber++;
+        }
+
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:'.$lastColumn.'1')->getFont()->setBold(true);
+        $sheet->freezePane('A2');
+        if ($rowNumber > 2) {
+            $sheet->setAutoFilter('A1:'.$lastColumn.'1');
+        }
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $fileName = 'customer-report-'.date('Y-m-d-His').'.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
     /**

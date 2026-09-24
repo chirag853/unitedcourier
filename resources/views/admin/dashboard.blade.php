@@ -657,6 +657,107 @@
                 </div>
                 <!-- end row -->
 
+                <!-- start row - COD / Prepaid Stat Tiles -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- COD Orders -->
+                    <div class="col-xl-4 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">COD Orders</p>
+                                        <h2 class="mb-2 fw-semibold" id="statCod">{{ number_format($codCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statCodSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-cash"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /COD Orders -->
+
+                    <!-- Prepaid Orders -->
+                    <div class="col-xl-4 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Prepaid Orders</p>
+                                        <h2 class="mb-2 fw-semibold" id="statPrepaid">{{ number_format($prepaidCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statPrepaidSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-green"><i class="ti ti-credit-card"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Prepaid Orders -->
+
+                    <!-- General Orders -->
+                    <div class="col-xl-4 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">General Orders</p>
+                                        <h2 class="mb-2 fw-semibold" id="statGeneral">{{ number_format($generalCount) }}</h2>
+                                        <span class="stat-trend-badge flat" id="statGeneralSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-indigo"><i class="ti ti-package"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /General Orders -->
+
+                </div>
+                <!-- end row - COD / Prepaid Stat Tiles -->
+
+                <!-- start row - COD / Prepaid Summary Charts (Pie + Bar) -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- COD / Prepaid Doughnut -->
+                    <div class="col-xl-5 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">COD / Prepaid Summary</h6>
+                            </div>
+                            <div class="card-body d-flex align-items-center justify-content-center">
+                                <canvas id="orderTypeSummaryChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- COD / Prepaid Bar Chart -->
+                    <div class="col-xl-7 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">COD / Prepaid Summary — Bar View</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="orderTypeBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row -->
+
+                <!-- start row - COD vs Prepaid Trend Chart -->
+                <div class="row mb-4">
+                    <div class="col-xl-12 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">COD vs Prepaid Trend</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="orderTypeTrendChart" style="max-height: 300px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row -->
+
                 <!-- start row - Recent Activity -->
                 <div class="row row-gap-3 mb-4">
                     <!-- Recent Shipments -->
@@ -832,6 +933,9 @@
         let shipmentTrendChart = null;
         let customerSummaryBarChart = null;
         let shipmentDeliveryBarChart = null;
+        let orderTypeSummaryChart = null;
+        let orderTypeBarChart = null;
+        let orderTypeTrendChart = null;
 
         // ---- Helpers -------------------------------------------------------
         function formatNumber(value) {
@@ -938,6 +1042,12 @@
             other: '#6c757d'
         };
 
+        const orderTypeColors = {
+            cod: '#fd7e14',
+            prepaid: '#198754',
+            general: '#5b5eff'
+        };
+
         function loadChartData(filter, btnElement) {
             // Update active button
             document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
@@ -959,7 +1069,11 @@
                     renderShipmentDeliverySummaryChart(data.shipmentStatusCounts, data.statusMap, data.deliverySummary);
                     renderShipmentDeliveryBarChart(data.shipmentStatusCounts, data.statusMap, data.deliverySummary);
                     renderShipmentTrendChart(data.dateWiseCounts, data.filter);
+                    renderOrderTypeSummaryChart(data.orderTypeSummary || {});
+                    renderOrderTypeBarChart(data.orderTypeSummary || {});
+                    renderOrderTypeTrendChart(data.orderTypeTrend || {}, data.filter);
                     updateShipmentDeliveryStatTiles(data.shipmentStatusCounts, data.deliverySummary, data.filter);
+                    updateOrderTypeStatTiles(data.orderTypeSummary || {}, data.filter);
                     updateBusinessStatTiles(data.businessSummary || {});
                 }
             })
@@ -1006,6 +1120,26 @@
 
             document.getElementById('statSelfNetwork').textContent = formatNumber(selfNetwork);
             document.getElementById('statSelfNetworkSub').querySelector('span').textContent = 'for ' + periodLabel;
+        }
+
+        function updateOrderTypeStatTiles(orderTypeSummary, filter) {
+            const filterLabels = {
+                today: 'today',
+                yesterday: 'yesterday',
+                this_month: 'this month',
+                last_month: 'last month',
+                last_year: 'last year'
+            };
+            const periodLabel = filterLabels[filter] || 'selected period';
+
+            document.getElementById('statCod').textContent = formatNumber(orderTypeSummary.cod);
+            document.getElementById('statCodSub').querySelector('span').textContent = 'for ' + periodLabel;
+
+            document.getElementById('statPrepaid').textContent = formatNumber(orderTypeSummary.prepaid);
+            document.getElementById('statPrepaidSub').querySelector('span').textContent = 'for ' + periodLabel;
+
+            document.getElementById('statGeneral').textContent = formatNumber(orderTypeSummary.general);
+            document.getElementById('statGeneralSub').querySelector('span').textContent = 'for ' + periodLabel;
         }
 
         function renderCustomerSummaryChart(customerSummary) {
@@ -1388,6 +1522,207 @@
                             grid: {
                                 display: false
                             }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderOrderTypeSummaryChart(orderTypeSummary) {
+            const labels = ['COD', 'Prepaid', 'General'];
+            const values = [
+                orderTypeSummary.cod || 0,
+                orderTypeSummary.prepaid || 0,
+                orderTypeSummary.general || 0
+            ];
+            const colors = [orderTypeColors.cod, orderTypeColors.prepaid, orderTypeColors.general];
+
+            if (orderTypeSummaryChart) {
+                orderTypeSummaryChart.destroy();
+            }
+
+            const ctx = document.getElementById('orderTypeSummaryChart').getContext('2d');
+            orderTypeSummaryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: themeColors().cardBg,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 12,
+                                usePointStyle: true,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderOrderTypeBarChart(orderTypeSummary) {
+            const labels = ['COD', 'Prepaid', 'General'];
+            const values = [
+                orderTypeSummary.cod || 0,
+                orderTypeSummary.prepaid || 0,
+                orderTypeSummary.general || 0
+            ];
+            const colors = [orderTypeColors.cod, orderTypeColors.prepaid, orderTypeColors.general];
+
+            if (orderTypeBarChart) {
+                orderTypeBarChart.destroy();
+            }
+
+            const ctx = document.getElementById('orderTypeBarChart').getContext('2d');
+            orderTypeBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Orders by Type',
+                        data: values,
+                        backgroundColor: colors.map(c => c + 'cc'),
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, font: { size: 11 } },
+                            grid: { color: themeColors().grid }
+                        },
+                        x: {
+                            ticks: { font: { size: 12 } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function formatTrendLabel(label, filter) {
+            if (filter === 'last_year') {
+                const [year, month] = label.split('-');
+                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                return monthNames[parseInt(month) - 1] + ' ' + year;
+            }
+            const parts = label.split('-');
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return parseInt(parts[2]) + ' ' + monthNames[parseInt(parts[1]) - 1];
+        }
+
+        function renderOrderTypeTrendChart(orderTypeTrend, filter) {
+            const rawLabels = orderTypeTrend.labels || [];
+            const displayLabels = rawLabels.map(label => formatTrendLabel(label, filter));
+            const codValues = orderTypeTrend.cod || [];
+            const prepaidValues = orderTypeTrend.prepaid || [];
+
+            if (orderTypeTrendChart) {
+                orderTypeTrendChart.destroy();
+            }
+
+            const ctx = document.getElementById('orderTypeTrendChart').getContext('2d');
+            const colors = themeColors();
+
+            orderTypeTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: displayLabels,
+                    datasets: [
+                        {
+                            label: 'COD',
+                            data: codValues,
+                            borderColor: orderTypeColors.cod,
+                            backgroundColor: orderTypeColors.cod,
+                            borderWidth: 3,
+                            pointBackgroundColor: orderTypeColors.cod,
+                            pointBorderColor: colors.cardBg,
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 6,
+                            pointRadius: 4,
+                            fill: false,
+                            tension: 0.42
+                        },
+                        {
+                            label: 'Prepaid',
+                            data: prepaidValues,
+                            borderColor: orderTypeColors.prepaid,
+                            backgroundColor: orderTypeColors.prepaid,
+                            borderWidth: 3,
+                            pointBackgroundColor: orderTypeColors.prepaid,
+                            pointBorderColor: colors.cardBg,
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 6,
+                            pointRadius: 4,
+                            fill: false,
+                            tension: 0.42
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { usePointStyle: true, font: { size: 12 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, font: { size: 11 } },
+                            grid: { color: colors.grid }
+                        },
+                        x: {
+                            ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 0 },
+                            grid: { display: false }
                         }
                     }
                 }

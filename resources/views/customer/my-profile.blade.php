@@ -332,7 +332,7 @@
                         <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
                             <div class="ps-0 ps-sm-5">
                                 <h4 class="mb-1 fw-bold">
-                                    {{ trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')) ?: 'Customer' }}
+                                        {{ ucwords(strtolower(trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')))) ?: 'Customer' }}
                                 </h4>
                                 <p class="text-muted mb-2">
                                     <i class="ti ti-mail me-1"></i>{{ $customer->email ?? 'N/A' }}

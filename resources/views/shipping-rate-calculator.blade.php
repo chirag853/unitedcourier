@@ -307,7 +307,7 @@
                 <h3 class="h4-title">Calculate Your <span class="gradient-text">Shipping Rate</span></h3>
              </div>
             
-              <form id="shippingRateForm">
+              <form id="shippingRateForm" autocomplete="off">
 
     <!-- Destination, location and postal code -->
     <div class="row g-4 mb-4">
@@ -336,7 +336,7 @@
                     <option value="">Select destination first</option>
                 </select>
                 <input type="text" id="destinationLocationText" name="location" class="form-control input-custom d-none"
-                    placeholder="Enter state or city" maxlength="100" disabled>
+                    placeholder="Enter state or city" maxlength="100" disabled autocomplete="new-password" spellcheck="false">
             </div>
             <small id="locationHelp" class="text-muted mt-2 d-block">Configured states and cities will appear as a dropdown; otherwise you can type the location.</small>
         </div>
@@ -351,7 +351,7 @@
                     <option value="">Select ZIP / postal code</option>
                 </select>
                 <input type="text" id="destinationZipcode" name="zipcode" class="form-control input-custom"
-                    placeholder="Enter ZIP or postal code" maxlength="20" required disabled>
+                    placeholder="Enter ZIP or postal code" maxlength="20" required disabled autocomplete="new-password" spellcheck="false">
             </div>
             <small id="zipcodeHelp" class="text-muted mt-2 d-block">Configured ZIP/postal codes will appear as a dropdown; otherwise you can type one.</small>
         </div>
@@ -363,7 +363,7 @@
             </label>
             <div class="input-group-custom">
                 <input type="number" id="shipmentWeight" name="weight" class="form-control input-custom"
-                    placeholder="Enter weight in kg" min="0.001" max="10000" step="0.001" required>
+                    placeholder="Enter weight in kg" min="0.001" max="10000" step="0.001" required autocomplete="off">
                 <span style="padding: 14px 20px; border-left:1px solid #ddd;">kg</span>
             </div>
         </div>

@@ -90,6 +90,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         Route::post('/received-in-hub', [AdminController::class, 'receivedInHub'])->name('admin.received-in-hub');
         Route::get('/notifications-data', [AdminController::class, 'notificationsData'])->name('admin.notifications.data');
         Route::patch('/notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('admin.notifications.read-all');
+        Route::delete('/notifications/clear', [AdminController::class, 'clearNotifications'])->name('admin.notifications.clear');
         Route::patch('/notifications/{id}/read', [AdminController::class, 'markNotificationRead'])->name('admin.notifications.read');
         Route::get('/leads-dashboard', [AdminController::class, 'leadsDashboard'])->name('admin.leads-dashboard');
         Route::get('/project-dashboard', [AdminController::class, 'projectDashboard'])->name('admin.project-dashboard');
@@ -115,6 +116,8 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/dispute-charges-list', [AdminController::class, 'disputeChargesList'])->name('admin.dispute-charges-list');
     Route::get('/dispute-orders', [AdminController::class, 'disputeOrders'])->name('admin.dispute-orders');
     Route::get('/cancel-orders', [AdminController::class, 'cancelOrders'])->name('admin.cancel-orders');
+    Route::get('/customer-report', [AdminController::class, 'customerReport'])->name('admin.customer-report');
+    Route::get('/customer-report/export', [AdminController::class, 'exportCustomerReport'])->name('admin.customer-report.export');
     Route::get('/wallet-transactions', [AdminController::class, 'walletTransactions'])->name('admin.wallet-transactions');
     Route::get('/wallet-transactions/data', [AdminController::class, 'walletTransactionsData'])->name('admin.wallet-transactions.data');
     Route::post('/apply-dispute-charge', [AdminController::class, 'applyDisputeCharge'])->name('admin.apply-dispute-charge');
@@ -726,6 +729,10 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
     Route::post('/ups-rate', [CustomerController::class, 'getUpsRate'])->name('ups.rate');
     Route::post('/ups-ship', [CustomerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [CustomerController::class, 'viewAllShipments'])->name('view-all-shipments');
+    Route::get('/status-report', [CustomerController::class, 'statusReport'])->name('status-report');
+    Route::get('/status-report/export', [CustomerController::class, 'exportStatusReport'])->name('status-report.export');
+    Route::get('/un-manifest-report', [CustomerController::class, 'unManifestReport'])->name('un-manifest-report');
+    Route::get('/un-manifest-report/export', [CustomerController::class, 'exportUnManifestReport'])->name('un-manifest-report.export');
     Route::get('/shipment-label/{invoiceId}', [CustomerController::class, 'getShipmentLabel'])->name('shipment-label');
     Route::get('/transaction-history', [CustomerController::class, 'transactionHistory'])->name('transaction-history');
     Route::get('/wallet-history', [CustomerController::class, 'walletHistory'])->name('wallet-history');
