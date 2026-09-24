@@ -17,20 +17,173 @@
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="app-style">
 
     <style>
+        /* ---------- Page hero ---------- */
+        .az-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 16px;
+            background: linear-gradient(115deg, #0a2a5e 0%, #0b5cd6 62%, #38bdf8 130%);
+            color: #fff;
+            box-shadow: 0 18px 40px -18px rgba(10, 42, 94, .55);
+        }
+        .az-hero::before {
+            content: "";
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            top: -110px;
+            right: -70px;
+            border-radius: 50%;
+            border: 30px solid rgba(255, 255, 255, .07);
+        }
+        .az-hero::after {
+            content: "";
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            bottom: -70px;
+            right: 140px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .05);
+        }
+        .az-hero h4 { color: #fff; }
+        .az-hero .text-muted { color: rgba(255, 255, 255, .72) !important; }
+        .az-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, .12);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 999px;
+            padding: 5px 14px 5px 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .az-chip i {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, .18);
+            font-size: 14px;
+        }
+        .az-hero .btn-light {
+            border: none;
+            font-weight: 600;
+            border-radius: 10px;
+            box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .35);
+        }
+
+        /* ---------- Pill tabs ---------- */
+        #zoneTabs {
+            background: #eaf0f7;
+            border: none;
+            border-radius: 14px;
+            padding: 6px;
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 1.25rem !important;
+        }
+        #zoneTabs .nav-link {
+            font-weight: 700;
+            font-size: 13.5px;
+            padding: 9px 22px;
+            color: #5b6b7f;
+            border: none;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all .18s ease;
+        }
+        #zoneTabs .nav-link:hover { color: #0b5cd6; background: rgba(255, 255, 255, .6); }
+        #zoneTabs .nav-link.active {
+            background: #fff;
+            color: #0b5cd6;
+            box-shadow: 0 4px 12px -4px rgba(10, 42, 94, .3);
+            border: none;
+        }
+
+        /* ---------- Cards & steps ---------- */
+        #add-zones-pane .card, #zone-list-pane .card {
+            border: 1px solid #e3eaf3;
+            border-radius: 16px;
+            box-shadow: 0 10px 28px -20px rgba(10, 42, 94, .3);
+        }
+        #add-zones-pane .card-header {
+            background: linear-gradient(160deg, #f6faff 0%, #ffffff 70%);
+            border-bottom: 1px solid #e3eaf3;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 14px 20px;
+        }
+        #add-zones-pane .card-header h5 { font-weight: 700; }
+        #addZoneForm > div.mb-4 {
+            background: #f8faff;
+            border: 1px solid #e3eaf3;
+            border-radius: 12px;
+            padding: 18px;
+        }
+        #addZoneForm > div.mb-4 > h6 { font-weight: 700; color: #0a2a5e; }
+        #entriesSection {
+            background: #f8faff;
+            border: 1px solid #e3eaf3;
+            border-radius: 12px;
+            padding: 18px;
+        }
+        #entriesSection > .d-flex h6 { font-weight: 700; color: #0a2a5e; }
         .zone-entry-row { transition: background-color .15s; }
-        .zone-entry-row:hover { background-color: #f8f9fa; }
+        .zone-entry-row:hover { background-color: #eef4ff; }
         .step-badge {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            background: #007bff;
+            background: linear-gradient(135deg, #0b5cd6, #38bdf8);
             color: #fff;
             font-weight: 700;
             font-size: 14px;
             margin-right: 8px;
+            box-shadow: 0 4px 10px rgba(11, 92, 214, .35);
+        }
+
+        /* ---------- Form controls ---------- */
+        #add-zones-pane .form-select, #add-zones-pane .form-control,
+        .zl-filter-card .form-select, .zl-filter-card .form-control {
+            min-height: 44px;
+            border-radius: 10px;
+            border-color: #dbe4f0;
+        }
+        #add-zones-pane .form-select:focus, #add-zones-pane .form-control:focus,
+        .zl-filter-card .form-select:focus, .zl-filter-card .form-control:focus {
+            border-color: #0b5cd6;
+            box-shadow: 0 0 0 .2rem rgba(11, 92, 214, .15);
+        }
+        #zoneEntriesTable { border-radius: 12px; overflow: hidden; }
+        #zoneEntriesTable thead th {
+            background: #0a2a5e;
+            color: #fff;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            border: none !important;
+            padding: 10px 12px;
+        }
+        #zoneEntriesTable .form-control { min-height: 40px; border-radius: 8px; }
+        .page-wrapper .content .btn-primary {
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .page-wrapper .content .btn-outline-secondary,
+        .page-wrapper .content .btn-outline-primary,
+        .page-wrapper .content .btn-outline-success {
+            border-radius: 10px;
+            font-weight: 600;
         }
         .nav-tabs .nav-link {
             font-weight: 600;
@@ -65,21 +218,44 @@
         }
         #zoneListTable { font-size: 13px; }
         #zoneListTable thead th {
+            background: linear-gradient(180deg, #0a2a5e, #14418f);
+            color: #fff;
             font-size: 10.5px;
             text-transform: uppercase;
-            letter-spacing: .4px;
-            color: #6b7a90;
-            background: #f2f6fc;
-            border-bottom: 1px solid #dfe7f2 !important;
+            letter-spacing: .5px;
             white-space: nowrap;
-            padding: 8px 12px;
+            border: none !important;
+            padding: 11px 12px;
         }
+        #zoneListTable thead th:first-child { border-radius: 10px 0 0 0; }
+        #zoneListTable thead th:last-child { border-radius: 0 10px 0 0; }
         #zoneListTable tbody td {
             vertical-align: middle;
-            padding: 7px 12px;
+            padding: 9px 12px;
         }
         #zoneListTable tbody tr { transition: background .12s; }
-        #zoneListTable tbody tr:hover td { background-color: #f5f9ff; }
+        #zoneListTable tbody tr:hover td { background-color: #f2f7ff; }
+        #zoneListResultsCard { overflow: hidden; }
+        /* Pagination bar */
+        #zoneListPagination .page-link {
+            border-radius: 8px;
+            margin: 0 2px;
+            border: 1px solid #e3eaf3;
+            color: #0b5cd6;
+            font-weight: 600;
+            font-size: 12.5px;
+            min-width: 32px;
+            text-align: center;
+        }
+        #zoneListPagination .page-link:hover { background: #eaf1ff; }
+        #zoneListPagination .page-item.active .page-link {
+            background: linear-gradient(135deg, #0b5cd6, #38bdf8);
+            border-color: transparent;
+            color: #fff;
+            box-shadow: 0 4px 10px rgba(11, 92, 214, .35);
+        }
+        #zoneListPagination .page-item.disabled .page-link { color: #aab6c5; background: #f4f6fa; }
+        #zoneListPerPage { border-radius: 8px; font-size: 12.5px; font-weight: 600; }
         .cat-badge {
             display: inline-flex;
             align-items: center;
@@ -168,17 +344,22 @@
         <div class="page-wrapper">
             <div class="content pb-0">
 
-                <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
-                    <div>
-                        <h4 class="mb-1">Add Zone</h4>
-                        <p class="text-muted mb-0">Create new zones for a country. First select a country, then a zone category, then enter the zone entries.</p>
+                <!-- Page Hero -->
+                <div class="az-hero d-flex align-items-center justify-content-between gap-3 mb-4 flex-wrap p-4">
+                    <div class="position-relative" style="z-index:1;">
+                        <h4 class="mb-1"><i class="ti ti-map-pin me-1"></i>Add Zone</h4>
+                        <p class="text-muted mb-2 small">Create new zones for a country. Select service &amp; country, pick a category, then add entries — or bulk upload via Excel.</p>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="az-chip"><i class="ti ti-map-pins"></i>{{ number_format($zoneStats['total'] ?? 0) }} zones</span>
+                            <span class="az-chip"><i class="ti ti-world"></i>{{ number_format($zoneStats['countries'] ?? 0) }} countries</span>
+                            <span class="az-chip"><i class="ti ti-truck-delivery"></i>{{ number_format($zoneStats['services'] ?? 0) }} services</span>
+                        </div>
                     </div>
-                    <div class="gap-2 d-flex align-items-center flex-wrap">
-                        <a href="{{ url('/admin/manage-rate') }}" class="btn btn-outline-secondary">
-                            <i class="ti ti-arrow-left me-1"></i>Back to Manage Rate
+                    <div class="position-relative d-flex gap-2" style="z-index:1;">
+                        <a href="{{ url('/admin/manage-rate') }}" class="btn btn-light">
+                            <i class="ti ti-arrow-left me-1"></i>Manage Rate
                         </a>
-                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></a>
+                        <button type="button" class="btn btn-light" data-bs-toggle="tooltip" data-bs-placement="top" title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></button>
                     </div>
                 </div>
 
@@ -260,7 +441,7 @@
                                                         </option>
                                                     @endforeach
                                                 </select>
-                                                <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                                <!-- <small class="text-muted">Select a service first — its countries will appear next.</small> -->
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
@@ -372,7 +553,7 @@
                                                     </option>
                                                 @endforeach
                                             </select>
-                                            <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                            <!-- <small class="text-muted">Select a service first — its countries will appear next.</small> -->
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-bold">Country <span class="text-danger">*</span></label>
@@ -434,7 +615,7 @@
                                             </option>
                                         @endforeach
                                     </select>
-                                    <small class="text-muted">Select a service first — its countries will appear next.</small>
+                                    <!-- <small class="text-muted">Select a service first — its countries will appear next.</small> -->
                                 </div>
                                 <div class="col-lg-4 col-md-6">
                                     <label class="form-label fw-bold" for="list_destination_id">
@@ -466,7 +647,7 @@
                                     <span class="text-muted fw-normal" id="zoneListScopeText"></span>
                                 </h6>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="zoneListSearchClear" style="display:none;">
-                                    <i class="ti ti-filter-x me-1"></i>Clear Local Filters
+                                    <i class="ti ti-filter-x me-1"></i>Clear Filters
                                 </button>
                             </div>
                             <div class="d-flex flex-wrap gap-2">
@@ -529,6 +710,17 @@
                                         </thead>
                                         <tbody id="zoneListBody"></tbody>
                                     </table>
+                                </div>
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 d-none" id="zoneListPaginationBar">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <label class="form-label mb-0 small text-muted" for="zoneListPerPage">Rows</label>
+                                        <select id="zoneListPerPage" class="form-select form-select-sm" style="width:auto;">
+                                            <option value="25">25 / page</option>
+                                            <option value="50" selected>50 / page</option>
+                                            <option value="100">100 / page</option>
+                                        </select>
+                                    </div>
+                                    <div id="zoneListPagination"></div>
                                 </div>
                                 <div class="text-center py-5 d-none" id="zoneListNoMatch">
                                     <i class="ti ti-search-off fs-1 d-block mb-2 text-muted"></i>
@@ -772,11 +964,17 @@
             // =================================================================
             var zoneListUrl = "{{ route('admin.add-zone.list') }}";
 
-            // Zones returned by the last AJAX load (kept so the client-side
-            // search / category filters never need another round trip).
+            // Zones of the current page (server-paginated via PHP).
             var zoneListData = [];
             // Currently active category chip: 'all' | 'state' | 'zipcode' | 'city'.
             var zoneListActiveCat = 'all';
+            // Server-side (PHP) pagination state for the Zone List tab.
+            var zoneListPage = 1;
+            var zoneListPerPage = 50;
+            var zoneListTotal = 0;
+            var zoneListLastPage = 1;
+            var zoneListCounts = { all: 0, state: 0, zipcode: 0, city: 0 };
+            var zoneListSearchTimer = null;
 
             // Zone List tab (service FIRST): rebuild the Country dropdown
             // with the selected service's countries. Keeps the previous
@@ -840,13 +1038,13 @@
                 $('#zoneListResultsCard').show();
             }
 
-            // Apply the current category chip + search box to the stored zones
-            // and re-render the chips, table and count badge.
+            // Render the current server-paginated page: chips (full-scope
+            // totals from PHP), table rows, count badge and pagination bar.
             function renderZoneList() {
                 var zones = zoneListData;
                 var cat = zoneListActiveCat;
-                var query = ($('#zoneListSearch').val() || '').trim().toLowerCase();
-                var hasLocalFilter = cat !== 'all' || query !== '';
+                var query = ($('#zoneListSearch').val() || '').trim();
+                var hasFilter = cat !== 'all' || query !== '';
 
                 // Header context line with the FULL country & service names.
                 var destName = $('#list_destination_id option:selected').text() || 'selected country';
@@ -861,16 +1059,12 @@
                 scope += '</strong>';
                 $('#zoneListScopeText').html('&nbsp;' + scope);
 
-                // Category counts for the chips.
-                var counts = { state: 0, zipcode: 0, city: 0 };
-                $.each(zones, function() {
-                    var k = String(this.zone_category || '').toLowerCase();
-                    if (counts[k] !== undefined) counts[k]++;
-                });
-                $('#chipCountAll').text(zones.length);
-                $('#chipCountState').text(counts.state);
-                $('#chipCountZip').text(counts.zipcode);
-                $('#chipCountCity').text(counts.city);
+                // Category counts come from the server (full scope totals).
+                var counts = zoneListCounts || { all: 0, state: 0, zipcode: 0, city: 0 };
+                $('#chipCountAll').text(counts.all || 0);
+                $('#chipCountState').text(counts.state || 0);
+                $('#chipCountZip').text(counts.zipcode || 0);
+                $('#chipCountCity').text(counts.city || 0);
 
                 // Highlight the active chip.
                 $('.zl-chip[data-cat]').each(function() {
@@ -878,29 +1072,18 @@
                     $(this).toggleClass('zl-chip-off', !isActive);
                 });
 
-                $('#zoneListSearchClear').toggle(hasLocalFilter);
-
-                // Filter the stored zones locally.
-                var filtered = [];
-                $.each(zones, function(i, z) {
-                    if (cat !== 'all' && String(z.zone_category || '').toLowerCase() !== cat) return;
-                    if (query) {
-                        var hay = ((z.zone_name || '') + ' ' + (z.zone_code || '') + ' ' +
-                                   (z.zone_category || '') + ' ' + (z.zone_number != null ? z.zone_number : '') + ' ' +
-                                   (z.service_name || '') + ' ' + destName).toLowerCase();
-                        if (hay.indexOf(query) === -1) return;
-                    }
-                    filtered.push(z);
-                });
+                $('#zoneListSearchClear').toggle(hasFilter);
 
                 var $tbody = $('#zoneListBody').empty();
-                if (filtered.length === 0) {
+                if (zones.length === 0) {
                     $('#zoneListTable').addClass('d-none');
+                    $('#zoneListPaginationBar').addClass('d-none');
                     $('#zoneListNoMatch').removeClass('d-none');
                 } else {
                     $('#zoneListNoMatch').addClass('d-none');
                     $('#zoneListTable').removeClass('d-none');
-                    $.each(filtered, function(i, z) {
+                    var baseNo = (zoneListPage - 1) * zoneListPerPage;
+                    $.each(zones, function(i, z) {
                         var meta = zoneCategoryMeta(z.zone_category);
                         var codeTd = z.zone_code
                             ? '<code>' + escHtml(z.zone_code) + '</code>'
@@ -910,7 +1093,7 @@
                             : '<span class="text-muted">—</span>';
                         $tbody.append(
                             '<tr>' +
-                                '<td class="text-center text-muted">' + (i + 1) + '</td>' +
+                                '<td class="text-center text-muted">' + (baseNo + i + 1) + '</td>' +
                                 '<td><i class="ti ti-world me-1 text-muted"></i>' + escHtml(destName) + '</td>' +
                                 '<td class="fw-semibold">' + escHtml(z.zone_name || '—') + '</td>' +
                                 '<td>' + codeTd + '</td>' +
@@ -920,32 +1103,87 @@
                             '</tr>'
                         );
                     });
+                    renderZoneListPagination();
                 }
 
-                var countText = filtered.length + ' of ' + zones.length + ' zone' + (zones.length === 1 ? '' : 's');
+                var countText;
+                if (zoneListTotal > 0 && zones.length > 0) {
+                    var from = (zoneListPage - 1) * zoneListPerPage + 1;
+                    countText = 'Showing ' + from + '–' + (from + zones.length - 1) + ' of ' + zoneListTotal + ' zones';
+                } else {
+                    countText = '0 zones';
+                }
                 $('#zoneListCountText').text(countText);
             }
 
-            // Load the zones via AJAX for the chosen country/service.
-            function loadZoneList() {
+            // Numbered pagination bar for the PHP-paginated zone list.
+            function renderZoneListPagination() {
+                var $bar = $('#zoneListPaginationBar');
+                var $pages = $('#zoneListPagination');
+                $pages.empty();
+                if (zoneListLastPage <= 1) {
+                    $bar.addClass('d-none');
+                    return;
+                }
+                $bar.removeClass('d-none');
+                function pageBtn(page, label, active, disabled) {
+                    return '<li class="page-item' + (active ? ' active' : '') + (disabled ? ' disabled' : '') + '">' +
+                        '<a class="page-link" href="#" data-page="' + page + '">' + label + '</a></li>';
+                }
+                var html = '<ul class="pagination pagination-sm justify-content-center mb-0 flex-wrap">';
+                html += pageBtn(zoneListPage - 1, '&laquo;', false, zoneListPage <= 1);
+                var prev = 0;
+                for (var p = 1; p <= zoneListLastPage; p++) {
+                    if (p !== 1 && p !== zoneListLastPage && Math.abs(p - zoneListPage) > 2) continue;
+                    if (p - prev > 1) html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+                    html += pageBtn(p, p, p === zoneListPage, false);
+                    prev = p;
+                }
+                html += pageBtn(zoneListPage + 1, '&raquo;', false, zoneListPage >= zoneListLastPage);
+                html += '</ul>';
+                $pages.html(html);
+            }
+
+            $(document).on('click', '#zoneListPagination .page-link', function(e) {
+                e.preventDefault();
+                var $li = $(this).closest('.page-item');
+                if ($li.hasClass('disabled') || $li.hasClass('active')) return;
+                loadZoneList(parseInt($(this).data('page'), 10) || 1);
+            });
+
+            $('#zoneListPerPage').on('change', function() {
+                zoneListPerPage = parseInt($(this).val(), 10) || 50;
+                loadZoneList(1);
+            });
+
+            // Load one page of zones via AJAX (PHP pagination) for the chosen
+            // country/service + server-side search & category filter.
+            function loadZoneList(page) {
                 var destId = $('#list_destination_id').val();
                 if (!destId) {
                     zoneListData = [];
+                    zoneListTotal = 0;
+                    zoneListLastPage = 1;
+                    zoneListPage = 1;
                     showZoneListEmpty('No zones to show yet',
                         'Select a service and a country above, then click "Show Zones" to browse all the zones configured for that destination.');
                     return;
                 }
+                zoneListPage = Math.max(1, parseInt(page, 10) || 1);
 
                 var $btn = $('#zoneListLoadBtn');
                 var serviceKey = $('#list_service_id').val();
-                var params = { destination_id: destId };
+                var params = {
+                    destination_id: destId,
+                    page: zoneListPage,
+                    per_page: zoneListPerPage,
+                    category: zoneListActiveCat,
+                    search: ($('#zoneListSearch').val() || '').trim()
+                };
                 if (serviceKey) {
                     params.service_key = serviceKey;
                 }
 
-                // Reset the client-side search & category for the new data set.
-                $('#zoneListSearch').val('');
-                zoneListActiveCat = 'all';
                 $('#zoneListEmpty').hide();
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Loading...');
 
@@ -956,10 +1194,17 @@
                     dataType: 'json',
                     success: function(res) {
                         zoneListData = res.zones || [];
-                        if (zoneListData.length === 0) {
-                            showZoneListEmpty('No zones found',
-                                'No zones are configured for the selected country' + (serviceKey ? ' and service' : '') +
-                                '. Add some zones using the "Add Zones" tab.');
+                        zoneListTotal = parseInt(res.total, 10) || 0;
+                        zoneListPerPage = parseInt(res.per_page, 10) || zoneListPerPage;
+                        zoneListPage = parseInt(res.current_page, 10) || 1;
+                        zoneListLastPage = Math.max(1, parseInt(res.last_page, 10) || 1);
+                        zoneListCounts = res.category_counts || { all: 0, state: 0, zipcode: 0, city: 0 };
+                        if (zoneListTotal === 0) {
+                            var hasFilter = zoneListActiveCat !== 'all' || (($('#zoneListSearch').val() || '').trim() !== '');
+                            showZoneListEmpty(hasFilter ? 'No matching zones' : 'No zones found',
+                                hasFilter ? 'Try a different search term or choose another category above.'
+                                    : 'No zones are configured for the selected country' + (serviceKey ? ' and service' : '') +
+                                      '. Add some zones using the "Add Zones" tab.');
                         } else {
                             hideZoneListEmpty();
                             renderZoneList();
@@ -972,6 +1217,7 @@
                             if (data && data.message) msg = data.message;
                         } catch (e) {}
                         zoneListData = [];
+                        zoneListTotal = 0;
                         showZoneListEmpty('Something went wrong', msg);
                     },
                     complete: function() {
@@ -980,88 +1226,105 @@
                 });
             }
 
-            // Local search box.
-            $('#zoneListSearch').on('input', renderZoneList);
+            // Server-side search box (debounced).
+            $('#zoneListSearch').on('input', function() {
+                clearTimeout(zoneListSearchTimer);
+                zoneListSearchTimer = setTimeout(function() { loadZoneList(1); }, 400);
+            });
 
-            // "Clear local filters" resets search + category but keeps the data.
+            // "Clear Filters" resets search + category but keeps the scope.
             $('#zoneListSearchClear').on('click', function() {
                 $('#zoneListSearch').val('');
                 zoneListActiveCat = 'all';
-                renderZoneList();
+                loadZoneList(1);
             });
 
-            // Category chips (States / ZIP / Cities / All).
+            // Category chips (States / ZIP / Cities / All) reload page 1.
             $('.zl-chip[data-cat]').on('click', function() {
                 zoneListActiveCat = String($(this).data('cat'));
-                renderZoneList();
+                loadZoneList(1);
             });
 
             // When a service is picked in the Zone List tab, restrict the
             // Country dropdown to that service's countries (keeping the
-            // previous country when still covered) and reload the list.
+            // previous country when still covered) and reload page 1.
             $('#list_service_id').on('change', function() {
                 refreshZoneListCountries();
-                loadZoneList();
+                loadZoneList(1);
             });
 
-            // When a country is picked, auto-load the zone list straight away.
+            // When a country is picked, auto-load page 1 straight away.
             $('#list_destination_id').on('change', function() {
                 if (this.value) {
-                    loadZoneList();
+                    loadZoneList(1);
                 } else {
                     zoneListData = [];
+                    zoneListTotal = 0;
+                    zoneListLastPage = 1;
+                    zoneListPage = 1;
                     showZoneListEmpty('No zones to show yet',
                         'Select a service and a country above, then click "Show Zones" to browse all the zones configured for that destination.');
                 }
             });
 
             // Manual trigger buttons.
-            $('#zoneListLoadBtn').on('click', loadZoneList);
-            $('#zoneListRefreshBtn').on('click', loadZoneList);
-            $('#zoneListEmptyRefresh').on('click', loadZoneList);
+            $('#zoneListLoadBtn').on('click', function() { loadZoneList(1); });
+            $('#zoneListRefreshBtn').on('click', function() { loadZoneList(zoneListPage); });
+            $('#zoneListEmptyRefresh').on('click', function() { loadZoneList(zoneListPage); });
 
-            // Export the currently visible (filtered) zones as a CSV file.
+            // Export the current server-side filter (search + category) as a
+            // CSV file. Fetches the full filtered list (all=1, no pagination).
             $('#zoneListExportBtn').on('click', function() {
-                if (!zoneListData.length) return;
-                var cat = zoneListActiveCat;
-                var query = ($('#zoneListSearch').val() || '').trim().toLowerCase();
+                var destId = $('#list_destination_id').val();
+                if (!destId || zoneListTotal === 0) return;
+                var $btn = $(this).prop('disabled', true);
+                var serviceKey = $('#list_service_id').val();
                 var destName = $('#list_destination_id option:selected').text() || 'selected country';
-                var rows = [];
-                $.each(zoneListData, function() {
-                    var z = this;
-                    if (cat !== 'all' && String(z.zone_category || '').toLowerCase() !== cat) return;
-                    if (query) {
-                        var hay = ((z.zone_name || '') + ' ' + (z.zone_code || '') + ' ' +
-                                   (z.zone_category || '') + ' ' + (z.zone_number != null ? z.zone_number : '') + ' ' +
-                                   (z.service_name || '') + ' ' + destName).toLowerCase();
-                        if (hay.indexOf(query) === -1) return;
-                    }
-                    rows.push(z);
-                });
-                if (!rows.length) return;
-
-                function csvCell(v) {
-                    var s = String(v == null ? '' : v).replace(/"/g, '""');
-                    return '"' + s + '"';
+                var params = {
+                    destination_id: destId,
+                    all: 1,
+                    category: zoneListActiveCat,
+                    search: ($('#zoneListSearch').val() || '').trim()
+                };
+                if (serviceKey) {
+                    params.service_key = serviceKey;
                 }
+                $.ajax({
+                    url: zoneListUrl,
+                    type: 'GET',
+                    data: params,
+                    dataType: 'json',
+                    success: function(res) {
+                        var rows = res.zones || [];
+                        if (!rows.length) return;
 
-                var csv = '\uFEFFCountry,Zone Name,Zone Code,Category,Zone Number,Service\n';
-                $.each(rows, function() {
-                    var z = this;
-                    csv += [destName, z.zone_name, z.zone_code, zoneCategoryMeta(z.zone_category).label,
-                            z.zone_number, isSharedZone(z) ? 'Shared (All Services)' : (z.service_name || '')]
-                        .map(csvCell).join(',') + '\n';
+                        function csvCell(v) {
+                            var s = String(v == null ? '' : v).replace(/"/g, '""');
+                            return '"' + s + '"';
+                        }
+
+                        var csv = '\uFEFFCountry,Zone Name,Zone Code,Category,Zone Number,Service\n';
+                        $.each(rows, function() {
+                            var z = this;
+                            csv += [destName, z.zone_name, z.zone_code, zoneCategoryMeta(z.zone_category).label,
+                                    z.zone_number, isSharedZone(z) ? 'Shared (All Services)' : (z.service_name || '')]
+                                .map(csvCell).join(',') + '\n';
+                        });
+
+                        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'zone-list-' + (destId || 'country') + '.csv';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    },
+                    complete: function() {
+                        $btn.prop('disabled', false);
+                    }
                 });
-
-                var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = 'zone-list-' + ($('#list_destination_id').val() || 'country') + '.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
             });
         });
     </script>

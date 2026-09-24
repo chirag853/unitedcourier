@@ -6623,7 +6623,14 @@ class AdminController extends Controller
             }
         }
 
-        return view('admin.add-zone', compact('destinations', 'services', 'serviceDestMap', 'serviceOptions', 'serviceCoverage'));
+        // Hero stats for the Add Zone page header (cheap aggregate queries).
+        $zoneStats = [
+            'total'     => \App\Models\Zone::count(),
+            'countries' => \App\Models\Destination::count(),
+            'services'  => \App\Models\CourierService::selectRaw('COUNT(DISTINCT api_provider, service_code) as cnt')->value('cnt') ?? 0,
+        ];
+
+        return view('admin.add-zone', compact('destinations', 'services', 'serviceDestMap', 'serviceOptions', 'serviceCoverage', 'zoneStats'));
     }
 
     /**
@@ -6700,6 +6707,10 @@ class AdminController extends Controller
             'destination_id' => 'required|integer|exists:destinations,id',
             'service_id'     => 'nullable|integer|exists:courier_services,id',
             'service_key'    => 'nullable|string|max:255',
+            'search'         => 'nullable|string|max:100',
+            'category'       => 'nullable|in:all,state,zipcode,city',
+            'per_page'       => 'nullable|integer|min:10|max:200',
+            'all'            => 'nullable|boolean',
         ]);
 
         // DISTINCT group (service_key) expands to every clone of that pair
@@ -6716,37 +6727,92 @@ class AdminController extends Controller
         }
         $serviceIds = array_values(array_unique($serviceIds));
 
-        $zones = \App\Models\Zone::with('service:id,method,service_code')
-            ->where('destination_id', $validated['destination_id'])
-            ->when(!empty($serviceIds), function ($q) use ($serviceIds) {
-                $q->where(function ($query) use ($serviceIds) {
-                    $query->whereIn('service_id', $serviceIds)
-                        ->orWhereNull('service_id');
+        // Base query: this destination + (service-specific OR shared) zones.
+        // Cloned per use so counts, pagination and export share one scope.
+        $baseQuery = function () use ($validated, $serviceIds) {
+            return \App\Models\Zone::where('destination_id', $validated['destination_id'])
+                ->when(!empty($serviceIds), function ($q) use ($serviceIds) {
+                    $q->where(function ($query) use ($serviceIds) {
+                        $query->whereIn('service_id', $serviceIds)
+                            ->orWhereNull('service_id');
+                    });
                 });
-            })
-            ->orderBy('zone_category')
-            ->orderBy('zone_name')
-            ->get();
+        };
+
+        // Per-category totals for the chips (ignores search + category filter).
+        $categoryCounts = ['all' => 0, 'state' => 0, 'zipcode' => 0, 'city' => 0];
+        foreach ((clone $baseQuery())->selectRaw('zone_category, COUNT(*) as cnt')->groupBy('zone_category')->get() as $row) {
+            $cat = strtolower((string) $row->zone_category);
+            $categoryCounts['all'] += (int) $row->cnt;
+            if (isset($categoryCounts[$cat])) {
+                $categoryCounts[$cat] += (int) $row->cnt;
+            }
+        }
+
+        $query = $baseQuery()->with('service:id,method,service_code');
+
+        // Server-side text search (zone name / code, plus exact zone number).
+        $search = trim((string) ($validated['search'] ?? ''));
+        if ($search !== '') {
+            $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
+            $query->where(function ($q) use ($like, $search) {
+                $q->where('zone_name', 'LIKE', $like)
+                    ->orWhere('zone_code', 'LIKE', $like);
+                if (is_numeric($search)) {
+                    $q->orWhere('zone_number_testing', (int) $search);
+                }
+            });
+        }
+
+        // Server-side category filter.
+        $category = strtolower((string) ($validated['category'] ?? 'all'));
+        if ($category !== '' && $category !== 'all') {
+            $query->where('zone_category', $category);
+        }
+
+        $query->orderBy('zone_category')->orderBy('zone_name');
+
+        $mapZone = function ($z) {
+            $serviceName = 'All Services';
+            if ($z->service) {
+                $serviceName = $z->service->method ?? ('Service #' . $z->service->id);
+                if (!empty($z->service->service_code)) {
+                    $serviceName .= ' (' . $z->service->service_code . ')';
+                }
+            }
+
+            return [
+                'id'            => $z->id,
+                'zone_name'     => $z->zone_name,
+                'zone_code'     => $z->zone_code,
+                'zone_category' => ucfirst((string) $z->zone_category),
+                'zone_number'   => $z->zone_number_testing,
+                'service_name'  => $serviceName,
+            ];
+        };
+
+        // Export mode (CSV button): full filtered list, no pagination.
+        if ($request->boolean('all')) {
+            return response()->json([
+                'zones'           => $query->get()->map($mapZone)->values(),
+                'total'           => $query->count(),
+                'category_counts' => $categoryCounts,
+            ]);
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 50);
+        $page = max(1, (int) $request->input('page', 1));
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
 
         return response()->json([
-            'zones' => $zones->map(function ($z) {
-                $serviceName = 'All Services';
-                if ($z->service) {
-                    $serviceName = $z->service->method ?? ('Service #' . $z->service->id);
-                    if (!empty($z->service->service_code)) {
-                        $serviceName .= ' (' . $z->service->service_code . ')';
-                    }
-                }
-
-                return [
-                    'id'            => $z->id,
-                    'zone_name'     => $z->zone_name,
-                    'zone_code'     => $z->zone_code,
-                    'zone_category' => ucfirst((string) $z->zone_category),
-                    'zone_number'   => $z->zone_number_testing,
-                    'service_name'  => $serviceName,
-                ];
-            }),
+            'zones'           => collect($paginator->items())->map($mapZone)->values(),
+            'total'           => $paginator->total(),
+            'per_page'        => $paginator->perPage(),
+            'current_page'    => $paginator->currentPage(),
+            'last_page'       => $paginator->lastPage(),
+            'from'            => $paginator->firstItem(),
+            'to'              => $paginator->lastItem(),
+            'category_counts' => $categoryCounts,
         ]);
     }
 
