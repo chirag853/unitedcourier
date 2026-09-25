@@ -2385,9 +2385,12 @@
                 document.querySelectorAll('.bulk-zone-checkbox').forEach(function(checkbox) { checkbox.checked = false; });
             });
 
-            // Download Sample: send ALL checked (service, country) targets so
-            // every selected country appears in the sample sheet (Country
-            // first column, one row-block per country, rates pre-filled).
+            // Download Sample: POST a hidden form with ALL checked (service,
+            // country) targets so every selected country appears in the sample
+            // sheet (Country first column, one row-block per country, rates
+            // pre-filled). POST is used instead of a GET query string because
+            // 100+ countries exceed Apache's LimitRequestLine and cause
+            // "414 Request-URI Too Long".
             document.getElementById('bulkDownloadSampleBtn').addEventListener('click', function(e) {
                 e.preventDefault();
                 var serviceKey = document.getElementById('bulkService').value;
@@ -2398,14 +2401,36 @@
                 if (!checked.length) { showAlert('Please select at least one country.', 'warning'); return; }
                 if (!withoutZone && !zones.length) { showAlert('Please select at least one zone.', 'warning'); return; }
 
-                var params = new URLSearchParams();
+                var csrfToken = document.querySelector('#bulkUploadForm input[name="_token"]');
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = "{{ route('admin.manage-rate.sample.post') }}";
+                form.style.display = 'none';
+                if (csrfToken) {
+                    var tokenInput = document.createElement('input');
+                    tokenInput.type = 'hidden';
+                    tokenInput.name = '_token';
+                    tokenInput.value = csrfToken.value;
+                    form.appendChild(tokenInput);
+                }
                 checked.forEach(function(c) {
-                    params.append('service_ids[]', c.serviceId);
-                    params.append('countries[]', c.country);
+                    var s = document.createElement('input');
+                    s.type = 'hidden'; s.name = 'service_ids[]'; s.value = c.serviceId;
+                    form.appendChild(s);
+                    var cc = document.createElement('input');
+                    cc.type = 'hidden'; cc.name = 'countries[]'; cc.value = c.country;
+                    form.appendChild(cc);
                 });
-                params.append('without_zone', withoutZone ? '1' : '0');
-                zones.forEach(function(zone) { params.append('zone_nos[]', zone); });
-                window.location.href = "{{ route('admin.manage-rate.sample') }}" + '?' + params.toString();
+                var wz = document.createElement('input');
+                wz.type = 'hidden'; wz.name = 'without_zone'; wz.value = withoutZone ? '1' : '0';
+                form.appendChild(wz);
+                zones.forEach(function(zone) {
+                    var z = document.createElement('input');
+                    z.type = 'hidden'; z.name = 'zone_nos[]'; z.value = zone;
+                    form.appendChild(z);
+                });
+                document.body.appendChild(form);
+                form.submit();
             });
 
             // Submit: inject service_ids[] + countries[] pairs for every

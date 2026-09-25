@@ -626,6 +626,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/manage-rate/update-new-rate', [AdminController::class, 'updateNewCustomerRate'])->name('admin.manage-rate.update-new-rate');
     Route::post('/manage-rate/add', [AdminController::class, 'addRate'])->name('admin.manage-rate.add');
     Route::get('/manage-rate/sample', [AdminController::class, 'downloadRateSample'])->name('admin.manage-rate.sample');
+    Route::post('/manage-rate/sample', [AdminController::class, 'downloadRateSample'])->name('admin.manage-rate.sample.post');
     Route::post('/manage-rate/upload', [AdminController::class, 'uploadRateExcel'])->name('admin.manage-rate.upload');
 
     // Surcharge Management Routes

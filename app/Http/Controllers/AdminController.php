@@ -5773,16 +5773,19 @@ class AdminController extends Controller
      */
     public function downloadRateSample(Request $request)
     {
-        $serviceId = $request->query('service_id');
-        $country = $request->query('country');
+        // NOTE: input() reads query string + POST body, so both the legacy
+        // GET link and the bulk-modal POST form (used for 100+ countries to
+        // avoid Apache "414 Request-URI Too Long") work here.
+        $serviceId = $request->input('service_id');
+        $country = $request->input('country');
         $withoutZone = $request->boolean('without_zone');
 
         // ---- Multi-country sample: all checked (service, country) targets ----
         // Frontend sends service_ids[] + countries[] (aligned pairs, same as
         // upload). When present, the sample contains a Country first column
         // with one row-block per selected country.
-        $multiServiceIds = array_values(array_filter(array_map('intval', (array) $request->query('service_ids', []))));
-        $multiCountries = array_values(array_filter(array_map(function ($c) { return trim((string) $c); }, (array) $request->query('countries', []))));
+        $multiServiceIds = array_values(array_filter(array_map('intval', (array) $request->input('service_ids', []))));
+        $multiCountries = array_values(array_filter(array_map(function ($c) { return trim((string) $c); }, (array) $request->input('countries', []))));
         $multiTargets = [];
         if (!empty($multiServiceIds) || !empty($multiCountries)) {
             $paired = (count($multiServiceIds) === count($multiCountries));
@@ -5834,7 +5837,7 @@ class AdminController extends Controller
             }
         }
 
-        $zoneNos = $request->query('zone_nos', []);
+        $zoneNos = $request->input('zone_nos', []);
         $zoneNos = is_array($zoneNos) ? $zoneNos : [$zoneNos];
         $zoneNos = array_values(array_unique(array_filter(array_map('intval', $zoneNos), function ($zone) {
             return $zone >= 0 && $zone <= 13;
@@ -5924,7 +5927,7 @@ class AdminController extends Controller
     private function downloadMultiCountryRateSample(array $targets, Request $request)
     {
         $withoutZone = $request->boolean('without_zone');
-        $zoneNos = $request->query('zone_nos', []);
+        $zoneNos = $request->input('zone_nos', []);
         $zoneNos = is_array($zoneNos) ? $zoneNos : [$zoneNos];
         $zoneNos = array_values(array_unique(array_filter(array_map('intval', $zoneNos), function ($zone) {
             return $zone >= 0 && $zone <= 13;
