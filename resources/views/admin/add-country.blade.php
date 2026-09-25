@@ -68,6 +68,74 @@
         .select2-container--default .select2-selection--single { height: 38px; }
         .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 38px; }
         .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
+        /* Checkboxes inside the Select Countries dropdown */
+        .cc-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+        .cc-box { pointer-events: none; cursor: pointer; margin-top: 0; flex-shrink: 0; }
+        .cc-all { display: inline-flex; align-items: center; gap: 8px; }
+        .cc-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cc-code {
+            font-size: 10px; font-weight: 700; letter-spacing: .3px;
+            background: #eef2ff; color: #4f46e5;
+            border-radius: 6px; padding: 1px 7px; flex-shrink: 0;
+        }
+        /* Sticky "All Countries" header pinned on top of the dropdown */
+        .select2-results__option:has(.cc-all) {
+            position: sticky; top: 0; z-index: 5;
+            background: linear-gradient(135deg, #eef4ff, #f5f0ff) !important;
+            border-bottom: 1px solid #e0e7ff;
+            box-shadow: 0 2px 6px rgba(79, 70, 229, .08);
+        }
+        .select2-results__option .cc-row { padding: 1px 0; }
+        /* Keep the selected box compact even with 250+ picks */
+        .cc-picker-wrap { position: relative; }
+        .cc-picker-wrap .select2-selection--multiple {
+            min-height: 48px !important; max-height: 48px !important;
+            overflow: hidden !important; border-radius: 12px !important;
+            cursor: pointer;
+        }
+        .cc-picker-wrap .select2-selection__choice,
+        .cc-picker-wrap .select2-search--inline { display: none !important; }
+        .cc-picker-overlay {
+            position: absolute; inset: 0; z-index: 2;
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 14px; background: #fff;
+            border: 1px solid #dee2e6; border-radius: 12px;
+            pointer-events: none; font-size: 13px; color: #475569;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .cc-picker-wrap:hover .cc-picker-overlay { border-color: #93c5fd; }
+        .cc-picker-overlay .cc-pick-icon {
+            width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #eef4ff, #f5f0ff); color: #4f46e5;
+            font-size: 15px;
+        }
+        .cc-picker-overlay .cc-pick-chev { margin-left: auto; color: #94a3b8; flex-shrink: 0; }
+        .cc-picker-count {
+            font-size: 11px; font-weight: 700; color: #fff;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 20px; padding: 2px 10px; flex-shrink: 0;
+        }
+        #countryCountBadge { font-size: 11px; vertical-align: middle; }
+        /* Selected chips (collapsible) */
+        .picked-chips {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            max-height: 150px; overflow-y: auto;
+        }
+        .picked-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11.5px; font-weight: 600; color: #3730a3;
+            background: #eef4ff; border: 1px solid #dbe4ff;
+            border-radius: 20px; padding: 2px 6px 2px 10px;
+        }
+        .picked-x {
+            border: none; background: #c7d2fe; color: #3730a3;
+            width: 16px; height: 16px; border-radius: 50%;
+            font-size: 11px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0;
+        }
+        .picked-x:hover { background: #a5b4fc; }
     </style>
 </head>
 
@@ -170,8 +238,9 @@
 
                                     <!-- Step 2: Countries -->
                                     <div class="mb-3" id="countrySection" style="display:none;">
-                                        <h6 class="mb-2"><span class="step-badge muted" id="step2Badge">2</span>Select Countries <span class="text-danger">*</span></h6>
+                                        <h6 class="mb-2"><span class="step-badge muted" id="step2Badge">2</span>Select Countries <span class="text-danger">*</span> <span class="badge bg-primary-subtle text-primary" id="countryCountBadge" style="display:none;"></span></h6>
                                         <select class="form-select" id="country_codes" name="country_codes[]" multiple="multiple" data-placeholder="— Search & select countries to add —">
+                                            <option value="__all__">All Countries (Select All)</option>
                                             @foreach($destinations as $dest)
                                                 @php $cc = strtoupper(trim($dest->country_code ?: $dest->code)); @endphp
                                                 <option value="{{ $cc }}">{{ $dest->name }} ({{ $cc }})</option>
@@ -297,8 +366,26 @@
                 width: '100%',
                 placeholder: $('#country_codes').data('placeholder'),
                 allowClear: true,
-                closeOnSelect: false
+                closeOnSelect: false,
+                escapeMarkup: function(markup) { return markup; },
+                templateResult: formatCountryDropdownOption,
+                templateSelection: formatCountryDropdownSelection
             });
+
+            // Turn the Select2 box into a clean picker button: hide the raw
+            // pills and overlay a summary (clicks pass through to open it).
+            var $ccBox = $('#country_codes').next('.select2-container');
+            if (!$ccBox.parent().hasClass('cc-picker-wrap')) {
+                $ccBox.wrap('<div class="cc-picker-wrap"></div>');
+                $ccBox.after(
+                    '<div class="cc-picker-overlay">' +
+                    '<span class="cc-pick-icon"><i class="ti ti-world"></i></span>' +
+                    '<span id="ccPickerText">Search &amp; select countries to add</span>' +
+                    '<span class="cc-picker-count" id="ccPickerCount" style="display:none;"></span>' +
+                    '<i class="ti ti-chevron-down cc-pick-chev"></i>' +
+                    '</div>'
+                );
+            }
 
             function coveredCountriesFor(key) {
                 return coverageMap[key] || [];
@@ -329,6 +416,7 @@
                 if (!key || !meta) {
                     $('#servicePreview').hide();
                     $('#countrySection').hide();
+                    $('#countryCountBadge').hide();
                     $('#step1Badge').removeClass('done');
                     $('#step2Badge').addClass('muted');
                     $('#submitBtn').prop('disabled', true);
@@ -389,21 +477,93 @@
                 }).addClass('table-active');
             }
 
+            var pickedOpen = false;
+
             function updateSummary() {
                 var key = $('#service_key').val();
-                var selected = $('#country_codes').val() || [];
+                var selected = ($('#country_codes').val() || []).filter(function(v) { return v !== '__all__'; });
+                var badge = $('#countryCountBadge');
+                var available = availableCountryValues().length;
                 if (!key || !selected.length) {
                     $('#summaryBox').hide();
                     $('#submitBtn').prop('disabled', !(key && selected.length));
+                    if (selected.length) { badge.text(selected.length + ' selected').show(); }
+                    else { badge.hide(); }
+                    setPickerOverlay(selected.length, available);
                     return;
                 }
+                badge.text(selected.length + ' selected').show();
+                setPickerOverlay(selected.length, available);
+                var pct = available > 0 ? Math.round(selected.length / available * 100) : 0;
                 $('#summaryText').html(
-                    '<strong>' + selected.length + '</strong> countr' + (selected.length === 1 ? 'y' : 'ies') +
-                    ' (' + selected.map(escHtml).join(', ') + ') will be added to <strong>' + escHtml(serviceLabel(key)) + '</strong>.'
+                    '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">' +
+                    '<div class="flex-fill" style="min-width:170px;">' +
+                    '<div class="fs-20 fw-bold lh-1">' + selected.length + ' <small class="text-muted fw-normal fs-13">/ ' + available + ' countries</small></div>' +
+                    '<div class="progress mt-2" style="height:6px;"><div class="progress-bar" role="progressbar" style="width:' + pct + '%;background:linear-gradient(90deg,#6366f1,#8b5cf6);"></div></div>' +
+                    '</div>' +
+                    '<div class="d-flex gap-2">' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary" id="viewPickedBtn">' + (pickedOpen ? 'Hide' : 'View selected') + '</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary" id="clearPickedBtn">Clear</button>' +
+                    '</div></div>' +
+                    '<div class="text-muted small mt-2">Will be added to <strong>' + escHtml(serviceLabel(key)) + '</strong>.</div>' +
+                    '<div id="pickedChips" class="picked-chips mt-2"' + (pickedOpen ? '' : ' style="display:none;"') + '></div>'
                 );
                 $('#summaryBox').show();
                 $('#submitBtn').prop('disabled', false);
+                if (pickedOpen) renderPickedChips();
             }
+
+            function setPickerOverlay(count, available) {
+                var label = $('#ccPickerText');
+                var pill = $('#ccPickerCount');
+                if (!label.length) return;
+                if (count > 0) {
+                    label.html('<strong>' + count + '</strong>&nbsp;countr' + (count === 1 ? 'y' : 'ies') + ' selected');
+                    pill.text(count + ' / ' + available).show();
+                } else {
+                    label.text('Search & select countries to add');
+                    pill.hide();
+                }
+            }
+
+            function renderPickedChips() {
+                var box = $('#pickedChips');
+                if (!box.length) return;
+                var nameMap = {};
+                $('#country_codes option').each(function() { nameMap[$(this).val()] = $(this).text(); });
+                var vals = ($('#country_codes').val() || []).filter(function(v) { return v !== '__all__'; });
+                if (!vals.length) {
+                    box.html('<small class="text-muted">Nothing selected.</small>');
+                    return;
+                }
+                box.html(vals.map(function(v) {
+                    var label = String(nameMap[v] || v).replace(/\s*\([A-Za-z0-9]+\)\s*$/, '');
+                    return '<span class="picked-chip">' + escHtml(label) + '<button type="button" class="picked-x" data-val="' + escHtml(v) + '" title="Remove">&times;</button></span>';
+                }).join(''));
+            }
+
+            $(document).on('click', '#viewPickedBtn', function() {
+                pickedOpen = !pickedOpen;
+                $(this).text(pickedOpen ? 'Hide' : 'View selected');
+                if (pickedOpen) {
+                    renderPickedChips();
+                    $('#pickedChips').slideDown(150);
+                } else {
+                    $('#pickedChips').slideUp(150);
+                }
+            });
+
+            $(document).on('click', '#clearPickedBtn', function() {
+                pickedOpen = false;
+                $('#country_codes').val(null).trigger('change');
+            });
+
+            $(document).on('click', '.picked-x', function(e) {
+                e.stopPropagation();
+                var v = String($(this).data('val') || '');
+                var vals = ($('#country_codes').val() || []).filter(function(x) { return x !== v && x !== '__all__'; });
+                $('#country_codes').val(vals).trigger('change');
+            });
 
             $('#service_key').on('change', function() {
                 // Clear country picks when the template changes to avoid
@@ -412,7 +572,98 @@
                 refreshForm(this.value);
             });
 
-            $('#country_codes').on('change', updateSummary);
+            $('#country_codes').on('change', function() {
+                var vals = $(this).val() || [];
+                // "__all__" is the virtual "All Countries" entry pinned on top
+                // of the dropdown — expand it to every available country
+                // (toggle: clears all when everything is already selected).
+                // It is never submitted as a real country code.
+                if (vals.indexOf('__all__') !== -1) {
+                    var allVals = availableCountryValues();
+                    var rest = vals.filter(function(v) { return v !== '__all__'; });
+                    var allOn = allVals.length > 0 && allVals.every(function(v) { return rest.indexOf(v) !== -1; });
+                    $(this).val(allOn ? [] : allVals).trigger('change');
+                    return;
+                }
+                updateSummary();
+                refreshAllBoxState();
+            });
+
+            // Values of all selectable (non-disabled) country options.
+            function availableCountryValues() {
+                var vals = [];
+                $('#country_codes option').each(function() {
+                    var v = $(this).val();
+                    if (v && v !== '__all__' && !$(this).prop('disabled') && vals.indexOf(v) === -1) {
+                        vals.push(v);
+                    }
+                });
+                return vals;
+            }
+
+            // Checkbox in front of every country inside the dropdown + an
+            // "All Countries" toggle entry on top (backed by __all__).
+            function formatCountryDropdownOption(opt) {
+                if (!opt.id) return opt.text;
+                if (opt.id === '__all__') {
+                    var allVals = availableCountryValues();
+                    var cur = $('#country_codes').val() || [];
+                    var clean = cur.filter(function(v) { return v !== '__all__'; });
+                    var allOn = allVals.length > 0 && allVals.every(function(v) { return clean.indexOf(v) !== -1; });
+                    var $all = $('<span class="cc-all"><input type="checkbox" class="form-check-input cc-box" id="ccAllBox" tabindex="-1"> <strong>All Countries</strong>&nbsp;<small class="text-muted">— select all available</small></span>');
+                    $all.find('input').prop('checked', allOn);
+                    return $all;
+                }
+                var disabled = opt.element && $(opt.element).prop('disabled');
+                var $row = $('<span class="cc-row"><input type="checkbox" class="form-check-input cc-box" tabindex="-1" value="' + escHtml(opt.id) + '"> <span class="cc-label"></span><span class="cc-code"></span></span>');
+                $row.find('input').prop('checked', !!opt.selected);
+                if (disabled) $row.find('input').prop('disabled', true);
+                // Option text is "Name (CC)" — show the name, move the code into a badge.
+                var label = String(opt.text || '').replace(/\s*\([A-Za-z0-9]+\)\s*$/, '');
+                $row.find('.cc-label').text(label || opt.text);
+                $row.find('.cc-code').text(opt.id);
+                return $row;
+            }
+
+            function formatCountryDropdownSelection(opt) {
+                if (!opt.id || opt.id === '__all__') return opt.text;
+                return opt.text;
+            }
+
+            // Keep every checkbox in the open dropdown in sync with the real
+            // selection — Select2 only re-renders rows when the dropdown
+            // re-opens, so after "All Countries" (or Clear) we tick/untick
+            // the visible rows ourselves.
+            function refreshAllBoxState() {
+                var selected = $('#country_codes').val() || [];
+                var selSet = {};
+                selected.forEach(function(v) { selSet[String(v).toUpperCase()] = true; });
+                var allVals = availableCountryValues();
+                var clean = selected.filter(function(v) { return v !== '__all__'; });
+                var allOn = allVals.length > 0 && allVals.every(function(v) { return clean.indexOf(v) !== -1; });
+                document.querySelectorAll('ul.select2-results__options input.cc-box').forEach(function(box) {
+                    if (box.id === 'ccAllBox' || box.getAttribute('value') === '__all__') {
+                        box.checked = allOn;
+                        return;
+                    }
+                    var v = box.getAttribute('value');
+                    if (v != null) box.checked = !!selSet[String(v).toUpperCase()];
+                });
+            }
+
+            // Live-tick the checkbox of the (un)selected country while the
+            // dropdown stays open (closeOnSelect is false).
+            $('#country_codes').on('select2:select select2:unselect', function(e) {
+                var data = e.params && e.params.data ? e.params.data : null;
+                if (!data || data.id === '__all__') return;
+                if (data._resultId) {
+                    var el = document.getElementById(data._resultId);
+                    if (el) {
+                        var box = el.querySelector('input.cc-box');
+                        if (box) box.checked = (e.type === 'select2:select');
+                    }
+                }
+            });
 
             $('#clearCountriesBtn').on('click', function() {
                 $('#country_codes').val(null).trigger('change');

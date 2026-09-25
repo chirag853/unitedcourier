@@ -7599,10 +7599,12 @@ class AdminController extends Controller
             }
 
             // Normalise codes: upper-case, trimmed, de-duplicated.
+            // '__ALL__' is the virtual "All Countries" dropdown entry — it
+            // is expanded client-side and must never become a destination.
             $codes = [];
             foreach ((array) $validated['country_codes'] as $c) {
                 $c = strtoupper(trim((string) $c));
-                if ($c !== '' && !in_array($c, $codes, true)) {
+                if ($c !== '' && $c !== '__ALL__' && !in_array($c, $codes, true)) {
                     $codes[] = $c;
                 }
             }
