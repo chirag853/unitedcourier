@@ -3869,11 +3869,11 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             markFieldInvalid(panField);
                             return;
                         }
-                        if (isBusinessFlow && pan.charAt(3) === 'P') {
-                            showKycAlert('Business PAN required', 'Please upload a business PAN card, not a personal PAN card.');
-                            markFieldInvalid(panField);
-                            return;
-                        }
+                        // if (isBusinessFlow && pan.charAt(3) === 'P') {
+                        //     showKycAlert('Business PAN required', 'Please upload a business PAN card, not a personal PAN card.');
+                        //     markFieldInvalid(panField);
+                        //     return;
+                        // }
                         if (!isBusinessFlow && pan.charAt(3) !== 'P') {
                             showKycAlert('Personal PAN required', 'Please upload a personal PAN card. Business PAN cards are not accepted for Personal KYC.');
                             markFieldInvalid(panField);

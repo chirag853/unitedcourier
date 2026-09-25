@@ -2001,16 +2001,18 @@ class KycController extends Controller
 
             // Business KYC accepts entity PANs, while Personal KYC must use
             // an individual PAN (PAN fourth character must be P).
-            if ($isBusinessCustomer && $this->isIndividualPan($pan)) {
-                \Log::warning('Business KYC PAN rejected: PAN belongs to an individual.', [
-                    'customer_id' => $customer->id,
-                    'pan_number' => $pan,
-                ]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Please upload a business PAN card, not a personal PAN card.',
-                ], 422);
-            }
+            // NOTE (disabled on request): business KYC now also accepts
+            // personal (individual) PANs, so this check stays commented.
+            // if ($isBusinessCustomer && $this->isIndividualPan($pan)) {
+            //     \Log::warning('Business KYC PAN rejected: PAN belongs to an individual.', [
+            //         'customer_id' => $customer->id,
+            //         'pan_number' => $pan,
+            //     ]);
+            //     return response()->json([
+            //         'success' => false,
+            //         'message' => 'Please upload a business PAN card, not a personal PAN card.',
+            //     ], 422);
+            // }
 
             if (!$isBusinessCustomer && !$this->isIndividualPan($pan)) {
                 \Log::warning('Personal KYC PAN rejected: PAN belongs to a business entity.', [
