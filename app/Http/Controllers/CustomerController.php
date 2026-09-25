@@ -8471,6 +8471,85 @@ class CustomerController extends Controller
                 ]);
             }
 
+            // SELF provider detection: courier_services.api_provider = 'self'
+            // (legacy fallback: shipper_info.shipping_method = 'SELF').
+            $payCourierService = null;
+            if (! empty($shipper->service_id) && is_numeric($shipper->service_id)) {
+                $payCourierService = CourierService::find($shipper->service_id);
+            }
+            $payShippingMethod = $shipper->shipping_method;
+            if (! $payCourierService) {
+                if (empty($payShippingMethod)) {
+                    $payShippingMethod = $this->resolveShippingMethod($shipper);
+                }
+                $payCourierService = $this->findCourierService($payShippingMethod, $shipper->id);
+            }
+            $payApiProvider = strtolower(trim((string) ($payCourierService->api_provider ?? '')));
+            $isSelfService = ($payApiProvider === 'self')
+                || (strtoupper(trim((string) ($payShippingMethod ?? ''))) === 'SELF');
+
+            // SELF flow: no carrier booking — deduct payment NOW and move draft → ready.
+            if ($isSelfService) {
+                $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
+                    ->where('type', 'debit')
+                    ->where('reason', 'shipment_charge')
+                    ->where('reference', $shipper->awb_number)
+                    ->exists();
+
+                if (! $alreadyPaid) {
+                    DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
+                        $wallet->decrement('balance', $amount);
+                        $wallet->refresh();
+
+                        WalletTransaction::create([
+                            'customer_id' => $customerId,
+                            'type' => 'debit',
+                            'reason' => 'shipment_charge',
+                            'amount' => $amount,
+                            'balance_after' => $wallet->balance,
+                            'reference' => $shipper->awb_number,
+                            'description' => 'Payment of ₹'.number_format($amount, 2).' for SELF shipment '.($shipper->awb_number ?: '#'.$shipper->id),
+                        ]);
+                    });
+                    $wallet->refresh();
+                }
+
+                $previousPayStatus = $shipper->status ?: 'draft';
+                $shipper->status = 'ready';
+                $shipper->save();
+
+                // Create tracking record for ready status
+                $createShipment = CreateShipment::where('shipper_id', $shipperId)->first();
+                Tracking::create([
+                    'awb_number' => $shipper->awb_number,
+                    'shipper_id' => $shipper->id,
+                    'shipping_id' => $createShipment ? $createShipment->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus('ready'),
+                    'status' => 'ready',
+                ]);
+
+                // Log the ready status change with deduction note.
+                ShipmentLog::logStatus(
+                    $shipper->id,
+                    $shipper->awb_number,
+                    'ready',
+                    $previousPayStatus,
+                    'Payment confirmed. Amount ₹'.number_format($amount, 2).' deducted from wallet (SELF service — no carrier booking).',
+                    $customerId,
+                    'customer'
+                );
+
+                \Log::info('payNow SELF: Shipper #'.$shipper->id.' → draft to ready with immediate deduction ₹'.$amount);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment moved to Ready. Payment of ₹'.number_format($amount, 2).' deducted from your wallet.',
+                    'new_balance' => (float) $wallet->balance,
+                    'amount_charged' => (float) $amount,
+                ]);
+            }
+
             // Payment is NOT deducted here anymore. The shipment charge is cut only AFTER
             // the manifest (carrier booking) succeeds. Here we only move the shipment from
             // draft to ready so that it can be manifested.
@@ -9005,6 +9084,25 @@ class CustomerController extends Controller
             ];
         }
 
+        // Idempotency: SELF flow already deducts in payNow (draft → ready).
+        // Dobara charge na ho isliye existing debit check karo.
+        if (! empty($shipper->awb_number)) {
+            $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
+                ->where('type', 'debit')
+                ->where('reason', 'shipment_charge')
+                ->where('reference', $shipper->awb_number)
+                ->exists();
+            if ($alreadyPaid) {
+                return [
+                    'charged' => false,
+                    'already_charged' => true,
+                    'amount' => $amount,
+                    'new_balance' => $balance,
+                    'message' => 'Payment was already deducted for this shipment.',
+                ];
+            }
+        }
+
         if (! $info['can_manifest']) {
             return [
                 'charged' => false,
@@ -9179,6 +9277,31 @@ class CustomerController extends Controller
             \Log::info('manifestShipment: Shipper #'.$shipperId.' → shipping_method="'.$shippingMethod.'" → network="'.$network.'" → api_provider="'.$apiProvider.'"');
 
             // Route to appropriate API based on the resolved provider.
+            // SELF provider: no carrier API — internal manifest only.
+            // Payment already deducted in payNow (draft → ready); charge here only if unpaid.
+            if ($apiProvider === 'self' || strtoupper(trim((string) $shippingMethod)) === 'SELF') {
+                $internal = $this->persistInternalManifest($shipper, $customerId, $targetStatus);
+                $chargeNote = $internal['amount_charged'] > 0
+                    ? ' Payment of ₹'.number_format($internal['amount_charged'], 2).' deducted from your wallet.'
+                    : (WalletTransaction::where('customer_id', $customerId)->where('type', 'debit')->where('reason', 'shipment_charge')->where('reference', $shipper->awb_number)->exists()
+                        ? ' Payment was already deducted from your wallet.'
+                        : '');
+
+                \Log::info('manifestShipment: Shipper #'.$shipperId.' manifested internally (SELF provider, no carrier API).');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully (SELF — no carrier booking)!'.$chargeNote,
+                    'tracking_number' => $internal['tracking_number'],
+                    'label_url' => null,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => $internal['manifest_number'],
+                    'network' => 'SELF',
+                    'carrier_skipped' => true,
+                    'amount_charged' => $internal['amount_charged'],
+                    'new_balance' => $internal['new_balance'],
+                ]);
+            }
             if ($apiProvider === 'shipuniversal') {
                 $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
                 if (! $shipUniversalResult['success']) {
@@ -9901,6 +10024,26 @@ class CustomerController extends Controller
                     $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
 
                     \Log::info('bulkManifest: Shipper #'.$shipperId.' → network="'.$network.'" → api_provider="'.$apiProvider.'"');
+
+                    // SELF provider: no carrier API — internal manifest only.
+                    if ($apiProvider === 'self' || strtoupper(trim((string) $shippingMethod)) === 'SELF') {
+                        $internal = $this->persistInternalManifest($shipper, $customerId, 'manifested', $bulkManifestNumber);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $internal['tracking_number'],
+                            'label_url' => null,
+                            'manifest_number' => $internal['manifest_number'],
+                            'network' => 'SELF',
+                            'carrier_skipped' => true,
+                            'amount_charged' => $internal['amount_charged'],
+                            'new_balance' => $internal['new_balance'],
+                        ];
+
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested internally (SELF provider, no carrier API).');
+
+                        continue;
+                    }
 
                     if ($apiProvider === 'shipuniversal') {
                         $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);

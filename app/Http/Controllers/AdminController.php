@@ -133,6 +133,39 @@ class AdminController extends Controller
         // Delivered shipments count
         $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
 
+        // Pickup & Dispatch funnel (display-only section on admin dashboard).
+        // Mapping mirrors the companies page tabs:
+        //   Ready for Pickup    = ready_for_pickup
+        //   Assigned for Pickup = assigned_for_pickup
+        //   Print Label         = received + dispatched
+        //   Ready to Dispatch   = ready_to_dispatch
+        $pickupDispatchCounts = [
+            'ready_for_pickup'    => (int) ($shipmentStatusCounts['ready_for_pickup'] ?? 0),
+            'assigned_for_pickup' => (int) ($shipmentStatusCounts['assigned_for_pickup'] ?? 0),
+            'print_label'         => (int) ($shipmentStatusCounts['received'] ?? 0) + (int) ($shipmentStatusCounts['dispatched'] ?? 0),
+            'ready_to_dispatch'   => (int) ($shipmentStatusCounts['ready_to_dispatch'] ?? 0),
+        ];
+
+        // Latest shipments sitting in the pickup/dispatch funnel (for the dashboard table).
+        $pickupDispatchRows = DB::table('shipper_info')
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+            ->whereIn('shipper_info.status', ['ready_for_pickup', 'assigned_for_pickup', 'received', 'dispatched', 'ready_to_dispatch'])
+            ->select(
+                'shipper_info.awb_number',
+                'shipper_info.company_name',
+                'shipper_info.city as pickup_city',
+                'shipper_info.status',
+                'shipper_info.created_at',
+                'consignee_info.consignee_name',
+                'consignee_info.city as destination_city',
+                'customers.first_name',
+                'customers.last_name'
+            )
+            ->orderByDesc('shipper_info.created_at')
+            ->limit(10)
+            ->get();
+
         // COD / Prepaid / General split (order-type analytics).
         // COD = shipment_type 2, Prepaid = 4 or 5 (codebase uses both),
         // General = everything else (incl. type 1 / null).
@@ -213,7 +246,8 @@ class AdminController extends Controller
             'thisMonthRevenue', 'revenueChangePercent',
             'thisMonthWalletTopups', 'walletTopupsChangePercent', 'walletBalanceTotal',
             'todayShipments', 'todayRegistrations',
-            'recentShipments', 'recentRegistrations'
+            'recentShipments', 'recentRegistrations',
+            'pickupDispatchCounts', 'pickupDispatchRows'
         ));
     }
 
@@ -357,6 +391,33 @@ class AdminController extends Controller
             'prepaid' => $trendRows->pluck('prepaid')->map(fn ($v) => (int) $v)->all(),
         ];
 
+        // Pickup & Dispatch funnel for the selected period (same mapping as index()).
+        $pickupDispatchSummary = [
+            'ready_for_pickup'    => (int) ($shipmentStatusCounts['ready_for_pickup'] ?? 0),
+            'assigned_for_pickup' => (int) ($shipmentStatusCounts['assigned_for_pickup'] ?? 0),
+            'print_label'         => (int) ($shipmentStatusCounts['received'] ?? 0) + (int) ($shipmentStatusCounts['dispatched'] ?? 0),
+            'ready_to_dispatch'   => (int) ($shipmentStatusCounts['ready_to_dispatch'] ?? 0),
+        ];
+
+        $pickupDispatchRows = ShipperInfo::whereBetween('shipper_info.created_at', [$startDate, $endDate])
+            ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->leftJoin('customers', 'shipper_info.customer_id', '=', 'customers.id')
+            ->whereIn('shipper_info.status', ['ready_for_pickup', 'assigned_for_pickup', 'received', 'dispatched', 'ready_to_dispatch'])
+            ->select(
+                'shipper_info.awb_number',
+                'shipper_info.company_name',
+                'shipper_info.city as pickup_city',
+                'shipper_info.status',
+                'shipper_info.created_at',
+                'consignee_info.consignee_name',
+                'consignee_info.city as destination_city',
+                'customers.first_name',
+                'customers.last_name'
+            )
+            ->orderByDesc('shipper_info.created_at')
+            ->limit(10)
+            ->get();
+
         $statusMap = Tracking::getStatusTitleMap();
 
         return response()->json([
@@ -390,6 +451,8 @@ class AdminController extends Controller
             ],
             'orderTypeTrend' => $orderTypeTrend,
             'dateWiseCounts' => $dateWiseCounts,
+            'pickupDispatchSummary' => $pickupDispatchSummary,
+            'pickupDispatchRows' => $pickupDispatchRows,
         ]);
     }
 
@@ -7507,7 +7570,7 @@ class AdminController extends Controller
             $validated = $request->validate([
                 'service_key'     => 'nullable|string|max:255',
                 'service_id'      => 'nullable|integer|exists:courier_services,id',
-                'country_codes'   => 'required|array|min:1|max:100',
+                'country_codes'   => 'required|array|min:1|max:500',
                 'country_codes.*' => 'required|string|max:10',
             ]);
             if (empty($validated['service_key']) && empty($validated['service_id'])) {

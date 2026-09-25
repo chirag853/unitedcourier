@@ -291,9 +291,13 @@
 
 <div id="uc-chatbot-wrapper">
     <!-- Chat Trigger FAB -->
-    <div id="uc-chat-trigger" class="uc-moving-gradient-bg">
-        <i data-lucide="message-circle" id="uc-icon-open"></i>
-        <i data-lucide="x" id="uc-icon-close" style="display: none;"></i>
+    <div id="uc-chat-trigger" class="uc-moving-gradient-bg" role="button" aria-label="Open chat" tabindex="0">
+        <span id="uc-icon-open" style="display: flex; align-items: center; justify-content: center;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+        </span>
+        <span id="uc-icon-close" style="display: none; align-items: center; justify-content: center;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
     </div>
 
     <!-- Chat Window -->
@@ -341,8 +345,8 @@
         <div class="uc-chat-input-area">
             <input type="text" class="uc-chat-input" id="uc-user-input" placeholder="Type your message..."
                 onkeypress="ucHandleKeyPress(event)">
-            <button class="uc-send-btn uc-moving-gradient-bg" onclick="ucSendMessage()">
-                <i data-lucide="send" size="18"></i>
+            <button class="uc-send-btn uc-moving-gradient-bg" onclick="ucSendMessage()" aria-label="Send message">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
             </button>
         </div>
     </div>
@@ -350,8 +354,12 @@
 
 <!-- Scripting -->
 <script>
-// Initialize Lucide Icons
-lucide.createIcons();
+(function () {
+function ucInitChatbot() {
+// Initialize Lucide Icons (optional enhancement only - core widget works without it)
+if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    try { window.lucide.createIcons(); } catch (e) { /* ignore - inline SVGs are the fallback */ }
+}
 
 const ucTrigger = document.getElementById('uc-chat-trigger');
 const ucWindowEl = document.getElementById('uc-chat-window');
@@ -360,22 +368,43 @@ const ucIconClose = document.getElementById('uc-icon-close');
 const ucChatContent = document.getElementById('uc-chat-content');
 const ucUserInput = document.getElementById('uc-user-input');
 
+if (!ucTrigger || !ucWindowEl) return;
+
 let ucIsOpen = false;
 
-// Toggle Chat Window
-ucTrigger.addEventListener('click', () => {
-    ucIsOpen = !ucIsOpen;
+function ucSetOpen(open) {
+    ucIsOpen = open;
     if (ucIsOpen) {
         ucWindowEl.style.display = 'flex';
-        ucIconOpen.style.display = 'none';
-        ucIconClose.style.display = 'block';
-        ucChatContent.scrollTop = ucChatContent.scrollHeight;
+        if (ucIconOpen) ucIconOpen.style.display = 'none';
+        if (ucIconClose) ucIconClose.style.display = 'flex';
+        if (ucChatContent) ucChatContent.scrollTop = ucChatContent.scrollHeight;
     } else {
         ucWindowEl.style.display = 'none';
-        ucIconOpen.style.display = 'block';
-        ucIconClose.style.display = 'none';
+        if (ucIconOpen) ucIconOpen.style.display = 'flex';
+        if (ucIconClose) ucIconClose.style.display = 'none';
+    }
+}
+
+// Toggle Chat Window (mouse + keyboard accessible)
+ucTrigger.addEventListener('click', () => {
+    ucSetOpen(!ucIsOpen);
+});
+ucTrigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        ucSetOpen(!ucIsOpen);
     }
 });
+}
+
+// Run after DOM is ready (script may load before body is parsed)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ucInitChatbot);
+} else {
+    ucInitChatbot();
+}
+})();
 
 function ucHandleKeyPress(e) {
     if (e.key === 'Enter') {
@@ -383,7 +412,15 @@ function ucHandleKeyPress(e) {
     }
 }
 
+function ucEscapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+}
+
 function ucSendMessage() {
+    const ucUserInput = document.getElementById('uc-user-input');
+    if (!ucUserInput) return;
     const text = ucUserInput.value.trim();
     if (text === "") return;
 
@@ -393,10 +430,13 @@ function ucSendMessage() {
 
 // Function to handle interactions
 function ucHandleAction(choice) {
+    const ucChatContent = document.getElementById('uc-chat-content');
+    if (!ucChatContent) return;
+    const safeChoice = ucEscapeHtml(choice);
     // User Message
     const userMsgHtml = `
                 <div class="uc-message-bubble uc-user-message" style="align-self: flex-end;">
-                    <p>${choice}</p>
+                    <p>${safeChoice}</p>
                     <span class="uc-timestamp" style="color: rgba(255,255,255,0.7)">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                 </div>
             `;
@@ -405,9 +445,9 @@ function ucHandleAction(choice) {
 
     // Simple Bot Response Logic
     setTimeout(() => {
-        let response = "I've received your inquiry about '" + choice +
+        let response = "I've received your inquiry about '" + safeChoice +
             "'. A team member will get back to you shortly.";
-        if (choice.toLowerCase().includes('track')) response =
+        if (String(choice).toLowerCase().includes('track')) response =
             "Please provide your tracking number and I will find your package immediately.";
 
         const botMsgHtml = `

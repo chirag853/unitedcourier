@@ -166,6 +166,45 @@
 
         .dashboard-title h4 { letter-spacing: -0.3px; }
         .activity-tab-link { cursor: pointer; user-select: none; }
+
+        /* --- Display-only status tabs (view only, no actions) --- */
+        .pd-view-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .pd-view-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            cursor: default;
+            user-select: none;
+            pointer-events: none;
+        }
+        .pd-view-tab .pd-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 26px;
+            height: 24px;
+            padding: 0 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+        }
+        [data-bs-theme="dark"] .pd-view-tab {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.85);
+        }
     </style>
 </head>
 
@@ -246,6 +285,85 @@
                     </div>
                 </div>
                 <!-- /Quick glance strip -->
+
+                <!-- Display-only status tabs (view only — no actions attached) -->
+                <div class="row row-gap-3 mb-4">
+                    <div class="col-12">
+                        <div class="card mb-0">
+                            <div class="card-body py-3">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                    <h6 class="mb-0"><i class="ti ti-truck-delivery me-1"></i>Pickup & Dispatch — Live Status</h6>
+                                    <span class="badge bg-secondary-subtle text-secondary"><i class="ti ti-eye me-1"></i>View only</span>
+                                </div>
+                                <div class="pd-view-tabs">
+                                    <span class="pd-view-tab" aria-disabled="true">
+                                        <i class="ti ti-calendar-event text-primary"></i>Ready for Pickup
+                                        <span class="pd-count" style="background:#6f42c1;" id="pdTabReady">{{ number_format($pickupDispatchCounts['ready_for_pickup'] ?? 0) }}</span>
+                                    </span>
+                                    <span class="pd-view-tab" aria-disabled="true">
+                                        <i class="ti ti-truck-delivery text-primary"></i>Assigned for Pickup
+                                        <span class="pd-count" style="background:#6366f1;" id="pdTabAssigned">{{ number_format($pickupDispatchCounts['assigned_for_pickup'] ?? 0) }}</span>
+                                    </span>
+                                    <span class="pd-view-tab" aria-disabled="true">
+                                        <i class="ti ti-printer text-primary"></i>Print Label
+                                        <span class="pd-count" style="background:#06b6d4;" id="pdTabPrint">{{ number_format($pickupDispatchCounts['print_label'] ?? 0) }}</span>
+                                    </span>
+                                    <span class="pd-view-tab" aria-disabled="true">
+                                        <i class="ti ti-truck text-primary"></i>Ready to Dispatch
+                                        <span class="pd-count" style="background:#f59e0b;" id="pdTabDispatch">{{ number_format($pickupDispatchCounts['ready_to_dispatch'] ?? 0) }}</span>
+                                    </span>
+                                </div>
+                                <div class="table-responsive mt-3">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB</th>
+                                                <th>Customer</th>
+                                                <th>Stage</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pdLiveTableBody">
+                                            @forelse($pickupDispatchRows->take(5) as $key => $row)
+                                            @php
+                                                $pdLiveName = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
+                                                $pdLiveCustomer = $row->company_name ?? ($pdLiveName !== '' ? $pdLiveName : '—');
+                                                $pdLiveStageColors = [
+                                                    'ready_for_pickup' => 'background:rgba(111,66,193,.12);color:#6f42c1;',
+                                                    'assigned_for_pickup' => 'background:rgba(99,102,241,.12);color:#6366f1;',
+                                                    'received' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
+                                                    'dispatched' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
+                                                    'ready_to_dispatch' => 'background:rgba(245,158,11,.14);color:#b45309;',
+                                                ];
+                                                $pdLiveStageTitles = [
+                                                    'ready_for_pickup' => 'Ready for Pickup',
+                                                    'assigned_for_pickup' => 'Assigned for Pickup',
+                                                    'received' => 'Print Label',
+                                                    'dispatched' => 'Print Label',
+                                                    'ready_to_dispatch' => 'Ready to Dispatch',
+                                                ];
+                                            @endphp
+                                            <tr>
+                                                <td>{{ $key + 1 }}</td>
+                                                <td><span class="fw-semibold">{{ $row->awb_number ?? '—' }}</span></td>
+                                                <td>{{ $pdLiveCustomer }}</td>
+                                                <td><span class="dash-status-badge" style="{{ $pdLiveStageColors[$row->status] ?? '' }}">{{ $pdLiveStageTitles[$row->status] ?? ucfirst(str_replace('_', ' ', $row->status)) }}</span></td>
+                                                <td class="text-muted">{{ \Carbon\Carbon::parse($row->created_at)->format('d M, h:i A') }}</td>
+                                            </tr>
+                                            @empty
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- /Display-only status tabs -->
 
                 <!-- start row - Customer Summary Stat Cards -->
                 <h6 class="mb-2"><i class="ti ti-users me-1"></i>Customer Summary</h6>
@@ -758,6 +876,176 @@
                 </div>
                 <!-- end row -->
 
+                <!-- start row - Pickup & Dispatch Stat Tiles -->
+                <h6 class="mb-2"><i class="ti ti-truck-delivery me-1"></i>Pickup & Dispatch</h6>
+                <div class="row row-gap-3 mb-4">
+                    <!-- Ready for Pickup -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Ready for Pickup</p>
+                                        <h2 class="mb-2 fw-semibold" id="pdStatReady">{{ number_format($pickupDispatchCounts['ready_for_pickup'] ?? 0) }}</h2>
+                                        <span class="stat-trend-badge flat" id="pdStatReadySub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon" style="background:linear-gradient(135deg,#6f42c1,#9b59f6);box-shadow:0 4px 12px rgba(111,66,193,.32);"><i class="ti ti-calendar-event"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Ready for Pickup -->
+
+                    <!-- Assigned for Pickup -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Assigned for Pickup</p>
+                                        <h2 class="mb-2 fw-semibold" id="pdStatAssigned">{{ number_format($pickupDispatchCounts['assigned_for_pickup'] ?? 0) }}</h2>
+                                        <span class="stat-trend-badge flat" id="pdStatAssignedSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-indigo"><i class="ti ti-truck-delivery"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Assigned for Pickup -->
+
+                    <!-- Print Label -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Print Label</p>
+                                        <h2 class="mb-2 fw-semibold" id="pdStatPrint">{{ number_format($pickupDispatchCounts['print_label'] ?? 0) }}</h2>
+                                        <span class="stat-trend-badge flat" id="pdStatPrintSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-cyan"><i class="ti ti-printer"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Print Label -->
+
+                    <!-- Ready to Dispatch -->
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
+                            <div class="card-body position-relative z-1">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <p class="fs-14 mb-1 text-body">Ready to Dispatch</p>
+                                        <h2 class="mb-2 fw-semibold" id="pdStatDispatch">{{ number_format($pickupDispatchCounts['ready_to_dispatch'] ?? 0) }}</h2>
+                                        <span class="stat-trend-badge flat" id="pdStatDispatchSub"><i class="ti ti-calendar"></i><span>for selected period</span></span>
+                                    </div>
+                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-truck"></i></span>
+                                </div>
+                            </div>
+                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
+                        </div>
+                    </div>
+                    <!-- /Ready to Dispatch -->
+                </div>
+                <!-- end row - Pickup & Dispatch Stat Tiles -->
+
+                <!-- start row - Pickup & Dispatch Charts (Pie + Bar) -->
+                <div class="row row-gap-3 mb-4">
+                    <!-- Pickup & Dispatch Doughnut -->
+                    <div class="col-xl-5 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Pickup & Dispatch — Share</h6>
+                            </div>
+                            <div class="card-body d-flex align-items-center justify-content-center">
+                                <canvas id="pickupDispatchChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Pickup & Dispatch Bar Chart -->
+                    <div class="col-xl-7 col-lg-6 d-flex">
+                        <div class="card flex-fill chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Pickup & Dispatch — Bar View</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="pickupDispatchBarChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row -->
+
+                <!-- start row - Pickup & Dispatch Table -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex align-items-center justify-content-between">
+                                <h6 class="mb-0"><i class="ti ti-table me-1"></i>Pickup & Dispatch — Latest Shipments</h6>
+                                <span class="badge bg-secondary-subtle text-secondary"><i class="ti ti-eye me-1"></i>View only</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>AWB</th>
+                                                <th>Customer</th>
+                                                <th>Route</th>
+                                                <th>Stage</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pickupDispatchTableBody">
+                                            @forelse($pickupDispatchRows as $key => $row)
+                                            @php
+                                                $pdName = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
+                                                $pdCustomer = $row->company_name ?? ($pdName !== '' ? $pdName : '—');
+                                                $pdStageColors = [
+                                                    'ready_for_pickup' => 'background:rgba(111,66,193,.12);color:#6f42c1;',
+                                                    'assigned_for_pickup' => 'background:rgba(99,102,241,.12);color:#6366f1;',
+                                                    'received' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
+                                                    'dispatched' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
+                                                    'ready_to_dispatch' => 'background:rgba(245,158,11,.14);color:#b45309;',
+                                                ];
+                                                $pdStageTitles = [
+                                                    'ready_for_pickup' => 'Ready for Pickup',
+                                                    'assigned_for_pickup' => 'Assigned for Pickup',
+                                                    'received' => 'Print Label',
+                                                    'dispatched' => 'Print Label',
+                                                    'ready_to_dispatch' => 'Ready to Dispatch',
+                                                ];
+                                            @endphp
+                                            <tr>
+                                                <td>{{ $key + 1 }}</td>
+                                                <td><span class="fw-semibold">{{ $row->awb_number ?? '—' }}</span></td>
+                                                <td>{{ $pdCustomer }}</td>
+                                                <td>
+                                                    <span class="d-block">{{ $row->pickup_city ?? '—' }}</span>
+                                                    <small class="text-muted"><i class="ti ti-arrow-right me-1"></i>{{ $row->destination_city ?? '—' }}</small>
+                                                </td>
+                                                <td><span class="dash-status-badge" style="{{ $pdStageColors[$row->status] ?? '' }}">{{ $pdStageTitles[$row->status] ?? ucfirst(str_replace('_', ' ', $row->status)) }}</span></td>
+                                                <td class="text-muted">{{ \Carbon\Carbon::parse($row->created_at)->format('d M, h:i A') }}</td>
+                                            </tr>
+                                            @empty
+                                            <tr id="pdEmptyRow">
+                                                <td colspan="6" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td>
+                                            </tr>
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row - Pickup & Dispatch Table -->
+
                 <!-- start row - Recent Activity -->
                 <div class="row row-gap-3 mb-4">
                     <!-- Recent Shipments -->
@@ -936,6 +1224,8 @@
         let orderTypeSummaryChart = null;
         let orderTypeBarChart = null;
         let orderTypeTrendChart = null;
+        let pickupDispatchChart = null;
+        let pickupDispatchBarChart = null;
 
         // ---- Helpers -------------------------------------------------------
         function formatNumber(value) {
@@ -1048,6 +1338,20 @@
             general: '#5b5eff'
         };
 
+        const pickupDispatchColors = {
+            ready_for_pickup: '#6f42c1',
+            assigned_for_pickup: '#6366f1',
+            print_label: '#06b6d4',
+            ready_to_dispatch: '#f59e0b'
+        };
+
+        const pickupDispatchTitles = {
+            ready_for_pickup: 'Ready for Pickup',
+            assigned_for_pickup: 'Assigned for Pickup',
+            print_label: 'Print Label',
+            ready_to_dispatch: 'Ready to Dispatch'
+        };
+
         function loadChartData(filter, btnElement) {
             // Update active button
             document.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
@@ -1072,6 +1376,7 @@
                     renderOrderTypeSummaryChart(data.orderTypeSummary || {});
                     renderOrderTypeBarChart(data.orderTypeSummary || {});
                     renderOrderTypeTrendChart(data.orderTypeTrend || {}, data.filter);
+                    updatePickupDispatchSection(data.pickupDispatchSummary || {}, data.pickupDispatchRows || [], data.filter);
                     updateShipmentDeliveryStatTiles(data.shipmentStatusCounts, data.deliverySummary, data.filter);
                     updateOrderTypeStatTiles(data.orderTypeSummary || {}, data.filter);
                     updateBusinessStatTiles(data.businessSummary || {});
@@ -1727,6 +2032,231 @@
                     }
                 }
             });
+        }
+
+        // ---- Pickup & Dispatch (display-only, follows the same date filter) ----
+        const pickupDispatchOrder = ['ready_for_pickup', 'assigned_for_pickup', 'print_label', 'ready_to_dispatch'];
+
+        const pickupStageStyle = {
+            ready_for_pickup: 'background:rgba(111,66,193,.12);color:#6f42c1;',
+            assigned_for_pickup: 'background:rgba(99,102,241,.12);color:#6366f1;',
+            received: 'background:rgba(6,182,212,.12);color:#06b6d4;',
+            dispatched: 'background:rgba(6,182,212,.12);color:#06b6d4;',
+            ready_to_dispatch: 'background:rgba(245,158,11,.14);color:#b45309;'
+        };
+
+        const pickupStageTitle = {
+            ready_for_pickup: 'Ready for Pickup',
+            assigned_for_pickup: 'Assigned for Pickup',
+            received: 'Print Label',
+            dispatched: 'Print Label',
+            ready_to_dispatch: 'Ready to Dispatch'
+        };
+
+        function escHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function buildPickupDispatchData(summary) {
+            const labels = pickupDispatchOrder.map(key => pickupDispatchTitles[key]);
+            const values = pickupDispatchOrder.map(key => Number(summary[key] || 0));
+            const colors = pickupDispatchOrder.map(key => pickupDispatchColors[key]);
+            return { labels, values, colors };
+        }
+
+        function renderPickupDispatchChart(summary) {
+            const { labels, values, colors } = buildPickupDispatchData(summary);
+
+            if (pickupDispatchChart) {
+                pickupDispatchChart.destroy();
+            }
+
+            const ctx = document.getElementById('pickupDispatchChart').getContext('2d');
+            pickupDispatchChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: themeColors().cardBg,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 12,
+                                usePointStyle: true,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '55%'
+                }
+            });
+        }
+
+        function renderPickupDispatchBarChart(summary) {
+            const { labels, values, colors } = buildPickupDispatchData(summary);
+
+            if (pickupDispatchBarChart) {
+                pickupDispatchBarChart.destroy();
+            }
+
+            const ctx = document.getElementById('pickupDispatchBarChart').getContext('2d');
+            pickupDispatchBarChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Pickup & Dispatch',
+                        data: values,
+                        backgroundColor: colors.map(c => c + 'cc'),
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, font: { size: 11 } },
+                            grid: { color: themeColors().grid }
+                        },
+                        x: {
+                            ticks: { font: { size: 11 }, maxRotation: 30, minRotation: 0 },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function formatPdDate(value) {
+            if (!value) return '—';
+            const d = new Date(String(value).replace(' ', 'T'));
+            if (isNaN(d.getTime())) return escHtml(value);
+            return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+
+        function renderPickupDispatchTable(rows) {
+            const tbody = document.getElementById('pickupDispatchTableBody');
+            if (!tbody) return;
+
+            if (!rows || rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map((row, idx) => {
+                const name = ((row.first_name || '') + ' ' + (row.last_name || '')).trim();
+                const customer = escHtml(row.company_name || name || '—');
+                const stage = pickupStageTitle[row.status] || escHtml(String(row.status || '—').replace(/_/g, ' '));
+                return '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td><span class="fw-semibold">' + escHtml(row.awb_number || '—') + '</span></td>' +
+                    '<td>' + customer + '</td>' +
+                    '<td><span class="d-block">' + escHtml(row.pickup_city || '—') + '</span>' +
+                    '<small class="text-muted"><i class="ti ti-arrow-right me-1"></i>' + escHtml(row.destination_city || '—') + '</small></td>' +
+                    '<td><span class="dash-status-badge" style="' + (pickupStageStyle[row.status] || '') + '">' + escHtml(stage) + '</span></td>' +
+                    '<td class="text-muted">' + formatPdDate(row.created_at) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderPdLiveTable(rows) {
+            const tbody = document.getElementById('pdLiveTableBody');
+            if (!tbody) return;
+
+            const top5 = (rows || []).slice(0, 5);
+            if (top5.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = top5.map((row, idx) => {
+                const name = ((row.first_name || '') + ' ' + (row.last_name || '')).trim();
+                const customer = escHtml(row.company_name || name || '—');
+                const stage = pickupStageTitle[row.status] || escHtml(String(row.status || '—').replace(/_/g, ' '));
+                return '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td><span class="fw-semibold">' + escHtml(row.awb_number || '—') + '</span></td>' +
+                    '<td>' + customer + '</td>' +
+                    '<td><span class="dash-status-badge" style="' + (pickupStageStyle[row.status] || '') + '">' + escHtml(stage) + '</span></td>' +
+                    '<td class="text-muted">' + formatPdDate(row.created_at) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function updatePickupDispatchSection(summary, rows, filter) {
+            renderPickupDispatchChart(summary);
+            renderPickupDispatchBarChart(summary);
+            renderPickupDispatchTable(rows);
+            renderPdLiveTable(rows);
+
+            const filterLabels = {
+                today: 'today',
+                yesterday: 'yesterday',
+                this_month: 'this month',
+                last_month: 'last month',
+                last_year: 'last year'
+            };
+            const periodLabel = filterLabels[filter] || 'selected period';
+
+            const setTile = function(valueId, subId, value) {
+                const valueEl = document.getElementById(valueId);
+                if (valueEl) valueEl.textContent = formatNumber(value);
+                const subEl = document.getElementById(subId);
+                if (subEl && subEl.querySelector('span')) subEl.querySelector('span').textContent = 'for ' + periodLabel;
+            };
+            setTile('pdStatReady', 'pdStatReadySub', summary.ready_for_pickup);
+            setTile('pdStatAssigned', 'pdStatAssignedSub', summary.assigned_for_pickup);
+            setTile('pdStatPrint', 'pdStatPrintSub', summary.print_label);
+            setTile('pdStatDispatch', 'pdStatDispatchSub', summary.ready_to_dispatch);
+
+            // Display-only top tabs follow the same filter (text update only, still no actions).
+            const setTab = function(id, value) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = formatNumber(value);
+            };
+            setTab('pdTabReady', summary.ready_for_pickup);
+            setTab('pdTabAssigned', summary.assigned_for_pickup);
+            setTab('pdTabPrint', summary.print_label);
+            setTab('pdTabDispatch', summary.ready_to_dispatch);
         }
 
         // Load default chart data on page load

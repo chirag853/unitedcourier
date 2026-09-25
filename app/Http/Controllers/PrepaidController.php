@@ -5094,6 +5094,24 @@ class PrepaidController extends Controller
             ];
         }
 
+        // Idempotency: SELF flow deducts in payNow (draft → ready) — dobara charge na ho.
+        if (! empty($shipper->awb_number)) {
+            $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
+                ->where('type', 'debit')
+                ->where('reason', 'shipment_charge')
+                ->where('reference', $shipper->awb_number)
+                ->exists();
+            if ($alreadyPaid) {
+                return [
+                    'charged' => false,
+                    'already_charged' => true,
+                    'amount' => $amount,
+                    'new_balance' => $balance,
+                    'message' => 'Payment was already deducted for this shipment.',
+                ];
+            }
+        }
+
         if (! $info['can_manifest']) {
             return [
                 'charged' => false,
@@ -8741,6 +8759,73 @@ class PrepaidController extends Controller
             \Log::info('prepaidManifest: Shipper #'.$shipperId.' → shipping_method="'.$shippingMethod.'" → network="'.$network.'" → api_provider="'.$apiProvider.'"');
 
             // Route to appropriate API based on the resolved provider.
+            // SELF provider: no carrier API — internal manifest only.
+            if ($apiProvider === 'self' || strtoupper(trim((string) $shippingMethod)) === 'SELF') {
+                $internalTracking = $shipper->awb_number ?: ('UWC'.$shipper->id);
+                $createShipmentSelf = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                ShipmentTracking::updateOrCreate(
+                    ['shipper_id' => $shipperId],
+                    [
+                        'customer_id' => $manifestCustomerId,
+                        'create_shipment_id' => $createShipmentSelf ? $createShipmentSelf->id : null,
+                        'response_status_code' => '1',
+                        'response_status_description' => 'SELF shipment (no carrier booking)',
+                        'shipment_identification_number' => $internalTracking,
+                        'total_charges_currency' => 'INR',
+                        'total_charges_amount' => null,
+                        'billing_weight_uom' => 'KGS',
+                        'billing_weight' => null,
+                        'package_results' => null,
+                        'raw_response' => null,
+                        'status' => 'created',
+                    ]
+                );
+
+                $shipper->status = $targetStatus;
+                $shipper->save();
+
+                Tracking::create([
+                    'awb_number' => $shipper->awb_number,
+                    'shipper_id' => $shipper->id,
+                    'shipping_id' => $createShipmentSelf ? $createShipmentSelf->id : null,
+                    'uwc_id' => $shipper->awb_number,
+                    'title' => Tracking::getTitleForStatus($targetStatus),
+                    'status' => $targetStatus,
+                ]);
+
+                ShipmentLog::logStatus(
+                    $shipper->id,
+                    $shipper->awb_number,
+                    $targetStatus,
+                    $previousStatus,
+                    'Prepaid shipment manifested internally (SELF — no carrier booking). Tracking: '.($internalTracking ?? 'N/A'),
+                    $manifestCustomerId,
+                    'admin'
+                );
+
+                $this->createManifestRecord($shipper->id, $manifestCustomerId);
+
+                $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                $chargeNote = $chargeResult['charged']
+                    ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from the customer wallet.'
+                    : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
+                \Log::info('prepaidManifest: Shipper #'.$shipperId.' manifested internally (SELF provider).');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shipment manifested successfully (SELF — no carrier booking)!'.$chargeNote,
+                    'tracking_number' => $internalTracking,
+                    'label_url' => null,
+                    'shipper_id' => $shipperId,
+                    'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                    'network' => 'SELF',
+                    'carrier_skipped' => true,
+                    'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                    'new_balance' => $chargeResult['new_balance'],
+                ]);
+            }
             if ($apiProvider === 'shipuniversal') {
                 $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);
                 if (! $shipUniversalResult['success']) {
@@ -9431,6 +9516,63 @@ class PrepaidController extends Controller
                     $apiProvider = $this->resolveApiProvider($shippingMethod, $shipper, $courierService);
 
                     \Log::info('prepaidBulkManifest: Shipper #'.$shipperId.' → network="'.$network.'" → api_provider="'.$apiProvider.'"');
+
+                    // SELF provider: no carrier API — internal manifest only.
+                    if ($apiProvider === 'self' || strtoupper(trim((string) $shippingMethod)) === 'SELF') {
+                        $internalTracking = $shipper->awb_number ?: ('UWC'.$shipper->id);
+                        $createShipmentSelf = CreateShipment::where('shipper_id', $shipperId)->first();
+
+                        ShipmentTracking::updateOrCreate(
+                            ['shipper_id' => $shipperId],
+                            [
+                                'customer_id' => $manifestCustomerId,
+                                'create_shipment_id' => $createShipmentSelf ? $createShipmentSelf->id : null,
+                                'response_status_code' => '1',
+                                'response_status_description' => 'SELF shipment (no carrier booking)',
+                                'shipment_identification_number' => $internalTracking,
+                                'total_charges_currency' => 'INR',
+                                'total_charges_amount' => null,
+                                'billing_weight_uom' => 'KGS',
+                                'billing_weight' => null,
+                                'package_results' => null,
+                                'raw_response' => null,
+                                'status' => 'created',
+                            ]
+                        );
+
+                        $shipper->status = 'manifested';
+                        $shipper->save();
+
+                        $this->createManifestRecord($shipper->id, $manifestCustomerId, $bulkManifestNumber);
+
+                        Tracking::create([
+                            'awb_number' => $shipper->awb_number,
+                            'shipper_id' => $shipper->id,
+                            'shipping_id' => $createShipmentSelf ? $createShipmentSelf->id : null,
+                            'uwc_id' => $shipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('manifested'),
+                            'status' => 'manifested',
+                        ]);
+
+                        ShipmentLog::logStatus($shipper->id, $shipper->awb_number, 'manifested', $bulkPreviousStatus, 'Prepaid shipment manifested internally (SELF bulk). Tracking: '.($internalTracking ?? 'N/A'), $manifestCustomerId, 'admin');
+
+                        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+
+                        $results['success'][] = [
+                            'shipper_id' => $shipperId,
+                            'tracking_number' => $internalTracking,
+                            'label_url' => null,
+                            'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
+                            'network' => 'SELF',
+                            'carrier_skipped' => true,
+                            'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                            'new_balance' => $chargeResult['new_balance'],
+                        ];
+
+                        \Log::info('Prepaid bulk manifest: shipment '.$shipperId.' manifested internally (SELF provider).');
+
+                        continue;
+                    }
 
                     if ($apiProvider === 'shipuniversal') {
                         $shipUniversalResult = $this->callShipUniversalApiFromDb($shipper);

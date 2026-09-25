@@ -606,17 +606,10 @@
                         </h2>
                         <div id="faq8" class="accordion-collapse collapse" data-bs-parent="#logisticsFaq">
                             <div class="accordion-body">
-                                Through our online tracking system, you can track youve');
-                }
-            });
-        }, obserrerOptions);
-
-        document.querySelectorAll('.timoline-item ).forEach(item => observer.observe(itemd)v
-    </script>
-
-
-
-@include('website_include.footer') </div>
+                                Through our online tracking system, you can track your shipment in real-time. For that, you just have to enter the tracking ID provided on our website dashboard to get live updates.
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Item 9 -->
                     <div class="accordion-item">
