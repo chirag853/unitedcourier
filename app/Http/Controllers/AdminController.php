@@ -83,6 +83,33 @@ class AdminController extends Controller
         $deliveredCount = $shipmentStatusCounts['delivered'] ?? 0;
         $deliverySuccessRate = $terminalExcluded > 0 ? round($deliveredCount / $terminalExcluded * 100, 1) : 0;
 
+        // KYC status split for the dashboard status cards (cumulative).
+        $kycStatusCounts = KycDetail::select('kyc_status', DB::raw('count(*) as count'))
+            ->groupBy('kyc_status')
+            ->pluck('count', 'kyc_status')
+            ->toArray();
+        $kycSplit = [
+            'pending' => (int) ($kycStatusCounts['pending'] ?? 0),
+            'under_review' => (int) ($kycStatusCounts['under_review'] ?? 0),
+            'approved' => (int) ($kycStatusCounts['approved'] ?? 0),
+            'rejected' => (int) ($kycStatusCounts['rejected'] ?? 0),
+        ];
+
+        // Hero overlay cards: delivered today + month-over-month deltas.
+        $deliveredToday = ShipperInfo::where('status', 'delivered')
+            ->whereDate('created_at', $now->toDateString())->count();
+        $thisMonthShipCount = ShipperInfo::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthShipCount = ShipperInfo::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $shipMoM = $lastMonthShipCount > 0 ? round(($thisMonthShipCount - $lastMonthShipCount) / $lastMonthShipCount * 100, 1) : ($thisMonthShipCount > 0 ? 100 : 0);
+        $thisMonthDelivered = ShipperInfo::where('status', 'delivered')
+            ->whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])->count();
+        $lastMonthDelivered = ShipperInfo::where('status', 'delivered')
+            ->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+        $deliveredMoM = $lastMonthDelivered > 0 ? round(($thisMonthDelivered - $lastMonthDelivered) / $lastMonthDelivered * 100, 1) : ($thisMonthDelivered > 0 ? 100 : 0);
+
+        // 7-day spark series for the dashboard tile mini-charts (real data).
+        $sparks = $this->dashboardSparkSeries($now);
+
         // Revenue from shipment invoices for this month vs last month
         $thisMonthRevenue = ShipmentInvoice::whereBetween('created_at', [$thisMonthStart, $now->copy()->endOfMonth()])
             ->where('invoice_amount', '>', 0)
@@ -223,12 +250,6 @@ class AdminController extends Controller
             ->limit(8)
             ->get();
 
-        // Recent customer registrations for the activity feed
-        $recentRegistrations = Customer::select('id', 'first_name', 'last_name', 'email', 'phone_number', 'created_at')
-            ->orderByDesc('created_at')
-            ->limit(6)
-            ->get();
-
         // Greeting for the dashboard header
         $adminName = explode(' ', (string) $admin->name)[0] ?: $admin->name;
         $currentHour = (int) $now->format('H');
@@ -246,9 +267,56 @@ class AdminController extends Controller
             'thisMonthRevenue', 'revenueChangePercent',
             'thisMonthWalletTopups', 'walletTopupsChangePercent', 'walletBalanceTotal',
             'todayShipments', 'todayRegistrations',
-            'recentShipments', 'recentRegistrations',
-            'pickupDispatchCounts', 'pickupDispatchRows'
+            'recentShipments',
+            'pickupDispatchCounts', 'pickupDispatchRows',
+            'kycSplit', 'sparks',
+            'deliveredToday', 'shipMoM', 'deliveredMoM'
         ));
+    }
+
+    /**
+     * Last-7-days daily series for dashboard tile sparklines.
+     * Returns ['labels' => [...], 'shipments' => [...], 'revenue' => [...],
+     * 'wallet' => [...], 'registrations' => [...]] with oldest day first.
+     */
+    private function dashboardSparkSeries($now): array
+    {
+        $days = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $d = $now->copy()->subDays($i);
+            $days[] = ['key' => $d->format('Y-m-d'), 'label' => $d->format('D')];
+        }
+        $keys = array_column($days, 'key');
+        $start = $keys[0] . ' 00:00:00';
+
+        $ship = ShipperInfo::where('created_at', '>=', $start)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('count(*) as c'))
+            ->groupBy('d')->pluck('c', 'd')->toArray();
+        $rev = ShipmentInvoice::where('created_at', '>=', $start)->where('invoice_amount', '>', 0)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('SUM(invoice_amount) as s'))
+            ->groupBy('d')->pluck('s', 'd')->toArray();
+        $wal = WalletTransaction::where('type', 'credit')->where('created_at', '>=', $start)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('SUM(amount) as s'))
+            ->groupBy('d')->pluck('s', 'd')->toArray();
+        $reg = Customer::where('created_at', '>=', $start)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('count(*) as c'))
+            ->groupBy('d')->pluck('c', 'd')->toArray();
+        $onb = KycDetail::where('kyc_status', 'approved')->where('created_at', '>=', $start)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('count(*) as c'))
+            ->groupBy('d')->pluck('c', 'd')->toArray();
+        $csb = Customer::where('csb_status', 2)->where('created_at', '>=', $start)
+            ->select(DB::raw('DATE(created_at) as d'), DB::raw('count(*) as c'))
+            ->groupBy('d')->pluck('c', 'd')->toArray();
+
+        return [
+            'labels' => array_column($days, 'label'),
+            'shipments' => array_map(fn ($k) => (int) ($ship[$k] ?? 0), $keys),
+            'revenue' => array_map(fn ($k) => round((float) ($rev[$k] ?? 0), 2), $keys),
+            'wallet' => array_map(fn ($k) => round((float) ($wal[$k] ?? 0), 2), $keys),
+            'registrations' => array_map(fn ($k) => (int) ($reg[$k] ?? 0), $keys),
+            'onboarded' => array_map(fn ($k) => (int) ($onb[$k] ?? 0), $keys),
+            'csb5' => array_map(fn ($k) => (int) ($csb[$k] ?? 0), $keys),
+        ];
     }
 
     /**
@@ -418,6 +486,12 @@ class AdminController extends Controller
             ->limit(10)
             ->get();
 
+        // KYC status split (cumulative, same definition as index()).
+        $kycStatusCounts = KycDetail::select('kyc_status', DB::raw('count(*) as count'))
+            ->groupBy('kyc_status')
+            ->pluck('count', 'kyc_status')
+            ->toArray();
+
         $statusMap = Tracking::getStatusTitleMap();
 
         return response()->json([
@@ -428,7 +502,14 @@ class AdminController extends Controller
                 'kycPending' => $kycPending,
                 'onboardedCustomers' => $onboardedCustomers,
                 'csb5Enabled' => $csb5Enabled,
+                'kycSplit' => [
+                    'pending' => (int) ($kycStatusCounts['pending'] ?? 0),
+                    'under_review' => (int) ($kycStatusCounts['under_review'] ?? 0),
+                    'approved' => (int) ($kycStatusCounts['approved'] ?? 0),
+                    'rejected' => (int) ($kycStatusCounts['rejected'] ?? 0),
+                ],
             ],
+            'sparks' => $this->dashboardSparkSeries($now),
             'shipmentStatusCounts' => $shipmentStatusCounts,
             'statusMap' => $statusMap,
             'deliverySummary' => [

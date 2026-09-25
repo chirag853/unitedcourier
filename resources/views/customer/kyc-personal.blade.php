@@ -621,7 +621,7 @@
             if (panDob && typeof flatpickr === 'function') {
                 flatpickr(panDob, {
                     dateFormat: 'd/m/Y',
-                    maxDate: new Date(new Date().setFullYear(new Date().getFullYear() - 18)),
+                    maxDate: 'today',
                     allowInput: false
                 });
             }

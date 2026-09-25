@@ -2538,11 +2538,8 @@ class CustomerController extends Controller
             // at all gets a new (business) entry for the admin to review.
             $existingKyc = $existingBusinessKyc ?? $existingPersonalKyc;
 
-            // A re-submission of a previously rejected (or still pending /
-            // under-review) KYC must go back to the review queue — never
-            // straight to approved. Only a brand-new application keeps the
-            // instant-approve behaviour.
-            $resubmitForReview = $existingKyc && ($existingKyc->kyc_status !== 'approved');
+            // Every business KYC submission (new or re-submission) goes to
+            // the admin review queue — never straight to approved.
 
             $businessKycData = [
                 'customer_id' => $customer->id,
@@ -2583,7 +2580,7 @@ class CustomerController extends Controller
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'terms_accepted' => $validated['terms_accepted'],
                 'terms_accepted_at' => $validated['terms_accepted'] ? now() : null,
-                'kyc_status' => $resubmitForReview ? 'pending' : 'approved',
+                'kyc_status' => 'pending',
             ];
 
             // If GST verification returned an address, use it as the Aadhaar address.
@@ -2616,9 +2613,7 @@ class CustomerController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $resubmitForReview
-                    ? 'Business KYC (CSB-V) re-submitted successfully! Your application is now under review.'
-                    : 'Business KYC (CSB-V) submitted successfully! Your application is now approved.',
+                'message' => 'Business KYC submitted successfully! Your application is now under review.',
                 'redirect' => route('customer.kyc.summary'),
             ], 200);
 

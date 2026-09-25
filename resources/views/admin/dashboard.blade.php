@@ -67,6 +67,11 @@
         .chart-card {
             min-height: 300px;
         }
+        /* All pie & bar charts render at one uniform size */
+        .chart-card .card-body {
+            height: 300px;
+            overflow: hidden;
+        }
 
         /* --- Dashboard polish --- */
         .dash-stat-card {
@@ -167,6 +172,169 @@
         .dashboard-title h4 { letter-spacing: -0.3px; }
         .activity-tab-link { cursor: pointer; user-select: none; }
 
+        /* ===== New dashboard design system (light, soft, rounded) ===== */
+        .content .card {
+            border-radius: 16px;
+            border: 1px solid #e8edf5;
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+        }
+        .content .card-header {
+            background: transparent;
+            border-bottom: 1px solid #eef1f6;
+            padding: 14px 20px;
+        }
+        .content .card-header h6 { font-weight: 700; font-size: 14.5px; }
+        .content .card-body { padding: 20px; }
+        .content .table thead th {
+            background: #f6f8fc;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: #8a94a6;
+            border-bottom: 1px solid #eef1f6;
+            white-space: nowrap;
+        }
+        .sec-title {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 15px;
+        }
+        .sec-title .sec-ic {
+            width: 26px; height: 26px; border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #2563eb, #1e6fd9); color: #fff; font-size: 14px;
+        }
+
+        /* Hero banner (background: public/assets/images/banner.png) */
+        .hero-banner {
+            position: relative; overflow: hidden;
+            border-radius: 18px;
+            background-size: cover; background-position: center right; background-repeat: no-repeat;
+            border: 1px solid #e2e8f0;
+            padding: 26px 28px;
+            min-height: 300px;
+        }
+        .hero-banner::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(90deg, rgba(255,255,255,.96) 25%, rgba(255,255,255,.75) 50%, rgba(255,255,255,.1) 80%);
+        }
+        .hero-banner > * { position: relative; z-index: 1; }
+        .hero-banner h4 { font-weight: 800; letter-spacing: -.3px; color: #0f172a; }
+        .hero-date { color: #64748b; font-size: 13px; }
+        .hero-cards { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 18px; }
+        .hero-stat-card {
+            background: #fff; border-radius: 14px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, .10);
+            border: 1px solid #eef1f6;
+            padding: 14px 18px;
+            display: flex; gap: 12px; align-items: flex-start;
+            min-width: 200px; flex: 0 1 250px;
+        }
+        .hero-stat-card .hs-ic {
+            width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 19px; color: #fff;
+        }
+        .hero-stat-card .hs-label { font-size: 12.5px; color: #475569; font-weight: 600; }
+        .hero-stat-card .hs-value { font-size: 24px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+        /* Quick action buttons */
+        .qa-btn {
+            display: flex; align-items: center; gap: 12px;
+            border-radius: 14px; padding: 14px 18px; color: #fff !important;
+            text-decoration: none; border: none;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, .14);
+            transition: transform .18s ease, box-shadow .18s ease;
+            height: 100%;
+        }
+        .qa-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(15, 23, 42, .18); color: #fff !important; }
+        .qa-btn .qa-ic {
+            width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,.22); font-size: 19px;
+        }
+        .qa-btn b { display: block; font-size: 14px; line-height: 1.2; }
+        .qa-btn small { display: block; font-size: 11.5px; opacity: .85; }
+        .qa-blue { background: linear-gradient(135deg, #2563eb, #1e40af); }
+        .qa-green { background: linear-gradient(135deg, #10b981, #047857); }
+        .qa-purple { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+        .qa-orange { background: linear-gradient(135deg, #fb923c, #ea580c); }
+        @media (max-width: 991px) {
+            .hero-banner { background-position: center; }
+            .hero-banner::before { background: rgba(255,255,255,.88); }
+        }
+
+        /* Stat tiles */
+        .stat-tile { transition: transform .2s ease, box-shadow .2s ease; }
+        .stat-tile:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(15, 23, 42, .09); }
+        .tile-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .tile-icon {
+            width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #fff;
+        }
+        .tile-label { font-size: 13px; color: #475569; font-weight: 600; margin: 0; line-height: 1.3; }
+        .tile-sub { font-size: 11px; color: #94a3b8; font-weight: 500; }
+        .tile-value { font-size: 30px; font-weight: 800; letter-spacing: -.5px; margin: 0 0 8px; color: #0f172a; }
+        .tile-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+        .tile-spark { width: 96px !important; height: 38px !important; flex-shrink: 0; }
+
+        /* KYC status minis */
+        .kyc-mini {
+            border: 1px solid #e9edf3; border-radius: 14px; padding: 16px 18px;
+            display: flex; align-items: center; gap: 14px; background: #fff;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+        }
+        .kyc-mini .km-ic {
+            width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 21px; color: #fff;
+        }
+        .kyc-mini b { font-size: 22px; font-weight: 800; color: #0f172a; display: block; line-height: 1.15; }
+        .kyc-mini small { color: #64748b; font-size: 12.5px; font-weight: 500; }
+        .kyc-card-title { font-size: 16.5px !important; font-weight: 800 !important; }
+        .kyc-empty { text-align: center; padding: 30px 0 22px; }
+        .kyc-empty i { font-size: 30px; color: #22c55e; }
+        .kyc-empty p { color: #64748b; font-size: 14px; font-weight: 500; margin: 8px 0 0; }
+        .km-amber { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+        .km-blue { background: linear-gradient(135deg, #60a5fa, #2563eb); }
+        .km-green { background: linear-gradient(135deg, #34d399, #059669); }
+        .km-red { background: linear-gradient(135deg, #f87171, #dc2626); }
+
+        /* Filter pills */
+        .chart-filter-btn {
+            padding: 6px 16px; border: 1px solid #e2e8f0; border-radius: 20px;
+            background: #fff; color: #64748b; font-size: 12px; font-weight: 600;
+        }
+        .chart-filter-btn:hover { background: #f1f5f9; }
+        .chart-filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+        [data-bs-theme="dark"] .content .card { background: #141b2d; border-color: rgba(255,255,255,.08); }
+        [data-bs-theme="dark"] .content .card-header { border-bottom-color: rgba(255,255,255,.08); }
+        [data-bs-theme="dark"] .content .table thead th { background: rgba(255,255,255,.04); color: #94a3b8; }
+        [data-bs-theme="dark"] .hero-banner { border-color: rgba(255,255,255,.08); }
+        [data-bs-theme="dark"] .hero-banner::before { background: linear-gradient(90deg, rgba(15,23,42,.96) 25%, rgba(15,23,42,.82) 55%, rgba(15,23,42,.35)); }
+        [data-bs-theme="dark"] .hero-stat-card { background: #141b2d; border-color: rgba(255,255,255,.08); }
+        [data-bs-theme="dark"] .tile-value, [data-bs-theme="dark"] .hero-banner h4, [data-bs-theme="dark"] .hero-stat-card .hs-value { color: #fff; }
+        [data-bs-theme="dark"] .tile-label, [data-bs-theme="dark"] .hero-date { color: #94a3b8; }
+        [data-bs-theme="dark"] .cc-picker-overlay { background: #141b2d; border-color: rgba(255,255,255,.1); color: #cbd5e1; }
+        [data-bs-theme="dark"] .kyc-mini { background: #141b2d; border-color: rgba(255,255,255,.08); }
+
+        /* ---- Dashboard entrance + micro animations ---- */
+        @keyframes dashFadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes growBar { from { width: 0 !important; } }
+        .dash-anim { opacity: 0; }
+        .dash-anim.in { animation: dashFadeUp .55s cubic-bezier(.22,.61,.36,1) forwards; animation-delay: var(--d, 0s); }
+        .hero-stat-card { animation: dashFadeUp .5s ease both; }
+        .hero-stat-card:nth-child(2) { animation-delay: .08s; }
+        .hero-stat-card:nth-child(3) { animation-delay: .16s; }
+        #summaryBox .progress-bar { animation: growBar .8s ease-out; }
+        @media (prefers-reduced-motion: reduce) {
+            .dash-anim, .hero-stat-card, #summaryBox .progress-bar { animation: none !important; opacity: 1 !important; }
+            .dash-anim, .hero-stat-card, .stat-tile, .qa-btn { transition: none !important; }
+        }
+
         /* --- Display-only status tabs (view only, no actions) --- */
         .pd-view-tabs {
             display: flex;
@@ -241,50 +409,90 @@
             <!-- Start Content -->
             <div class="content pb-0">
 
-                <!-- Page Header -->
-                <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
-                    <div class="dashboard-title">
-                        <h4 class="mb-1 fw-semibold">{{ $greeting }}, {{ $adminName }} <i class="ti ti-sun fs-20 text-warning align-middle ms-1"></i></h4>
-                        <p class="text-muted fs-13 mb-0">{{ \Carbon\Carbon::now()->format('l, d F Y') }} — Here's what's happening with your courier network today.</p>
+                <!-- Hero banner -->
+                <div class="hero-banner mb-4" style="background-image:url('{{ asset('assets/images/banner.png') }}');">
+                    <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                        <div>
+                            <h4 class="mb-1">{{ $greeting }}, {{ $adminName }} <i class="ti ti-sun fs-20 text-warning align-middle ms-1"></i></h4>
+                            <p class="text-muted fs-13 mb-2">Here's what's happening with your courier network today.</p>
+                            <p class="hero-date mb-0"><i class="ti ti-calendar me-1"></i>{{ \Carbon\Carbon::now()->format('l, d F Y') }} &bull; {{ \Carbon\Carbon::now()->format('h:i A') }}</p>
+                        </div>
+                        <div class="gap-2 d-flex align-items-center flex-wrap">
+                            <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-primary">
+                                <i class="ti ti-file-alert me-1"></i>KYC Pending <span class="badge bg-white text-primary ms-1">{{ $kycPending }}</span>
+                            </a>
+                            <a href="javascript:void(0);" class="btn btn-icon btn-outline-light bg-white shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload()"><i class="ti ti-refresh"></i></a>
+                        </div>
                     </div>
-                    <div class="gap-2 d-flex align-items-center flex-wrap">
-                        <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-outline-warning">
-                            <i class="ti ti-file-alert me-1"></i>KYC Pending <span class="badge bg-warning text-dark ms-1">{{ $kycPending }}</span>
-                        </a>
-                        <a href="{{ route('admin.companies') }}" class="btn btn-primary btn-sm"><i class="ti ti-building me-1"></i>Companies</a>
-                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload()"><i class="ti ti-refresh"></i></a>
-                    </div>
-                </div>
-                <!-- /Page Header -->
-
-                <!-- Quick glance strip -->
-                <div class="row row-gap-3 mb-4">
-                    <div class="col-12">
-                        <div class="card mb-0">
-                            <div class="card-body py-3">
-                                <div class="row align-items-center text-center text-md-start row-gap-3">
-                                    <div class="col-md-3 col-6">
-                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-truck-delivery me-1"></i>Shipments Today</p>
-                                        <h5 class="mb-0 fw-semibold" id="todayShipments">{{ $todayShipments }}</h5>
-                                    </div>
-                                    <div class="col-md-3 col-6">
-                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-user-plus me-1"></i>New Registrations Today</p>
-                                        <h5 class="mb-0 fw-semibold" id="todayRegistrations">{{ $todayRegistrations }}</h5>
-                                    </div>
-                                    <div class="col-md-3 col-6">
-                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-wallet me-1"></i>Total Wallet Balance</p>
-                                        <h5 class="mb-0 fw-semibold">₹ {{ number_format($walletBalanceTotal, 0) }}</h5>
-                                    </div>
-                                    <div class="col-md-3 col-6">
-                                        <p class="text-muted fs-13 mb-1"><i class="ti ti-box me-1"></i>Total Shipments (All Time)</p>
-                                        <h5 class="mb-0 fw-semibold">{{ number_format($totalShipments) }}</h5>
-                                    </div>
-                                </div>
+                    <div class="hero-cards">
+                        <div class="hero-stat-card">
+                            <span class="hs-ic icon-indigo"><i class="ti ti-package"></i></span>
+                            <div>
+                                <div class="hs-label">Total Shipments</div>
+                                <div class="hs-value">{{ number_format($totalShipments) }}</div>
+                                @if($shipMoM > 0)
+                                <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $shipMoM }}% <span class="fw-normal ms-1">vs. last month</span></span>
+                                @elseif($shipMoM < 0)
+                                <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($shipMoM) }}% <span class="fw-normal ms-1">vs. last month</span></span>
+                                @else
+                                <span class="stat-trend-badge flat">No change vs last month</span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="hero-stat-card">
+                            <span class="hs-ic icon-green"><i class="ti ti-truck-delivery"></i></span>
+                            <div>
+                                <div class="hs-label">Delivered Today</div>
+                                <div class="hs-value">{{ number_format($deliveredToday) }}</div>
+                                @if($deliveredMoM > 0)
+                                <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $deliveredMoM }}% <span class="fw-normal ms-1">vs. last month</span></span>
+                                @elseif($deliveredMoM < 0)
+                                <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($deliveredMoM) }}% <span class="fw-normal ms-1">vs. last month</span></span>
+                                @else
+                                <span class="stat-trend-badge flat">No change vs last month</span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="hero-stat-card">
+                            <span class="hs-ic icon-blue"><i class="ti ti-truck"></i></span>
+                            <div>
+                                <div class="hs-label">In Transit</div>
+                                <div class="hs-value">{{ number_format($inTransit) }}</div>
+                                <span class="stat-trend-badge flat">Moving through the network</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- /Quick glance strip -->
+                <!-- /Hero banner -->
+
+                <!-- Quick actions -->
+                <div class="row row-gap-3 mb-4">
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <a href="{{ route('admin.companies') }}" class="qa-btn qa-blue flex-fill">
+                            <span class="qa-ic"><i class="ti ti-package"></i></span>
+                            <span><b>Create Shipment</b><small>New shipment</small></span>
+                        </a>
+                    </div>
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <a href="{{ url('/get-started') }}" class="qa-btn qa-green flex-fill">
+                            <span class="qa-ic"><i class="ti ti-user-plus"></i></span>
+                            <span><b>Add Customer</b><small>Register customer</small></span>
+                        </a>
+                    </div>
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <a href="{{ route('admin.manage-rate') }}" class="qa-btn qa-purple flex-fill">
+                            <span class="qa-ic"><i class="ti ti-tag"></i></span>
+                            <span><b>Add Rate</b><small>Manage rates</small></span>
+                        </a>
+                    </div>
+                    <div class="col-xl-3 col-sm-6 d-flex">
+                        <a href="{{ route('admin.customer-report') }}" class="qa-btn qa-orange flex-fill">
+                            <span class="qa-ic"><i class="ti ti-file-download"></i></span>
+                            <span><b>Generate Report</b><small>Download reports</small></span>
+                        </a>
+                    </div>
+                </div>
+                <!-- /Quick actions -->
 
                 <!-- Display-only status tabs (view only — no actions attached) -->
                 <div class="row row-gap-3 mb-4">
@@ -366,100 +574,99 @@
                 <!-- /Display-only status tabs -->
 
                 <!-- start row - Customer Summary Stat Cards -->
-                <h6 class="mb-2"><i class="ti ti-users me-1"></i>Customer Summary</h6>
+                <h6 class="mb-2 fw-bold" style="font-size:15px;">Key Statistics</h6>
                 <div class="row row-gap-3 mb-4">
 					<!-- Total Registrations -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">Total Registrations</p>
-                                        <h2 class="mb-2 fw-semibold">{{ number_format($totalRegistrations) }}</h2>
-                                        @if($registrationsChangePercent > 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $registrationsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($registrationsChangePercent < 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($registrationsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-indigo"><i class="ti ti-building"></i></span>
+						<div class="card stat-tile flex-fill mb-0">
+							<div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-indigo"><i class="ti ti-building"></i></span>
+                                    <div><p class="tile-label">Total Registrations</p></div>
+                                </div>
+                                <h2 class="tile-value">{{ number_format($totalRegistrations) }}</h2>
+                                <div class="tile-foot">
+                                    @if($registrationsChangePercent > 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $registrationsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($registrationsChangePercent < 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($registrationsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
+                                    <canvas class="tile-spark" id="sparkRegistrations"></canvas>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
 					<!-- /Total Registrations -->
 
                     <!-- KYC Pending -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">KYC Pending</p>
-                                        <h2 class="mb-2 fw-semibold">{{ number_format($kycPending) }}</h2>
-                                        @if($kycPendingChangePercent > 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-up"></i>{{ $kycPendingChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($kycPendingChangePercent < 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-down"></i>{{ abs($kycPendingChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-clock"></i></span>
+						<div class="card stat-tile flex-fill mb-0">
+							<div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-orange"><i class="ti ti-clock"></i></span>
+                                    <div><p class="tile-label">KYC Pending</p></div>
+                                </div>
+                                <h2 class="tile-value">{{ number_format($kycPending) }}</h2>
+                                <div class="tile-foot">
+                                    @if($kycPendingChangePercent > 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-up"></i>{{ $kycPendingChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($kycPendingChangePercent < 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-down"></i>{{ abs($kycPendingChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
 					<!-- /KYC Pending -->
 
                     <!-- Onboarded Customers -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">Onboarded Customers</p>
-                                        <h2 class="mb-2 fw-semibold">{{ number_format($onboardedCustomers) }}</h2>
-                                        @if($onboardedChangePercent > 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $onboardedChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($onboardedChangePercent < 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($onboardedChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-green"><i class="ti ti-user-check"></i></span>
+						<div class="card stat-tile flex-fill mb-0">
+							<div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-green"><i class="ti ti-user-check"></i></span>
+                                    <div><p class="tile-label">Onboarded Customers</p></div>
+                                </div>
+                                <h2 class="tile-value">{{ number_format($onboardedCustomers) }}</h2>
+                                <div class="tile-foot">
+                                    @if($onboardedChangePercent > 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $onboardedChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($onboardedChangePercent < 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($onboardedChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
+                                    <canvas class="tile-spark" id="sparkOnboarded"></canvas>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
 					<!-- /Onboarded Customers -->
 
                     <!-- CSB5 Enabled -->
 					<div class="col-xl-3 col-sm-6 d-flex">
-						<div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-							<div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">CSB5 Enabled</p>
-                                        <h2 class="mb-2 fw-semibold">{{ number_format($csb5Enabled) }}</h2>
-                                        @if($csb5ChangePercent > 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $csb5ChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($csb5ChangePercent < 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($csb5ChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-purple"><i class="ti ti-file-check"></i></span>
+						<div class="card stat-tile flex-fill mb-0">
+							<div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-purple"><i class="ti ti-file-check"></i></span>
+                                    <div><p class="tile-label">CSB5 Enabled</p></div>
+                                </div>
+                                <h2 class="tile-value">{{ number_format($csb5Enabled) }}</h2>
+                                <div class="tile-foot">
+                                    @if($csb5ChangePercent > 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $csb5ChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($csb5ChangePercent < 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($csb5ChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
+                                    <canvas class="tile-spark" id="sparkCsb"></canvas>
                                 </div>
 							</div>
-                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
 						</div>
 					</div>
 					<!-- /CSB5 Enabled -->
@@ -468,88 +675,86 @@
                 <!-- end row -->
 
                 <!-- start row - Business Summary Stat Cards -->
-                <h6 class="mb-2"><i class="ti ti-trending-up me-1"></i>Business Summary</h6>
                 <div class="row row-gap-3 mb-4">
                     <!-- Revenue -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-                            <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">Revenue (This Month)</p>
-                                        <h2 class="mb-2 fw-semibold" id="statRevenue">₹ {{ number_format($thisMonthRevenue) }}</h2>
-                                        @if($revenueChangePercent > 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $revenueChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($revenueChangePercent < 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($revenueChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-green"><i class="ti ti-currency-rupee"></i></span>
+                        <div class="card stat-tile flex-fill mb-0">
+                            <div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-green"><i class="ti ti-currency-rupee"></i></span>
+                                    <div><p class="tile-label">Business Summary</p><span class="tile-sub">Revenue (This Month)</span></div>
+                                </div>
+                                <h2 class="tile-value" id="statRevenue">₹ {{ number_format($thisMonthRevenue) }}</h2>
+                                <div class="tile-foot">
+                                    @if($revenueChangePercent > 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $revenueChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($revenueChangePercent < 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($revenueChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
+                                    <canvas class="tile-spark" id="sparkRevenue"></canvas>
                                 </div>
                             </div>
-                            <img src="{{ asset('assets/img/icons/elemnt-01.svg') }}" alt="elemnt-01" class="img-fluid position-absolute top-0 start-0">
                         </div>
                     </div>
                     <!-- /Revenue -->
 
-                    <!-- In-Transit -->
+                    <!-- Total Shipments -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-                            <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">In-Transit Shipments</p>
-                                        <h2 class="mb-2 fw-semibold" id="statInTransit">{{ number_format($inTransit) }}</h2>
-                                        <span class="stat-trend-badge flat">Moving through the network</span>
-                                    </div>
-                                    <span class="dash-stat-icon icon-blue"><i class="ti ti-truck"></i></span>
+                        <div class="card stat-tile flex-fill mb-0">
+                            <div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-blue"><i class="ti ti-truck"></i></span>
+                                    <div><p class="tile-label">Total Shipments</p></div>
+                                </div>
+                                <h2 class="tile-value" id="statShipmentsTile">{{ number_format($totalShipments) }}</h2>
+                                <div class="tile-foot">
+                                    <span class="stat-trend-badge flat">All time</span>
+                                    <canvas class="tile-spark" id="sparkShipments"></canvas>
                                 </div>
                             </div>
-                            <img src="{{ asset('assets/img/icons/elemnt-02.svg') }}" alt="elemnt-02" class="img-fluid position-absolute top-0 start-0">
                         </div>
                     </div>
-                    <!-- /In-Transit -->
+                    <!-- /Total Shipments -->
 
                     <!-- Wallet Top-ups -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-                            <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">Wallet Top-ups (This Month)</p>
-                                        <h2 class="mb-2 fw-semibold" id="statWalletTopups">₹ {{ number_format($thisMonthWalletTopups) }}</h2>
-                                        @if($walletTopupsChangePercent > 0)
-                                        <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $walletTopupsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @elseif($walletTopupsChangePercent < 0)
-                                        <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($walletTopupsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
-                                        @else
-                                        <span class="stat-trend-badge flat">No change vs last month</span>
-                                        @endif
-                                    </div>
-                                    <span class="dash-stat-icon icon-orange"><i class="ti ti-wallet"></i></span>
+                        <div class="card stat-tile flex-fill mb-0">
+                            <div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-purple"><i class="ti ti-wallet"></i></span>
+                                    <div><p class="tile-label">Wallet Top-ups</p><span class="tile-sub">This Month</span></div>
+                                </div>
+                                <h2 class="tile-value" id="statWalletTopups">₹ {{ number_format($thisMonthWalletTopups) }}</h2>
+                                <div class="tile-foot">
+                                    @if($walletTopupsChangePercent > 0)
+                                    <span class="stat-trend-badge up"><i class="ti ti-arrow-bar-up"></i>{{ $walletTopupsChangePercent }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @elseif($walletTopupsChangePercent < 0)
+                                    <span class="stat-trend-badge down"><i class="ti ti-arrow-bar-down"></i>{{ abs($walletTopupsChangePercent) }}% <span class="fw-normal ms-1">vs last month</span></span>
+                                    @else
+                                    <span class="stat-trend-badge flat">No change vs last month</span>
+                                    @endif
+                                    <canvas class="tile-spark" id="sparkWallet"></canvas>
                                 </div>
                             </div>
-                            <img src="{{ asset('assets/img/icons/elemnt-03.svg') }}" alt="elemnt-03" class="img-fluid position-absolute top-0 start-0">
                         </div>
                     </div>
                     <!-- /Wallet Top-ups -->
 
                     <!-- Delivery Success Rate -->
                     <div class="col-xl-3 col-sm-6 d-flex">
-                        <div class="card dash-stat-card flex-fill mb-0 position-relative overflow-hidden">
-                            <div class="card-body position-relative z-1">
-                                <div class="d-flex align-items-start justify-content-between gap-2">
-                                    <div>
-                                        <p class="fs-14 mb-1 text-body">Delivery Success Rate</p>
-                                        <h2 class="mb-2 fw-semibold" id="statSuccessRate">{{ $deliverySuccessRate }}%</h2>
-                                        <span class="stat-trend-badge flat">Delivered vs non-cancelled</span>
-                                    </div>
-                                    <span class="dash-stat-icon icon-teal"><i class="ti ti-circle-check"></i></span>
+                        <div class="card stat-tile flex-fill mb-0">
+                            <div class="card-body">
+                                <div class="tile-top">
+                                    <span class="tile-icon icon-teal"><i class="ti ti-circle-check"></i></span>
+                                    <div><p class="tile-label">Delivery Success Rate</p></div>
+                                </div>
+                                <h2 class="tile-value" id="statSuccessRate">{{ $deliverySuccessRate }}%</h2>
+                                <div class="tile-foot">
+                                    <span class="stat-trend-badge flat">Delivered vs non-cancelled</span>
                                 </div>
                             </div>
-                            <img src="{{ asset('assets/img/icons/elemnt-04.svg') }}" alt="elemnt-04" class="img-fluid position-absolute top-0 start-0">
                         </div>
                     </div>
                     <!-- /Delivery Success Rate -->
@@ -561,10 +766,36 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header d-flex align-items-center justify-content-between">
-                                <h6 class="mb-0">KYC Pending Customers</h6>
+                                <h6 class="mb-0 kyc-card-title"><span class="sec-title"><span class="sec-ic"><i class="ti ti-shield-check"></i></span>KYC Pending Customers</span></h6>
                                 <a href="{{ url('/admin/kyc-pending') }}" class="btn btn-sm btn-outline-primary">View All</a>
                             </div>
                             <div class="card-body">
+                                <div class="row row-gap-3 mb-3">
+                                    <div class="col-xl-3 col-sm-6">
+                                        <div class="kyc-mini">
+                                            <span class="km-ic km-amber"><i class="ti ti-clock"></i></span>
+                                            <div><b id="kycMiniPending">{{ number_format($kycSplit['pending'] ?? 0) }}</b><small>Pending</small></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-xl-3 col-sm-6">
+                                        <div class="kyc-mini">
+                                            <span class="km-ic km-blue"><i class="ti ti-file-search"></i></span>
+                                            <div><b id="kycMiniUnderReview">{{ number_format($kycSplit['under_review'] ?? 0) }}</b><small>Under Review</small></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-xl-3 col-sm-6">
+                                        <div class="kyc-mini">
+                                            <span class="km-ic km-green"><i class="ti ti-circle-check"></i></span>
+                                            <div><b id="kycMiniApproved">{{ number_format($kycSplit['approved'] ?? 0) }}</b><small>Approved</small></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-xl-3 col-sm-6">
+                                        <div class="kyc-mini">
+                                            <span class="km-ic km-red"><i class="ti ti-circle-x"></i></span>
+                                            <div><b id="kycMiniRejected">{{ number_format($kycSplit['rejected'] ?? 0) }}</b><small>Rejected</small></div>
+                                        </div>
+                                    </div>
+                                </div>
                                 @if($kycPendingList->count() > 0)
                                 <div class="table-responsive">
                                     <table class="table table-hover table-sm">
@@ -601,9 +832,9 @@
                                     </table>
                                 </div>
                                 @else
-                                <div class="text-center py-3">
-                                    <i class="ti ti-circle-check fs-24 text-success"></i>
-                                    <p class="text-muted mb-0">No pending KYC submissions</p>
+                                <div class="kyc-empty">
+                                    <i class="ti ti-circle-check"></i>
+                                    <p>No pending KYC submissions</p>
                                 </div>
                                 @endif
                             </div>
@@ -613,19 +844,20 @@
                 <!-- /KYC Pending List -->
 
                 <!-- Shipment Analytics Section with Date Filters -->
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h6 class="mb-0">Shipment Analytics</h6>
-                    <div class="d-flex gap-2">
-                        <button class="chart-filter-btn" data-filter="today" onclick="loadChartData('today', this)">Today</button>
-                        <button class="chart-filter-btn" data-filter="yesterday" onclick="loadChartData('yesterday', this)">Yesterday</button>
-                        <button class="chart-filter-btn active" data-filter="this_month" onclick="loadChartData('this_month', this)">This Month</button>
-                        <button class="chart-filter-btn" data-filter="last_month" onclick="loadChartData('last_month', this)">Last Month</button>
-                        <button class="chart-filter-btn" data-filter="last_year" onclick="loadChartData('last_year', this)">Last Year</button>
+                <div class="card mb-4">
+                    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <h6 class="mb-0"><span class="sec-title"><span class="sec-ic"><i class="ti ti-chart-bar"></i></span>Shipment Analytics</span></h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="chart-filter-btn" data-filter="today" onclick="loadChartData('today', this)">Today</button>
+                            <button class="chart-filter-btn" data-filter="yesterday" onclick="loadChartData('yesterday', this)">Yesterday</button>
+                            <button class="chart-filter-btn active" data-filter="this_month" onclick="loadChartData('this_month', this)">This Month</button>
+                            <button class="chart-filter-btn" data-filter="last_month" onclick="loadChartData('last_month', this)">Last Month</button>
+                            <button class="chart-filter-btn" data-filter="last_year" onclick="loadChartData('last_year', this)">Last Year</button>
+                        </div>
                     </div>
-                </div>
-
+                    <div class="card-body">
                 <!-- start row - Customer Summary Charts (Pie + Bar) -->
-                <div class="row row-gap-3 mb-4">
+                <div class="row row-gap-3">
                     <!-- Customer Summary Pie/Doughnut -->
                     <div class="col-xl-5 col-lg-6 d-flex">
                         <div class="card flex-fill chart-card">
@@ -633,8 +865,8 @@
                                 <h6 class="mb-0">Customer Summary</h6>
                             </div>
                             <div class="card-body">
-                                <div class="d-flex align-items-center justify-content-center flex-wrap gap-4">
-                                    <div style="position: relative; width: 210px; height: 210px;">
+                                <div class="d-flex align-items-center justify-content-center flex-wrap gap-4 h-100">
+                                    <div style="position: relative; width: 250px; height: 250px;">
                                         <canvas id="customerSummaryChart"></canvas>
                                     </div>
                                     <div id="customerSummaryLegend" class="flex-fill" style="min-width: 210px;"></div>
@@ -655,6 +887,9 @@
                     </div>
                 </div>
                 <!-- end row -->
+                    </div>
+                </div>
+                <!-- /Shipment Analytics card -->
 
                 <!-- start row - Shipment & Delivery Stat Tiles -->
                 <div class="row row-gap-3 mb-4">
@@ -980,76 +1215,10 @@
                 </div>
                 <!-- end row -->
 
-                <!-- start row - Pickup & Dispatch Table -->
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header d-flex align-items-center justify-content-between">
-                                <h6 class="mb-0"><i class="ti ti-table me-1"></i>Pickup & Dispatch — Latest Shipments</h6>
-                                <span class="badge bg-secondary-subtle text-secondary"><i class="ti ti-eye me-1"></i>View only</span>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-hover table-sm mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>AWB</th>
-                                                <th>Customer</th>
-                                                <th>Route</th>
-                                                <th>Stage</th>
-                                                <th>Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="pickupDispatchTableBody">
-                                            @forelse($pickupDispatchRows as $key => $row)
-                                            @php
-                                                $pdName = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
-                                                $pdCustomer = $row->company_name ?? ($pdName !== '' ? $pdName : '—');
-                                                $pdStageColors = [
-                                                    'ready_for_pickup' => 'background:rgba(111,66,193,.12);color:#6f42c1;',
-                                                    'assigned_for_pickup' => 'background:rgba(99,102,241,.12);color:#6366f1;',
-                                                    'received' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
-                                                    'dispatched' => 'background:rgba(6,182,212,.12);color:#06b6d4;',
-                                                    'ready_to_dispatch' => 'background:rgba(245,158,11,.14);color:#b45309;',
-                                                ];
-                                                $pdStageTitles = [
-                                                    'ready_for_pickup' => 'Ready for Pickup',
-                                                    'assigned_for_pickup' => 'Assigned for Pickup',
-                                                    'received' => 'Print Label',
-                                                    'dispatched' => 'Print Label',
-                                                    'ready_to_dispatch' => 'Ready to Dispatch',
-                                                ];
-                                            @endphp
-                                            <tr>
-                                                <td>{{ $key + 1 }}</td>
-                                                <td><span class="fw-semibold">{{ $row->awb_number ?? '—' }}</span></td>
-                                                <td>{{ $pdCustomer }}</td>
-                                                <td>
-                                                    <span class="d-block">{{ $row->pickup_city ?? '—' }}</span>
-                                                    <small class="text-muted"><i class="ti ti-arrow-right me-1"></i>{{ $row->destination_city ?? '—' }}</small>
-                                                </td>
-                                                <td><span class="dash-status-badge" style="{{ $pdStageColors[$row->status] ?? '' }}">{{ $pdStageTitles[$row->status] ?? ucfirst(str_replace('_', ' ', $row->status)) }}</span></td>
-                                                <td class="text-muted">{{ \Carbon\Carbon::parse($row->created_at)->format('d M, h:i A') }}</td>
-                                            </tr>
-                                            @empty
-                                            <tr id="pdEmptyRow">
-                                                <td colspan="6" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td>
-                                            </tr>
-                                            @endforelse
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- end row - Pickup & Dispatch Table -->
-
                 <!-- start row - Recent Activity -->
                 <div class="row row-gap-3 mb-4">
                     <!-- Recent Shipments -->
-                    <div class="col-xl-7 col-lg-12 d-flex">
+                    <div class="col-12 d-flex">
                         <div class="card flex-fill mb-0">
                             <div class="card-header d-flex align-items-center justify-content-between">
                                 <h6 class="mb-0"><i class="ti ti-truck me-1"></i>Recent Shipments</h6>
@@ -1127,44 +1296,6 @@
                         </div>
                     </div>
                     <!-- /Recent Shipments -->
-
-                    <!-- Recent Registrations -->
-                    <div class="col-xl-5 col-lg-12 d-flex">
-                        <div class="card flex-fill mb-0">
-                            <div class="card-header d-flex align-items-center justify-content-between">
-                                <h6 class="mb-0"><i class="ti ti-user-plus me-1"></i>Recent Registrations</h6>
-                                <a href="{{ route('admin.kyc-pending') }}" class="btn btn-sm btn-outline-primary">View All</a>
-                            </div>
-                            <div class="card-body py-2">
-                                @if($recentRegistrations->count() > 0)
-                                @foreach($recentRegistrations as $customer)
-                                @php
-                                    $initial = strtoupper(substr($customer->first_name ?? ($customer->email ?? 'U'), 0, 1));
-                                    $avatarPalette = ['icon-indigo', 'icon-orange', 'icon-green', 'icon-purple', 'icon-teal', 'icon-blue'];
-                                    $avatarClass = $avatarPalette[($customer->id ?? 0) % count($avatarPalette)];
-                                @endphp
-                                <div class="dash-list-item">
-                                    <span class="dash-avatar {{ $avatarClass }}">{{ $initial }}</span>
-                                    <div class="flex-fill min-w-0">
-                                        <p class="mb-0 fw-semibold text-truncate">{{ $customer->first_name }} {{ $customer->last_name }}</p>
-                                        <small class="text-muted text-truncate d-block">{{ $customer->email }}</small>
-                                    </div>
-                                    <div class="text-end flex-shrink-0">
-                                        <span class="stat-trend-badge flat">{{ \Carbon\Carbon::parse($customer->created_at)->format('d M') }}</span>
-                                        <small class="text-muted d-block">{{ \Carbon\Carbon::parse($customer->created_at)->diffForHumans() }}</small>
-                                    </div>
-                                </div>
-                                @endforeach
-                                @else
-                                <div class="text-center py-3">
-                                    <i class="ti ti-user-off fs-24 text-muted"></i>
-                                    <p class="text-muted mb-0">No registrations yet</p>
-                                </div>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-                    <!-- /Recent Registrations -->
                 </div>
                 <!-- end row - Recent Activity -->
 
@@ -1226,6 +1357,7 @@
         let orderTypeTrendChart = null;
         let pickupDispatchChart = null;
         let pickupDispatchBarChart = null;
+        const sparkCharts = {};
 
         // ---- Helpers -------------------------------------------------------
         function formatNumber(value) {
@@ -1380,6 +1512,8 @@
                     updateShipmentDeliveryStatTiles(data.shipmentStatusCounts, data.deliverySummary, data.filter);
                     updateOrderTypeStatTiles(data.orderTypeSummary || {}, data.filter);
                     updateBusinessStatTiles(data.businessSummary || {});
+                    updateKycMinis(data.customerSummary || {});
+                    paintSparks(data.sparks || {});
                 }
             })
             .catch(error => {
@@ -1391,10 +1525,15 @@
         }
 
         function updateBusinessStatTiles(businessSummary) {
-            document.getElementById('statRevenue').textContent = formatCurrency(businessSummary.revenue);
-            document.getElementById('statInTransit').textContent = formatNumber(businessSummary.inTransit);
-            document.getElementById('statWalletTopups').textContent = formatCurrency(businessSummary.walletTopups);
-            document.getElementById('statSuccessRate').textContent = (businessSummary.successRate || 0) + '%';
+            var setTile = function(id, text) {
+                var el = document.getElementById(id);
+                if (el) el.textContent = text;
+            };
+            setTile('statRevenue', formatCurrency(businessSummary.revenue));
+            setTile('statInTransit', formatNumber(businessSummary.inTransit));
+            setTile('statShipmentsTile', formatNumber(businessSummary.totalShipments));
+            setTile('statWalletTopups', formatCurrency(businessSummary.walletTopups));
+            setTile('statSuccessRate', (businessSummary.successRate || 0) + '%');
         }
 
         function updateShipmentDeliveryStatTiles(statusCounts, deliverySummary, filter) {
@@ -1574,7 +1713,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -1649,7 +1788,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     interaction: {
                         mode: 'index',
                         intersect: false
@@ -1733,7 +1872,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             display: false
@@ -1794,7 +1933,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             display: false
@@ -1861,7 +2000,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -1916,7 +2055,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -2003,7 +2142,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: {
@@ -2091,7 +2230,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -2140,7 +2279,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -2173,31 +2312,6 @@
             return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
         }
 
-        function renderPickupDispatchTable(rows) {
-            const tbody = document.getElementById('pickupDispatchTableBody');
-            if (!tbody) return;
-
-            if (!rows || rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No shipments in pickup / dispatch stages</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = rows.map((row, idx) => {
-                const name = ((row.first_name || '') + ' ' + (row.last_name || '')).trim();
-                const customer = escHtml(row.company_name || name || '—');
-                const stage = pickupStageTitle[row.status] || escHtml(String(row.status || '—').replace(/_/g, ' '));
-                return '<tr>' +
-                    '<td>' + (idx + 1) + '</td>' +
-                    '<td><span class="fw-semibold">' + escHtml(row.awb_number || '—') + '</span></td>' +
-                    '<td>' + customer + '</td>' +
-                    '<td><span class="d-block">' + escHtml(row.pickup_city || '—') + '</span>' +
-                    '<small class="text-muted"><i class="ti ti-arrow-right me-1"></i>' + escHtml(row.destination_city || '—') + '</small></td>' +
-                    '<td><span class="dash-status-badge" style="' + (pickupStageStyle[row.status] || '') + '">' + escHtml(stage) + '</span></td>' +
-                    '<td class="text-muted">' + formatPdDate(row.created_at) + '</td>' +
-                    '</tr>';
-            }).join('');
-        }
-
         function renderPdLiveTable(rows) {
             const tbody = document.getElementById('pdLiveTableBody');
             if (!tbody) return;
@@ -2225,7 +2339,6 @@
         function updatePickupDispatchSection(summary, rows, filter) {
             renderPickupDispatchChart(summary);
             renderPickupDispatchBarChart(summary);
-            renderPickupDispatchTable(rows);
             renderPdLiveTable(rows);
 
             const filterLabels = {
@@ -2259,9 +2372,112 @@
             setTab('pdTabDispatch', summary.ready_to_dispatch);
         }
 
+        function updateKycMinis(customerSummary) {
+            var split = customerSummary.kycSplit || {};
+            var setMini = function(id, value) {
+                var el = document.getElementById(id);
+                if (el) el.textContent = formatNumber(value);
+            };
+            setMini('kycMiniPending', split.pending);
+            setMini('kycMiniUnderReview', split.under_review);
+            setMini('kycMiniApproved', split.approved);
+            setMini('kycMiniRejected', split.rejected);
+        }
+
+        // Tiny tile sparklines (last 7 days, real data from backend).
+        function drawSpark(canvasId, values, color) {
+            var canvas = document.getElementById(canvasId);
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (sparkCharts[canvasId]) {
+                sparkCharts[canvasId].destroy();
+            }
+            var ctx = canvas.getContext('2d');
+            var gradient = ctx.createLinearGradient(0, 0, 0, 38);
+            gradient.addColorStop(0, color + '55');
+            gradient.addColorStop(1, color + '05');
+            sparkCharts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: (values || []).map(function(_, i) { return i; }),
+                    datasets: [{
+                        data: values || [],
+                        borderColor: color,
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 3,
+                        fill: true,
+                        tension: 0.45
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, beginAtZero: true }
+                    },
+                    events: []
+                }
+            });
+        }
+
+        function paintSparks(sparks) {
+            drawSpark('sparkRegistrations', sparks.registrations, '#5b5eff');
+            drawSpark('sparkRevenue', sparks.revenue, '#1abe17');
+            drawSpark('sparkShipments', sparks.shipments, '#2f80ed');
+            drawSpark('sparkWallet', sparks.wallet, '#7367f0');
+            drawSpark('sparkOnboarded', sparks.onboarded, '#1abe17');
+            drawSpark('sparkCsb', sparks.csb5, '#ff4d4f');
+        }
+
+        // ---- Entrance reveal + count-up animations ----
+        var dashReduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function initDashAnimations() {
+            var items = document.querySelectorAll('.content > .hero-banner, .content > .row');
+            if (!('IntersectionObserver' in window) || dashReduceMotion) return;
+            items.forEach(function(el, i) {
+                el.classList.add('dash-anim');
+                el.style.setProperty('--d', Math.min(i * 0.06, 0.4) + 's');
+            });
+            var obs = new IntersectionObserver(function(entries) {
+                entries.forEach(function(en) {
+                    if (en.isIntersecting) { en.target.classList.add('in'); obs.unobserve(en.target); }
+                });
+            }, { threshold: 0.08 });
+            items.forEach(function(el) { obs.observe(el); });
+        }
+
+        function animateCountUp() {
+            if (dashReduceMotion) return;
+            document.querySelectorAll('.tile-value, .hs-value, .dash-stat-card h2').forEach(function(el) {
+                var raw = el.textContent.trim();
+                var num = parseFloat(raw.replace(/[^0-9.\-]/g, ''));
+                if (isNaN(num)) return;
+                var decimals = (raw.replace(/,/g, '').split('.')[1] || '').length;
+                var prefix = raw.charAt(0) === '₹' ? '₹ ' : '';
+                var suffix = raw.charAt(raw.length - 1) === '%' ? '%' : '';
+                var start = null, dur = 900;
+                function step(ts) {
+                    if (!start) start = ts;
+                    var p = Math.min((ts - start) / dur, 1);
+                    var eased = 1 - Math.pow(1 - p, 3);
+                    var val = num * eased;
+                    el.textContent = prefix + val.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix;
+                    if (p < 1) requestAnimationFrame(step);
+                }
+                requestAnimationFrame(step);
+            });
+        }
+
         // Load default chart data on page load
         document.addEventListener('DOMContentLoaded', function() {
             applyChartDefaults();
+            initDashAnimations();
+            animateCountUp();
+            paintSparks(@json($sparks ?? []));
             loadChartData('this_month', document.querySelector('.chart-filter-btn[data-filter="this_month"]'));
 
             // Re-apply theme-aware chart styling when the theme changes
