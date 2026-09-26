@@ -3029,8 +3029,8 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                     <hr>
                                     <div
                                         style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-top: 0.5rem; color: #34537a; font-size: 0.9rem;">
-                                        <span>Â© UNITED WORLDWIDE COURIERS PVT LTD</span>
-                                        <span>New Delhi Â· India</span>
+                                        <span>© UNITED WORLDWIDE COURIERS PVT LTD</span>
+                                        <span>New Delhi· India</span>
                                     </div>
                                 </div>
 

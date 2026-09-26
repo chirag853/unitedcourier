@@ -4747,14 +4747,64 @@ class AdminController extends Controller
         }
     }
 
-    public function manageRate()
+    /**
+     * Base query for default (customer_id = 0) rates with the manage-rate
+     * filters applied: service_key (api_provider||service_code group),
+     * country (service country code) and q (text search). Filters arrive
+     * via POST (filter form) or GET (pagination/export links), so input()
+     * is used. Shared by the paginated table and the Excel export.
+     */
+    private function filteredDefaultRatesQuery(Request $request)
     {
-        $defaultRates = \App\Models\CourierRate::with('service')
-            ->where('customer_id', 0)
+        $ratesQuery = \App\Models\CourierRate::with('service')->where('customer_id', 0);
+
+        $serviceKey = trim((string) $request->input('service_key', ''));
+        if ($serviceKey !== '' && str_contains($serviceKey, '||')) {
+            $normKey = strtolower(trim(preg_replace('/\s+/', ' ', $serviceKey)));
+            [$keyApi, $keyCode] = array_pad(explode('||', $normKey, 2), 2, '');
+            $groupServiceIds = \App\Models\CourierService::whereRaw('LOWER(api_provider) = ?', [$keyApi])
+                ->whereRaw('LOWER(service_code) = ?', [$keyCode])
+                ->pluck('id');
+            $ratesQuery->whereIn('service_id', $groupServiceIds);
+        }
+
+        $countryFilter = strtoupper(trim((string) $request->input('country', '')));
+        if ($countryFilter !== '') {
+            $countryServiceIds = \App\Models\CourierService::whereRaw('UPPER(country) = ?', [$countryFilter])->pluck('id');
+            $ratesQuery->whereIn('service_id', $countryServiceIds);
+        }
+
+        $search = trim((string) $request->input('q', ''));
+        if ($search !== '') {
+            $ratesQuery->where(function ($w) use ($search) {
+                $w->where('wt_range_start', 'like', "%{$search}%")
+                    ->orWhere('wt_range_end', 'like', "%{$search}%")
+                    ->orWhere('zone_no', 'like', "%{$search}%")
+                    ->orWhere('price', 'like', "%{$search}%")
+                    ->orWhereHas('service', function ($s) use ($search) {
+                        $s->where('network', 'like', "%{$search}%")
+                            ->orWhere('method', 'like', "%{$search}%")
+                            ->orWhere('service_code', 'like', "%{$search}%")
+                            ->orWhere('country', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        return $ratesQuery
             ->orderBy('service_id')
             ->orderBy('zone_no')
-            ->orderBy('wt_range_start')
-            ->get();
+            ->orderBy('wt_range_start');
+    }
+
+    public function manageRate(Request $request)
+    {
+        // Server-side (PHP) pagination + filters for the Default Rate table.
+        // The filter form POSTs (service_key group, country, q text search);
+        // pagination re-POSTs via JS with a page field, so the page number
+        // is passed explicitly instead of relying on the query string.
+        $defaultRates = $this->filteredDefaultRatesQuery($request)
+            ->paginate(50, ['*'], 'page', max(1, (int) $request->input('page', 1)))
+            ->withQueryString();
 
         $customers = \App\Models\Customer::orderBy('first_name')->get();
 
@@ -4762,82 +4812,12 @@ class AdminController extends Controller
 
         $surcharges = \App\Models\SurCharge::orderBy('name')->get();
 
-        // ------------------------------------------------------------------
-        // Zone lookup map for the "Zone Name" / "Zone Category" columns.
-        //
-        // courier_rates.zone_no  matches  zone.zone_number_testing  (0-13).
-        // Multiple zones can share the same zone_number_testing, so for each
-        // (destination_id, zone_number_testing) pair we pre-compute:
-        //   - category : the zone_category ('state' or 'zipcode')
-        //   - names    : comma-separated zone names (for the table columns)
-        //   - nameList : array of individual zone names (for the Add Rate
-        //                modal's Select2 dropdown, where each name becomes a
-        //                separate searchable option)
-        //   - count    : number of zones in this group
-        //
-        // This is built once server-side and passed to the view so the
-        // Default Rate table can render the columns without extra queries,
-        // and the Customer Rate tab can look them up in JS. The Add Rate
-        // modal's Select2 zone dropdown shows each zone name as a separate
-        // option so the admin can search for a specific state/postal code.
-        // ------------------------------------------------------------------
-        $zoneLookup = [];
-        // Increase GROUP_CONCAT limit so the full list of zone names (which
-        // can be hundreds of postal codes for zipcode-category zones) is
-        // not truncated by MySQL's default 1024-byte limit.
-        \DB::statement('SET SESSION group_concat_max_len = 1000000');
-        // A single zone_name may now have multiple zone_codes, so we
-        // GROUP_CONCAT DISTINCT zone_name to avoid the same name appearing
-        // several times in the comma-separated display / Select2 dropdown.
-        $zones = \App\Models\Zone::selectRaw('destination_id, zone_number_testing, zone_category, COUNT(*) as cnt, GROUP_CONCAT(DISTINCT zone_name SEPARATOR ", ") as names')
-            ->groupBy('destination_id', 'zone_number_testing', 'zone_category')
-            ->get();
-
-        foreach ($zones as $z) {
-            $zoneNo = (int) $z->zone_number_testing;
-            $category = $z->zone_category ?: 'state';
-            $count = (int) $z->cnt;
-            // Comma-separated string for the table columns.
-            $nameDisplay = $z->names ?: ('Zone ' . $zoneNo);
-            // Array of individual names for the Add Rate modal dropdown,
-            // where each name becomes a separate searchable Select2 option.
-            $nameList = $z->names
-                ? array_map('trim', explode(',', $z->names))
-                : ['Zone ' . $zoneNo];
-            $zoneLookup[$z->destination_id][$zoneNo] = [
-                'category' => $category,
-                'names'    => $nameDisplay,
-                'nameList' => $nameList,
-                'count'    => $count,
-            ];
-        }
-
-        // Map CourierService.country -> Destination.id so we can look up
-        // zones for a given rate's service. courier_services.country now
-        // stores the same short code as destinations.country_code
-        // (e.g. "US", "UK", "CA", "AUS"). We build a lookup that tries several
-        // match strategies (code, country_code, name, plus legacy friendly
-        // names) so the mapping stays correct regardless of which format is
-        // used.
-        $destinations = \App\Models\Destination::orderBy('name')->get();
-        $countryToDestId = [];
-        foreach ($destinations as $dest) {
-            $countryToDestId[$dest->id] = [
-                'name'         => $dest->name,
-                'code'         => $dest->code,
-                'country_code' => $dest->country_code,
-            ];
-        }
+        // Zone lookup map for the "Zone Name" / "Zone Category" columns
+        // (shared with the default-rates Excel export).
+        [$zoneLookup, $countryToDestinationId] = $this->manageRateZoneMaps();
 
         // Helper: given a service's country string, find the matching
-        // destination_id. Tries (in order): exact code, exact country_code,
-        // case-insensitive name contains, code prefix.
-        $countryToDestinationId = [];
-        foreach ($destinations as $dest) {
-            $countryToDestinationId[strtolower($dest->code)] = $dest->id;
-            $countryToDestinationId[strtolower($dest->country_code)] = $dest->id;
-            $countryToDestinationId[strtolower($dest->name)] = $dest->id;
-        }
+        // destination_id (built by manageRateZoneMaps() above).
         // Also map the friendly country names used by courier_services.
         $friendlyMap = [
             'us'        => 1,
@@ -4885,6 +4865,7 @@ class AdminController extends Controller
             }
         }
         $destNameToServiceCountry = [];
+        $destinations = \App\Models\Destination::orderBy('name')->get();
         foreach ($destinations as $dest) {
             if (isset($destIdToServiceCountry[$dest->id])) {
                 $destNameToServiceCountry[$dest->name] = $destIdToServiceCountry[$dest->id];
@@ -4938,7 +4919,47 @@ class AdminController extends Controller
             }
         }
 
-        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestId', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry', 'surcharges', 'serviceZoneNumbers'));
+        return view('admin.manage-rate', compact('defaultRates', 'customers', 'services', 'zoneLookup', 'countryToDestinationId', 'destinations', 'destNameToServiceCountry', 'surcharges', 'serviceZoneNumbers'));
+    }
+
+    /**
+     * Build the zone lookup maps shared by the manage-rate page and the
+     * default-rates Excel export.
+     *
+     * courier_rates.zone_no matches zone.zone_number_testing (0-13).
+     * Returns [$zoneLookup, $countryToDestinationId] where $zoneLookup is
+     * [destination_id][zone_no] => ['category','names','nameList','count']
+     * and $countryToDestinationId resolves every code/country_code/name
+     * variant (lower-cased) to a destination_id.
+     */
+    private function manageRateZoneMaps(): array
+    {
+        $zoneLookup = [];
+        \DB::statement('SET SESSION group_concat_max_len = 1000000');
+        $zones = \App\Models\Zone::selectRaw('destination_id, zone_number_testing, zone_category, COUNT(*) as cnt, GROUP_CONCAT(DISTINCT zone_name SEPARATOR ", ") as names')
+            ->groupBy('destination_id', 'zone_number_testing', 'zone_category')
+            ->get();
+
+        foreach ($zones as $z) {
+            $zoneNo = (int) $z->zone_number_testing;
+            $zoneLookup[$z->destination_id][$zoneNo] = [
+                'category' => $z->zone_category ?: 'state',
+                'names'    => $z->names ?: ('Zone ' . $zoneNo),
+                'nameList' => $z->names
+                    ? array_map('trim', explode(',', $z->names))
+                    : ['Zone ' . $zoneNo],
+                'count'    => (int) $z->cnt,
+            ];
+        }
+
+        $countryToDestinationId = [];
+        foreach (\App\Models\Destination::orderBy('name')->get() as $dest) {
+            $countryToDestinationId[strtolower($dest->code)] = $dest->id;
+            $countryToDestinationId[strtolower($dest->country_code)] = $dest->id;
+            $countryToDestinationId[strtolower($dest->name)] = $dest->id;
+        }
+
+        return [$zoneLookup, $countryToDestinationId];
     }
 
     /**
@@ -5203,6 +5224,16 @@ class AdminController extends Controller
         }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
+    /**
+     * Update a default rate from the Edit Rate popup (manage-rate page).
+     *
+     * Editable: weight range, zone, price, fuel charge/%, GST %.
+     * Duplicate detection stays on (service, weight range, zone).
+     * Customer rows still on the default rate (is_default = 1, matched on
+     * the OLD key) are moved to the new values as well; mirrors that would
+     * collide with an existing row of the same customer are skipped and
+     * reported instead of creating duplicates.
+     */
     public function updateRate(Request $request, $id)
     {
         $rate = \App\Models\CourierRate::findOrFail($id);
@@ -5215,25 +5246,151 @@ class AdminController extends Controller
             ], 403);
         }
 
-        $rate->price = $request->price;
+        $validated = $request->validate([
+            'wt_range_start'  => ['required', 'numeric', 'min:0'],
+            'wt_range_end'    => ['required', 'numeric', 'gt:wt_range_start'],
+            'zone_no'         => ['required', 'integer', 'min:0', 'max:13'],
+            'price'           => ['required', 'numeric', 'min:0'],
+            'fuel_charge'     => ['nullable', 'numeric', 'min:0'],
+            'fuel_percentage' => ['nullable', 'numeric', 'min:0'],
+            'gst_percentage'  => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $newValues = [
+            'wt_range_start'  => $validated['wt_range_start'],
+            'wt_range_end'    => $validated['wt_range_end'],
+            'zone_no'         => (int) $validated['zone_no'],
+            'price'           => $validated['price'],
+            'fuel_charge'     => $validated['fuel_charge'] ?? 0,
+            'fuel_percentage' => $validated['fuel_percentage'] ?? 0,
+            'gst_percentage'  => $validated['gst_percentage'] ?? 0,
+        ];
+
+        // Duplicate check on (service, weight range, zone), excluding self.
+        $duplicate = \App\Models\CourierRate::where('customer_id', 0)
+            ->where('service_id', $rate->service_id)
+            ->where('wt_range_start', $newValues['wt_range_start'])
+            ->where('wt_range_end', $newValues['wt_range_end'])
+            ->where('zone_no', $newValues['zone_no'])
+            ->where('id', '!=', $rate->id)
+            ->exists();
+        if ($duplicate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Another default rate already exists for this service, weight range and zone.',
+            ], 422);
+        }
+
+        $oldServiceId = $rate->service_id;
+        $oldStart = $rate->wt_range_start;
+        $oldEnd = $rate->wt_range_end;
+        $oldZone = $rate->zone_no;
+
+        $rate->fill($newValues);
         $rate->save();
 
-        // Propagate the default rate change to all customers who still use the default rate (is_default = 1).
-        // Customer-specific rates that have been customized (is_default = 0) are left untouched.
-        $updatedCustomers = \App\Models\CourierRate::where('customer_id', '!=', 0)
+        // Propagate to customer mirrors matched on the OLD key.
+        $mirrors = \App\Models\CourierRate::where('customer_id', '!=', 0)
             ->where('is_default', 1)
-            ->where('service_id', $rate->service_id)
-            ->where('wt_range_start', $rate->wt_range_start)
-            ->where('wt_range_end', $rate->wt_range_end)
-            ->where('zone_no', $rate->zone_no)
-            ->update(['price' => $request->price]);
+            ->where('service_id', $oldServiceId)
+            ->where('wt_range_start', $oldStart)
+            ->where('wt_range_end', $oldEnd)
+            ->where('zone_no', $oldZone)
+            ->get();
 
-        $message = 'Rate updated successfully.';
+        $updatedCustomers = 0;
+        $skippedCustomers = 0;
+        foreach ($mirrors as $mirror) {
+            $collision = \App\Models\CourierRate::where('customer_id', $mirror->customer_id)
+                ->where('service_id', $rate->service_id)
+                ->where('wt_range_start', $newValues['wt_range_start'])
+                ->where('wt_range_end', $newValues['wt_range_end'])
+                ->where('zone_no', $newValues['zone_no'])
+                ->where('id', '!=', $mirror->id)
+                ->exists();
+            if ($collision) {
+                $skippedCustomers++;
+                continue;
+            }
+            $mirror->fill($newValues);
+            $mirror->save();
+            $updatedCustomers++;
+        }
+
+        $message = 'Default rate updated successfully.';
         if ($updatedCustomers > 0) {
             $message .= ' The same rate was also updated for ' . $updatedCustomers . ' customer(s) using the default rate.';
         }
+        if ($skippedCustomers > 0) {
+            $message .= ' ' . $skippedCustomers . ' customer row(s) skipped to avoid duplicates.';
+        }
 
         return response()->json(['success' => true, 'message' => $message]);
+    }
+
+    /**
+     * Export filtered default rates as Excel (replaces the old
+     * client-side DataTables export now that the table uses PHP
+     * pagination). Accepts the same filters as manageRate() via GET.
+     */
+    public function exportDefaultRates(Request $request)
+    {
+        $rates = $this->filteredDefaultRatesQuery($request)->get();
+        [$zoneLookup, $countryToDestinationId] = $this->manageRateZoneMaps();
+
+        $headers = ['#', 'Network', 'Country', 'Service Code', 'Method', 'TAT', 'Weight Start (KG)', 'Weight End (KG)', 'Zone No', 'Zone Category', 'Price', 'Default'];
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter . '1', $header);
+        }
+
+        $row = 2;
+        foreach ($rates as $i => $rate) {
+            $zoneCategory = '—';
+            $rateCountry = $rate->service->country ?? '';
+            $destId = $countryToDestinationId[strtolower(trim($rateCountry))] ?? null;
+            if ($destId && isset($zoneLookup[$destId][(int) $rate->zone_no])) {
+                $zoneCategory = $zoneLookup[$destId][(int) $rate->zone_no]['category'];
+            }
+            $values = [
+                $i + 1,
+                $rate->service->network ?? '—',
+                $rateCountry ?: '—',
+                $rate->service->service_code ?? '—',
+                $rate->service->method ?? '—',
+                $rate->service->tat ?? '—',
+                $rate->wt_range_start,
+                $rate->wt_range_end,
+                $rate->zone_no,
+                $zoneCategory,
+                $rate->price,
+                $rate->is_default ? 'Yes' : 'No',
+            ];
+            foreach ($values as $colIdx => $value) {
+                $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
+                $sheet->setCellValue($columnLetter . $row, $value);
+            }
+            $row++;
+        }
+
+        $lastColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->getFont()->setBold(true);
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, 'default-rates.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="default-rates.xlsx"',
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 
     public function updateCustomerRate(Request $request, $id)

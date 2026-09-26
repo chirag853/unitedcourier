@@ -618,8 +618,10 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
 
     // Manage Rate Routes
     Route::get('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate');
+    Route::post('/manage-rate', [AdminController::class, 'manageRate'])->name('admin.manage-rate.filter');
     Route::get('/manage-rate/get-customer-rates', [AdminController::class, 'getCustomerRates'])->name('admin.manage-rate.get-customer-rates');
     Route::get('/manage-rate/export-customer-rates', [AdminController::class, 'exportCustomerRates'])->name('admin.manage-rate.export-customer-rates');
+    Route::get('/manage-rate/export-default-rates', [AdminController::class, 'exportDefaultRates'])->name('admin.manage-rate.export-default-rates');
     Route::post('/manage-rate/update/{id}', [AdminController::class, 'updateRate'])->name('admin.manage-rate.update');
     Route::post('/manage-rate/update-customer/{id}', [AdminController::class, 'updateCustomerRate'])->name('admin.manage-rate.update-customer');
     Route::post('/manage-rate/update-customer-end-date/{id}', [AdminController::class, 'updateCustomerEndDate'])->name('admin.manage-rate.update-customer-end-date');

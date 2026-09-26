@@ -4621,8 +4621,8 @@ class PrepaidController extends Controller
         $totalValue = 0;
         $service = 'DIRECT';
         $senderCompany = 'UWC COURIERS PVT LTD';
-        $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
-        $senderPhone = '8130470109';
+        // $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
+        // $senderPhone = '8130470109';
 
         foreach ($manifestRows as $manifest) {
             $shipper = $manifest->shipper;
@@ -5094,7 +5094,9 @@ class PrepaidController extends Controller
             ];
         }
 
-        // Idempotency: SELF flow deducts in payNow (draft → ready) — dobara charge na ho.
+        // Exactly-once per shipment: a prior shipment_charge debit for this
+        // AWB means an earlier manifest step already charged. Never debit
+        // twice for one shipment.
         if (! empty($shipper->awb_number)) {
             $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
                 ->where('type', 'debit')
@@ -8685,6 +8687,16 @@ class PrepaidController extends Controller
             // Confirm Payment se manifest hone par status Ready rakha jata hai (target_status=ready).
             $targetStatus = $request->input('target_status') === 'ready' ? 'ready' : 'manifested';
 
+            // Strict pre-booking gate: block the manifest unless the wallet
+            // can cover the shipment charge.
+            $gateInfo = $this->getShipmentChargeInfo($shipper, $manifestCustomerId);
+            if (! $gateInfo['can_manifest']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $gateInfo['message'] ?? 'Insufficient wallet balance to manifest this shipment.',
+                ], 422);
+            }
+
             // Agar carrier booking pehle ho chuki hai (Confirm Payment par), to dobara API call mat karo.
             // Sirf status aage badhao taaki duplicate AWB / double charge na ho.
             if ($targetStatus === 'manifested') {
@@ -8718,13 +8730,23 @@ class PrepaidController extends Controller
                         'admin'
                     );
 
+                    // This path never charged before — deduct now so no
+                    // successful manifest stays unpaid (exactly-once guard
+                    // inside still prevents any double debit).
+                    $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $manifestCustomerId);
+                    $chargeNote = $chargeResult['charged']
+                        ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                        : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                     return response()->json([
                         'success' => true,
-                        'message' => 'Already manifested on payment. Status moved to Manifested.',
+                        'message' => 'Already manifested on payment. Status moved to Manifested.'.$chargeNote,
                         'tracking_number' => $existingTracking->shipment_identification_number,
                         'shipper_id' => $shipperId,
                         'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                         'already_manifested' => true,
+                        'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                        'new_balance' => $chargeResult['new_balance'],
                     ]);
                 }
             }
@@ -9505,6 +9527,15 @@ class PrepaidController extends Controller
                     }
 
                     $bulkPreviousStatus = $shipper->status;
+
+                    // Strict pre-booking gate per shipment: insufficient balance
+                    // fails only this shipment, the rest of the batch continues.
+                    $bulkGateInfo = $this->getShipmentChargeInfo($shipper, $manifestCustomerId);
+                    if (! $bulkGateInfo['can_manifest']) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $bulkGateInfo['message'] ?? 'Insufficient wallet balance.'];
+
+                        continue;
+                    }
 
                     // Determine the network from the shipping method's CourierService
                     $shippingMethod = $this->resolveShippingMethod($shipper);

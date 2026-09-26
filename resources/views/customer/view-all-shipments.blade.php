@@ -3089,6 +3089,7 @@
                 let successfulPayments = 0;
                 let successfulManifests = 0;
                 let failedManifests = 0;
+                let totalCharged = 0;
 
                 const markRowReady = function (item, response) {
                     const $row = $('#invoice-row-' + item.invoice_id);
@@ -3125,6 +3126,7 @@
                         success: function (manifestResponse) {
                             if (manifestResponse && manifestResponse.success) {
                                 successfulManifests++;
+                                totalCharged += Number(manifestResponse.amount_charged || 0);
                                 // Payment is cut ONLY after the manifest succeeds — update wallet from manifest response.
                                 if (typeof manifestResponse.new_balance !== 'undefined' && manifestResponse.new_balance !== null) {
                                     walletBalance = Number(manifestResponse.new_balance);
@@ -3190,7 +3192,12 @@
                         if (failedManifests) {
                             resultText += '.<br>' + failedManifests + ' shipment(s) failed to manifest and were moved back to Draft. No payment was deducted for them.';
                         }
-                        resultText += '.<br>Payment was deducted from your wallet only after the manifest succeeded.<br>New wallet balance: INR ' + number_format(walletBalance, 2);
+                        if (totalCharged > 0) {
+                            resultText += '.<br>Payment of INR ' + number_format(totalCharged, 2) + ' was deducted from your wallet only after the manifest succeeded.';
+                        } else {
+                            resultText += '.<br>No payment was deducted from your wallet.';
+                        }
+                        resultText += '<br>New wallet balance: INR ' + number_format(walletBalance, 2);
                         const popupHtml = '<div class="modal fade" id="paymentSuccessPopup" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow"><div class="modal-body text-center py-4"><div class="mb-3"><i class="ti ' + popupIcon + ' fs-48" style="color:' + popupColor + ';"></i></div><h5 class="fw-bold mb-1">' + popupTitle + '</h5><p class="text-muted mb-3">' + resultText + '</p><button type="button" class="btn ' + popupBtnClass + ' px-4" data-bs-dismiss="modal">OK</button></div></div></div></div>';
                         $('body').append(popupHtml);
                         const popupElement = document.getElementById('paymentSuccessPopup');
@@ -3385,9 +3392,7 @@
                     type: 'POST',
                     data: {
                         _token: $('meta[name="csrf-token"]').attr('content'),
-                        shipper_id: shipperId,
-                        // Carrier API hit nahi karni — internal manifest only.
-                        skip_carrier: true
+                        shipper_id: shipperId
                     },
                     success: function (response) {
                         if (response.success) {
@@ -3484,7 +3489,7 @@
                     data: {
                         _token: $('meta[name="csrf-token"]').attr('content'),
                         shipper_ids: shipperIds,
-                        // Carrier API hit nahi karni — internal manifest only.
+                        // Bulk manifest: no carrier API + no wallet charge — internal manifest only.
                         skip_carrier: true
                     },
                     success: function (response) {

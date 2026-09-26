@@ -458,7 +458,7 @@
                             <div class="d-flex gap-2 flex-wrap">
                                 <span class="mr-stat"><i class="ti ti-truck-delivery"></i>{{ $services->count() }} services</span>
                                 <span class="mr-stat"><i class="ti ti-world"></i>{{ $destinations->count() }} countries</span>
-                                <span class="mr-stat"><i class="ti ti-file-spreadsheet"></i>{{ $defaultRates->count() }} default rates</span>
+                                <span class="mr-stat"><i class="ti ti-file-spreadsheet"></i>{{ $defaultRates->total() }} default rates</span>
                                 <span class="mr-stat"><i class="ti ti-users"></i>{{ $customers->count() }} customers</span>
                             </div>
                         </div>
@@ -512,18 +512,20 @@
 
                                     <!-- Default Rate Tab -->
                                     <div class="tab-pane fade show active" id="default-rate-pane" role="tabpanel">
-                                        <!-- Filters: Service FIRST, then Country -->
+                                        <!-- Filters: Service FIRST, then Country (server-side POST) -->
+                                        <form method="POST" action="{{ route('admin.manage-rate.filter') }}" id="defaultFilterForm">
+                                        @csrf
                                         <div class="row mb-3 g-2 align-items-end mr-filter-card">
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <label class="form-label fw-bold">Service</label>
-                                                <select class="form-select" id="defaultServiceFilter">
+                                                <select class="form-select" id="defaultServiceFilter" name="service_key">
                                                     <option value="">— All Services —</option>
                                                 </select>
                                                 <small class="text-muted">Select a service first — its countries will appear afterwards.</small>
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <label class="form-label fw-bold">Country</label>
-                                                <select class="form-select" id="defaultCountryFilter">
+                                                <select class="form-select" id="defaultCountryFilter" name="country">
                                                     <option value="">— All Countries —</option>
                                                     @foreach($destinations as $dest)
                                                         <option value="{{ $dest->country_code }}">{{ $dest->name }}</option>
@@ -531,13 +533,22 @@
                                                 </select>
                                                 <small class="text-muted">&nbsp;</small>
                                             </div>
-                                            <div class="col-md-4 text-md-end">
+                                            <div class="col-md-3">
+                                                <label class="form-label fw-bold">Search</label>
+                                                <input type="text" class="form-control" id="defaultSearchInput" name="q" value="{{ request('q') }}" placeholder="Network, method, code, price...">
+                                                <small class="text-muted">&nbsp;</small>
+                                            </div>
+                                            <div class="col-md-3 text-md-end">
                                                 <label class="form-label fw-bold d-block">&nbsp;</label>
-                                                <button type="button" class="btn btn-outline-secondary" id="defaultClearFilter">
-                                                    <i class="ti ti-filter-x me-1"></i>Clear Filters
+                                                <button type="submit" class="btn btn-primary me-1">
+                                                    <i class="ti ti-filter me-1"></i>Filter
                                                 </button>
+                                                <a href="{{ route('admin.manage-rate') }}" class="btn btn-outline-secondary">
+                                                    <i class="ti ti-filter-x me-1"></i>Clear
+                                                </a>
                                             </div>
                                         </div>
+                                        </form>
                                         <div class="table-responsive">
                                             <table class="table table-hover" id="defaultRateTable">
                                                 <thead>
@@ -559,7 +570,7 @@
                                                 <tbody>
                                                     @foreach($defaultRates as $key => $rate)
                                                     <tr data-country="{{ $rate->service->country ?? '' }}" data-service-id="{{ $rate->service_id }}">
-                                                        <td>{{ $key + 1 }}</td>
+                                                        <td>{{ $defaultRates->firstItem() + $key }}</td>
                                                         <td>{{ $rate->service->network ?? '—' }}</td>
                                                         <td>{{ $rate->service->country ?? '—' }}</td>
                                                         <td>{{ $rate->service->service_code ?? '—' }}</td>
@@ -595,10 +606,22 @@
                                                         <td>
                                                             @if($rate->is_default)
                                                                 <span class="rate-display" id="rate-display-{{ $rate->id }}">{{ number_format($rate->price, 2) }}</span>
-                                                                <input type="number" step="0.01" min="0" class="rate-input d-none" id="rate-input-{{ $rate->id }}" value="{{ $rate->price }}" data-rate-id="{{ $rate->id }}" data-original="{{ $rate->price }}">
-                                                                <i class="ti ti-edit edit-icon" id="edit-icon-{{ $rate->id }}" onclick="editRate({{ $rate->id }})"></i>
-                                                                <i class="ti ti-device-floppy save-icon d-none" id="save-icon-{{ $rate->id }}" onclick="saveRate({{ $rate->id }})"></i>
-                                                                <i class="ti ti-x cancel-icon d-none" id="cancel-icon-{{ $rate->id }}" onclick="cancelEdit({{ $rate->id }})"></i>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary ms-1 edit-rate-btn" title="Edit rate"
+                                                                    data-rate-id="{{ $rate->id }}"
+                                                                    data-network="{{ $rate->service->network ?? '' }}"
+                                                                    data-country="{{ $rate->service->country ?? '' }}"
+                                                                    data-service-code="{{ $rate->service->service_code ?? '' }}"
+                                                                    data-method="{{ $rate->service->method ?? '' }}"
+                                                                    data-tat="{{ $rate->service->tat ?? '' }}"
+                                                                    data-wt-start="{{ $rate->wt_range_start }}"
+                                                                    data-wt-end="{{ $rate->wt_range_end }}"
+                                                                    data-zone-no="{{ $rate->zone_no }}"
+                                                                    data-price="{{ $rate->price }}"
+                                                                    data-fuel-charge="{{ $rate->fuel_charge ?? 0 }}"
+                                                                    data-fuel-percentage="{{ $rate->fuel_percentage ?? 0 }}"
+                                                                    data-gst-percentage="{{ $rate->gst_percentage ?? 0 }}">
+                                                                    <i class="ti ti-edit"></i>
+                                                                </button>
                                                             @else
                                                                 <span class="rate-display text-muted">{{ number_format($rate->price, 2) }}</span>
                                                                 <i class="ti ti-lock text-muted ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Non-default rate — cannot be edited"></i>
@@ -615,6 +638,10 @@
                                                     @endforeach
                                                 </tbody>
                                             </table>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+                                            <small class="text-muted">Showing {{ $defaultRates->firstItem() ?? 0 }} to {{ $defaultRates->lastItem() ?? 0 }} of {{ $defaultRates->total() }} default rates</small>
+                                            {{ $defaultRates->links('pagination::bootstrap-5') }}
                                         </div>
                                     </div>
 
@@ -919,6 +946,62 @@
         </div>
     </div>
 
+    <!-- Edit Default Rate Modal -->
+    <div class="modal fade" id="editRateModal" tabindex="-1" aria-labelledby="editRateModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header mr-modal-header">
+                    <h5 class="modal-title" id="editRateModalLabel">
+                        <i class="ti ti-edit me-1"></i>Edit Default Rate
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border mb-3" id="editRateContext"></div>
+                    <input type="hidden" id="editRateId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Weight Start (KG) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.001" min="0" class="form-control" id="editRateWtStart" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Weight End (KG) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.001" min="0" class="form-control" id="editRateWtEnd" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Zone No <span class="text-danger">*</span></label>
+                            <input type="number" step="1" min="0" max="13" class="form-control" id="editRateZoneNo" required>
+                            <small class="text-muted">0 – 13</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Price <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="editRatePrice" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Fuel Charge</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="editRateFuelCharge">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Fuel %</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="editRateFuelPct">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">GST %</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="editRateGstPct">
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-3">Saving also updates customers still using this default rate. Duplicate (service + weight + zone) entries are blocked.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="editRateSaveBtn">
+                        <i class="ti ti-device-floppy me-1"></i>Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Update New Customer Rate Modal -->
     <div class="modal fade" id="updateNewRateModal" tabindex="-1" aria-labelledby="updateNewRateModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -1021,7 +1104,6 @@
             })->values();
         @endphp
 
-        var defaultRateTable;
         var customerRateTable;
         var loadedCustomerRates = [];
         // Currently selected customer ID + details (used by the end_date popup)
@@ -1151,50 +1233,9 @@
         }
 
         $(document).ready(function() {
-            // Initialize Default Rate DataTable
-            // dom: 'frtip' — the built-in Buttons are NOT shown (no 'B'); they
-            // are triggered programmatically by the custom Export buttons in
-            // the filter row. This keeps the UI clean.
-            defaultRateTable = $('#defaultRateTable').DataTable({
-                order: [[0, 'asc']],
-                pageLength: 50,
-                dom: 'frtip',
-                buttons: [
-                    {
-                        extend: 'excelHtml5',
-                        text: 'Export Excel',
-                        title: 'Default Rates',
-                        exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-                            // Strip HTML from all exported cells so the Excel
-                            // file contains plain text values (e.g. the Zone
-                            // Category column renders a <span> badge — without
-                            // stripping, those HTML tags would leak into the
-                            // exported spreadsheet).
-                            format: {
-                                body: function(data, row, column) {
-                                    if (column === 10) {
-                                        // Price column — export only the numeric value.
-                                        return $('<div>').html(data).find('.rate-display').first().text()
-                                            || $('<div>').html(data).text().replace(/[^\d.]/g, '');
-                                    }
-                                    // All other columns (including Zone No at
-                                    // index 8 and Zone Category at index 9) —
-                                    // strip any HTML tags and return the plain
-                                    // text.
-                                    return $('<div>').html(data).text().trim();
-                                }
-                            }
-                        }
-                    }
-                ],
-                language: {
-                    search: "Search:",
-                    lengthMenu: "Show _MENU_ entries per page",
-                    info: "Showing _START_ to _END_ of _TOTAL_ entries",
-                    emptyTable: "No default rates found.",
-                }
-            });
+            // Default Rate table uses server-side (PHP) pagination now, so no
+            // DataTables instance is created for #defaultRateTable. Filters
+            // submit the GET form above; export hits the server endpoint.
 
             // Initialize Customer Rate DataTable ONCE (empty)
             customerRateTable = $('#customerRatesDataTable').DataTable({
@@ -1363,62 +1404,87 @@
             // customerCountryFilter) are rendered server-side from the
             // destinations table, so no JS population is needed here.
 
-            // Service ID -> DISTINCT group key map (api_provider||service_code),
-            // built once so the Default table filter can match rows by group.
-            var serviceIdToGroupKey = {};
-            allServices.forEach(function(s) {
-                serviceIdToGroupKey[String(s.id)] =
-                    ((s.api_provider || '') + '||' + (s.service_code || ''))
-                        .toLowerCase().replace(/\s+/g, ' ').trim();
-            });
-
             // Populate service dropdowns (all services initially).
             // Both tabs are DISTINCT service-first (SELECT DISTINCT
             // api_provider, service_code FROM courier_services).
-            populateDefaultServiceGroups('');
-            populateDefaultCountryOptions('', '');
+            // Default tab preselects the active server-side filters.
+            var activeServiceKey = @json(request('service_key', ''));
+            var activeCountry = @json(request('country', ''));
+            populateDefaultServiceGroups(activeServiceKey);
+            populateDefaultCountryOptions(activeServiceKey, activeCountry);
             populateCustomerServiceGroups('');
             populateCustomerCountryOptions('', '');
 
-            // DataTables custom search plugin for Default Rate table
-            // (global plugin — guarded by table ID so it only affects defaultRateTable).
-            // Service filter is a DISTINCT group key (api_provider||service_code),
-            // matched via the serviceIdToGroupKey map; country matches as before.
-            $.fn.dataTable.ext.search.push(function(settings, searchData, index) {
-                if (settings.nTable.id !== 'defaultRateTable') {
-                    return true;
+            // Default rate filters are server-side POST but work ON CHANGE
+            // like before (no need to click the Filter button):
+            // Service / Country / Search change auto-submits the form.
+            // Pagination links are hijacked below to re-POST with the page
+            // number so filters survive paging.
+            function submitDefaultFilter(resetPage) {
+                var form = document.getElementById('defaultFilterForm');
+                if (!form) return;
+                var pageInput = document.getElementById('defaultPageInput');
+                if (resetPage) {
+                    // New filter => always start from page 1, otherwise a
+                    // stale page (e.g. 3) is sent with the new filter and
+                    // the table looks empty / filter looks broken.
+                    if (pageInput) pageInput.value = 1;
                 }
-                var countryFilter = document.getElementById('defaultCountryFilter').value;
-                var serviceFilter = document.getElementById('defaultServiceFilter').value;
-                if (!countryFilter && !serviceFilter) {
-                    return true;
-                }
-                var rowNode = settings.aoData[index].nTr;
-                if (!rowNode) return true;
-                var rowCountry = rowNode.getAttribute('data-country') || '';
-                var rowServiceId = rowNode.getAttribute('data-service-id') || '';
-                if (serviceFilter) {
-                    var rowKey = serviceIdToGroupKey[String(rowServiceId)] || '';
-                    if (rowKey !== String(serviceFilter).toLowerCase().trim()) return false;
-                }
-                if (countryFilter && rowCountry !== countryFilter) return false;
-                return true;
-            });
-
-            // Default rate filter change handlers — Service FIRST, then Country.
+                form.submit();
+            }
             $('#defaultServiceFilter').on('change', function() {
                 populateDefaultCountryOptions(this.value, '');
                 document.getElementById('defaultCountryFilter').value = '';
-                defaultRateTable.draw();
+                submitDefaultFilter(true);
             });
             $('#defaultCountryFilter').on('change', function() {
-                defaultRateTable.draw();
+                submitDefaultFilter(true);
             });
-            $('#defaultClearFilter').on('click', function() {
-                document.getElementById('defaultServiceFilter').value = '';
-                populateDefaultCountryOptions('', '');
-                document.getElementById('defaultCountryFilter').value = '';
-                defaultRateTable.draw();
+            // Search works on-change too (like the old DataTables search):
+            // typing auto-submits after a short pause, Enter/blur submits
+            // immediately. Filter button still works as before.
+            var defaultSearchTimer = null;
+            $('#defaultSearchInput').on('input', function() {
+                if (defaultSearchTimer) clearTimeout(defaultSearchTimer);
+                defaultSearchTimer = setTimeout(function() {
+                    submitDefaultFilter(true);
+                }, 800);
+            });
+            $('#defaultSearchInput').on('change', function() {
+                if (defaultSearchTimer) clearTimeout(defaultSearchTimer);
+                submitDefaultFilter(true);
+            });
+            $('#defaultFilterForm').on('submit', function() {
+                if (defaultSearchTimer) clearTimeout(defaultSearchTimer);
+                var pageInput = document.getElementById('defaultPageInput');
+                // Manual Filter button click => also start from page 1
+                // unless the submit came from a pagination click (which
+                // sets the page just before submitting).
+                if (!$(this).data('from-pagination') && pageInput) pageInput.value = 1;
+                $(this).removeData('from-pagination');
+            });
+
+            // Pagination (PHP) keeps POST filters: intercept page clicks and
+            // re-submit the filter form with the requested page number.
+            $(document).on('click', '#default-rate-pane .pagination a', function(e) {
+                var href = $(this).attr('href') || '';
+                if (href === '' || $(this).parent().hasClass('disabled')) return;
+                e.preventDefault();
+                var page = 1;
+                var match = href.match(/[?&]page=(\d+)/);
+                if (match) page = match[1];
+                var form = document.getElementById('defaultFilterForm');
+                var pageInput = document.getElementById('defaultPageInput');
+                if (!pageInput) {
+                    pageInput = document.createElement('input');
+                    pageInput.type = 'hidden';
+                    pageInput.id = 'defaultPageInput';
+                    pageInput.name = 'page';
+                    form.appendChild(pageInput);
+                }
+                pageInput.value = page;
+                $(form).data('from-pagination', true);
+                form.submit();
             });
 
             // Customer rate filter change handlers — Service FIRST, then Country
@@ -1439,11 +1505,17 @@
             });
 
             // === Export Excel button handlers ===
-            // The custom buttons in the filter rows trigger the DataTables
-            // built-in excelHtml5 button (index 0), which exports only the
-            // rows currently visible after filtering/searching.
+            // Default rates export hits the server endpoint with the active
+            // filters (works with PHP pagination — exports ALL filtered rows).
             $('#defaultExportExcel').on('click', function() {
-                defaultRateTable.button(0).trigger();
+                var params = new URLSearchParams();
+                var serviceKey = document.getElementById('defaultServiceFilter').value;
+                var country = document.getElementById('defaultCountryFilter').value;
+                var q = document.getElementById('defaultSearchInput').value;
+                if (serviceKey) params.set('service_key', serviceKey);
+                if (country) params.set('country', country);
+                if (q) params.set('q', q);
+                window.location.href = '{{ route("admin.manage-rate.export-default-rates") }}?' + params.toString();
             });
             $('#customerExportExcel').on('click', function() {
                 if (selectedCustomerIds.length === 0) {
@@ -2472,58 +2544,87 @@
             });
         });
 
-        // Inline edit for Default Rate
-        function editRate(rateId) {
-            $('#rate-display-' + rateId).addClass('d-none');
-            $('#edit-icon-' + rateId).addClass('d-none');
-            $('#rate-input-' + rateId).removeClass('d-none').focus().select();
-            $('#save-icon-' + rateId).removeClass('d-none');
-            $('#cancel-icon-' + rateId).removeClass('d-none');
-        }
+        // Edit Default Rate popup (weight, zone, price, fuel, GST).
+        // Opens the modal pre-filled from the row button, saves via AJAX.
+        $(document).on('click', '.edit-rate-btn', function() {
+            var btn = $(this);
+            $('#editRateId').val(btn.data('rate-id'));
+            $('#editRateWtStart').val(btn.data('wt-start'));
+            $('#editRateWtEnd').val(btn.data('wt-end'));
+            $('#editRateZoneNo').val(btn.data('zone-no'));
+            $('#editRatePrice').val(btn.data('price'));
+            $('#editRateFuelCharge').val(btn.data('fuel-charge'));
+            $('#editRateFuelPct').val(btn.data('fuel-percentage'));
+            $('#editRateGstPct').val(btn.data('gst-percentage'));
+            $('#editRateContext').html(
+                '<strong>' + (btn.data('network') || '—') + ' · ' + (btn.data('country') || '—') + '</strong><br>' +
+                '<span class="text-muted">' + (btn.data('service-code') || '') + ' · ' + (btn.data('method') || '') +
+                (btn.data('tat') ? ' · TAT: ' + btn.data('tat') : '') + '</span>'
+            );
+            var modal = new bootstrap.Modal(document.getElementById('editRateModal'));
+            modal.show();
+        });
 
-        function cancelEdit(rateId) {
-            var original = $('#rate-input-' + rateId).data('original');
-            $('#rate-input-' + rateId).val(original).addClass('d-none');
-                    $('#rate-display-' + rateId).text(parseFloat(original).toFixed(2)).removeClass('d-none');
-            $('#edit-icon-' + rateId).removeClass('d-none');
-            $('#save-icon-' + rateId).addClass('d-none');
-            $('#cancel-icon-' + rateId).addClass('d-none');
-        }
-
-        function saveRate(rateId) {
-            var price = $('#rate-input-' + rateId).val();
+        $('#editRateSaveBtn').on('click', function() {
+            var rateId = $('#editRateId').val();
+            var wtStart = $('#editRateWtStart').val();
+            var wtEnd = $('#editRateWtEnd').val();
+            var zoneNo = $('#editRateZoneNo').val();
+            var price = $('#editRatePrice').val();
+            if (wtStart === '' || isNaN(wtStart) || parseFloat(wtStart) < 0) {
+                showAlert('Please enter a valid Weight Start.', 'warning');
+                return;
+            }
+            if (wtEnd === '' || isNaN(wtEnd) || parseFloat(wtEnd) <= parseFloat(wtStart)) {
+                showAlert('Weight End must be greater than Weight Start.', 'warning');
+                return;
+            }
+            if (zoneNo === '' || isNaN(zoneNo) || parseInt(zoneNo) < 0 || parseInt(zoneNo) > 13) {
+                showAlert('Please enter a valid Zone No (0 – 13).', 'warning');
+                return;
+            }
             if (price === '' || isNaN(price) || parseFloat(price) < 0) {
                 showAlert('Please enter a valid price.', 'warning');
                 return;
             }
+
+            var btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving...');
 
             $.ajax({
                 url: '{{ url("/admin/manage-rate/update") }}/' + rateId,
                 type: 'POST',
                 data: {
                     _token: '{{ csrf_token() }}',
-                    price: price
+                    wt_range_start: wtStart,
+                    wt_range_end: wtEnd,
+                    zone_no: zoneNo,
+                    price: price,
+                    fuel_charge: $('#editRateFuelCharge').val(),
+                    fuel_percentage: $('#editRateFuelPct').val(),
+                    gst_percentage: $('#editRateGstPct').val()
                 },
                 success: function(response) {
-                    $('#rate-display-' + rateId).text(parseFloat(price).toFixed(2)).removeClass('d-none');
-                    $('#rate-input-' + rateId).data('original', price).addClass('d-none');
-                    $('#edit-icon-' + rateId).removeClass('d-none');
-                    $('#save-icon-' + rateId).addClass('d-none');
-                    $('#cancel-icon-' + rateId).addClass('d-none');
+                    bootstrap.Modal.getInstance(document.getElementById('editRateModal')).hide();
+                    showAlert(response.message || 'Rate updated successfully.', 'success', function() {
+                        location.reload();
+                    });
                 },
                 error: function(xhr) {
-                    if (xhr.status === 403) {
-                        var msg = xhr.responseJSON && xhr.responseJSON.message
-                            ? xhr.responseJSON.message
-                            : 'This rate cannot be edited.';
-                        showAlert(msg, 'error');
-                        cancelEdit(rateId);
-                    } else {
-                        showAlert('Failed to update rate. Please try again.', 'error');
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                        ? xhr.responseJSON.message
+                        : 'Failed to update rate. Please try again.';
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var firstKey = Object.keys(xhr.responseJSON.errors)[0];
+                        msg = xhr.responseJSON.errors[firstKey][0];
                     }
+                    showAlert(msg, 'error');
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('<i class="ti ti-device-floppy me-1"></i>Save Changes');
                 }
             });
-        }
+        });
 
         // Load customer rates via AJAX
         // Load customer rates via AJAX and store them for filtering

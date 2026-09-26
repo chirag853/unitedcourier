@@ -2477,10 +2477,12 @@ class CustomerController extends Controller
                 'signature'
             );
 
-            // Create or update CSB Form record
+            // Create or update CSB Form record.
+            // eCommerce / Exporter accounts always store is_csb_v = 1;
+            // all other categories keep 0 (admin approval may flip it later).
             $csbData = [
                 'customer_id' => $customer->id,
-                'is_csb_v' => 0,
+                'is_csb_v' => ($isEcommerce || $isExporter) ? 1 : 0,
                 'is_gst' => $validated['is_gst'],
                 'is_lut' => $validated['is_lut'],
                 'gst_certificate_number' => $gstNumber
@@ -2580,7 +2582,9 @@ class CustomerController extends Controller
                 'merchant_agreement_accepted_at' => $validated['terms_accepted'] ? now() : null,
                 'terms_accepted' => $validated['terms_accepted'],
                 'terms_accepted_at' => $validated['terms_accepted'] ? now() : null,
-                'kyc_status' => 'pending',
+                // NOTE: kyc_status is intentionally NOT set here — a CSB5
+                // submission must never change it. Updates keep the existing
+                // status; brand-new rows get the DB default ('pending').
             ];
 
             // If GST verification returned an address, use it as the Aadhaar address.
@@ -7430,8 +7434,8 @@ class CustomerController extends Controller
         $totalValue = 0;
         $service = 'DIRECT';
         $senderCompany = 'UWC COURIERS PVT LTD';
-        $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
-        $senderPhone = '8130470109';
+        // $senderAddress = 'UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India';
+        // $senderPhone = '8130470109';
 
         foreach ($manifestRows as $manifest) {
             $shipper = $manifest->shipper;
@@ -8482,34 +8486,12 @@ class CustomerController extends Controller
             $payApiProvider = strtolower(trim((string) ($payCourierService->api_provider ?? '')));
             $isSelfService = ($payApiProvider === 'self')
                 || (strtoupper(trim((string) ($payShippingMethod ?? ''))) === 'SELF');
-
-            // SELF flow: no carrier booking — deduct payment NOW and move draft → ready.
+            // SELF flow: no carrier booking — move draft → ready WITHOUT
+            // deducting payment here. The charge happens only once, after the
+            // manifest succeeds (chargeShipmentIfNotPaid), same as carrier flows.
             if ($isSelfService) {
-                $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
-                    ->where('type', 'debit')
-                    ->where('reason', 'shipment_charge')
-                    ->where('reference', $shipper->awb_number)
-                    ->exists();
-
-                if (! $alreadyPaid) {
-                    DB::transaction(function () use ($wallet, $amount, $shipper, $customerId) {
-                        $wallet->decrement('balance', $amount);
-                        $wallet->refresh();
-
-                        WalletTransaction::create([
-                            'customer_id' => $customerId,
-                            'type' => 'debit',
-                            'reason' => 'shipment_charge',
-                            'amount' => $amount,
-                            'balance_after' => $wallet->balance,
-                            'reference' => $shipper->awb_number,
-                            'description' => 'Payment of ₹'.number_format($amount, 2).' for SELF shipment '.($shipper->awb_number ?: '#'.$shipper->id),
-                        ]);
-                    });
-                    $wallet->refresh();
-                }
-
                 $previousPayStatus = $shipper->status ?: 'draft';
+
                 $shipper->status = 'ready';
                 $shipper->save();
 
@@ -8524,24 +8506,26 @@ class CustomerController extends Controller
                     'status' => 'ready',
                 ]);
 
-                // Log the ready status change with deduction note.
+                // Log the ready status change.
                 ShipmentLog::logStatus(
                     $shipper->id,
                     $shipper->awb_number,
                     'ready',
                     $previousPayStatus,
-                    'Payment confirmed. Amount ₹'.number_format($amount, 2).' deducted from wallet (SELF service — no carrier booking).',
+                    'Shipment moved to Ready. Payment of ₹'.number_format($amount, 2).' will be deducted from the wallet only after the manifest succeeds (SELF service — no carrier booking).',
                     $customerId,
                     'customer'
                 );
 
-                \Log::info('payNow SELF: Shipper #'.$shipper->id.' → draft to ready with immediate deduction ₹'.$amount);
+                \Log::info('payNow SELF: Shipper #'.$shipper->id.' → draft to ready without deduction ₹'.$amount);
+
+                $wallet->refresh();
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Shipment moved to Ready. Payment of ₹'.number_format($amount, 2).' deducted from your wallet.',
+                    'message' => 'Shipment moved to Ready. Payment will be deducted only after the manifest succeeds.',
                     'new_balance' => (float) $wallet->balance,
-                    'amount_charged' => (float) $amount,
+                    'amount_charged' => 0,
                 ]);
             }
 
@@ -9079,8 +9063,9 @@ class CustomerController extends Controller
             ];
         }
 
-        // Idempotency: SELF flow already deducts in payNow (draft → ready).
-        // Dobara charge na ho isliye existing debit check karo.
+        // Exactly-once per shipment: a prior shipment_charge debit for this
+        // AWB means an earlier manifest step already charged (e.g. Ready
+        // manifest in the pay-now flow). Never debit twice for one shipment.
         if (! empty($shipper->awb_number)) {
             $alreadyPaid = WalletTransaction::where('customer_id', $customerId)
                 ->where('type', 'debit')
@@ -9173,6 +9158,17 @@ class CustomerController extends Controller
             // Confirm Payment se manifest hone par status Ready rakha jata hai (target_status=ready).
             $targetStatus = $request->input('target_status') === 'ready' ? 'ready' : 'manifested';
 
+            // Strict pre-booking gate: block the manifest unless the wallet
+            // can cover the shipment charge. This guarantees every successful
+            // manifest deducts (no unpaid bookings).
+            $gateInfo = $this->getShipmentChargeInfo($shipper, $customerId);
+            if (! $gateInfo['can_manifest']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $gateInfo['message'] ?? 'Insufficient wallet balance to manifest this shipment.',
+                ], 422);
+            }
+
             // Agar carrier booking pehle ho chuki hai (Confirm Payment par), to dobara API call mat karo.
             // Sirf status aage badhao taaki duplicate AWB / double charge na ho.
             if ($targetStatus === 'manifested') {
@@ -9206,40 +9202,25 @@ class CustomerController extends Controller
                         'customer'
                     );
 
+                    // This path never charged before — deduct now so no
+                    // successful manifest stays unpaid (exactly-once guard
+                    // inside still prevents any double debit).
+                    $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+                    $chargeNote = $chargeResult['charged']
+                        ? ' Payment of ₹'.number_format($chargeResult['amount'], 2).' deducted from your wallet.'
+                        : ($chargeResult['message'] ? ' '.$chargeResult['message'] : '');
+
                     return response()->json([
                         'success' => true,
-                        'message' => 'Already manifested on payment. Status moved to Manifested.',
+                        'message' => 'Already manifested on payment. Status moved to Manifested.'.$chargeNote,
                         'tracking_number' => $existingTracking->shipment_identification_number,
                         'shipper_id' => $shipperId,
                         'manifest_number' => Manifest::where('shipper_id', $shipperId)->value('manifest_number'),
                         'already_manifested' => true,
+                        'amount_charged' => $chargeResult['charged'] ? $chargeResult['amount'] : 0,
+                        'new_balance' => $chargeResult['new_balance'],
                     ]);
                 }
-            }
-
-            // Carrier booking skip (skip_carrier flag / MANIFEST_SKIP_CARRIER):
-            // koi carrier API hit nahi hogi — internal AWB par manifest complete.
-            $skipCarrier = $request->boolean('skip_carrier') || config('services.manifest.skip_carrier', false);
-            if ($skipCarrier) {
-                $internal = $this->persistInternalManifest($shipper, $customerId, $targetStatus);
-                $chargeNote = $internal['amount_charged'] > 0
-                    ? ' Payment of ₹'.number_format($internal['amount_charged'], 2).' deducted from your wallet.'
-                    : '';
-
-                \Log::info('manifestShipment: Shipper #'.$shipperId.' manifested internally (carrier skipped).');
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Shipment manifested successfully (carrier booking skipped)!'.$chargeNote,
-                    'tracking_number' => $internal['tracking_number'],
-                    'label_url' => null,
-                    'shipper_id' => $shipperId,
-                    'manifest_number' => $internal['manifest_number'],
-                    'network' => 'internal',
-                    'carrier_skipped' => true,
-                    'amount_charged' => $internal['amount_charged'],
-                    'new_balance' => $internal['new_balance'],
-                ]);
             }
 
             // Ready flow me Primus ke liye custom label chahiye hota hai (jo normally Packed me banta hai).
@@ -9965,9 +9946,10 @@ class CustomerController extends Controller
             // shipment in the batch (single manifest flow keeps unique numbers).
             $bulkManifestNumber = Manifest::generateManifestNumber();
 
-            // Carrier booking skip (skip_carrier flag / MANIFEST_SKIP_CARRIER):
-            // koi carrier API hit nahi hogi — internal AWB par manifest complete.
-            $skipCarrier = $request->boolean('skip_carrier') || config('services.manifest.skip_carrier', false);
+            // Bulk manifest: no carrier API + no wallet charge — internal
+            // manifest only (scoped to this bulk endpoint; single manifest
+            // still books via carrier API and charges normally).
+            $skipCarrier = $request->boolean('skip_carrier');
 
             foreach ($shipperIds as $shipperId) {
                 try {
@@ -9989,9 +9971,9 @@ class CustomerController extends Controller
 
                     $bulkPreviousStatus = $shipper->status;
 
-                    // Carrier booking skipped: no carrier API, internal manifest.
+                    // Bulk skip: no carrier API, no wallet charge, no shipment_tracking write.
                     if ($skipCarrier) {
-                        $internal = $this->persistInternalManifest($shipper, $customerId, 'manifested', $bulkManifestNumber);
+                        $internal = $this->persistInternalManifest($shipper, $customerId, 'manifested', $bulkManifestNumber, false, false);
 
                         $results['success'][] = [
                             'shipper_id' => $shipperId,
@@ -10000,11 +9982,20 @@ class CustomerController extends Controller
                             'manifest_number' => $internal['manifest_number'],
                             'network' => 'internal',
                             'carrier_skipped' => true,
-                            'amount_charged' => $internal['amount_charged'],
+                            'amount_charged' => 0,
                             'new_balance' => $internal['new_balance'],
                         ];
 
-                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested internally (carrier skipped).');
+                        \Log::info('Bulk manifest: shipment '.$shipperId.' manifested internally (no carrier API, no charge).');
+
+                        continue;
+                    }
+
+                    // Strict pre-booking gate per shipment: insufficient balance
+                    // fails only this shipment, the rest of the batch continues.
+                    $bulkGateInfo = $this->getShipmentChargeInfo($shipper, $customerId);
+                    if (! $bulkGateInfo['can_manifest']) {
+                        $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $bulkGateInfo['message'] ?? 'Insufficient wallet balance.'];
 
                         continue;
                     }
@@ -12429,36 +12420,45 @@ class CustomerController extends Controller
     /**
      * Persist a manifest WITHOUT any carrier API call.
      *
-     * Used when the `skip_carrier` request flag (or MANIFEST_SKIP_CARRIER env)
-     * is set: no UPS/ShipGlobal/Primus/... booking happens. The shipment's own
-     * AWB number is used as the tracking number; status flow, manifest record,
-     * wallet charge and logs stay exactly the same as a carrier manifest.
+     * Used for SELF-provider services only: no UPS/ShipGlobal/Primus/...
+     * booking happens. The shipment's own AWB number is used as the
+     * tracking number; status flow, manifest record, wallet charge and
+     * logs stay exactly the same as a carrier manifest.
+     *
+     * @param bool $chargeWallet Pass false for a free manifest (bulk-skip):
+     *                           no wallet debit, amount 0, current balance returned.
+     * @param bool $touchTracking Pass false to leave the shipment_tracking
+     *                           table completely untouched (bulk-skip).
      *
      * @return array{tracking_number: ?string, label_url: null, manifest_number: ?string, network: string, carrier_skipped: bool, amount_charged: float, new_balance: mixed}
      */
-    private function persistInternalManifest($shipper, $customerId, $targetStatus = 'manifested', ?string $manifestNumber = null)
+    private function persistInternalManifest($shipper, $customerId, $targetStatus = 'manifested', ?string $manifestNumber = null, bool $chargeWallet = true, bool $touchTracking = true)
     {
         $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         $internalTracking = $shipper->awb_number ?: ('UWC'.$shipper->id);
         $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
 
-        ShipmentTracking::updateOrCreate(
-            ['shipper_id' => $shipper->id],
-            [
-                'customer_id' => $customerId,
-                'create_shipment_id' => $createShipment ? $createShipment->id : null,
-                'response_status_code' => '1',
-                'response_status_description' => 'Internal manifest (carrier booking skipped)',
-                'shipment_identification_number' => $internalTracking,
-                'total_charges_currency' => 'INR',
-                'total_charges_amount' => null,
-                'billing_weight_uom' => 'KGS',
-                'billing_weight' => null,
-                'package_results' => null,
-                'raw_response' => null,
-                'status' => 'created',
-            ]
-        );
+        // Bulk-skip manifests pass $touchTracking = false so the
+        // shipment_tracking table is left completely untouched.
+        if ($touchTracking) {
+            ShipmentTracking::updateOrCreate(
+                ['shipper_id' => $shipper->id],
+                [
+                    'customer_id' => $customerId,
+                    'create_shipment_id' => $createShipment ? $createShipment->id : null,
+                    'response_status_code' => '1',
+                    'response_status_description' => 'Internal manifest (carrier booking skipped)',
+                    'shipment_identification_number' => $internalTracking,
+                    'total_charges_currency' => 'INR',
+                    'total_charges_amount' => null,
+                    'billing_weight_uom' => 'KGS',
+                    'billing_weight' => null,
+                    'package_results' => null,
+                    'raw_response' => null,
+                    'status' => 'created',
+                ]
+            );
+        }
 
         $previousStatus = $shipper->status;
         $shipper->status = $targetStatus;
@@ -12481,7 +12481,19 @@ class CustomerController extends Controller
         );
 
         // Payment is cut only AFTER the manifest succeeds (same as carrier flow).
-        $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+        // Bulk-skip manifests pass $chargeWallet = false for a free manifest.
+        if ($chargeWallet) {
+            $chargeResult = $this->chargeShipmentIfNotPaid($shipper, $customerId);
+        } else {
+            $wallet = Wallet::where('customer_id', $customerId)->first();
+            $chargeResult = [
+                'charged' => false,
+                'already_charged' => false,
+                'amount' => 0,
+                'new_balance' => $wallet ? $wallet->balance : 0,
+                'message' => null,
+            ];
+        }
 
         ShipmentLog::logStatus(
             $shipper->id,
