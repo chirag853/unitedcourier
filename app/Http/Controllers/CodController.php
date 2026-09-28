@@ -182,7 +182,7 @@ class CodController extends Controller
 
                 // Invoice Information
                 'invoice_number' => 'required|string|max:100',
-                'invoice_date' => 'required|date|after_or_equal:today',
+                'invoice_date' => 'required|date|before_or_equal:today',
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',

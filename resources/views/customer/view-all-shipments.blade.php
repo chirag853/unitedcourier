@@ -535,7 +535,7 @@
             min-width: 0;
         }
 
-        /* Package Details column: billable / dead / volumetric weight,
+        /* Package Details column: billable weight only,
            shown as a compact label-value stack per package.
            Width is capped so it cannot grow wider than its content needs. */
         .shipments-table .package-details-col {
@@ -1168,17 +1168,9 @@
                                                     $packageCount = is_countable($packages) ? count($packages) : 0;
 
                                                     $totalBillable = 0.0;
-                                                    $totalDead = 0.0;
-                                                    $totalVol = 0.0;
                                                     foreach ($packages as $package) {
                                                         if ($package->chargeable_weight !== null && $package->chargeable_weight !== '') {
                                                             $totalBillable += (float) $package->chargeable_weight;
-                                                        }
-                                                        if ($package->actual_weight_kg !== null && $package->actual_weight_kg !== '') {
-                                                            $totalDead += (float) $package->actual_weight_kg;
-                                                        }
-                                                        if ($package->volumetric_weight !== null && $package->volumetric_weight !== '') {
-                                                            $totalVol += (float) $package->volumetric_weight;
                                                         }
                                                     }
                                                 @endphp
@@ -1190,14 +1182,6 @@
                                                         <div class="package-details-row">
                                                             <span class="package-details-label">Billable Wt.</span>
                                                             <span class="package-details-value">{{ $totalBillable > 0 ? number_format($totalBillable, 2).' kg' : '-' }}</span>
-                                                        </div>
-                                                        <div class="package-details-row">
-                                                            <span class="package-details-label">Dead Wt.</span>
-                                                            <span class="package-details-value">{{ $totalDead > 0 ? number_format($totalDead, 2).' kg' : '-' }}</span>
-                                                        </div>
-                                                        <div class="package-details-row">
-                                                            <span class="package-details-label">Vol. Wt.</span>
-                                                            <span class="package-details-value">{{ $totalVol > 0 ? number_format($totalVol, 2).' kg' : '-' }}</span>
                                                         </div>
                                                     </div>
                                                 @else
@@ -2239,15 +2223,13 @@
                 card.appendChild(header);
                 const row1 = document.createElement('div');
                 row1.className = 'row';
-                row1.innerHTML = '<div class="col-md-3"><strong>Weight:</strong> ' + (pkg.weight || '-') + ' Kg</div>' +
-                    '<div class="col-md-3"><strong>Length:</strong> ' + (pkg.length || '-') + ' cm</div>' +
-                    '<div class="col-md-3"><strong>Width:</strong> ' + (pkg.width || '-') + ' cm</div>' +
-                    '<div class="col-md-3"><strong>Height:</strong> ' + (pkg.height || '-') + ' cm</div>';
+                row1.innerHTML = '<div class="col-md-4"><strong>Length:</strong> ' + (pkg.length || '-') + ' cm</div>' +
+                    '<div class="col-md-4"><strong>Width:</strong> ' + (pkg.width || '-') + ' cm</div>' +
+                    '<div class="col-md-4"><strong>Height:</strong> ' + (pkg.height || '-') + ' cm</div>';
                 card.appendChild(row1);
                 const row2 = document.createElement('div');
                 row2.className = 'row mt-1';
-                row2.innerHTML = '<div class="col-md-3"><strong>Volumetric Wt:</strong> ' + (pkg.volumetric || '-') + ' Kg</div>' +
-                    '<div class="col-md-3"><strong>Chg. Wt:</strong> ' + (pkg.chargeable || '-') + ' Kg</div>';
+                row2.innerHTML = '<div class="col-md-4"><strong>Billable Wt:</strong> ' + (pkg.chargeable || '-') + ' Kg</div>';
                 card.appendChild(row2);
                 packagesContainer.appendChild(card);
             });
@@ -2627,9 +2609,8 @@
                         const card = document.createElement('div');
                         card.style.cssText = 'border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;';
                         card.innerHTML = '<strong>Box #' + pkg.index + '</strong>: ' +
-                            'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
                             'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
-                            'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg';
+                            'Billable Wt: ' + (pkg.chargeable || '-') + ' Kg';
                         packagesContainer.appendChild(card);
                     });
                 } else {
@@ -2689,7 +2670,7 @@
 
                 const companyLogoUrl = "{{ asset('assets/img/logo.png') }}";
                 const companyFullName = "United Worldwide Couriers Pvt. Ltd.";
-                const companyAddress = "Building No. 1, Bypass Road, Mahipalpur, New Delhi - 110037";
+                const companyAddress = "Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037";
                 const companyEmail = "support@unitedcouriers.biz";
 
                 const shipper = data.shipper || {};
@@ -2749,10 +2730,8 @@
                 function dimText(pkg) {
                     if (!pkg) return 'Dimensions not available';
                     var parts = [];
-                    if (pkg.weight) parts.push('Wt: ' + pkg.weight + ' Kg');
                     if (pkg.length && pkg.width && pkg.height) parts.push('L×W×H: ' + pkg.length + '×' + pkg.width + '×' + pkg.height + ' cm');
-                    if (pkg.volumetric) parts.push('Vol. Wt: ' + pkg.volumetric + ' Kg');
-                    if (pkg.chargeable) parts.push('Chg. Wt: ' + pkg.chargeable + ' Kg');
+                    if (pkg.chargeable) parts.push('Billable Wt: ' + pkg.chargeable + ' Kg');
                     return parts.length ? parts.join(' &nbsp;|&nbsp; ') : 'Dimensions not available';
                 }
 
@@ -3052,10 +3031,11 @@
                 payShipperId = $(this).data('shipper-id');
                 const amount = $(this).data('amount');
 
-                // Set reference and default amount
+                // Set reference and default amount (rounded to 2 decimals to avoid float artefacts like 1497.1999999999998)
                 const refText = shipmentData[payInvoiceId] ? (shipmentData[payInvoiceId].awb_number || shipmentData[payInvoiceId].invoice_number) : 'Shipment #' + payInvoiceId;
                 $('#payShipmentRef').val(refText);
-                $('#payAmount').val(amount);
+                const payAmt = parseFloat(amount);
+                $('#payAmount').val(isNaN(payAmt) ? amount : payAmt.toFixed(2));
                 $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
                 updatePayInsufficientAlert(amount);
 
@@ -3844,7 +3824,7 @@
                 payInvoiceId = null;
                 payShipperId = null;
                 $('#payShipmentRef').val('Selected Draft Shipment(s) (' + rows.length + ')');
-                $('#payAmount').val(total);
+                $('#payAmount').val(Number(total).toFixed(2));
                 $('#payWalletBalance').text('INR ' + number_format(walletBalance, 2));
                 $('#payNowModal').modal('show');
             });
@@ -4328,7 +4308,7 @@
                 '<div class="label">' +
                     '<div class="header">' +
                         '<div class="company-name">United Worldwide Courier Pvt. Ltd.</div>' +
-                        '<div class="company-address">A-219, First Floor, Road No. 5 Mahipalpur Extension, New Delhi 110037</div>' +
+                        '<div class="company-address">Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037</div>' +
                         '<div class="company-contact">TEL:-011-46122222,www.unitedcouriers.biz</div>' +
                         '<div class="box-badge">BOX ' + boxIdx + ' OF ' + boxTot + '</div>' +
                     '</div>' +
@@ -4406,9 +4386,8 @@
             const packageHtml = packages.length ? packages.map(function (pkg) {
                 return '<div style="border:1px solid #dee2e6;border-radius:6px;padding:8px;margin-bottom:6px;">' +
                     '<strong>Box #' + (pkg.index || '-') + '</strong>: ' +
-                    'Weight: ' + (pkg.weight || '-') + ' Kg | ' +
                     'L: ' + (pkg.length || '-') + ' × W: ' + (pkg.width || '-') + ' × H: ' + (pkg.height || '-') + ' cm | ' +
-                    'Vol. Wt: ' + (pkg.volumetric || '-') + ' Kg | Chg. Wt: ' + (pkg.chargeable || '-') + ' Kg' +
+                    'Billable Wt: ' + (pkg.chargeable || '-') + ' Kg' +
                     '</div>';
             }).join('') : '<div class="text-muted">No package details</div>';
 

@@ -35,6 +35,16 @@
             page-break-after: auto;
         }
 
+        /* ===== Gradient headings (blue → purple) ===== */
+        .gradient-text {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
         /* ===== Header ===== */
         .doc-header {
             display: flex;
@@ -68,7 +78,6 @@
             font-size: 22px;
             font-weight: 800;
             text-transform: uppercase;
-            color: #b22222;
             letter-spacing: 1px;
         }
 
@@ -148,7 +157,6 @@
             text-transform: uppercase;
             letter-spacing: .5px;
             margin: 14px 0 6px;
-            color: #b22222;
         }
 
         table.shipments {
@@ -182,38 +190,6 @@
             line-height: 1.5;
         }
 
-        table.shipments .total-row td {
-            font-weight: 700;
-            background: #f6f7f9;
-        }
-
-        /* ===== Summary boxes ===== */
-        .summary-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 14px;
-        }
-
-        .summary-box {
-            border: 1px solid #999;
-            padding: 10px 12px;
-        }
-
-        .summary-box .s-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .5px;
-            color: #666;
-        }
-
-        .summary-box .s-value {
-            font-size: 16px;
-            font-weight: 800;
-            margin-top: 2px;
-        }
-
         /* ===== Sender & Return ===== */
         .sender-block {
             border: 1px solid #999;
@@ -226,7 +202,6 @@
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: .5px;
-            color: #b22222;
             margin-bottom: 4px;
         }
 
@@ -275,7 +250,7 @@
     <div class="doc-wrap">
         <div class="no-print" style="text-align:center;margin-bottom:10px;">
             <button onclick="window.print()"
-                    style="background:#b22222;color:#fff;border:none;padding:10px 26px;font-size:14px;font-weight:700;border-radius:6px;cursor:pointer;">
+                    style="background:linear-gradient(to right, #2563eb, #9333ea);color:#fff;border:none;padding:10px 26px;font-size:14px;font-weight:700;border-radius:6px;cursor:pointer;">
                 🖨 Print Manifest Document
             </button>
         </div>
@@ -284,7 +259,7 @@
             <div class="doc-header">
                 <div class="brand">United Worldwide Couriers </div>
                 <div class="doc-title">
-                    <div class="title-main">Manifest Document</div>
+                    <div class="title-main gradient-text">Manifest Document</div>
                     <div class="title-sub">Shipping Manifest Summary</div>
                 </div>
             </div>
@@ -334,7 +309,7 @@
                 </div>
             </div>
 
-            <div class="sec-title">Shipment Details</div>
+            <div class="sec-title gradient-text">Shipment Details</div>
             <table class="shipments">
                 <thead>
                     <tr>
@@ -347,7 +322,6 @@
                         <th>Items</th>
                         <th>Pkgs</th>
                         <th>Weight</th>
-                        <th class="num">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -368,35 +342,19 @@
                             </td>
                             <td class="num">{{ $shipment['package_count'] }}</td>
                             <td>{{ $shipment['total_weight'] }}</td>
-                            <td class="num">{{ number_format($shipment['amount'], 2) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10">No shipments in this manifest.</td>
+                            <td colspan="9">No shipments in this manifest.</td>
                         </tr>
                     @endforelse
-                    <tr class="total-row">
-                        <td colspan="9">Total ({{ $manifest->shipment_count }} shipments)</td>
-                        <td class="num">{{ number_format($manifest->total_value, 2) }}{{ $manifest->currency ? ' ' . $manifest->currency : '' }}</td>
-                    </tr>
                 </tbody>
             </table>
 
-            <div class="summary-row">
-                <div class="summary-box">
-                    <div class="s-label">Total Shipment Value</div>
-                    <div class="s-value">{{ number_format($manifest->total_value, 2) }}{{ $manifest->currency ? ' ' . $manifest->currency : '' }}</div>
-                </div>
-                <div class="summary-box">
-                    <div class="s-label">Total Freight Cost</div>
-                    <div class="s-value">{{ number_format($manifest->total_cost, 2) }}</div>
-                </div>
-            </div>
-
             <div class="sender-block">
-                <div class="sender-title">Sender & Return Details</div>
+                <div class="sender-title gradient-text">Sender & Return Details</div>
                 <div class="sender-line">
-                    UWC COURIERS PVT LTD, Khasra 4/2, Bandh Road, Sultanpur, Delhi - 110086, India<br>
+                    Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037<br>
                     Phone: 8130470109
                 </div>
             </div>

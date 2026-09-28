@@ -306,7 +306,7 @@
                 <div class="company-info">
                     <p class="brand-name">United Worldwide Couriers Pvt. Ltd.</p>
                     <span class="brand-tag">Global Logistics Since 1995</span>
-                    <p>Building No. 1, Bypass Road, Mahipalpur, New Delhi - 110037</p>
+                    <p>Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037</p>
                     <p>Email: support@unitedcouriers.biz &nbsp;|&nbsp; www.unitedcouriers.biz</p>
                 </div>
             </div>

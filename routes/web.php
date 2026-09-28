@@ -113,6 +113,8 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::post('/receive-shipment-bulk', [AdminController::class, 'receiveBulkShipment'])->name('admin.receive-shipment-bulk');
     Route::post('/generate-label', [AdminController::class, 'generateLabel'])->name('admin.generate-label');
     Route::post('/ready-to-dispatch', [AdminController::class, 'readyToDispatch'])->name('admin.ready-to-dispatch');
+    Route::post('/not-received-at-hub', [AdminController::class, 'notReceivedAtHub'])->name('admin.not-received-at-hub');
+    Route::get('/not-received-orders', [AdminController::class, 'notReceivedOrders'])->name('admin.not-received-orders');
     Route::get('/dispute-charges-list', [AdminController::class, 'disputeChargesList'])->name('admin.dispute-charges-list');
     Route::get('/dispute-orders', [AdminController::class, 'disputeOrders'])->name('admin.dispute-orders');
     Route::get('/cancel-orders', [AdminController::class, 'cancelOrders'])->name('admin.cancel-orders');

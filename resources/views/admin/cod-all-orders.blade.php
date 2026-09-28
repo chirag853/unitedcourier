@@ -1368,7 +1368,7 @@
                 '<div class="label">' +
                     '<div class="header">' +
                         '<div class="company-name">United Worldwide Courier Pvt. Ltd.</div>' +
-                        '<div class="company-address">A-219, First Floor, Road No. 5 Mahipalpur Extension, New Delhi 110037</div>' +
+                        '<div class="company-address">Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037</div>' +
                         '<div class="company-contact">TEL:-011-46122222,www.unitedcouriers.biz</div>' +
                         '<div class="box-badge">BOX ' + boxIdx + ' OF ' + boxTot + '</div>' +
                     '</div>' +

@@ -7625,6 +7625,18 @@
                                                                     placeholder="IEC Code">
                                                             </div>
                                                         </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">INV Terms</label>
+                                                                <select class="form-control" name="inv_terms">
+                                                                    <option value="">Select</option>
+                                                                    <option value="CF" {{ old('inv_terms') == 'CF' ? 'selected' : '' }}>CF</option>
+                                                                    <option value="CI" {{ old('inv_terms') == 'CI' ? 'selected' : '' }}>CI</option>
+                                                                    <option value="FOB" {{ old('inv_terms') == 'FOB' ? 'selected' : '' }}>FOB</option>
+                                                                    <option value="CIF" {{ old('inv_terms') == 'CIF' ? 'selected' : '' }}>CIF</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
                                                         <div class="col-md-4" id="csbGstDetails" style="display: {{ $hasCsbGst ? ($defaultCsbTaxType === 'gst' ? 'block' : 'none') : 'none' }};">
                                                             <div class="mb-3">
                                                                 <label class="form-label">GST Number</label>
@@ -7696,7 +7708,7 @@
                                                                     <label class="form-label">Invoice Date</label>
                                                                     <input type="date" class="form-control"
                                                                         name="invoice_date" value="{{ old('invoice_date') }}"
-                                                                        min="{{ now()->toDateString() }}">
+                                                                        max="{{ now()->toDateString() }}">
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
@@ -8091,6 +8103,30 @@
                                                                 let row = e.target.closest('tr');
                                                                 if (window.recalcRow) window.recalcRow(row);
                                                                 if (typeof updateTotal === 'function') updateTotal();
+                                                            }
+                                                        });
+                                                        // HTS CODE -> TAB: auto-open Unit Type dropdown of the same row
+                                                        // (delegated so it also works for dynamically added invoice rows)
+                                                        document.addEventListener('keydown', function(e) {
+                                                            if (e.key !== 'Tab' || e.shiftKey) return;
+                                                            var target = e.target;
+                                                            if (!target || !target.matches) return;
+                                                            if (!target.matches('#invoiceTable .hts-code-input, #invoiceTable input[name$="[hts_code]"]')) return;
+                                                            var row = target.closest('tr');
+                                                            if (!row) return;
+                                                            var unitSelect = row.querySelector('select[name$="[unit_type]"]');
+                                                            if (!unitSelect) return;
+                                                            e.preventDefault();
+                                                            unitSelect.focus();
+                                                            try {
+                                                                if (typeof unitSelect.showPicker === 'function') {
+                                                                    unitSelect.showPicker();
+                                                                } else {
+                                                                    var ev = new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true });
+                                                                    unitSelect.dispatchEvent(ev);
+                                                                }
+                                                            } catch (err) {
+                                                                unitSelect.focus();
                                                             }
                                                         });
                                                         // Apply IGST visibility on page load
@@ -9564,12 +9600,6 @@
                                                     <span class="breakdown-label">Total Surcharge (incl. GST)</span>
                                                     <span class="breakdown-value">₹ ${combinedSurcharge.toFixed(2)}</span>
                                                 </div>
-                                                ${ddpMatched && ddpTotal > 0 ? `
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">DDP Surcharge (incl. GST)</span>
-                                                    <span class="breakdown-value">₹ ${ddpTotal.toFixed(2)}</span>
-                                                </div>
-                                                ` : ''}
                                                 ${greenMatched && greenTotal > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Go Green Plus (incl. GST)</span>
@@ -10828,8 +10858,8 @@
             if (invoiceDate?.value) {
                 const today = new Date();
                 const todayString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                if (invoiceDate.value < todayString) {
-                    addError(invoiceDate, 'Invoice date must be today or a future date.', 'access-info');
+                if (invoiceDate.value > todayString) {
+                    addError(invoiceDate, 'Invoice date must be today or a past date.', 'access-info');
                 }
             }
             const invoiceAmount = form.querySelector('[name="invoice_amount"]');

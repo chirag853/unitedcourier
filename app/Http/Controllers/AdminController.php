@@ -2098,6 +2098,74 @@ class AdminController extends Controller
     }
 
     /**
+     * Mark a shipment as Not Received at Hub.
+     * Creates a tracking record with status 'not_received' and updates
+     * the shipper status so the shipment moves to the Not Received at Hub page.
+     */
+    public function notReceivedAtHub(Request $request)
+    {
+        try {
+            $request->validate([
+                'shipment_id' => 'required|integer|exists:shipment_invoice,id',
+            ]);
+
+            $shipmentInvoice = ShipmentInvoice::find($request->shipment_id);
+            if (!$shipmentInvoice || !$shipmentInvoice->shipper_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipment not found or no shipper associated.'
+                ]);
+            }
+
+            $shipper = \App\Models\ShipperInfo::find($shipmentInvoice->shipper_id);
+            if (!$shipper || !$shipper->awb_number) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shipper info not found or AWB number missing.'
+                ]);
+            }
+
+            $previousStatus = $shipper->status;
+
+            $createShipment = \App\Models\CreateShipment::where('shipper_id', $shipper->id)->first();
+
+            // Create tracking record for not received at hub
+            \App\Models\Tracking::create([
+                'awb_number'  => $shipper->awb_number,
+                'status'      => 'not_received',
+                'title'       => 'Not Received at Hub',
+                'shipper_id'  => $shipper->id,
+                'shipping_id' => $createShipment ? $createShipment->id : null,
+                'uwc_id'      => $shipper->awb_number,
+            ]);
+
+            // Update shipper status so it moves to "Not Received at Hub" page
+            $shipper->status = 'not_received';
+            $shipper->save();
+
+            ShipmentLog::logStatus(
+                (int) $shipper->id,
+                (string) $shipper->awb_number,
+                'not_received',
+                (string) ($previousStatus ?? ''),
+                'Shipment marked as Not Received at Hub by admin.',
+                $shipper->customer_id,
+                'admin'
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shipment marked as Not Received at Hub successfully. It has been moved to the Not Received at Hub page.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * Dispute charges dropdown list for the admin/companies Dispute popup.
      * shipment_id mile to us shipment ke destination + shipping method ke
      * hisaab se filter karke bhejta hai (USA-only rows CA shipment me nahi
@@ -2261,6 +2329,60 @@ class AdminController extends Controller
         $totalAmount = (float) $orders->sum('total_price');
 
         return view('admin.cancel-orders', compact('orders', 'cancelLogs', 'totalAmount'));
+    }
+
+    /**
+     * Not Received at Hub listing page (sidebar: Manage Orders > Orders > Not Received at Hub).
+     * Saare shipments jinka status 'not_received' hai yahan table me dikhte hain.
+     */
+    public function notReceivedOrders()
+    {
+        $orders = DB::table('shipment_invoice as si')
+            ->join('shipper_info as shp', 'shp.id', '=', 'si.shipper_id')
+            ->leftJoin('customers as c', 'c.id', '=', 'shp.customer_id')
+            ->leftJoin('consignee_info as con', 'con.shipper_id', '=', 'shp.id')
+            ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shp.id')
+            ->where('shp.status', 'not_received')
+            ->select(
+                'si.id',
+                'si.invoice_number',
+                'si.invoice_currency',
+                'si.created_at as order_date',
+                'shp.id as shipper_id',
+                'shp.awb_number',
+                'shp.company_name as shipper_company',
+                'shp.contact_person as shipper_contact',
+                'shp.city as shipper_city',
+                'shp.state as shipper_state',
+                'shp.status as shipper_status',
+                'shp.total_price',
+                'manifests.manifest_number',
+                'c.first_name',
+                'c.last_name',
+                'c.email as customer_email',
+                'con.consignee_name',
+                'con.city as consignee_city',
+                'con.state as consignee_state',
+                'con.delivery_destination as consignee_destination'
+            )
+            ->orderByDesc('si.created_at')
+            ->get();
+
+        // Latest 'not_received' log per shipper: kab + kisne mark kiya.
+        $notReceivedLogs = [];
+        if ($orders->isNotEmpty()) {
+            $logs = ShipmentLog::whereIn('shipper_id', $orders->pluck('shipper_id')->all())
+                ->where('status', 'not_received')
+                ->orderBy('created_at')
+                ->get(['shipper_id', 'created_at', 'performed_by', 'description']);
+            foreach ($logs as $log) {
+                $notReceivedLogs[$log->shipper_id] = $log;
+            }
+        }
+
+        $totalAmount = (float) $orders->sum('total_price');
+
+        return view('admin.not-received-orders', compact('orders', 'notReceivedLogs', 'totalAmount'));
     }
 
     /**

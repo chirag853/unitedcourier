@@ -3039,6 +3039,7 @@ class CustomerController extends Controller
                 'bond_ut_igst' => 'nullable|in:Bond UT,IGST',
                 'lut_number' => 'nullable|string|max:100',
                 'iec_code' => 'nullable|string|max:50',
+                'inv_terms' => 'nullable|string|in:CF,CI,FOB,CIF|max:20',
                 'gst_number' => 'nullable|string|max:50',
                 'ad_code' => 'nullable|string|max:100',
                 'bank_account_number' => 'nullable|string|max:50',
@@ -3046,7 +3047,7 @@ class CustomerController extends Controller
 
                 // Invoice Information
                 'invoice_number' => 'required|string|max:100',
-                'invoice_date' => 'required|date|after_or_equal:today',
+                'invoice_date' => 'required|date|before_or_equal:today',
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
@@ -3923,6 +3924,7 @@ class CustomerController extends Controller
                 'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
                 'lut_number' => $validatedData['lut_number'] ?? null,
                 'iec_code' => $validatedData['iec_code'] ?? null,
+                'inv_terms' => $validatedData['inv_terms'] ?? null,
                 'gst_number' => $validatedData['gst_number'] ?? null,
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,

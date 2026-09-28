@@ -41,6 +41,16 @@
             page-break-after: auto;
         }
 
+        /* ===== Gradient headings (blue → purple) ===== */
+        .gradient-text {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
         /* Header: company + service */
         .header {
             display: flex;
@@ -61,7 +71,6 @@
             letter-spacing: .5px;
             line-height: 1.1;
             text-transform: uppercase;
-            color:linear-gradient(to right, #2563eb, #9333ea)
         }
 
         .header .company .brand .sub {
@@ -120,7 +129,6 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #b22222;
             margin-bottom: 4px;
         }
 
@@ -155,11 +163,6 @@
             text-align: right;
         }
 
-        .products .total-row td {
-            font-weight: 700;
-            background: #f6f7f9;
-        }
-
         /* Date + sender */
         .date {
             font-size: 12px;
@@ -178,7 +181,6 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #b22222;
             margin-bottom: 4px;
         }
 
@@ -222,7 +224,7 @@
     <div class="labels-wrap">
         <div class="no-print" style="text-align:center;margin-bottom:10px;">
             <button onclick="window.print()"
-                    style="background:#b22222;color:#fff;border:none;padding:10px 26px;font-size:14px;font-weight:700;border-radius:6px;cursor:pointer;">
+                    style="background:linear-gradient(to right, #2563eb, #9333ea);color:#fff;border:none;padding:10px 26px;font-size:14px;font-weight:700;border-radius:6px;cursor:pointer;">
                 🖨 Print Manifest Label
             </button>
         </div>
@@ -231,7 +233,7 @@
         <div class="label">
             <div class="header">
                 <div class="company">
-                    <div class="brand">United Worldwide Couriers </div>
+                    <div class="brand gradient-text">United Worldwide Couriers </div>
                 </div>
             </div>
 
@@ -242,7 +244,7 @@
             </div>
 
             <div class="address-section">
-                <div class="addr-title">Delivery Address</div>
+                <div class="addr-title gradient-text">Delivery Address</div>
                 <div class="addr-line">
                     {{ $label['delivery_company'] }}
                     @if(!empty($label['delivery_address']))
@@ -257,9 +259,8 @@
             <table class="products">
                 <thead>
                     <tr>
-                        <th style="width:60%;">Product Name</th>
-                        <th style="width:10%;">Qty</th>
-                        <th style="width:30%;">Total (Rs.)</th>
+                        <th style="width:75%;">Product Name</th>
+                        <th style="width:25%;">Qty</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -267,7 +268,6 @@
                         <tr>
                             <td>{{ $item['description'] }}</td>
                             <td class="num">{{ (float) $item['qty'] }} {{ $item['unit_type'] ?? '' }}</td>
-                            <td class="num">{{ number_format((float) $item['amount'], 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -280,7 +280,7 @@
             </div>
 
             <div class="sender">
-                <div class="sender-title">Sender & Return Details</div>
+                <div class="sender-title gradient-text">Sender & Return Details</div>
                 <div class="sender-line">
                     @if(!empty($label['customer_code']))
                         Customer Code: {{ $label['customer_code'] }}

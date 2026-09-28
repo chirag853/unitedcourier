@@ -976,6 +976,476 @@
             border-color: #fecaca;
             color: #b91c1c;
         }
+        /* ===== Operations hero header ===== */
+        .ops-hero {
+            position: relative;
+            overflow: hidden;
+            border: none;
+            border-radius: 18px;
+            padding: 26px 28px;
+            color: #fff;
+            background: linear-gradient(115deg, #1e1b4b 0%, #3730a3 32%, #2563eb 62%, #9333ea 100%);
+            box-shadow: 0 14px 34px rgba(49, 46, 129, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+        .ops-hero::before,
+        .ops-hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .ops-hero::before {
+            width: 340px;
+            height: 340px;
+            right: -110px;
+            top: -170px;
+            background: radial-gradient(circle, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 65%);
+        }
+        .ops-hero::after {
+            width: 220px;
+            height: 220px;
+            right: 130px;
+            bottom: -140px;
+            background: radial-gradient(circle, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 65%);
+        }
+        .ops-hero-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.85);
+            background: rgba(255,255,255,0.14);
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 4px 12px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+        }
+        .ops-hero-title {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+            color: #fff;
+        }
+        .ops-hero-sub {
+            margin: 6px 0 0;
+            font-size: 13px;
+            color: rgba(255,255,255,0.82);
+        }
+        .ops-hero-refresh {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 18px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.16);
+            border: 1px solid rgba(255,255,255,0.35);
+            backdrop-filter: blur(4px);
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .ops-hero-refresh:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.28);
+            transform: translateY(-1px);
+        }
+        /* ===== Operations stat cards ===== */
+        .ops-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .ops-stat {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            text-decoration: none;
+            color: inherit;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-top: 3px solid var(--chip, #2563eb);
+            border-radius: 14px;
+            padding: 14px 14px;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            width: 100%;
+        }
+        .ops-stat:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+            border-color: var(--chip, #2563eb);
+            color: inherit;
+        }
+        .ops-stat-active {
+            border-color: var(--chip, #2563eb);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18), 0 12px 26px rgba(15, 23, 42, 0.12);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip, #2563eb) 22%, transparent), 0 12px 26px rgba(15, 23, 42, 0.12);
+            background: #fff;
+            background: linear-gradient(180deg, #ffffff 0%, color-mix(in srgb, var(--chip, #2563eb) 7%, #ffffff) 100%);
+        }
+        .ops-stat-icon {
+            width: 42px;
+            height: 42px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 20px;
+            background: linear-gradient(135deg, var(--chip, #2563eb), var(--chip2, #9333ea));
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+        }
+        .ops-stat-body {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1;
+        }
+        .ops-stat-count {
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1.1;
+            color: #0f172a;
+        }
+        .ops-stat-label {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ops-stat-go {
+            color: #cbd5e1;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: color 0.18s ease, transform 0.18s ease;
+        }
+        .ops-stat:hover .ops-stat-go {
+            color: var(--chip, #2563eb);
+            transform: translateX(3px);
+        }
+        /* ===== Modern tabs (nav strip hidden — switching happens via stat tiles above) ===== */
+        #shipmentTabs {
+            display: none;
+        }
+        .tab-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 6px 22px rgba(15, 23, 42, 0.07);
+        }
+        .tab-card .nav-tabs {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 8px 12px 0;
+            background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+            gap: 2px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+        .tab-card .nav-tabs .nav-link {
+            border: none;
+            border-radius: 12px 12px 0 0;
+            padding: 13px 20px 15px;
+            font-weight: 700;
+            font-size: 13px;
+            color: #64748b;
+            transition: color 0.2s ease, background 0.2s ease;
+            position: relative;
+            white-space: nowrap;
+        }
+        .tab-card .nav-tabs .nav-link:hover {
+            color: #3730a3;
+            background: #eef2ff;
+        }
+        .tab-card .nav-tabs .nav-link.active {
+            color: #3730a3;
+            background: #fff;
+            box-shadow: inset 0 3px 0 #6366f1;
+        }
+        .tab-card .nav-tabs .nav-link.active::after {
+            content: "";
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            bottom: -1px;
+            height: 3px;
+            border-radius: 3px 3px 0 0;
+            background: linear-gradient(to right, #2563eb, #9333ea);
+        }
+        .tab-card .nav-tabs .nav-link .badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 999px;
+            margin-left: 6px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+        }
+        .tab-refresh-btn {
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 12px !important;
+            background: linear-gradient(135deg, #2563eb, #9333ea) !important;
+            color: #fff !important;
+            border: none !important;
+            box-shadow: 0 6px 14px rgba(99, 102, 241, 0.4) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+            align-self: center;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        .tab-refresh-btn:hover {
+            color: #fff !important;
+            transform: rotate(40deg);
+            box-shadow: 0 8px 18px rgba(99, 102, 241, 0.5) !important;
+        }
+        /* ===== Table premium polish ===== */
+        .table-scroll-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+        }
+        .table-scroll-wrap::-webkit-scrollbar,
+        .table-scroll-wrap .dataTables_scrollBody::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-thumb,
+        .table-scroll-wrap .dataTables_scrollBody::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #93c5fd, #c4b5fd);
+            border-radius: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-track,
+        .table-scroll-wrap .dataTables_scrollBody::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .table-scroll-wrap table.dataTable thead th {
+            background: linear-gradient(180deg, #eef2ff 0%, #f1f5f9 100%);
+            color: #3730a3;
+            font-size: 11.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            vertical-align: middle;
+            padding: 13px 14px;
+            border-bottom: 2px solid #c7d2fe;
+        }
+        .table-scroll-wrap table.dataTable tbody td {
+            vertical-align: middle;
+            padding: 11px 14px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .table-scroll-wrap table.dataTable tbody tr {
+            transition: background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .table-scroll-wrap table.dataTable tbody tr:nth-child(even) {
+            background-color: #fafbff;
+        }
+        .table-scroll-wrap table.dataTable tbody tr:hover {
+            background-color: #eef2ff;
+            box-shadow: inset 3px 0 0 #6366f1;
+        }
+        /* Manifest deep-link highlight (?tab=printlabel&manifest=... se aane par) */
+        .table-scroll-wrap table.dataTable tbody tr.manifest-match {
+            background-color: #fefce8 !important;
+            box-shadow: inset 3px 0 0 #eab308;
+        }
+        .table-scroll-wrap .badge.bg-dark {
+            background: linear-gradient(120deg, #0f172a, #3b4a63) !important;
+            letter-spacing: 0.5px;
+            padding: 5px 11px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.28);
+        }
+        /* ===== Action buttons premium ===== */
+        .btn-print-label {
+            background: linear-gradient(120deg, #0891b2, #2563eb);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn-print-label:hover {
+            background: linear-gradient(120deg, #0e7490, #1d4ed8);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.45);
+        }
+        .btn-ready-to-dispatch {
+            background: linear-gradient(120deg, #f59e0b, #f97316);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn-ready-to-dispatch:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(249, 115, 22, 0.45);
+        }
+        .btn-dispute {
+            background: linear-gradient(120deg, #e5484d, #b91c1c);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn-dispute:hover {
+            background: linear-gradient(120deg, #c81e2b, #991b1b);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(220, 38, 38, 0.4);
+        }
+        .btn-not-received {
+            background: linear-gradient(120deg, #881337, #4c0519);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(136, 19, 55, 0.35);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn-not-received:hover {
+            background: linear-gradient(120deg, #6b0f2b, #350310);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(136, 19, 55, 0.45);
+        }
+        .table-actions .btn-icon {
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .table-actions .btn-icon:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(15, 23, 42, 0.18);
+        }
+        /* ===== DataTables controls polish ===== */
+        .table-scroll-wrap .dataTables_wrapper .dataTables_filter input,
+        .table-scroll-wrap .dt-container .dt-search input {
+            border-radius: 10px;
+            border: 1.5px solid #e2e8f0;
+            padding: 6px 12px;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_filter input:focus,
+        .table-scroll-wrap .dt-container .dt-search input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_length select,
+        .table-scroll-wrap .dt-container .dt-length select {
+            border-radius: 10px;
+            border: 1.5px solid #e2e8f0;
+            padding: 5px 8px;
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        .table-scroll-wrap .dt-container .dt-paging-button.current {
+            background: linear-gradient(to right, #2563eb, #9333ea) !important;
+            color: #fff !important;
+            border: none !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 10px rgba(99, 102, 241, 0.4);
+        }
+        .table-scroll-wrap .dataTables_wrapper .dataTables_paginate .paginate_button,
+        .table-scroll-wrap .dt-container .dt-paging-button {
+            border-radius: 8px !important;
+        }
+        /* ===== Print label modal premium ===== */
+        #printLabelModal .modal-content {
+            border: none;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(37, 99, 235, 0.28), 0 8px 24px rgba(15, 23, 42, 0.12);
+        }
+        #printLabelModal .modal-header {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            color: #fff;
+            border: none;
+            padding: 16px 20px;
+        }
+        #printLabelModal .modal-title {
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+        #printLabelModal .modal-footer {
+            border-top: 1px solid #eef2ff;
+            background: #fafbff;
+        }
+        #printLabelModal #printLabelPrintBtn {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            border: none;
+            font-weight: 700;
+            border-radius: 10px;
+            padding: 8px 20px;
+            box-shadow: 0 6px 14px rgba(99, 102, 241, 0.4);
+        }
+        #printLabelModal #printLabelPrintBtn:hover {
+            filter: brightness(1.08);
+        }
+        @media (max-width: 768px) {
+            .ops-hero {
+                padding: 20px;
+            }
+            .ops-hero-title {
+                font-size: 21px;
+            }
+            .tab-card .nav-tabs .nav-link {
+                padding: 12px 14px 13px;
+                font-size: 12px;
+            }
+        }
     </style>
 
 </head>
@@ -1017,22 +1487,61 @@
             <!-- Start Content -->
             <div class="content">
 
-                <!-- Page Header -->
-                <!-- <div class="d-flex align-items-center justify-content-between gap-2 mb-4 flex-wrap">
-                    <div>
-                        <h4 class="mb-1">View Customer List</h4>
-                        <nav aria-label="breadcrumb">
-                            <ol class="breadcrumb mb-0 p-0">
-                                <li class="breadcrumb-item"><a href="{{ url('/admin/dashboard') }}">Home</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">View Customer List</li>
-                            </ol>
-                        </nav>
+                @php
+                    // Active tab view-all-shipments jese URL query (?tab=...) se decide hota hai.
+                    $validOpsTabs = ['manifested', 'readyforpickup', 'assigned', 'printlabel', 'readytodispatch'];
+                    $activeTab = in_array(request('tab'), $validOpsTabs, true) ? request('tab') : 'manifested';
+                @endphp
+                <!-- Page Hero Header -->
+                <div class="ops-hero mb-3">
+                    <div class="ops-hero-text">
+                        <span class="ops-hero-eyebrow"><i class="ti ti-building-warehouse me-1"></i> Admin · Companies · Operations</span>
+                        <h4 class="ops-hero-title">Shipment Operations{{ ($activeTab === 'printlabel' && request('manifest')) ? ' - ' . request('manifest') : '' }}</h4>
+                        <p class="ops-hero-sub">Manifests, pickups, labels &amp; dispatch — everything in one place.</p>
                     </div>
-                    <div class="gap-2 d-flex align-items-center flex-wrap">
-                        <a href="javascript:void(0);" class="btn btn-icon btn-outline-light shadow" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh" onclick="location.reload();"><i class="ti ti-refresh"></i></a>
+                    <div class="ops-hero-actions">
+                        <a href="javascript:void(0);" class="ops-hero-refresh" onclick="location.reload();" title="Refresh">
+                            <i class="ti ti-refresh"></i><span>Refresh</span>
+                        </a>
                     </div>
-                </div>                 -->
-				<!-- End Page Header -->
+                </div>
+                <!-- End Page Hero Header -->
+
+                <!-- Operations Stat Cards (view-all-shipments jesa URL format: click par ?tab=... ke sath reload) -->
+                <div class="ops-stats">
+                    <a href="{{ route('admin.companies', ['tab' => 'readyforpickup']) }}" class="ops-stat {{ $activeTab === 'readyforpickup' ? 'ops-stat-active' : '' }}" style="--chip:#6f42c1;--chip2:#a78bfa;">
+                        <span class="ops-stat-icon"><i class="ti ti-calendar-event"></i></span>
+                        <span class="ops-stat-body">
+                            <span class="ops-stat-count">{{ count($readyForPickupShipments) }}</span>
+                            <span class="ops-stat-label">Ready for Pickup</span>
+                        </span>
+                        <i class="ti ti-chevron-right ops-stat-go"></i>
+                    </a>
+                    <a href="{{ route('admin.companies', ['tab' => 'assigned']) }}" class="ops-stat {{ $activeTab === 'assigned' ? 'ops-stat-active' : '' }}" style="--chip:#6366f1;--chip2:#818cf8;">
+                        <span class="ops-stat-icon"><i class="ti ti-truck-delivery"></i></span>
+                        <span class="ops-stat-body">
+                            <span class="ops-stat-count">{{ count($assignedForPickupShipments) }}</span>
+                            <span class="ops-stat-label">Assigned for Pickup</span>
+                        </span>
+                        <i class="ti ti-chevron-right ops-stat-go"></i>
+                    </a>
+                    <a href="{{ route('admin.companies', ['tab' => 'printlabel']) }}" class="ops-stat {{ $activeTab === 'printlabel' ? 'ops-stat-active' : '' }}" style="--chip:#0891b2;--chip2:#22d3ee;">
+                        <span class="ops-stat-icon"><i class="ti ti-printer"></i></span>
+                        <span class="ops-stat-body">
+                            <span class="ops-stat-count">{{ count($printLabelShipments) }}</span>
+                            <span class="ops-stat-label">Print Label</span>
+                        </span>
+                        <i class="ti ti-chevron-right ops-stat-go"></i>
+                    </a>
+                    <a href="{{ route('admin.companies', ['tab' => 'readytodispatch']) }}" class="ops-stat {{ $activeTab === 'readytodispatch' ? 'ops-stat-active' : '' }}" style="--chip:#f59e0b;--chip2:#fb923c;">
+                        <span class="ops-stat-icon"><i class="ti ti-truck"></i></span>
+                        <span class="ops-stat-body">
+                            <span class="ops-stat-count">{{ count($readyToDispatchShipments) }}</span>
+                            <span class="ops-stat-label">Ready to Dispatch</span>
+                        </span>
+                        <i class="ti ti-chevron-right ops-stat-go"></i>
+                    </a>
+                </div>
 
                 @if(session('success'))
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -1052,38 +1561,38 @@
                 <div class="tab-card">
                     <ul class="nav nav-tabs" id="shipmentTabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="manifested-tab" data-bs-toggle="tab" data-bs-target="#manifestedPane" type="button" role="tab" aria-controls="manifestedPane" aria-selected="true">
+                            <button class="nav-link {{ $activeTab === 'manifested' ? 'active' : '' }}" id="manifested-tab" data-bs-toggle="tab" data-bs-target="#manifestedPane" type="button" role="tab" aria-controls="manifestedPane" aria-selected="{{ $activeTab === 'manifested' ? 'true' : 'false' }}">
                                 <i class="ti ti-package me-1"></i> Manifested
                                 <span class="badge bg-primary">{{ count($manifestGroups) }}</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="readyforpickup-tab" data-bs-toggle="tab" data-bs-target="#readyforpickupPane" type="button" role="tab" aria-controls="readyforpickupPane" aria-selected="false">
+                            <button class="nav-link {{ $activeTab === 'readyforpickup' ? 'active' : '' }}" id="readyforpickup-tab" data-bs-toggle="tab" data-bs-target="#readyforpickupPane" type="button" role="tab" aria-controls="readyforpickupPane" aria-selected="{{ $activeTab === 'readyforpickup' ? 'true' : 'false' }}">
                                 <i class="ti ti-calendar-event me-1"></i> Ready for Pickup
                                 <span class="badge" style="background:#6f42c1;color:#fff;">{{ count($readyForPickupShipments) }}</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="assigned-tab" data-bs-toggle="tab" data-bs-target="#assignedPane" type="button" role="tab" aria-controls="assignedPane" aria-selected="false">
+                            <button class="nav-link {{ $activeTab === 'assigned' ? 'active' : '' }}" id="assigned-tab" data-bs-toggle="tab" data-bs-target="#assignedPane" type="button" role="tab" aria-controls="assignedPane" aria-selected="{{ $activeTab === 'assigned' ? 'true' : 'false' }}">
                                 <i class="ti ti-truck-delivery me-1"></i> Assigned for Pickup
                                 <span class="badge" style="background:#6366f1;color:#fff;">{{ count($assignedForPickupShipments) }}</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="printlabel-tab" data-bs-toggle="tab" data-bs-target="#printlabelPane" type="button" role="tab" aria-controls="printlabelPane" aria-selected="false">
+                            <button class="nav-link {{ $activeTab === 'printlabel' ? 'active' : '' }}" id="printlabel-tab" data-bs-toggle="tab" data-bs-target="#printlabelPane" type="button" role="tab" aria-controls="printlabelPane" aria-selected="{{ $activeTab === 'printlabel' ? 'true' : 'false' }}">
                                 <i class="ti ti-printer me-1"></i> Print Label
                                 <span class="badge" style="background:#06b6d4;color:#fff;">{{ count($printLabelShipments) }}</span>
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="readytodispatch-tab" data-bs-toggle="tab" data-bs-target="#readytodispatchPane" type="button" role="tab" aria-controls="readytodispatchPane" aria-selected="false">
+                            <button class="nav-link {{ $activeTab === 'readytodispatch' ? 'active' : '' }}" id="readytodispatch-tab" data-bs-toggle="tab" data-bs-target="#readytodispatchPane" type="button" role="tab" aria-controls="readytodispatchPane" aria-selected="{{ $activeTab === 'readytodispatch' ? 'true' : 'false' }}">
                                 <i class="ti ti-truck me-1"></i> Ready to Dispatch
                                 <span class="badge" style="background:#f59e0b;color:#fff;">{{ count($readyToDispatchShipments) }}</span>
                             </button>
                         </li>
                         <div class="gap-2 d-flex align-items-center justify-content-end flex-wrap">
                             <a href="javascript:void(0);" 
-                            class="btn btn-icon btn-outline-light shadow" 
+                            class="btn btn-icon btn-outline-light shadow tab-refresh-btn" 
                             data-bs-toggle="tooltip" 
                             data-bs-placement="top" 
                             aria-label="Refresh" 
@@ -1097,7 +1606,7 @@
                     <div class="tab-content" id="shipmentTabContent">
 
                         <!-- ===== TAB 1: Manifested ===== -->
-                        <div class="tab-pane fade show active" id="manifestedPane" role="tabpanel" aria-labelledby="manifested-tab">
+                        <div class="tab-pane fade {{ $activeTab === 'manifested' ? 'show active' : '' }}" id="manifestedPane" role="tabpanel" aria-labelledby="manifested-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
                                     <table id="manifestedTable" class="table table-bordered table-hover">
@@ -1185,7 +1694,7 @@
                              Grouped by manifest number (one row per manifest, shipments
                              collapsed). "View" opens the manifest detail page in a new tab.
                              Each collapsed child keeps the Assign Pickup icon. -->
-                        <div class="tab-pane fade" id="readyforpickupPane" role="tabpanel" aria-labelledby="readyforpickup-tab">
+                        <div class="tab-pane fade {{ $activeTab === 'readyforpickup' ? 'show active' : '' }}" id="readyforpickupPane" role="tabpanel" aria-labelledby="readyforpickup-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
                                     <table id="readyforpickupTable" class="table table-bordered table-hover">
@@ -1317,7 +1826,7 @@
                              Grouped by manifest number (one row per manifest, same
                              layout as the Ready for Pickup tab). Action keeps the
                              existing Receive Shipment button. -->
-                        <div class="tab-pane fade" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
+                        <div class="tab-pane fade {{ $activeTab === 'assigned' ? 'show active' : '' }}" id="assignedPane" role="tabpanel" aria-labelledby="assigned-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
                                     <table id="assignedTable" class="table table-bordered table-hover">
@@ -1440,7 +1949,7 @@
                         </div>
 
                         <!-- ===== TAB 3: Print Label ===== -->
-                        <div class="tab-pane fade" id="printlabelPane" role="tabpanel" aria-labelledby="printlabel-tab">
+                        <div class="tab-pane fade {{ $activeTab === 'printlabel' ? 'show active' : '' }}" id="printlabelPane" role="tabpanel" aria-labelledby="printlabel-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
                                     <table id="printlabelTable" class="table table-bordered table-hover">
@@ -1459,29 +1968,27 @@
                                             @foreach($printLabelShipments as $index => $shipment)
                                             @php
                                                 $plPkgs = $packagesByShipper->get($shipment->shipper_id, collect());
-                                                $plBillable = 0.0; $plDead = 0.0; $plVol = 0.0;
+                                                $plBillable = 0.0;
                                                 foreach ($plPkgs as $plPkg) {
                                                     if ($plPkg->chargeable_weight !== null && $plPkg->chargeable_weight !== '') { $plBillable += (float) $plPkg->chargeable_weight; }
-                                                    if ($plPkg->actual_weight_kg !== null && $plPkg->actual_weight_kg !== '') { $plDead += (float) $plPkg->actual_weight_kg; }
-                                                    if ($plPkg->volumetric_weight !== null && $plPkg->volumetric_weight !== '') { $plVol += (float) $plPkg->volumetric_weight; }
                                                 }
                                                 $plStatus = $shipment->shipper_status ?? 'dispatched';
                                             @endphp
-                                            <tr>
+                                            <tr data-manifest-number="{{ $shipment->manifest_number ?? '' }}">
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>
                                                     <span class="badge bg-dark">{{ $shipment->awb_number ?? 'N/A' }}</span>
                                                     <div class="hawb-sub-info">
                                                         <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Destination:</span>
+                                                            <span class="hawb-sub-label">Des:</span>
                                                             <span class="hawb-sub-value">{{ $shipment->consignee_destination ?: '-' }}{{ $shipment->consignee_zip ? ' · '.$shipment->consignee_zip : '' }}</span>
                                                         </div>
                                                         <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Reference number:</span>
+                                                            <span class="hawb-sub-label">Ref No:</span>
                                                             <span class="hawb-sub-value">{{ $shipment->reference_number ?: '-' }}</span>
                                                         </div>
                                                         <div class="hawb-sub-row">
-                                                            <span class="hawb-sub-label">Invoice number:</span>
+                                                            <span class="hawb-sub-label">Inv No:</span>
                                                             <span class="hawb-sub-value">{{ $shipment->invoice_number ?: '-' }}</span>
                                                         </div>
                                                     </div>
@@ -1511,14 +2018,6 @@
                                                                 <span class="package-details-label">Billable Wt.</span>
                                                                 <span class="package-details-value">{{ $plBillable > 0 ? number_format($plBillable, 2).' kg' : '-' }}</span>
                                                             </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Dead Wt.</span>
-                                                                <span class="package-details-value">{{ $plDead > 0 ? number_format($plDead, 2).' kg' : '-' }}</span>
-                                                            </div>
-                                                            <div class="package-details-row">
-                                                                <span class="package-details-label">Vol. Wt.</span>
-                                                                <span class="package-details-value">{{ $plVol > 0 ? number_format($plVol, 2).' kg' : '-' }}</span>
-                                                            </div>
                                                         </div>
                                                     @else
                                                         <span class="text-muted">-</span>
@@ -1543,6 +2042,11 @@
                                                             <i class="ti ti-alert-triangle me-1"></i> Dispute
                                                         </button>
                                                     </div>
+                                                    <div class="mt-1">
+                                                        <button class="btn-not-received" onclick="markNotReceivedAtHub({{ $shipment->id }})">
+                                                            <i class="ti ti-package-off me-1"></i> Not Received at Hub
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                             @endforeach
@@ -1553,7 +2057,7 @@
                         </div>
 
                         <!-- ===== TAB 4: Ready to Dispatch (same table structure as Print Label) ===== -->
-                        <div class="tab-pane fade" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
+                        <div class="tab-pane fade {{ $activeTab === 'readytodispatch' ? 'show active' : '' }}" id="readytodispatchPane" role="tabpanel" aria-labelledby="readytodispatch-tab">
                             <div class="card-body">
                                 <div class="table-scroll-wrap">
                                     <table id="readytodispatchTable" class="table table-bordered table-hover">
@@ -1762,7 +2266,7 @@
                     <h5 class="modal-title" id="printLabelModalLabel">
                         <i class="ti ti-printer me-1"></i> Print Shipping Label
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="printLabelContent">
                     <!-- Loading state -->
@@ -2368,10 +2872,18 @@
                         if (response.success) {
                             showReceiveShipmentAlert(response.message, 'success');
                             $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
-                            // Reload page after a short delay to reflect changes
+                            // Yes par shipment Print Label tab me chala jata hai — usi manifest
+                            // number ke sath Print Label tab kholo taaki received shipment turant dikhe.
+                            const answeredYes = ($('input[name="received"]:checked').val() === 'yes');
+                            let manifestNo = ($('#receive_manifest_number').val() || $('#receive_manifest_display').text() || '').trim();
+                            if (manifestNo === '-') manifestNo = '';
                             setTimeout(function() {
-                                location.reload();
-                            }, 2500);
+                                if (answeredYes && manifestNo) {
+                                    window.location.href = '{{ url('/admin/companies') }}?tab=printlabel&manifest=' + encodeURIComponent(manifestNo);
+                                } else {
+                                    location.reload();
+                                }
+                            }, 1500);
                         } else {
                             showReceiveShipmentAlert(response.message || 'Something went wrong.', 'danger');
                             $btn.prop('disabled', false).html('<i class="ti ti-check me-1"></i> Submit');
@@ -3215,6 +3727,126 @@
                 }
             });
         }
+
+        /**
+         * Mark a shipment as Not Received at Hub.
+         * Confirmation popup ke OK par shipment ka status 'not_received'
+         * ho jata hai aur wo Not Received at Hub page par move ho jata hai.
+         * @param {number} shipmentId - The shipment_invoice ID
+         */
+        function markNotReceivedAtHub(shipmentId) {
+            const $btn = $(event.currentTarget);
+
+            const askConfirm = function () {
+                if (window.Swal) {
+                    Swal.fire({
+                        title: 'Mark as Not Received at Hub?',
+                        text: 'Are you sure this shipment was NOT received at the hub? It will be moved to the Not Received at Hub page.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, mark it',
+                        cancelButtonText: 'Cancel',
+                        confirmButtonColor: '#881337',
+                        reverseButtons: true
+                    }).then(function (result) {
+                        if (result.isConfirmed) {
+                            doMarkNotReceived($btn, shipmentId);
+                        }
+                    });
+                } else if (confirm('Are you sure you want to mark this shipment as Not Received at Hub?')) {
+                    doMarkNotReceived($btn, shipmentId);
+                }
+            };
+
+            if (window.Swal) {
+                askConfirm();
+            } else {
+                // SweetAlert2 on-demand load (global alerts wala CDN); fail ho to native confirm.
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+                s.onload = askConfirm;
+                s.onerror = askConfirm;
+                document.head.appendChild(s);
+            }
+        }
+
+        function doMarkNotReceived($btn, shipmentId) {
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+
+            $.ajax({
+                url: '{{ route("admin.not-received-at-hub") }}',
+                type: 'POST',
+                data: { shipment_id: shipmentId },
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showAlert(response.message, 'success', function() {
+                            // Reload page to reflect changes (shipment moves to Not Received at Hub page)
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1000);
+                        });
+                    } else {
+                        showAlert(response.message || 'Something went wrong.', 'error');
+                        $btn.prop('disabled', false).html('<i class="ti ti-package-off me-1"></i> Not Received at Hub');
+                    }
+                },
+                error: function(xhr) {
+                    let msg = 'An error occurred. Please try again.';
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        } else if (xhr.responseJSON.errors) {
+                            msg = Object.values(xhr.responseJSON.errors).flat().join('\n');
+                        }
+                    }
+                    showAlert(msg, 'error');
+                    $btn.prop('disabled', false).html('<i class="ti ti-package-off me-1"></i> Not Received at Hub');
+                }
+            });
+        }
+    </script>
+    <script>
+        // ?tab=printlabel&manifest=MUWC... deep-link: Print Label table ko usi
+        // manifest number par filter karo (row ke data-manifest-number se) +
+        // matching rows highlight karo.
+        // (Receive Shipment me Yes karne ke baad yahi URL par redirect hota hai.)
+        $(document).ready(function () {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const manifestNo = (params.get('manifest') || '').trim();
+                if (params.get('tab') !== 'printlabel' || !manifestNo) {
+                    return;
+                }
+                const table = $('#printlabelTable').DataTable();
+                const extSearch = ($.fn.dataTable && $.fn.dataTable.ext)
+                    ? $.fn.dataTable.ext.search
+                    : (window.DataTable ? DataTable.ext.search : null);
+                if (extSearch) {
+                    extSearch.push(function (settings, data, dataIndex) {
+                        if (settings.nTable && settings.nTable.id === 'printlabelTable') {
+                            let node = null;
+                            try {
+                                node = table.row(dataIndex).node();
+                            } catch (e) { node = null; }
+                            const m = node ? (node.getAttribute('data-manifest-number') || '') : '';
+                            return m === manifestNo;
+                        }
+                        return true;
+                    });
+                }
+                table.on('draw', function () {
+                    $('#printlabelTable tbody tr').addClass('manifest-match');
+                });
+                table.draw();
+                const content = document.getElementById('shipmentTabContent');
+                if (content) {
+                    content.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } catch (e) { /* table ready nahi to silently skip */ }
+        });
     </script>
 
 </body>

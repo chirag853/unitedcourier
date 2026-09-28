@@ -18,6 +18,7 @@ class CsbInformation extends Model
         'bond_ut_igst',
         'lut_number',
         'iec_code',
+        'inv_terms',
         'gst_number',
         'ad_code',
         'bank_account_number',

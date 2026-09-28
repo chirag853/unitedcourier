@@ -7697,7 +7697,7 @@
                                                                     <label class="form-label">Invoice Date</label>
                                                                     <input type="date" class="form-control"
                                                                         name="invoice_date" value="{{ old('invoice_date') }}"
-                                                                        min="{{ now()->toDateString() }}">
+                                                                        max="{{ now()->toDateString() }}">
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
@@ -10895,8 +10895,8 @@
             if (invoiceDate?.value) {
                 const today = new Date();
                 const todayString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                if (invoiceDate.value < todayString) {
-                    addError(invoiceDate, 'Invoice date must be today or a future date.', 'access-info');
+                if (invoiceDate.value > todayString) {
+                    addError(invoiceDate, 'Invoice date must be today or a past date.', 'access-info');
                 }
             }
             const invoiceAmount = form.querySelector('[name="invoice_amount"]');
