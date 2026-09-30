@@ -1839,6 +1839,7 @@
                                                 <th>Total Value</th>
                                                 <th>Total Weight</th>
                                                 <th>Pickup Date</th>
+                                                <th>Delivery Type</th>
                                                 <th>Action</th>
                                             </tr>
                                         </thead>
@@ -1869,7 +1870,28 @@
                                                 <td style="font-weight:600;color:#0f172a;">
                                                     {{ $manifest->pickup_date ? \Carbon\Carbon::parse($manifest->pickup_date)->format('d-m-Y') : '-' }}
                                                 </td>
+                                                <td>
+                                                    @if(!empty($manifest->delivery_type))
+                                                        <span class="badge {{ strtolower(trim($manifest->delivery_type)) === 'self' ? 'bg-warning text-dark' : 'bg-info' }}">{{ $manifest->delivery_type }}</span>
+                                                    @else
+                                                        <span class="text-muted">-</span>
+                                                    @endif
+                                                </td>
                                                 <td class="table-actions">
+                                                    @php
+                                                        $printableShipments = collect($manifest->shipments)->filter(function ($s) {
+                                                            return strtolower(trim($s['manifest_delivery_type'] ?? $s['delivery_type'] ?? '')) !== 'self' && !empty($s['delivery_label']);
+                                                        })->values();
+                                                    @endphp
+                                                    @if($printableShipments->isNotEmpty())
+                                                        <button type="button" class="btn btn-sm btn-outline-primary btn-icon"
+                                                                data-bs-toggle="modal" data-bs-target="#printLabelsModal"
+                                                                data-manifest="{{ $manifest->manifest_number ?? 'N/A' }}"
+                                                                data-labels='@json($printableShipments->map(fn($s) => ['awb' => $s['awb_number'], 'label' => $s['delivery_label']])->values())'
+                                                                title="Print Labels ({{ $printableShipments->count() }})">
+                                                            <i class="ti ti-printer"></i>
+                                                        </button>
+                                                    @endif
                                                     @if(!empty($manifest->shipments))
                                                     <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment (whole manifest: {{ $manifest->shipment_count }} shipment(s))" onclick="openReceiveBulkShipment('{{ addslashes($manifest->manifest_number ?? '') }}', {{ (int) $manifest->shipment_count }})">
                                                         <i class="ti ti-package"></i>
@@ -1933,6 +1955,14 @@
                                                         @endif
                                                     </td>
                                                     <td class="table-actions">
+                                                        @if(strtolower(trim($shipment['manifest_delivery_type'] ?? $shipment['delivery_type'] ?? '')) !== 'self' && !empty($shipment['delivery_label']))
+                                                            <a href="{{ $shipment['delivery_label'] }}"
+                                                               target="_blank"
+                                                               class="btn btn-sm btn-outline-primary btn-icon"
+                                                               title="Print Label ({{ $shipment['awb_number'] }})">
+                                                                <i class="ti ti-printer"></i>
+                                                            </a>
+                                                        @endif
                                                         <button class="btn btn-sm btn-outline-success btn-icon" title="Receive Shipment"
                                                                 onclick="openReceiveShipment({{ $shipment['id'] }}, '{{ $manifest->manifest_number ?? '' }}')">
                                                             <i class="ti ti-package"></i>
@@ -1945,6 +1975,30 @@
                                     </div>
                                 </template>
                                 @endforeach
+                            </div>
+                        </div>
+
+                        <!-- Manifest labels modal: ek Print button ke ander saare shipment labels -->
+                        <div class="modal fade" id="printLabelsModal" tabindex="-1" aria-labelledby="printLabelsModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <div>
+                                            <h5 class="modal-title" id="printLabelsModalLabel">Manifest Labels</h5>
+                                            <small class="text-muted">Manifest <span id="printLabelsManifestNo" class="fw-semibold">-</span> ke shipment labels</small>
+                                        </div>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div id="printLabelsList" class="d-flex flex-column gap-2"></div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                                        <button type="button" class="btn btn-primary" id="openAllLabelsButton">
+                                            <i class="ti ti-printer me-1"></i>Open All
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -2610,7 +2664,7 @@
                 scrollY: '60vh',
                 scrollCollapse: true,
                 columnDefs: [
-                    { orderable: false, targets: 7 },
+                    { orderable: false, targets: 8 },
                     { defaultContent: '-', targets: '_all' }
                 ],
                 language: {
@@ -2643,6 +2697,46 @@
                     tr.addClass('shown');
                     icon.removeClass('ti-chevron-down').addClass('ti-chevron-up');
                 }
+            });
+
+            // Manifest labels modal: button ke data-labels (JSON) se list banao.
+            let currentManifestLabels = [];
+            const printLabelsModal = document.getElementById('printLabelsModal');
+            printLabelsModal?.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                currentManifestLabels = [];
+                try {
+                    const parsed = JSON.parse(button.dataset.labels || '[]');
+                    if (Array.isArray(parsed)) currentManifestLabels = parsed;
+                } catch (e) { currentManifestLabels = []; }
+                document.getElementById('printLabelsManifestNo').textContent = button.dataset.manifest || '-';
+                const list = document.getElementById('printLabelsList');
+                list.innerHTML = '';
+                if (!currentManifestLabels.length) {
+                    list.innerHTML = '<div class="text-muted text-center py-3">No labels available.</div>';
+                    return;
+                }
+                currentManifestLabels.forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = 'd-flex align-items-center justify-content-between gap-3 border rounded px-3 py-2';
+                    const awb = document.createElement('span');
+                    awb.className = 'badge bg-dark';
+                    awb.textContent = item.awb || '-';
+                    const openBtn = document.createElement('a');
+                    openBtn.className = 'btn btn-sm btn-outline-primary';
+                    openBtn.href = item.label || '#';
+                    openBtn.target = '_blank';
+                    openBtn.rel = 'noopener';
+                    openBtn.innerHTML = '<i class="ti ti-printer me-1"></i>Open Label';
+                    row.appendChild(awb);
+                    row.appendChild(openBtn);
+                    list.appendChild(row);
+                });
+            });
+            document.getElementById('openAllLabelsButton')?.addEventListener('click', () => {
+                currentManifestLabels.forEach(item => {
+                    if (item.label) window.open(item.label, '_blank', 'noopener');
+                });
             });
 
             $('#printlabelTable').DataTable({

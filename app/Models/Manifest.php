@@ -74,6 +74,10 @@ class Manifest extends Model
         'customer_id',
         'status',
         'pickup_date',
+        'delivery_type',
+        'assigned_delivery_person',
+        'delivery_label',
+        'delhivery_pickup_id',
     ];
 
     /**
@@ -86,6 +90,7 @@ class Manifest extends Model
         'customer_id' => 'integer',
         'status'      => 'integer',
         'pickup_date' => 'date:Y-m-d',
+        'assigned_delivery_person' => 'integer',
     ];
 
     /**
@@ -102,6 +107,14 @@ class Manifest extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    /**
+     * Get the delivery person assigned for Self delivery.
+     */
+    public function deliveryPerson()
+    {
+        return $this->belongsTo(Admin::class, 'assigned_delivery_person');
     }
 
     /**

@@ -31,6 +31,7 @@ class ShipperInfo extends Model
         'kyc_number',
         'service_rate_id',
         'service_id',
+        'warehouse_address_id',
         'status',
         'custom_label',
         'base_price',
@@ -100,6 +101,14 @@ class ShipperInfo extends Model
     public function serviceRate()
     {
         return $this->belongsTo(CourierRate::class, 'service_rate_id');
+    }
+
+    /**
+     * Get the warehouse selected at order creation for Delhivery pickup.
+     */
+    public function warehouseAddress()
+    {
+        return $this->belongsTo(WarehouseAddress::class, 'warehouse_address_id');
     }
 
     /**

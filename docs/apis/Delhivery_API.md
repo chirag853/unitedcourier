@@ -90,13 +90,13 @@ Decoded `data` JSON:
 }
 ```
 
-Payload sources:
+Payload sources (pickup = shipper warehouse, drop = Delhi hub):
 
 | Field | Source |
 | --- | --- |
+| shipment drop (`name`/`add`/`pin`/`city`/`state`/`phone`) | `services.delhivery` hub block (`DELHIVERY_HUB_*`, default Delhi 110037) |
+| `pickup_location.name` | `warehouse_addresses.name` — shipper pin/city auto-match; no match = hub fallback (`DELHIVERY_PICKUP_LOCATION`) |
 | shipment invoice | `shipment_invoice` |
-| shipper details | `shipper_info` |
-| consignee details | `consignee_info` |
 | package dimensions | `package_dimension` |
 | product description | `shipment_invoice_items.description` |
 

@@ -270,6 +270,26 @@ return [
         'client' => env('DELHIVERY_CLIENT', ''),
         'waybill_prefetch' => filter_var(env('DELHIVERY_WAYBILL_PREFETCH', true), FILTER_VALIDATE_BOOLEAN),
         'waybill_timeout' => (int) env('DELHIVERY_WAYBILL_TIMEOUT', 15),
+        // Packing slip: CMU create ke baad har waybill ke liye hit hota hai;
+        // pdf_download_link (packages[] ke ander) manifests.delivery_label me save hota hai.
+        'packing_slip_url' => env('DELHIVERY_PACKING_SLIP_URL', 'https://track.delhivery.com/api/p/packing_slip'),
+        'packing_slip_pdf_size' => env('DELHIVERY_PACKING_SLIP_SIZE', '4x6'),
+        // FM pickup request: CMU create ke baad ek baar hit hota hai.
+        // (FM pickup id store nahi hota; manifests.delhivery_pickup_id me waybill rehta hai.)
+        'fm_pickup_url' => env('DELHIVERY_FM_PICKUP_URL', 'https://track.delhivery.com/fm/request/new/'),
+        'pickup_time' => env('DELHIVERY_PICKUP_TIME', '11:00:00'),
+        // Hub drop address: Delhivery CMU me shipments[] (drop) isi se bharta hai.
+        // Exact values .env me set karo (screenshot: Delhi - 110037).
+        'hub_name' => env('DELHIVERY_HUB_NAME', 'ac549e-UNITEDWORLDWIDECOURI-do'),
+        'hub_address' => env('DELHIVERY_HUB_ADDRESS', 'BUILDING NO. 1, BYPASS ROAD'),
+        'hub_pin' => env('DELHIVERY_HUB_PIN', '110037'),
+        'hub_city' => env('DELHIVERY_HUB_CITY', 'Delhi'),
+        'hub_state' => env('DELHIVERY_HUB_STATE', 'Delhi'),
+        'hub_phone' => env('DELHIVERY_HUB_PHONE', ''),
+        // Client warehouse create: customer ke Add Warehouse par hit hota hai.
+        'warehouse_create_url' => env('DELHIVERY_WAREHOUSE_CREATE_URL', 'https://track.delhivery.com/api/backend/clientwarehouse/create/'),
+        // Client warehouse edit: customer ke Update Warehouse par hit hota hai (name/phone/address).
+        'warehouse_edit_url' => env('DELHIVERY_WAREHOUSE_EDIT_URL', 'https://track.delhivery.com/api/backend/clientwarehouse/edit/'),
     ],
 
 ];

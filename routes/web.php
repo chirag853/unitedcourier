@@ -87,7 +87,9 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         Route::get('/delivery-dashboard-chart-data', [AdminController::class, 'deliveryDashboardChartData'])->name('admin.delivery-dashboard-chart-data');
         Route::get('/delivery-orders', [AdminController::class, 'deliveryOrders'])->name('admin.delivery-orders');
         Route::post('/pickup-delivery', [AdminController::class, 'pickupDelivery'])->name('admin.pickup-delivery');
+        Route::post('/pickup-manifest', [AdminController::class, 'pickupManifest'])->name('admin.pickup-manifest');
         Route::post('/received-in-hub', [AdminController::class, 'receivedInHub'])->name('admin.received-in-hub');
+        Route::post('/received-manifest', [AdminController::class, 'receivedManifest'])->name('admin.received-manifest');
         Route::get('/notifications-data', [AdminController::class, 'notificationsData'])->name('admin.notifications.data');
         Route::patch('/notifications/read-all', [AdminController::class, 'markAllNotificationsRead'])->name('admin.notifications.read-all');
         Route::delete('/notifications/clear', [AdminController::class, 'clearNotifications'])->name('admin.notifications.clear');
@@ -709,6 +711,9 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
         'enableExporterCustomerCsb5'])->name('exporter-customers.enable-csb5');
     Route::get('/exporter-customers/{id}', [CustomerController::class,
         'showExporterCustomer'])->name('exporter-customers.show');
+    Route::get('/warehouse-addresses', [CustomerController::class, 'warehouseAddresses'])->name('warehouse-addresses');
+    Route::post('/warehouse-addresses', [CustomerController::class, 'storeWarehouseAddress'])->name('warehouse-addresses.store');
+    Route::put('/warehouse-addresses/{id}', [CustomerController::class, 'updateWarehouseAddress'])->name('warehouse-addresses.update');
     Route::post('/verify-exporter-customer-aadhar', [KycController::class, 'verifyExporterCustomerAadhar'])->name('verify.exporter-customer-aadhar');
     Route::post('/verify-exporter-customer-pan', [KycController::class, 'verifyExporterCustomerPan'])->name('verify.exporter-customer-pan');
     Route::get('/create-shipment', [CustomerController::class, 'createShipment'])->name('create-shipment');

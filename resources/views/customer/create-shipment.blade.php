@@ -467,11 +467,23 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Address Line 1 <span
+                                                                <label class="form-label" for="warehouseSelect">Address Line 1 <span
                                                                         class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control"
-                                                                    name="shipper_address_line1" value="{{ old('shipper_address_line1') }}"
-                                                                    placeholder="Address Line 1">
+                                                                @if($warehouses->isNotEmpty())
+                                                                    <select class="form-select" id="warehouseSelect" name="selected_warehouse_id">
+                                                                        <option value="">-- Select Warehouse Address --</option>
+                                                                        @foreach($warehouses as $warehouse)
+                                                                            <option value="{{ $warehouse->id }}" {{ (string) old('selected_warehouse_id') === (string) $warehouse->id ? 'selected' : '' }}>
+                                                                                {{ $warehouse->address ?: $warehouse->name }}{{ $warehouse->city ? ' (' . $warehouse->city . ($warehouse->pin ? ', ' . $warehouse->pin : '') . ')' : '' }}
+                                                                            </option>
+                                                                        @endforeach
+                                                                    </select>
+                                                                    <input type="hidden" name="shipper_address_line1" value="{{ old('shipper_address_line1') }}">
+                                                                @else
+                                                                    <input type="text" class="form-control"
+                                                                        name="shipper_address_line1" value="{{ old('shipper_address_line1') }}"
+                                                                        placeholder="Address Line 1">
+                                                                @endif
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -10488,6 +10500,35 @@
                 jQuery(exporterCustomerAddressSelect).on('change', applySelectedExporterCustomerAddress);
             } else {
                 exporterCustomerAddressSelect.addEventListener('change', applySelectedExporterCustomerAddress);
+            }
+        }
+
+        // Warehouse dropdown: shipper info ke address wale fields bharta hai.
+        // (Contact person/state warehouse me nahi hote, wo manual rahenge.)
+        const warehouseSelect = document.getElementById('warehouseSelect');
+        const warehouseData = @json($warehousesMap);
+        function applySelectedWarehouse() {
+            if (!warehouseSelect) return;
+            const selectedWarehouse = warehouseData[String(warehouseSelect.value || '')];
+            if (!selectedWarehouse) return;
+
+            setField('shipper_company_names', selectedWarehouse.registered_name || selectedWarehouse.name || '');
+            setField('shipper_address_line1', selectedWarehouse.address || '');
+            setField('shipper_pincode', selectedWarehouse.pin || '');
+            setField('shipper_city', selectedWarehouse.city || '');
+            setField('shipper_phone_number', selectedWarehouse.phone || '');
+            setField('shipper_emails', selectedWarehouse.email || '');
+
+            if (sameAsCustomer) {
+                sameAsCustomer.checked = false;
+            }
+        }
+        if (warehouseSelect) {
+            warehouseSelect.addEventListener('change', applySelectedWarehouse);
+
+            // Validation redirect ke baad purani selection dobara lagao.
+            if (warehouseSelect.value) {
+                setTimeout(applySelectedWarehouse, 0);
             }
         }
 

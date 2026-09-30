@@ -157,13 +157,13 @@
                 <div class="card-header d-flex align-items-center justify-content-between gap-3 flex-wrap">
                     <div>
                         <h6 class="mb-1">{{ $currentView['title'] }}</h6>
-                        <small class="text-muted">{{ $deliveries->total() }} {{ \Illuminate\Support\Str::plural('record', $deliveries->total()) }} found</small>
+                        <small class="text-muted">{{ $manifestGroups->count() }} {{ \Illuminate\Support\Str::plural('manifest', $manifestGroups->count()) }} · {{ $shipmentCount }} {{ \Illuminate\Support\Str::plural('shipment', $shipmentCount) }} found</small>
                     </div>
                     <form method="GET" action="{{ route('admin.delivery-orders') }}" class="d-flex align-items-center gap-2 flex-wrap">
                         <input type="hidden" name="view" value="{{ $view }}">
                         <div class="input-group" style="min-width: 280px;">
                             <span class="input-group-text bg-white"><i class="ti ti-search"></i></span>
-                            <input type="search" name="search" value="{{ $search }}" class="form-control" placeholder="Search AWB, invoice, customer..." aria-label="Search deliveries">
+                            <input type="search" name="search" value="{{ $search }}" class="form-control" placeholder="Search AWB, manifest, invoice, customer..." aria-label="Search deliveries">
                         </div>
                         <button type="submit" class="btn btn-primary">Search</button>
                         @if($search !== '')
@@ -176,17 +176,74 @@
                         <table class="table table-hover align-middle mb-0">
                             <thead>
                             <tr>
-                                <th>AWB / Invoice</th>
-                                <th>Pickup Name & Address</th>
-                                <th>Delivery Name & Address</th>
+                                <th style="width:40px;">#</th>
+                                <th>Manifest No.</th>
+                                <th>Order Date</th>
+                                <th>Shipments</th>
                                 <th>Delivery Type</th>
-                                <th>Status</th>
                                 <th>Assigned / Updated</th>
-                                @if(in_array($view, ['pending', 'process_pickup'], true))<th class="text-end">Action</th>@endif
+                                <th class="text-end">Shipments Detail</th>
                             </tr>
                             </thead>
                             <tbody>
-                            @forelse($deliveries as $delivery)
+                            @forelse($manifestGroups as $index => $manifest)
+                                <tr class="manifest-group-row">
+                                    <td>{{ $index + 1 }}</td>
+                                    <td>
+                                        <span class="badge bg-dark" style="font-size:12px;">{{ $manifest->manifest_number ?? 'N/A' }}</span>
+                                    </td>
+                                    <td style="white-space:nowrap;">
+                                        {{ $manifest->manifest_created_at ? \Carbon\Carbon::parse($manifest->manifest_created_at)->format('d-m-Y') : '-' }}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ $manifest->shipment_count }}</span>
+                                    </td>
+                                    <td>{{ $manifest->delivery_type ? ucfirst(str_replace('_', ' ', $manifest->delivery_type)) : '-' }}</td>
+                                    <td>{{ $manifest->latest_assigned_at ? \Carbon\Carbon::parse($manifest->latest_assigned_at)->format('d M Y, h:i A') : '-' }}</td>
+                                    <td class="text-end" style="white-space:nowrap;">
+                                        @if($view === 'pending' && $manifest->pickup_eligible_count > 0)
+                                            <button type="button" class="btn btn-sm btn-primary pickup-manifest-btn me-1"
+                                                    data-bs-toggle="modal" data-bs-target="#pickupManifestModal"
+                                                    data-manifest="{{ $manifest->manifest_number ?? 'N/A' }}"
+                                                    data-count="{{ $manifest->pickup_eligible_count }}"
+                                                    data-shipment-ids="{{ $manifest->shipments->where('status', 'assigned_for_pickup')->pluck('id')->implode(',') }}"
+                                                    data-awbs="{{ $manifest->shipments->where('status', 'assigned_for_pickup')->pluck('awb_number')->filter()->implode(', ') }}">
+                                                <i class="ti ti-package-import me-1"></i>Pickup ({{ $manifest->pickup_eligible_count }})
+                                            </button>
+                                        @endif
+                                        @if($view === 'process_pickup' && $manifest->hub_eligible_count > 0)
+                                            <button type="button" class="btn btn-sm btn-success received-manifest-btn me-1"
+                                                    data-bs-toggle="modal" data-bs-target="#receivedManifestModal"
+                                                    data-manifest="{{ $manifest->manifest_number ?? 'N/A' }}"
+                                                    data-count="{{ $manifest->hub_eligible_count }}"
+                                                    data-shipment-ids="{{ $manifest->shipments->where('status', 'confirm_pickup')->pluck('id')->implode(',') }}"
+                                                    data-awbs="{{ $manifest->shipments->where('status', 'confirm_pickup')->pluck('awb_number')->filter()->implode(', ') }}">
+                                                <i class="ti ti-building-warehouse me-1"></i>Received ({{ $manifest->hub_eligible_count }})
+                                            </button>
+                                        @endif
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-icon manifest-toggle"
+                                                data-target="manifest-shipments-{{ $index }}" title="View Shipments">
+                                            <i class="ti ti-chevron-down"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr class="manifest-shipments" id="manifest-shipments-{{ $index }}" style="display:none;">
+                                    <td colspan="7" class="p-0">
+                                        <div class="p-3 bg-light">
+                                            <table class="table table-sm table-bordered bg-white mb-0">
+                                                <thead class="table-light">
+                                                <tr>
+                                                    <th>AWB / Invoice</th>
+                                                    <th>Pickup Name & Address</th>
+                                                    <th>Delivery Name & Address</th>
+                                                    <th>Delivery Type</th>
+                                                    <th>Status</th>
+                                                    <th>Assigned / Updated</th>
+                                                    @if(in_array($view, ['pending', 'process_pickup'], true))<th class="text-end">Action</th>@endif
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                @foreach($manifest->shipments as $delivery)
                                 @php
                                     $statusTitle = $statusMap[$delivery->status] ?? ucfirst(str_replace('_', ' ', $delivery->status));
                                     $badgeClass = match($delivery->status) {
@@ -264,9 +321,15 @@
                                         </td>
                                     @endif
                                 </tr>
+                                                @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ in_array($view, ['pending', 'process_pickup'], true) ? 7 : 6 }}" class="text-center text-muted py-5">
+                                    <td colspan="7" class="text-center text-muted py-5">
                                         <i class="ti ti-package-off fs-30 d-block mb-2"></i>
                                         @if($search !== '')
                                             No deliveries match your search.
@@ -280,11 +343,6 @@
                         </table>
                     </div>
                 </div>
-                @if($deliveries->hasPages())
-                    <div class="card-footer d-flex justify-content-end">
-                        {{ $deliveries->links() }}
-                    </div>
-                @endif
             </div>
         </div>
     </div>
@@ -319,7 +377,7 @@
                         <div class="border rounded p-3 h-100">
                             <h6 class="text-success"><i class="ti ti-map-pin-check me-1"></i>Delivery Details</h6>
                             <div class="pickup-detail-label">Delivery Name</div><div class="pickup-detail-value mb-2" id="modalDeliveryName">-</div>
-                            <div class="pickup-detail-label">Complete Address</div><div class="pickup-detail-value mb-2" id="modalDeliveryAddress">Building A-219, First Floor, Road No. 5, Mahipalpur Extension, New Delhi 110037</div>
+                            <div class="pickup-detail-label">Complete Address</div><div class="pickup-detail-value mb-2" id="modalDeliveryAddress">Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037</div>
                             <div class="pickup-detail-label">Phone Number</div><div class="pickup-detail-value" id="modalDeliveryPhone">-</div>
                         </div>
                     </div>
@@ -329,6 +387,34 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">No</button>
                 <button type="button" class="btn btn-primary" id="confirmPickupButton"><i class="ti ti-check me-1"></i>Yes, Confirm Pickup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="pickupManifestModal" tabindex="-1" aria-labelledby="pickupManifestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="pickupManifestModalLabel">Confirm Manifest Pickup</h5>
+                    <small class="text-muted">Poore manifest ki saari pending shipments ek saath pickup hogi.</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pickupManifestAlert" class="alert d-none" role="alert"></div>
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6"><div class="pickup-detail-label">Manifest No.</div><div class="pickup-detail-value" id="manifestModalNumber">-</div></div>
+                    <div class="col-sm-6"><div class="pickup-detail-label">Shipments</div><div class="pickup-detail-value" id="manifestModalCount">-</div></div>
+                </div>
+                <div class="pickup-detail-label">AWB Numbers</div>
+                <div class="pickup-detail-value" id="manifestModalAwbs">-</div>
+                <div class="alert alert-warning mt-3 mb-0"><i class="ti ti-alert-triangle me-1"></i>Do you want to confirm pickup for all these shipments and move them to In Process?</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">No</button>
+                <button type="button" class="btn btn-primary" id="confirmPickupManifestButton"><i class="ti ti-check me-1"></i>Yes, Pickup All</button>
             </div>
         </div>
     </div>
@@ -371,11 +457,59 @@
     </div>
 </div>
 
+<div class="modal fade" id="receivedManifestModal" tabindex="-1" aria-labelledby="receivedManifestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="receivedManifestModalLabel">Manifest Received in Hub</h5>
+                    <small class="text-muted">Poore manifest ki saari Process Pickup shipments ek saath hub me receive hogi.</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="receivedManifestAlert" class="alert d-none" role="alert"></div>
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6"><div class="pickup-detail-label">Manifest No.</div><div class="pickup-detail-value" id="receivedManifestNumber">-</div></div>
+                    <div class="col-sm-6"><div class="pickup-detail-label">Shipments</div><div class="pickup-detail-value" id="receivedManifestCount">-</div></div>
+                </div>
+                <div class="pickup-detail-label">AWB Numbers</div>
+                <div class="pickup-detail-value" id="receivedManifestAwbs">-</div>
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="ti ti-alert-triangle me-1"></i>
+                    Has this whole manifest been received in the hub?
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">No</button>
+                <button type="button" class="btn btn-success" id="confirmReceivedManifestButton">
+                    <i class="ti ti-check me-1"></i>Yes, Received in Hub
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ asset('js/jquery-3.7.1.min.js') }}"></script>
 <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}"></script>
 <script src="{{ asset('assets/js/script.js') }}"></script>
 <script>
+    // Expand / collapse manifest shipment details (admin panel jaisa grouping)
+    document.querySelectorAll('.manifest-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.target);
+            if (!target) return;
+            const icon = btn.querySelector('i');
+            const isHidden = target.style.display === 'none';
+            target.style.display = isHidden ? '' : 'none';
+            if (icon) {
+                icon.classList.toggle('ti-chevron-down', !isHidden);
+                icon.classList.toggle('ti-chevron-up', isHidden);
+            }
+        });
+    });
+
     const pickupModal = document.getElementById('pickupConfirmationModal');
     const confirmPickupButton = document.getElementById('confirmPickupButton');
     const pickupModalAlert = document.getElementById('pickupModalAlert');
@@ -469,6 +603,100 @@
             receivedInHubAlert.textContent = error.message;
             confirmReceivedInHubButton.disabled = false;
             confirmReceivedInHubButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Received in Hub';
+        }
+    });
+
+    // Whole-manifest pickup: ek click me manifest ki saari pending shipments.
+    const pickupManifestModal = document.getElementById('pickupManifestModal');
+    const confirmPickupManifestButton = document.getElementById('confirmPickupManifestButton');
+    const pickupManifestAlert = document.getElementById('pickupManifestAlert');
+    let selectedManifestShipmentIds = [];
+
+    pickupManifestModal?.addEventListener('show.bs.modal', event => {
+        const button = event.relatedTarget;
+        selectedManifestShipmentIds = (button.dataset.shipmentIds || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        document.getElementById('manifestModalNumber').textContent = button.dataset.manifest || '-';
+        document.getElementById('manifestModalCount').textContent = button.dataset.count || '-';
+        document.getElementById('manifestModalAwbs').textContent = button.dataset.awbs || '-';
+        pickupManifestAlert.className = 'alert d-none';
+        pickupManifestAlert.textContent = '';
+        confirmPickupManifestButton.disabled = false;
+        confirmPickupManifestButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Pickup All';
+    });
+
+    confirmPickupManifestButton?.addEventListener('click', async () => {
+        if (!selectedManifestShipmentIds.length) return;
+        confirmPickupManifestButton.disabled = true;
+        confirmPickupManifestButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+        try {
+            const response = await fetch('{{ route('admin.pickup-manifest') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({ shipment_ids: selectedManifestShipmentIds })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Unable to confirm manifest pickup.');
+
+            pickupManifestAlert.className = 'alert alert-success';
+            pickupManifestAlert.textContent = data.message;
+            setTimeout(() => window.location.reload(), 900);
+        } catch (error) {
+            pickupManifestAlert.className = 'alert alert-danger';
+            pickupManifestAlert.textContent = error.message;
+            confirmPickupManifestButton.disabled = false;
+            confirmPickupManifestButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Pickup All';
+        }
+    });
+
+    // Whole-manifest received in hub: ek click me manifest ki saari Process Pickup shipments.
+    const receivedManifestModal = document.getElementById('receivedManifestModal');
+    const confirmReceivedManifestButton = document.getElementById('confirmReceivedManifestButton');
+    const receivedManifestAlert = document.getElementById('receivedManifestAlert');
+    let selectedReceivedManifestShipmentIds = [];
+
+    receivedManifestModal?.addEventListener('show.bs.modal', event => {
+        const button = event.relatedTarget;
+        selectedReceivedManifestShipmentIds = (button.dataset.shipmentIds || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        document.getElementById('receivedManifestNumber').textContent = button.dataset.manifest || '-';
+        document.getElementById('receivedManifestCount').textContent = button.dataset.count || '-';
+        document.getElementById('receivedManifestAwbs').textContent = button.dataset.awbs || '-';
+        receivedManifestAlert.className = 'alert d-none';
+        receivedManifestAlert.textContent = '';
+        confirmReceivedManifestButton.disabled = false;
+        confirmReceivedManifestButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Received in Hub';
+    });
+
+    confirmReceivedManifestButton?.addEventListener('click', async () => {
+        if (!selectedReceivedManifestShipmentIds.length) return;
+        confirmReceivedManifestButton.disabled = true;
+        confirmReceivedManifestButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...';
+
+        try {
+            const response = await fetch('{{ route('admin.received-manifest') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({ shipment_ids: selectedReceivedManifestShipmentIds })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Unable to update manifest status.');
+
+            receivedManifestAlert.className = 'alert alert-success';
+            receivedManifestAlert.textContent = data.message;
+            setTimeout(() => window.location.reload(), 900);
+        } catch (error) {
+            receivedManifestAlert.className = 'alert alert-danger';
+            receivedManifestAlert.textContent = error.message;
+            confirmReceivedManifestButton.disabled = false;
+            confirmReceivedManifestButton.innerHTML = '<i class="ti ti-check me-1"></i>Yes, Received in Hub';
         }
     });
 </script>

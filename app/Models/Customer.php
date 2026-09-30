@@ -98,4 +98,12 @@ class Customer extends Authenticatable
     {
         return $this->hasMany(ExporterCustomer::class, 'exporter_id');
     }
+
+    /**
+     * Get the warehouse addresses owned by this customer.
+     */
+    public function warehouseAddresses()
+    {
+        return $this->hasMany(WarehouseAddress::class, 'customer_id');
+    }
 }

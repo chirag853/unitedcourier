@@ -28,6 +28,7 @@ use App\Models\SurCharge;
 use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Models\WarehouseAddress;
 use App\Models\Zone;
 use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
@@ -57,6 +58,18 @@ use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
+    /**
+     * Sentinel jab Delhivery edit API bole warehouse exists hi nahi karta —
+     * caller tab create API se sync karta hai.
+     */
+    private const DELHIVERY_WAREHOUSE_NOT_FOUND = '__WAREHOUSE_NOT_FOUND__';
+
+    /**
+     * Sentinel jab Delhivery bole warehouse name already exists karta hai —
+     * caller tab user ko "already exists" message dikhata hai.
+     */
+    private const DELHIVERY_WAREHOUSE_ALREADY_EXISTS = '__WAREHOUSE_ALREADY_EXISTS__';
+
     public function login()
     {
         return view('customer.login');
@@ -1782,6 +1795,342 @@ class CustomerController extends Controller
         ]);
     }
 
+    /**
+     * Warehouse address list page (customer sidebar).
+     */
+    public function warehouseAddresses()
+    {
+        $customer = auth()->guard('customer')->user();
+        if (! $customer) {
+            return redirect()->route('login');
+        }
+
+        $warehouses = $customer->warehouseAddresses()
+            ->orderByDesc('id')
+            ->get();
+
+        return view('customer.warehouse-addresses', compact('warehouses'));
+    }
+
+    /**
+     * Store a new warehouse address for the logged-in customer.
+     */
+    public function storeWarehouseAddress(Request $request)
+    {
+        $customer = auth()->guard('customer')->user();
+        if (! $customer) {
+            return redirect()->route('login');
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:150',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:150',
+            'address' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:100',
+            'state' => 'nullable|string|max:100',
+            'pin' => 'nullable|string|max:20',
+            'country' => 'nullable|string|max:100',
+            'registered_name' => 'nullable|string|max:150',
+            'return_address' => 'nullable|string|max:255',
+            'return_pin' => 'nullable|string|max:20',
+            'return_city' => 'nullable|string|max:100',
+            'return_state' => 'nullable|string|max:100',
+            'return_country' => 'nullable|string|max:100',
+        ]);
+
+        $warehouse = $customer->warehouseAddresses()->create($validated);
+
+        // Delhivery client warehouse create API hit karo (same payload).
+        $delhiveryNote = $this->createDelhiveryWarehouse($validated);
+
+        if ($delhiveryNote === null) {
+            return redirect()->route('customer.warehouse-addresses')
+                ->with('success', 'Warehouse address added successfully');
+        }
+
+        // Delhivery bola naam already exists hai (XML: success=False + "already exists")
+        // to abhi bana hua record hata kar user ko friendly message dikhao.
+        if ($delhiveryNote === self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS) {
+            $warehouse->delete();
+
+            return redirect()->route('customer.warehouse-addresses')
+                ->with('error', 'This warehouse address already exists.');
+        }
+
+        return redirect()->route('customer.warehouse-addresses')
+            ->with('success', 'Warehouse address saved locally, Delhivery sync pending: ' . $delhiveryNote);
+    }
+
+    /**
+     * Delhivery warehouse API ka raw body (JSON ya XML) parse karo.
+     *
+     * Returns: [isSuccess(bool), message(string), isAlreadyExists(bool), isNotFound(bool)]
+     * Delhivery aksar XML deta hai: <root><success>False</success><error><list-item>... already exists ...</list-item></error></root>
+     */
+    private function parseDelhiveryWarehouseBody(string $rawBody): array
+    {
+        $rawBody = trim($rawBody);
+        if ($rawBody === '') {
+            return [true, '', false, false];
+        }
+
+        $combinedText = $rawBody;
+        $success = null;
+        $message = '';
+
+        // 1) JSON try karo.
+        $decoded = json_decode($rawBody, true);
+        if (is_array($decoded)) {
+            if (array_key_exists('success', $decoded)) {
+                $success = filter_var($decoded['success'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                if ($success === null) {
+                    $success = (bool) $decoded['success'];
+                }
+            }
+            $msg = $decoded['message'] ?? $decoded['error'] ?? '';
+            if (is_array($msg)) {
+                $msg = implode(', ', array_map(static function ($v) {
+                    return is_array($v) ? implode(', ', $v) : (string) $v;
+                }, $msg));
+            }
+            $message = (string) $msg;
+            $combinedText = $rawBody . ' ' . $message;
+        } elseif (str_starts_with(ltrim($rawBody), '<')) {
+            // 2) XML try karo.
+            libxml_use_internal_errors(true);
+            $xml = simplexml_load_string($rawBody);
+            if ($xml !== false) {
+                $successRaw = strtolower(trim((string) ($xml->success ?? '')));
+                if ($successRaw !== '') {
+                    $success = ! in_array($successRaw, ['false', '0', 'no'], true);
+                }
+                $parts = [];
+                if (isset($xml->data->message)) {
+                    $parts[] = trim((string) $xml->data->message);
+                }
+                if (isset($xml->error)) {
+                    $errText = trim(strip_tags($xml->error->asXML() ?? ''));
+                    if ($errText !== '') {
+                        $parts[] = $errText;
+                    }
+                }
+                if (isset($xml->message)) {
+                    $parts[] = trim((string) $xml->message);
+                }
+                $message = implode(', ', array_filter($parts));
+                $combinedText = $rawBody . ' ' . $message;
+            }
+            libxml_clear_errors();
+        }
+
+        // success flag hi nahi mila to success mano (purana behaviour).
+        if ($success === null) {
+            return [true, '', false, false];
+        }
+
+        if ($success === true) {
+            return [true, '', false, false];
+        }
+
+        $isAlreadyExists = (bool) preg_match('/already\s*exists/i', $combinedText);
+        $isNotFound = (bool) preg_match('/does not exist|not found/i', $combinedText);
+
+        if ($message === '') {
+            $message = 'Delhivery rejected the warehouse.';
+        }
+
+        return [false, $message, $isAlreadyExists, $isNotFound];
+    }
+
+    /**
+     * Create the warehouse in Delhivery (clientwarehouse/create).
+     *
+     * Returns null on success, else the error message for display.
+     * Local save is never blocked by a Delhivery failure.
+     */
+    private function createDelhiveryWarehouse(array $data)
+    {
+        $cfg = config('services.delhivery', []);
+        $token = $cfg['token'] ?? '';
+        if ($token === '') {
+            return 'Missing Delhivery token.';
+        }
+
+        try {
+            $url = rtrim($cfg['warehouse_create_url'] ?? 'https://track.delhivery.com/api/backend/clientwarehouse/create/', '/') . '/';
+            $timeout = (int) ($cfg['timeout'] ?? 25);
+
+            $payload = [
+                'phone' => (string) ($data['phone'] ?? ''),
+                'city' => (string) ($data['city'] ?? ''),
+                'name' => (string) ($data['name'] ?? ''),
+                'pin' => (string) ($data['pin'] ?? ''),
+                'address' => (string) ($data['address'] ?? ''),
+                'country' => (string) ($data['country'] ?? ''),
+                'email' => (string) ($data['email'] ?? ''),
+                'registered_name' => (string) ($data['registered_name'] ?? ''),
+                'return_address' => (string) ($data['return_address'] ?? ''),
+                'return_pin' => (string) ($data['return_pin'] ?? ''),
+                'return_city' => (string) ($data['return_city'] ?? ''),
+                'return_state' => (string) ($data['return_state'] ?? ''),
+                'return_country' => (string) ($data['return_country'] ?? ''),
+            ];
+
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token ' . $token,
+            ])->timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->post($url, $payload);
+
+            if (! $response->successful()) {
+                $rawBody = (string) $response->body();
+                Log::warning('Delhivery warehouse create failed', [
+                    'status' => $response->status(),
+                    'body' => substr($rawBody, 0, 1000),
+                ]);
+                [, , $isAlreadyExists] = $this->parseDelhiveryWarehouseBody($rawBody);
+                if ($isAlreadyExists) {
+                    return self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS;
+                }
+                return 'Delhivery API returned HTTP ' . $response->status() . '.';
+            }
+
+            [$isSuccess, $msg, $isAlreadyExists] = $this->parseDelhiveryWarehouseBody((string) $response->body());
+            if (! $isSuccess) {
+                Log::warning('Delhivery warehouse create rejected', ['body' => substr($response->body(), 0, 1000)]);
+                if ($isAlreadyExists) {
+                    return self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS;
+                }
+                return $msg !== '' ? $msg : 'Delhivery rejected the warehouse.';
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Delhivery warehouse create call failed: ' . $e->getMessage());
+            return 'Delhivery call failed: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Update the warehouse in Delhivery (clientwarehouse/edit).
+     * Sirf name/phone/address bheje jate hain (warehouse name se match hota hai).
+     *
+     * Returns null on success, else the error message for display.
+     * Local update is never blocked by a Delhivery failure.
+     */
+    private function updateDelhiveryWarehouse(array $data)
+    {
+        $cfg = config('services.delhivery', []);
+        $token = $cfg['token'] ?? '';
+        if ($token === '') {
+            return 'Missing Delhivery token.';
+        }
+
+        try {
+            $url = rtrim($cfg['warehouse_edit_url'] ?? 'https://track.delhivery.com/api/backend/clientwarehouse/edit/', '/') . '/';
+            $timeout = (int) ($cfg['timeout'] ?? 25);
+
+            $payload = [
+                'name' => (string) ($data['name'] ?? ''),
+                'phone' => (string) ($data['phone'] ?? ''),
+                'address' => (string) ($data['address'] ?? ''),
+            ];
+
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token ' . $token,
+            ])->timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->post($url, $payload);
+
+            if (! $response->successful()) {
+                $rawBody = (string) $response->body();
+                Log::warning('Delhivery warehouse edit failed', [
+                    'status' => $response->status(),
+                    'body' => substr($rawBody, 0, 1000),
+                ]);
+                [, , $isAlreadyExists, $isNotFound] = $this->parseDelhiveryWarehouseBody($rawBody);
+                if ($isAlreadyExists) {
+                    return self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS;
+                }
+                if ($isNotFound || preg_match('/does not exist|not found/i', $rawBody)) {
+                    return self::DELHIVERY_WAREHOUSE_NOT_FOUND;
+                }
+                return 'Delhivery API returned HTTP ' . $response->status() . '.';
+            }
+
+            [$isSuccess, $msg, $isAlreadyExists, $isNotFound] = $this->parseDelhiveryWarehouseBody((string) $response->body());
+            if (! $isSuccess) {
+                Log::warning('Delhivery warehouse edit rejected', ['body' => substr($response->body(), 0, 1000)]);
+                if ($isAlreadyExists) {
+                    return self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS;
+                }
+                if ($isNotFound) {
+                    return self::DELHIVERY_WAREHOUSE_NOT_FOUND;
+                }
+                return $msg !== '' ? $msg : 'Delhivery rejected the warehouse update.';
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Delhivery warehouse edit call failed: ' . $e->getMessage());
+            return 'Delhivery call failed: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Update a warehouse address owned by the logged-in customer.
+     */
+    public function updateWarehouseAddress(Request $request, $id)
+    {
+        $customer = auth()->guard('customer')->user();
+        if (! $customer) {
+            return redirect()->route('login');
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:150',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email|max:150',
+            'address' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:100',
+            'state' => 'nullable|string|max:100',
+            'pin' => 'nullable|string|max:20',
+            'country' => 'nullable|string|max:100',
+            'registered_name' => 'nullable|string|max:150',
+            'return_address' => 'nullable|string|max:255',
+            'return_pin' => 'nullable|string|max:20',
+            'return_city' => 'nullable|string|max:100',
+            'return_state' => 'nullable|string|max:100',
+            'return_country' => 'nullable|string|max:100',
+        ]);
+
+        $warehouse = $customer->warehouseAddresses()->whereKey((int) $id)->firstOrFail();
+        $warehouse->update($validated);
+
+        // Edited details Delhivery par bhi update karo (clientwarehouse/edit: name/phone/address).
+        // Waha naam se match nahi hua to create karke sync kar do.
+        $delhiveryNote = $this->updateDelhiveryWarehouse($validated);
+        if ($delhiveryNote === self::DELHIVERY_WAREHOUSE_NOT_FOUND) {
+            $delhiveryNote = $this->createDelhiveryWarehouse($validated);
+        }
+
+        if ($delhiveryNote === null) {
+            return redirect()->route('customer.warehouse-addresses')
+                ->with('success', 'Warehouse address updated successfully');
+        }
+
+        if ($delhiveryNote === self::DELHIVERY_WAREHOUSE_ALREADY_EXISTS) {
+            return redirect()->route('customer.warehouse-addresses')
+                ->with('error', 'This warehouse address already exists.');
+        }
+
+        return redirect()->route('customer.warehouse-addresses')
+            ->with('success', 'Warehouse address updated locally, Delhivery sync pending: ' . $delhiveryNote);
+    }
+
     public function createShipment()
     {
         // Check if customer is logged in using auth guard
@@ -1808,6 +2157,21 @@ class CustomerController extends Controller
         $exporterCustomers = $canManageSavedCustomers
             ? $customer->exporterCustomers()->with('addresses')->orderByDesc('id')->get()
             : collect();
+        // Saved warehouses (sabhi customers ke liye) — dropdown se Shipper Info bharta hai.
+        $warehouses = $customer->warehouseAddresses()->orderBy('name')->get();
+        $warehousesMap = [];
+        foreach ($warehouses as $warehouse) {
+            $warehousesMap[$warehouse->id] = [
+                'name' => $warehouse->name,
+                'phone' => $warehouse->phone,
+                'email' => $warehouse->email,
+                'address' => $warehouse->address,
+                'city' => $warehouse->city,
+                'pin' => $warehouse->pin,
+                'country' => $warehouse->country,
+                'registered_name' => $warehouse->registered_name,
+            ];
+        }
 
         return view('customer.create-shipment', compact(
             'customer',
@@ -1817,7 +2181,9 @@ class CustomerController extends Controller
             'destinations',
             'canCreateShipment',
             'canManageSavedCustomers',
-            'exporterCustomers'
+            'exporterCustomers',
+            'warehouses',
+            'warehousesMap'
         ));
     }
 
@@ -2989,6 +3355,7 @@ class CustomerController extends Controller
                 'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
                 'selected_exporter_customer_id' => 'nullable|integer',
+                'selected_warehouse_id' => 'nullable|integer',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
@@ -3831,14 +4198,24 @@ class CustomerController extends Controller
                 'ddp_matched' => $ddpResult['matched'] ?? false,
                 'ddp_total' => $ddpTotal,
                 'ddp_reason' => $ddpResult['reason'] ?? null,
-                'green_matched' => $goGreenResult['matched'] ?? false,
+                'green_matched' => $greenResult['matched'] ?? false,
                 'green_total' => $goGreenTotal,
-                'green_reason' => $goGreenResult['reason'] ?? null,
+                'green_reason' => $greenResult['reason'] ?? null,
             ]);
+
+            // Warehouse dropdown ki selection (sirf isi customer ka warehouse valid hai).
+            $selectedWarehouseId = null;
+            if (!empty($validatedData['selected_warehouse_id'])) {
+                $selectedWarehouseId = auth()->guard('customer')->user()
+                    ->warehouseAddresses()
+                    ->whereKey((int) $validatedData['selected_warehouse_id'])
+                    ->value('id');
+            }
 
             $shipper = ShipperInfo::create([
                 'customer_id' => auth()->guard('customer')->id(),
                 'awb_number' => $awbNumber,
+                'warehouse_address_id' => $selectedWarehouseId,
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
                 'company_name' => $validatedData['shipper_company_names'],

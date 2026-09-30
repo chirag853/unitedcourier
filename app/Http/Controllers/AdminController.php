@@ -632,6 +632,7 @@ class AdminController extends Controller
         $baseQuery = DB::table('shipment_invoice')
             ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
             ->leftJoin('consignee_info', 'shipper_info.id', '=', 'consignee_info.shipper_id')
+            ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
             ->where('shipment_invoice.assigned_delivery_person', $admin->id);
 
         $pendingStatuses = [
@@ -664,6 +665,7 @@ class AdminController extends Controller
             $baseQuery->where(function ($query) use ($search) {
                 $query->where('shipper_info.awb_number', 'like', '%' . $search . '%')
                     ->orWhere('shipment_invoice.invoice_number', 'like', '%' . $search . '%')
+                    ->orWhere('manifests.manifest_number', 'like', '%' . $search . '%')
                     ->orWhere('shipper_info.company_name', 'like', '%' . $search . '%')
                     ->orWhere('shipper_info.contact_person', 'like', '%' . $search . '%')
                     ->orWhere('shipper_info.address_line1', 'like', '%' . $search . '%')
@@ -691,6 +693,8 @@ class AdminController extends Controller
                 'shipper_info.state as pickup_state',
                 'shipper_info.phone_number as pickup_phone',
                 'shipper_info.status',
+                'manifests.manifest_number',
+                'manifests.created_at as manifest_created_at',
                 'consignee_info.consignee_name',
                 'consignee_info.contact_person as consignee_contact',
                 'consignee_info.address_line1 as destination_address_line1',
@@ -702,8 +706,30 @@ class AdminController extends Controller
                 'consignee_info.phone_number as destination_phone'
             )
             ->orderByDesc('shipment_invoice.updated_at')
-            ->paginate(15)
-            ->withQueryString();
+            ->get();
+
+        // Admin panel jaisa grouping: ek manifest_number = ek row,
+        // uske ander uski saari shipments. Bina manifest wali shipments
+        // 'N/A' group me aayengi.
+        $manifestGroups = $deliveries
+            ->groupBy(fn ($d) => $d->manifest_number ?: 'N/A')
+            ->map(function ($shipments, $manifestNumber) {
+                $first = $shipments->first();
+                $deliveryTypes = $shipments->pluck('delivery_type')->filter()->unique()->values();
+
+                return (object) [
+                    'manifest_number' => $manifestNumber === 'N/A' ? null : $manifestNumber,
+                    'manifest_created_at' => $first->manifest_created_at ?? null,
+                    'shipment_count' => $shipments->count(),
+                    'pickup_eligible_count' => $shipments->where('status', 'assigned_for_pickup')->count(),
+                    'hub_eligible_count' => $shipments->where('status', 'confirm_pickup')->count(),
+                    'delivery_type' => $deliveryTypes->count() === 1 ? $deliveryTypes->first() : ($deliveryTypes->isEmpty() ? null : 'Mixed'),
+                    'latest_assigned_at' => $shipments->max('assigned_at'),
+                    'shipments' => $shipments->values(),
+                ];
+            })
+            ->values();
+        $shipmentCount = $deliveries->count();
 
         $statusMap = Tracking::getStatusTitleMap();
 
@@ -712,6 +738,8 @@ class AdminController extends Controller
             'view',
             'search',
             'deliveries',
+            'manifestGroups',
+            'shipmentCount',
             'pendingCount',
             'processPickupCount',
             'completedCount',
@@ -763,6 +791,68 @@ class AdminController extends Controller
         });
 
         return response()->json(['success' => true, 'message' => 'Pickup confirmed. Delivery moved to In Process.']);
+    }
+
+    /**
+     * Confirm pickup for a whole manifest in one go. Accepts the group's
+     * shipment_invoice ids; only rows still in "assigned_for_pickup" move
+     * to "confirm_pickup", the rest are reported as skipped.
+     */
+    public function pickupManifest(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'shipment_ids' => 'required|array|min:1',
+            'shipment_ids.*' => 'integer',
+        ]);
+
+        $shipmentIds = array_values(array_unique(array_map('intval', $request->input('shipment_ids', []))));
+
+        $shipments = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->whereIn('shipment_invoice.id', $shipmentIds)
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->select('shipment_invoice.id', 'shipper_info.id as shipper_id', 'shipper_info.awb_number', 'shipper_info.status')
+            ->get();
+
+        if ($shipments->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'These deliveries are not assigned to you.'], 403);
+        }
+
+        $blockedStatuses = ['delivered', 'cancelled', 'disputed', 'received', 'confirm_pickup', 'ready_to_dispatch', 'dispatched'];
+        $eligible = $shipments->reject(fn ($s) => in_array($s->status, $blockedStatuses, true))->values();
+        $skipped = $shipments->count() - $eligible->count();
+
+        if ($eligible->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'All shipments of this manifest are already in process or completed.'], 422);
+        }
+
+        DB::transaction(function () use ($eligible) {
+            foreach ($eligible as $shipment) {
+                Tracking::create([
+                    'awb_number' => $shipment->awb_number,
+                    'status' => 'confirm_pickup',
+                    'title' => 'Pickup Confirmed - In Process',
+                    'shipper_id' => $shipment->shipper_id,
+                    'uwc_id' => $shipment->awb_number,
+                ]);
+
+                DB::table('shipper_info')->where('id', $shipment->shipper_id)->update([
+                    'status' => 'confirm_pickup',
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        $picked = $eligible->count();
+        $message = $picked . ' shipment' . ($picked > 1 ? 's' : '') . ' picked up and moved to In Process.'
+            . ($skipped > 0 ? ' ' . $skipped . ' already in process, skipped.' : '');
+
+        return response()->json(['success' => true, 'message' => $message, 'picked' => $picked, 'skipped' => $skipped]);
     }
 
     /**
@@ -833,6 +923,70 @@ class AdminController extends Controller
             'success' => true,
             'message' => 'Shipment received in hub and moved to Complete Delivery.',
         ]);
+    }
+
+    /**
+     * Mark a whole manifest as received in the hub in one go. Accepts the
+     * group's shipment_invoice ids; only rows still in "confirm_pickup"
+     * move to "received", the rest are reported as skipped.
+     */
+    public function receivedManifest(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->canAccessDeliveryDashboard()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'shipment_ids' => 'required|array|min:1',
+            'shipment_ids.*' => 'integer',
+        ]);
+
+        $shipmentIds = array_values(array_unique(array_map('intval', $request->input('shipment_ids', []))));
+
+        $shipments = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->whereIn('shipment_invoice.id', $shipmentIds)
+            ->where('shipment_invoice.assigned_delivery_person', $admin->id)
+            ->select('shipment_invoice.id', 'shipper_info.id as shipper_id', 'shipper_info.awb_number', 'shipper_info.status')
+            ->get();
+
+        if ($shipments->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'These deliveries are not assigned to you.'], 403);
+        }
+
+        $eligible = $shipments->where('status', 'confirm_pickup')->values();
+        $skipped = $shipments->count() - $eligible->count();
+
+        if ($eligible->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No Process Pickup shipment found in this manifest.'], 422);
+        }
+
+        DB::transaction(function () use ($eligible) {
+            foreach ($eligible as $shipment) {
+                Tracking::create([
+                    'awb_number' => $shipment->awb_number,
+                    'status' => 'received',
+                    'title' => 'Shipment Received in Hub',
+                    'shipper_id' => $shipment->shipper_id,
+                    'uwc_id' => $shipment->awb_number,
+                ]);
+
+                DB::table('shipper_info')
+                    ->where('id', $shipment->shipper_id)
+                    ->where('status', 'confirm_pickup')
+                    ->update([
+                        'status' => 'received',
+                        'updated_at' => now(),
+                    ]);
+            }
+        });
+
+        $picked = $eligible->count();
+        $message = $picked . ' shipment' . ($picked > 1 ? 's' : '') . ' received in hub and moved to Complete Delivery.'
+            . ($skipped > 0 ? ' ' . $skipped . ' already completed, skipped.' : '');
+
+        return response()->json(['success' => true, 'message' => $message, 'received' => $picked, 'skipped' => $skipped]);
     }
 
     /**
@@ -1029,6 +1183,9 @@ class AdminController extends Controller
                     'manifests.manifest_number',
                     'manifests.created_at as manifest_created_at',
                     'manifests.pickup_date',
+                    'manifests.delivery_type as manifest_delivery_type',
+                    'manifests.assigned_delivery_person as manifest_assigned_delivery_person',
+                    'manifests.delivery_label as manifest_delivery_label',
                     'customers.id as customer_id',
                     'customers.first_name',
                     'customers.last_name',
@@ -1198,10 +1355,19 @@ class AdminController extends Controller
             ->map(function ($shipments, $manifestNumber) use ($manifestTotalWeight, $packagesByShipper) {
                 $first = $shipments->first();
 
+                // Group-level delivery type: sab same ho to wahi, warna Mixed.
+                // manifests me 'Delhivery' stored hai, display ke liye 'DDU' dikhao (baaki pages jaisa).
+                $groupTypes = $shipments->map(function ($s) {
+                    $t = $s->manifest_delivery_type ?? $s->delivery_type;
+                    return strcasecmp(trim((string) $t), 'Delhivery') === 0 ? 'DDU' : $t;
+                })->filter()->unique()->values();
+                $groupDeliveryType = $groupTypes->count() === 1 ? $groupTypes->first() : ($groupTypes->isEmpty() ? null : 'Mixed');
+
                 return (object) [
                     'manifest_number' => $first->manifest_number ?? null,
                     'manifest_created_at' => $first->manifest_created_at ?? null,
                     'pickup_date' => $first->pickup_date ?? null,
+                    'delivery_type' => $groupDeliveryType,
                     'shipment_count' => $shipments->count(),
                     'total_value' => (float) $shipments->sum('shipper_total_price'),
                     'total_weight' => $manifestTotalWeight($shipments),
@@ -1224,6 +1390,8 @@ class AdminController extends Controller
                         return [
                             'id' => $s->id,
                             'delivery_type' => $s->delivery_type,
+                            'manifest_delivery_type' => $s->manifest_delivery_type ?? $s->delivery_type,
+                            'delivery_label' => $s->manifest_delivery_label,
                             'assigned_delivery_person' => $s->assigned_delivery_person,
                             'awb_number' => $s->awb_number ?? 'N/A',
                             'pickup_date' => $s->pickup_date,
@@ -1305,6 +1473,10 @@ class AdminController extends Controller
                     $response['message'] = 'Delivery assignment saved, but Delhivery API call failed: ' . $delhiveryResponse['message'];
                 } else {
                     $response['message'] = 'Delivery assignment saved and Delhivery pickup created successfully.';
+                    $note = $this->delhiveryEnrichmentNote($delhiveryResponse);
+                    if ($note !== '') {
+                        $response['message'] .= ' Note: ' . $note;
+                    }
                 }
             }
 
@@ -1393,12 +1565,22 @@ class AdminController extends Controller
                 }
             }
 
-            // DDU: ONE bulk Delhivery call for all shipments of the manifest.
+            // DDU: Delhivery calls pickup-location wise split hote hain — har
+            // warehouse ke liye alag CMU call taaki sahi jagah se pickup lage.
+            // (Delhivery ek CMU request me sirf ek pickup_location manta hai.)
             $delhiveryResponse = null;
             if ($request->delivery_type === 'DDU') {
-                $delhiveryResponse = $this->callDelhiveryBulkApi(
-                    array_map(fn($a) => (int) $a['shipment_id'], $assigned)
-                );
+                $bulkIds = array_map(fn($a) => (int) $a['shipment_id'], $assigned);
+                $pickupGroups = $this->groupInvoiceIdsByPickupLocation($bulkIds);
+                $groupResults = [];
+                foreach ($pickupGroups as $group) {
+                    $groupResults[] = [
+                        'pickup_location' => $group['name'],
+                        'shipment_ids' => $group['ids'],
+                        'result' => $this->callDelhiveryBulkApi($group['ids']),
+                    ];
+                }
+                $delhiveryResponse = $this->mergeDelhiveryGroupResults($groupResults);
             }
 
             $count = count($assigned);
@@ -1415,6 +1597,10 @@ class AdminController extends Controller
                     $response['message'] = $count . ' shipment(s) assigned, but Delhivery API call failed: ' . $delhiveryResponse['message'];
                 } else {
                     $response['message'] = $count . ' shipment(s) assigned and Delhivery pickup created successfully (Manifest ' . $manifestNumber . ').';
+                    $note = $this->delhiveryEnrichmentNote($delhiveryResponse);
+                    if ($note !== '') {
+                        $response['message'] .= ' Note: ' . $note;
+                    }
                 }
                 if (!empty($delhiveryResponse['failed_orders'])) {
                     $response['failed'] = $delhiveryResponse['failed_orders'];
@@ -1479,6 +1665,15 @@ class AdminController extends Controller
                     $shipper->status = 'assigned_for_pickup';
                     $shipper->save();
                 }
+                // Manifest row (per shipper_id) ko invoice ke saath sync karo.
+                // manifests.delivery_type me DDU ko 'Delhivery' likhte hain
+                // (invoice me 'DDU' hi rehta hai taaki Delhivery flow trigger hota rahe).
+                // Row na mile to silently skip — manifest baad me bhi ban sakta hai.
+                $manifestUpdateData = $updateData;
+                if (($manifestUpdateData['delivery_type'] ?? null) === 'DDU') {
+                    $manifestUpdateData['delivery_type'] = 'Delhivery';
+                }
+                \App\Models\Manifest::where('shipper_id', $shipper->id)->update($manifestUpdateData);
             }
         }
 
@@ -3139,7 +3334,7 @@ class AdminController extends Controller
      *
      * Returns null when the shipment data is not found.
      */
-    private function buildDelhiveryShipmentPayload($shipmentId)
+    private function buildDelhiveryShipmentPayload($shipmentId, $legacyShipperDrop = false)
     {
         // Fetch shipment with all related data
         $shipment = DB::table('shipment_invoice')
@@ -3189,25 +3384,54 @@ class AdminController extends Controller
                 return null;
             }
 
-            // Build the full address string for shipper (origin)
-            $shipperAddress = trim(
-                ($shipment->address_line1 ?? '') . ' ' .
-                ($shipment->address_line2 ?? '') . ' ' .
-                ($shipment->address_line3 ?? '')
-            );
-
             // Determine payment mode based on incoterms or default to prepaid
             $paymentMode = 'prepaid';
 
-            // Build ONE shipment entry for the Delhivery API with shipper_info details
+            // LEGACY mode (pehle jaisa): DROP = shipper address, PICKUP = hub.
+            // Warehouse Delhivery me registered na ho to isi par fallback hota hai.
+            if ($legacyShipperDrop) {
+                $shipperAddress = trim(
+                    ($shipment->address_line1 ?? '') . ' ' .
+                    ($shipment->address_line2 ?? '') . ' ' .
+                    ($shipment->address_line3 ?? '')
+                );
+
+                return [
+                    'name' => $shipment->company_name ?? $shipment->contact_person ?? 'Shipper',
+                    'add' => $shipperAddress ?: 'Address not provided',
+                    'pin' => $shipment->pincode ?? '',
+                    'city' => $shipment->shipper_city ?? '',
+                    'state' => $shipment->shipper_state ?? '',
+                    'country' => 'India',
+                    'phone' => $shipment->shipper_phone ?? '',
+                    'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
+                    'payment_mode' => $paymentMode,
+                    'quantity' => 1,
+                    'weight' => $shipment->actual_weight_kg ?? 0,
+                    'total_amount' => $shipment->invoice_amount ?? 0,
+                    'products_desc' => $shipment->description ?? '',
+                    'cod_amount' => $paymentMode === 'COD' ? ($shipment->invoice_amount ?? 0) : 0,
+                    'shipping_mode' => 'Surface',
+                    'shipment_width' => $shipment->pkg_width ?? 0,
+                    'shipment_length' => $shipment->pkg_length ?? 0,
+                    'shipment_height' => $shipment->pkg_height ?? 0,
+                    'end_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
+                ];
+            }
+
+            // DROP = hamara Delhi hub (Delhivery yahi deliver karega).
+            // PICKUP shipper ke warehouse se hota hai (pickup_location me bheja jata hai).
+            $hubCfg = config('services.delhivery', []);
+
+            // Build ONE shipment entry for the Delhivery API with hub drop details
             return [
-                'name' => $shipment->company_name ?? $shipment->contact_person ?? 'Shipper',
-                'add' => $shipperAddress ?: 'Address not provided',
-                'pin' => $shipment->pincode ?? '',
-                'city' => $shipment->shipper_city ?? '',
-                'state' => $shipment->shipper_state ?? '',
+                'name' => $hubCfg['hub_name'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do',
+                'add' => $hubCfg['hub_address'] ?? 'BUILDING NO. 1, BYPASS ROAD',
+                'pin' => $hubCfg['hub_pin'] ?? '110037',
+                'city' => $hubCfg['hub_city'] ?? 'Delhi',
+                'state' => $hubCfg['hub_state'] ?? 'Delhi',
                 'country' => 'India',
-                'phone' => $shipment->shipper_phone ?? '',
+                'phone' => $hubCfg['hub_phone'] ?? '',
                 'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
                 'payment_mode' => $paymentMode,
                 'quantity' => 1,
@@ -3224,6 +3448,155 @@ class AdminController extends Controller
     }
 
     /**
+     * Resolve the Delhivery pickup_location name for the given shipments.
+     *
+     * Shipper ke pincode/city se warehouse_addresses me auto-match karke uska
+     * Delhivery-registered warehouse `name` milta hai (pickup wahi se hoga).
+     * Pehle exact pin match, phir city match; kuch na mile to hub fallback
+     * taaki flow kabhi block na ho. Drop ka phone bhi wahi warehouse ka jata hai.
+     *
+     * @param int[] $invoiceIds
+     * @return array{name: string, phone: string, matched: bool}
+     */
+    private function resolveDelhiveryPickupLocation(array $invoiceIds)
+    {
+        $cfg = config('services.delhivery', []);
+        $fallback = $cfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do';
+
+        $invoiceIds = array_values(array_unique(array_map('intval', $invoiceIds)));
+        if (empty($invoiceIds)) {
+            return ['name' => $fallback, 'phone' => '', 'matched' => false];
+        }
+
+        $shippers = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->whereIn('shipment_invoice.id', $invoiceIds)
+            ->select('shipper_info.warehouse_address_id', 'shipper_info.pincode', 'shipper_info.city')
+            ->get();
+
+        $warehouses = \App\Models\WarehouseAddress::orderBy('name')->get(['id', 'name', 'phone', 'city', 'pin']);
+        if ($warehouses->isEmpty()) {
+            return ['name' => $fallback, 'phone' => '', 'matched' => false];
+        }
+
+        // 0) Order par saved warehouse (sabse exact — jis warehouse se order bana wahi pickup).
+        foreach ($shippers as $shipper) {
+            $savedId = (int) ($shipper->warehouse_address_id ?? 0);
+            if ($savedId <= 0) {
+                continue;
+            }
+            $match = $warehouses->firstWhere('id', $savedId);
+            if ($match) {
+                return ['name' => (string) $match->name, 'phone' => (string) ($match->phone ?? ''), 'matched' => true];
+            }
+        }
+
+        // 1) Exact pin match.
+        foreach ($shippers as $shipper) {
+            $pin = trim((string) ($shipper->pincode ?? ''));
+            if ($pin === '') {
+                continue;
+            }
+            $match = $warehouses->first(function ($w) use ($pin) {
+                return trim((string) ($w->pin ?? '')) !== '' && trim((string) $w->pin) === $pin;
+            });
+            if ($match) {
+                return ['name' => (string) $match->name, 'phone' => (string) ($match->phone ?? ''), 'matched' => true];
+            }
+        }
+
+        // 2) City match (case-insensitive).
+        foreach ($shippers as $shipper) {
+            $city = strtolower(trim((string) ($shipper->city ?? '')));
+            if ($city === '') {
+                continue;
+            }
+            $match = $warehouses->first(function ($w) use ($city) {
+                return strtolower(trim((string) ($w->city ?? ''))) === $city;
+            });
+            if ($match) {
+                return ['name' => (string) $match->name, 'phone' => (string) ($match->phone ?? ''), 'matched' => true];
+            }
+        }
+
+        return ['name' => $fallback, 'phone' => '', 'matched' => false];
+    }
+
+    /**
+     * Kya CMU failure warehouse-registered-na-hone ki wajah se hai?
+     * ("ClientWarehouse matching query does not exist" etc.)
+     */
+    private function isDelhiveryWarehouseError(array $result)
+    {
+        if (!empty($result['success'])) {
+            return false;
+        }
+        $haystack = (string) ($result['message'] ?? '') . ' ' . json_encode($result['data'] ?? []);
+        return stripos($haystack, 'ClientWarehouse') !== false;
+    }
+
+    /**
+     * Invoice ids ko pickup-location wise groups me baanto.
+     * Har group ki apni CMU call hogi taaki har warehouse se sahi pickup lage.
+     *
+     * @param int[] $invoiceIds
+     * @return array<int, array{name: string, ids: int[]}>
+     */
+    private function groupInvoiceIdsByPickupLocation(array $invoiceIds)
+    {
+        $groups = [];
+        foreach (array_values(array_unique(array_map('intval', $invoiceIds))) as $sid) {
+            $loc = $this->resolveDelhiveryPickupLocation([$sid]);
+            $key = (string) $loc['name'];
+            if (!isset($groups[$key])) {
+                $groups[$key] = ['name' => $key, 'ids' => []];
+            }
+            $groups[$key]['ids'][] = $sid;
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * Multiple CMU group results ko frontend-compatible shape me merge karo.
+     * success = sab groups ok; message/failed/packages combined.
+     */
+    private function mergeDelhiveryGroupResults(array $groupResults)
+    {
+        $allOk = true;
+        $messages = [];
+        $failed = [];
+        $packages = [];
+        foreach ($groupResults as $gr) {
+            $res = $gr['result'] ?? [];
+            $allOk = $allOk && !empty($res['success']);
+            $text = '[' . ($gr['pickup_location'] ?? '?') . '] ' . ($res['message'] ?? '');
+            $note = $this->delhiveryEnrichmentNote(is_array($res) ? $res : []);
+            if ($note !== '') {
+                $text .= ' Note: ' . $note;
+            }
+            $messages[] = trim($text);
+            foreach ($res['failed_orders'] ?? [] as $f) {
+                $failed[] = $f;
+            }
+            $pkgs = $res['data']['packages'] ?? null;
+            if (is_array($pkgs)) {
+                foreach ($pkgs as $p) {
+                    $packages[] = $p;
+                }
+            }
+        }
+
+        return [
+            'success' => $allOk && !empty($groupResults),
+            'message' => implode(' ', $messages),
+            'data' => ['packages' => $packages],
+            'failed_orders' => $failed,
+            'groups' => $groupResults,
+        ];
+    }
+
+    /**
      * Call the Delhivery API to create a pickup/shipment (single shipment).
      *
      * @param int $shipmentId
@@ -3236,6 +3609,13 @@ class AdminController extends Controller
             return ['success' => false, 'message' => 'Shipment data not found for Delhivery API call.'];
         }
 
+        // PICKUP = shipper ka warehouse (pin/city match), DROP = hub (payload me).
+        // Drop phone bhi warehouse ka jata hai (fallback hub env phone).
+        $pickupLocation = $this->resolveDelhiveryPickupLocation([(int) $shipmentId]);
+        if (!empty($pickupLocation['phone'])) {
+            $payload['phone'] = $pickupLocation['phone'];
+        }
+
         // Explicit waybill avoids Delhivery auto-consume failures
         // ("Unable to consume <waybill> for <pickup_location>").
         $waybills = $this->fetchDelhiveryWaybills(1);
@@ -3243,7 +3623,35 @@ class AdminController extends Controller
             $payload['waybill'] = $waybills[0];
         }
 
-        return $this->postDelhiveryShipments([$payload], 'shipment #' . $shipmentId);
+        $result = $this->postDelhiveryShipments([$payload], 'shipment #' . $shipmentId, $pickupLocation['name']);
+        $pickupNameForEnrich = $pickupLocation['name'];
+
+        // Warehouse Delhivery me registered nahi → pehle jaisa retry (hub pickup + shipper drop).
+        if ($this->isDelhiveryWarehouseError($result)) {
+            $legacyPayload = $this->buildDelhiveryShipmentPayload($shipmentId, true);
+            if ($legacyPayload) {
+                if (!empty($waybills)) {
+                    $legacyPayload['waybill'] = $waybills[0];
+                }
+                $hubCfg = config('services.delhivery', []);
+                $pickupNameForEnrich = $hubCfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do';
+                $result = $this->postDelhiveryShipments([$legacyPayload], 'shipment #' . $shipmentId . ' (hub fallback)');
+                $payload = $legacyPayload;
+                $result['fallback'] = 'Warehouse Delhivery me registered nahi tha, hub pickup use hua.';
+            }
+        }
+
+        // CMU success ke saath packing slip (label) + FM pickup request bhi hit karo.
+        if (!empty($result['success'])) {
+            $requestWaybills = [];
+            if (!empty($payload['waybill'])) {
+                $requestWaybills[(int) $shipmentId] = (string) $payload['waybill'];
+            }
+            $result['pickup_location_name'] = $pickupNameForEnrich;
+            $result = $this->enrichDelhiveryWithLabelAndPickup([(int) $shipmentId], $requestWaybills, $result);
+        }
+
+        return $result;
     }
 
     /**
@@ -3259,6 +3667,7 @@ class AdminController extends Controller
     private function callDelhiveryBulkApi(array $shipmentIds)
     {
         $shipmentsData = [];
+        $payloadInvoiceIds = [];
         $orderToAwb = [];
         $missing = 0;
 
@@ -3278,6 +3687,7 @@ class AdminController extends Controller
                 continue;
             }
             $shipmentsData[] = $payload;
+            $payloadInvoiceIds[] = (int) $sid;
             $row = $rows->get($sid);
             $orderKey = (string) ($payload['order'] ?? '');
             $orderToAwb[$orderKey] = $row?->awb_number;
@@ -3295,11 +3705,59 @@ class AdminController extends Controller
                 $shipmentsData[$i]['waybill'] = $waybills[$i];
             }
         }
+        $requestWaybillByInvoice = [];
+        foreach ($shipmentsData as $i => $item) {
+            if (!empty($item['waybill']) && isset($payloadInvoiceIds[$i])) {
+                $requestWaybillByInvoice[(int) $payloadInvoiceIds[$i]] = (string) $item['waybill'];
+            }
+        }
+
+        // PICKUP = shippers ke warehouse (pin/city match), DROP = hub (payload me).
+        // Drop phone bhi warehouse ka jata hai (fallback hub env phone).
+        $pickupLocation = $this->resolveDelhiveryPickupLocation($shipmentIds);
+        if (!empty($pickupLocation['phone'])) {
+            foreach ($shipmentsData as $i => $item) {
+                $shipmentsData[$i]['phone'] = $pickupLocation['phone'];
+            }
+        }
 
         $result = $this->postDelhiveryShipments(
             $shipmentsData,
-            count($shipmentsData) . ' shipment(s)' . ($missing > 0 ? ' (' . $missing . ' skipped, data missing)' : '')
+            count($shipmentsData) . ' shipment(s)' . ($missing > 0 ? ' (' . $missing . ' skipped, data missing)' : ''),
+            $pickupLocation['name']
         );
+        $pickupNameForEnrich = $pickupLocation['name'];
+
+        // Warehouse Delhivery me registered nahi → pehle jaisa retry (hub pickup + shipper drop).
+        if ($this->isDelhiveryWarehouseError($result)) {
+            $legacyData = [];
+            $legacyInvoiceIds = [];
+            foreach ($shipmentIds as $sid) {
+                $legacyPayload = $this->buildDelhiveryShipmentPayload($sid, true);
+                if ($legacyPayload) {
+                    $legacyData[] = $legacyPayload;
+                    $legacyInvoiceIds[] = (int) $sid;
+                }
+            }
+            if (!empty($legacyData)) {
+                $legacyWaybills = $this->fetchDelhiveryWaybills(count($legacyData));
+                $requestWaybillByInvoice = [];
+                foreach ($legacyData as $i => $item) {
+                    $wb = $legacyWaybills[$i] ?? $waybills[$i] ?? null;
+                    if ($wb !== null && $wb !== '') {
+                        $legacyData[$i]['waybill'] = $wb;
+                        $requestWaybillByInvoice[(int) $legacyInvoiceIds[$i]] = (string) $wb;
+                    }
+                }
+                $hubCfg = config('services.delhivery', []);
+                $pickupNameForEnrich = $hubCfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do';
+                $result = $this->postDelhiveryShipments(
+                    $legacyData,
+                    count($legacyData) . ' shipment(s) (hub fallback)'
+                );
+                $result['fallback'] = 'Warehouse Delhivery me registered nahi tha, hub pickup use hua.';
+            }
+        }
 
         // Map per-package failures back to our order ids / AWBs.
         $failed = [];
@@ -3322,6 +3780,12 @@ class AdminController extends Controller
         }
         if (!empty($failed)) {
             $result['failed_orders'] = $failed;
+        }
+
+        // CMU success ke saath packing slips (labels) + FM pickup request bhi hit karo.
+        if (!empty($result['success'])) {
+            $result['pickup_location_name'] = $pickupNameForEnrich ?? $pickupLocation['name'];
+            $result = $this->enrichDelhiveryWithLabelAndPickup($shipmentIds, $requestWaybillByInvoice, $result);
         }
 
         return $result;
@@ -3436,13 +3900,14 @@ class AdminController extends Controller
      * @param string $logContext Free text for log lines (e.g. "shipment #5" or "3 shipment(s)")
      * @return array
      */
-    private function postDelhiveryShipments(array $shipmentsData, $logContext)
+    private function postDelhiveryShipments(array $shipmentsData, $logContext, $pickupLocationName = null)
     {
         try {
-            // Build pickup_location object - name must remain unchanged as specified
+            // PICKUP = shipper ka warehouse (resolve karke aaya), fallback hub.
+            // DROP = shipments[] me hub address (payload builder me).
             $delhiveryCfg = config('services.delhivery', []);
             $pickupLocation = [
-                'name' => $delhiveryCfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do',
+                'name' => $pickupLocationName ?: ($delhiveryCfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do'),
             ];
 
             // Build the full data structure
@@ -3558,6 +4023,335 @@ class AdminController extends Controller
                 'message' => 'Delhivery API call failed: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Fetch the packing slip link for one Delhivery waybill.
+     *
+     * GET {packing_slip_url}?wbns={waybill}&pdf=true&pdf_size=4x6
+     *
+     * Delhivery returns JSON with "pdf_download_link" (S3 presigned URL),
+     * nested under packages[] — wahi link manifests.delivery_label me store
+     * hota hai. Koi file download nahi hoti, sirf URL save hota hai.
+     *
+     * @param string $waybill
+     * @return array{success: bool, link?: string, message?: string}
+     */
+    private function fetchDelhiveryPackingSlip($waybill)
+    {
+        $cfg = config('services.delhivery', []);
+        $token = $cfg['token'] ?? '';
+        $waybill = trim((string) $waybill);
+        if ($token === '' || $waybill === '') {
+            return ['success' => false, 'message' => 'Missing Delhivery token or waybill.'];
+        }
+
+        try {
+            $url = rtrim($cfg['packing_slip_url'] ?? 'https://track.delhivery.com/api/p/packing_slip', '/');
+            $timeout = (int) ($cfg['timeout'] ?? 25);
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Token ' . $token,
+            ])->timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->get($url, [
+                    'wbns' => $waybill,
+                    'pdf' => 'true',
+                    'pdf_size' => $cfg['packing_slip_pdf_size'] ?? '4x6',
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('Delhivery packing slip failed for waybill ' . $waybill, [
+                    'status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+                return ['success' => false, 'message' => 'Packing slip API returned HTTP ' . $response->status() . '.'];
+            }
+
+            $decoded = json_decode($response->body(), true);
+            if (is_array($decoded)) {
+                $link = $decoded['pdf_download_link']
+                    ?? $decoded['pdfDownloadLink']
+                    ?? $decoded['data']['pdf_download_link']
+                    ?? null;
+
+                // Asli response me link packages[] ke ander hota hai —
+                // same waybill wali entry prefer karo, warna pehla link lo.
+                if (!is_string($link) || trim($link) === '') {
+                    $pkgs = $decoded['packages'] ?? null;
+                    if (is_array($pkgs)) {
+                        $firstLink = null;
+                        foreach ($pkgs as $p) {
+                            if (!is_array($p)) {
+                                continue;
+                            }
+                            $pl = $p['pdf_download_link'] ?? $p['pdfDownloadLink'] ?? null;
+                            if (!is_string($pl) || trim($pl) === '') {
+                                continue;
+                            }
+                            if ($firstLink === null) {
+                                $firstLink = $pl;
+                            }
+                            $pwb = (string) ($p['waybill'] ?? $p['wbn'] ?? $p['wb'] ?? '');
+                            if ($pwb !== '' && $pwb === $waybill) {
+                                $link = $pl;
+                                break;
+                            }
+                        }
+                        if ((!is_string($link) || trim($link) === '') && $firstLink !== null) {
+                            $link = $firstLink;
+                        }
+                    }
+                }
+
+                if (is_string($link) && trim($link) !== '') {
+                    return ['success' => true, 'link' => trim($link)];
+                }
+            }
+
+            Log::warning('Delhivery packing slip had no pdf_download_link for waybill ' . $waybill, [
+                'content_type' => $response->header('Content-Type'),
+                'body' => substr($response->body(), 0, 500),
+            ]);
+            return ['success' => false, 'message' => 'Packing slip response me pdf_download_link nahi mila.'];
+        } catch (\Exception $e) {
+            Log::warning('Delhivery packing slip call failed for waybill ' . $waybill . ': ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Packing slip call failed: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Raise a Delhivery FM pickup request for the just-created shipments.
+     *
+     * POST {fm_pickup_url} {pickup_time, pickup_date, pickup_location,
+     * expected_package_count}
+     *
+     * @param string $pickupDate Y-m-d
+     * @param int $packageCount
+     * @param string|null $pickupLocationName warehouse name (null = hub fallback)
+     * @return array{success: bool, pickup_id?: string|null, message?: string}
+     */
+    private function requestDelhiveryPickup($pickupDate, $packageCount, $pickupLocationName = null)
+    {
+        $cfg = config('services.delhivery', []);
+        $token = $cfg['token'] ?? '';
+        if ($token === '') {
+            return ['success' => false, 'message' => 'Missing Delhivery token.'];
+        }
+
+        try {
+            $url = rtrim($cfg['fm_pickup_url'] ?? 'https://track.delhivery.com/fm/request/new/', '/') . '/';
+            $timeout = (int) ($cfg['timeout'] ?? 25);
+
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Authorization' => 'Token ' . $token,
+            ])->timeout($timeout)
+                ->connectTimeout(min(10, $timeout))
+                ->retry((int) ($cfg['retries'] ?? 1), (int) ($cfg['retry_delay'] ?? 1000))
+                ->post($url, [
+                    'pickup_time' => $cfg['pickup_time'] ?? '11:00:00',
+                    'pickup_date' => $pickupDate,
+                    'pickup_location' => $pickupLocationName ?: ($cfg['pickup_location'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do'),
+                    'expected_package_count' => max(1, (int) $packageCount),
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('Delhivery FM pickup request failed', [
+                    'status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+                return ['success' => false, 'message' => 'Pickup request API returned HTTP ' . $response->status() . '.'];
+            }
+
+            $body = $response->json();
+            $pickupId = null;
+            if (is_array($body)) {
+                foreach (['pickup_id', 'pickupId', 'pickupID', 'id'] as $key) {
+                    if (isset($body[$key]) && $body[$key] !== '') {
+                        $pickupId = (string) $body[$key];
+                        break;
+                    }
+                }
+                if ($pickupId === null && isset($body['data']) && is_array($body['data'])) {
+                    foreach (['pickup_id', 'pickupId', 'pickupID', 'id'] as $key) {
+                        if (isset($body['data'][$key]) && $body['data'][$key] !== '') {
+                            $pickupId = (string) $body['data'][$key];
+                            break;
+                        }
+                    }
+                }
+                if (array_key_exists('success', $body) && $body['success'] === false) {
+                    return ['success' => false, 'message' => 'Pickup request rejected by Delhivery.'];
+                }
+            }
+
+            if ($pickupId === null || $pickupId === '') {
+                Log::warning('Delhivery FM pickup response had no pickup id', ['body' => substr($response->body(), 0, 500)]);
+                return ['success' => false, 'message' => 'Pickup request response had no pickup id.'];
+            }
+
+            return ['success' => true, 'pickup_id' => $pickupId];
+        } catch (\Exception $e) {
+            Log::warning('Delhivery FM pickup request failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Pickup request call failed: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * After a successful CMU create, fetch packing slips + raise the FM
+     * pickup request, and persist results on the manifests rows.
+     *
+     * Packing slip ka pdf_download_link (packages[] ke ander wala) sirf URL ki
+     * tarah manifests.delivery_label me jata hai — koi file download nahi hoti;
+     * har shipment ka waybill manifests.delhivery_pickup_id me jata hai. FM pickup request bhi
+     * hit hoti hai (uska id response me milta hai, store nahi hota).
+     * Failures here never fail the assignment — they are reported in the
+     * returned summary so the UI can show a note.
+     *
+     * @param int[] $invoiceIds shipment_invoice ids sent to Delhivery
+     * @param array<int, string> $requestWaybillByInvoice waybills used in the CMU payload, keyed by invoice id
+     * @param array $result postDelhiveryShipments() result (modified in place with summary keys)
+     * @return array
+     */
+    private function enrichDelhiveryWithLabelAndPickup(array $invoiceIds, array $requestWaybillByInvoice, array $result)
+    {
+        $invoiceIds = array_values(array_unique(array_map('intval', $invoiceIds)));
+        if (empty($invoiceIds) || empty($result['success'])) {
+            return $result;
+        }
+
+        // Order key must match the payload builder exactly:
+        // reference_number ?? invoice_number ?? ''.
+        $rows = DB::table('shipment_invoice')
+            ->join('shipper_info', 'shipment_invoice.shipper_id', '=', 'shipper_info.id')
+            ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shipper_info.id')
+            ->whereIn('shipment_invoice.id', $invoiceIds)
+            ->select(
+                'shipment_invoice.id',
+                'shipment_invoice.reference_number',
+                'shipment_invoice.invoice_number',
+                'shipper_info.id as shipper_id',
+                'shipper_info.awb_number',
+                'manifests.pickup_date as manifest_pickup_date'
+            )
+            ->get()
+            ->keyBy('id');
+
+        // Waybills Delhivery assigned itself come back in response packages;
+        // failed orders (status Fail) are skipped for labels.
+        $responseWaybillByOrder = [];
+        $failedOrders = [];
+        $packages = $result['data']['packages'] ?? null;
+        if (is_array($packages)) {
+            foreach ($packages as $pkg) {
+                if (!is_array($pkg)) {
+                    continue;
+                }
+                $orderKey = (string) ($pkg['order'] ?? $pkg['refnum'] ?? $pkg['reference_number'] ?? '');
+                if (($pkg['status'] ?? '') === 'Fail') {
+                    if ($orderKey !== '') {
+                        $failedOrders[$orderKey] = true;
+                    }
+                    continue;
+                }
+                $wb = $pkg['waybill'] ?? $pkg['wbn'] ?? null;
+                if ($orderKey !== '' && $wb !== null && $wb !== '') {
+                    $responseWaybillByOrder[$orderKey] = (string) $wb;
+                }
+            }
+        }
+        foreach ($result['failed_orders'] ?? [] as $failed) {
+            if (!empty($failed['order'])) {
+                $failedOrders[(string) $failed['order']] = true;
+            }
+        }
+
+        $labelSaved = 0;
+        $labelFailed = [];
+        $successShipperIds = [];
+        foreach ($invoiceIds as $invoiceId) {
+            $row = $rows->get($invoiceId);
+            if (!$row) {
+                continue;
+            }
+            $orderKey = (string) ($row->reference_number ?? $row->invoice_number ?? '');
+            if ($orderKey !== '' && isset($failedOrders[$orderKey])) {
+                continue;
+            }
+            $successShipperIds[] = (int) $row->shipper_id;
+
+            $waybill = $requestWaybillByInvoice[$invoiceId]
+                ?? ($orderKey !== '' ? ($responseWaybillByOrder[$orderKey] ?? null) : null);
+            if (empty($waybill)) {
+                $labelFailed[] = $row->awb_number ?: ('invoice #' . $invoiceId);
+                continue;
+            }
+
+            // manifests.delhivery_pickup_id me us shipment ka waybill store karo.
+            \App\Models\Manifest::where('shipper_id', (int) $row->shipper_id)
+                ->update(['delhivery_pickup_id' => (string) $waybill]);
+
+            $slip = $this->fetchDelhiveryPackingSlip($waybill);
+            if (empty($slip['success']) || empty($slip['link'])) {
+                $labelFailed[] = $row->awb_number ?: ('invoice #' . $invoiceId);
+                continue;
+            }
+
+            // Sirf URL store hota hai, koi file download nahi hoti.
+            \App\Models\Manifest::where('shipper_id', (int) $row->shipper_id)
+                ->update(['delivery_label' => (string) $slip['link']]);
+            $labelSaved++;
+        }
+
+        $result['packing_slip'] = ['saved' => $labelSaved, 'failed' => array_values($labelFailed)];
+
+        // ONE pickup request for the whole batch. pickup_date prefers the
+        // manifests' own pickup date, else tomorrow.
+        $pickupRequest = ['success' => false, 'message' => 'No successful shipment for pickup request.'];
+        if (!empty($successShipperIds)) {
+            $pickupDate = null;
+            foreach ($invoiceIds as $invoiceId) {
+                $row = $rows->get($invoiceId);
+                if ($row && !empty($row->manifest_pickup_date)) {
+                    $d = substr((string) $row->manifest_pickup_date, 0, 10);
+                    if ($pickupDate === null || $d > $pickupDate) {
+                        $pickupDate = $d;
+                    }
+                }
+            }
+            if ($pickupDate === null) {
+                $pickupDate = now()->addDay()->format('Y-m-d');
+            }
+
+            $pickupRequest = $this->requestDelhiveryPickup($pickupDate, count($successShipperIds), $result['pickup_location_name'] ?? null);
+            // Note: FM pickup id store NAHI hota — manifests.delhivery_pickup_id
+            // me hamesha shipment ka waybill rehta hai. FM id sirf response me milta hai.
+        }
+        $result['pickup_request'] = $pickupRequest;
+
+        return $result;
+    }
+
+    /**
+     * Human-readable suffix for assignment messages when the label/pickup
+     * follow-up steps partially failed. Empty string when all good.
+     */
+    private function delhiveryEnrichmentNote(array $delhiveryResponse)
+    {
+        $notes = [];
+        if (!empty($delhiveryResponse['fallback'])) {
+            $notes[] = $delhiveryResponse['fallback'];
+        }
+        $slip = $delhiveryResponse['packing_slip'] ?? null;
+        if (is_array($slip) && !empty($slip['failed'])) {
+            $notes[] = count($slip['failed']) . ' label(s) download nahi ho paye.';
+        }
+        $pickup = $delhiveryResponse['pickup_request'] ?? null;
+        if (is_array($pickup) && empty($pickup['success'])) {
+            $notes[] = 'Pickup request fail: ' . ($pickup['message'] ?? 'unknown error');
+        }
+        return implode(' ', $notes);
     }
 
     /**
