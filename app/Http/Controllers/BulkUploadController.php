@@ -173,7 +173,10 @@ class BulkUploadController extends Controller
                     $shipperState = $getCol($firstRow, 'consignorstate');
                     $shipperPincode = $getCol($firstRow, 'consignorpincode');
                     $shipperPhone = $getCol($firstRow, 'consignortelephone') ?: ($customer->phone_number ?? null);
-                    $shipperEmail = $customer->email ?? ($shipperPhone . '@bulkupload.local');
+                    $shipperEmailRaw = $getColAny($firstRow, ['consignoremail', 'consignormail', 'shipperemail', 'shippermail']);
+                    $shipperEmail = (is_string($shipperEmailRaw) && filter_var($shipperEmailRaw, FILTER_VALIDATE_EMAIL))
+                        ? $shipperEmailRaw
+                        : ($customer->email ?? ($shipperPhone . '@bulkupload.local'));
                     $gstType = $getCol($firstRow, 'gsttype');
                     $gstIdNo = $getCol($firstRow, 'gstidno');
 
@@ -187,6 +190,10 @@ class BulkUploadController extends Controller
                     $consigneeState = $getCol($firstRow, 'consigneestate');
                     $consigneeZip = $getCol($firstRow, 'consigneezipcode');
                     $consigneePhone = $getCol($firstRow, 'consigneetelephone');
+                    $consigneeEmailRaw = $getColAny($firstRow, ['consigneeemail', 'receiveremail', 'consigneemail']);
+                    $consigneeEmail = (is_string($consigneeEmailRaw) && filter_var($consigneeEmailRaw, FILTER_VALIDATE_EMAIL))
+                        ? $consigneeEmailRaw
+                        : ($consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local');
 
                     $destination = $getCol($firstRow, 'destination');
                     $referenceNo = $getCol($firstRow, 'referenceno');
@@ -358,7 +365,7 @@ class BulkUploadController extends Controller
                         'city' => $consigneeCity,
                         'state' => $consigneeState,
                         'phone_number' => $consigneePhone,
-                        'email' => $consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local',
+                        'email' => $consigneeEmail,
                         'email_opt_out' => false,
                     ]);
 
@@ -481,7 +488,7 @@ class BulkUploadController extends Controller
                         'consignee_city' => $consigneeCity,
                         'consignee_state' => $consigneeState,
                         'consignee_phone_number' => $consigneePhone,
-                        'consignee_email' => $consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local',
+                        'consignee_email' => $consigneeEmail,
                         'invoice_number' => $invoiceNo,
                         'invoice_date' => now()->toDateString(),
                         'invoice_amount' => $invoiceValue,

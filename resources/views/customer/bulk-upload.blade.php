@@ -733,9 +733,9 @@
                 var headers = [
                     'AwbNo','ReferenceNo','Origin','Destination','CustomerName',
                     'ConsignorName','ConsignorContactPerson','ConsignorAddressLine1','ConsignorAddressLine2','ConsignorAddressLine3',
-                    'ConsignorCity','ConsignorState','ConsignorPincode','ConsignorTelephone','GSTType','GSTIDNo',
+                    'ConsignorCity','ConsignorState','ConsignorPincode','ConsignorTelephone','ConsignorEmail','GSTType','GSTIDNo',
                     'ConsigneeName','ConsigneeContactPerson','ConsigneeAddressLine1','ConsigneeAddressLine2','ConsigneeAddressLine3',
-                    'ConsigneeCity','ConsigneeState','ConsigneeZipCode','ConsigneeTelephone',
+                    'ConsigneeCity','ConsigneeState','ConsigneeZipCode','ConsigneeTelephone','ConsigneeEmail',
                     'GoodsType','ServiceType','Pcs','ActWeight','L','B','H','VolWeight','ChgWeight','Dimention',
                     'InvoiceNo','InvoiceValue','Currency','Description','Remark',
                     'HSCode','HTSCode',
@@ -743,8 +743,8 @@
                 ];
                 var sampleRow = [
                     'AWB001','REF001','Mumbai','Delhi','Acme Corp',
-                    'Acme Logistics','John Doe','123 Main St','Suite 100','','Mumbai','Maharashtra','400001','9876543210','GSTIN','27ABCDE1234F1Z5',
-                    'Retail Customer','Jane Smith','456 Market Rd','Apt 5','','Delhi','Delhi','110001','9123456780',
+                    'Acme Logistics','John Doe','123 Main St','Suite 100','','Mumbai','Maharashtra','400001','9876543210','consignor@example.com','GSTIN','27ABCDE1234F1Z5',
+                    'Retail Customer','Jane Smith','456 Market Rd','Apt 5','','Delhi','Delhi','110001','9123456780','consignee@example.com',
                     'Documents','Express','1','2.5','30','20','15','1.5','2.5','30x20x15',
                     'INV001','5000','INR','Shipping documents','Sample remark',
                     '123456','987654',
