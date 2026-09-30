@@ -6762,22 +6762,34 @@ class CustomerController extends Controller
             ->filter()
             ->unique()
             ->values();
+        $destinationNamesUpper = $destinationNames
+            ->map(fn ($n) => strtoupper(trim((string) $n)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        // Destinations table is tiny — load once and match in PHP on
+        // upper-cased names so 'SINGAPORE' matches master 'Singapore'
+        // regardless of DB collation (case-sensitive or not).
         $destinationIsoMap = Destination::query()
-            ->whereIn('name', $destinationNames)
             ->get(['name', 'country_code'])
             ->mapWithKeys(function ($destination) {
-                return [$destination->name => strtoupper((string) ($destination->country_code ?? ''))];
+                // Keys upper-cased so lookups match regardless of stored case
+                // (e.g. bulk upload now stores SINGAPORE vs master Singapore).
+                return [strtoupper(trim((string) $destination->name)) => strtoupper((string) ($destination->country_code ?? ''))];
             })
+            ->filter(fn ($code, $name) => $code !== '' && in_array($name, $destinationNamesUpper, true))
             ->all();
         // Fallback mapping for legacy or unmapped destination names so the
-        // ISO is never blank in the shipments table.
+        // ISO is never blank in the shipments table (keys upper-cased for
+        // case-insensitive lookup).
         $fallbackIsoMap = [
-            'US- United State of America' => 'US',
-            'India' => 'IN',
-            'UK - United Kingdom' => 'GB',
-            'China' => 'CN',
-            'Russia' => 'RU',
-            'Srilanka' => 'LK',
+            'US- UNITED STATE OF AMERICA' => 'US',
+            'INDIA' => 'IN',
+            'UK - UNITED KINGDOM' => 'GB',
+            'CHINA' => 'CN',
+            'RUSSIA' => 'RU',
+            'SRILANKA' => 'LK',
         ];
 
         // Prepare shipment details data for the detail modal (JS-friendly format)

@@ -195,7 +195,7 @@ class BulkUploadController extends Controller
                         ? $consigneeEmailRaw
                         : ($consigneePhone ? $consigneePhone . '@bulkupload.local' : 'consignee@bulkupload.local');
 
-                    $destination = $getCol($firstRow, 'destination');
+                    $destination = strtoupper(trim((string) ($getCol($firstRow, 'destination') ?? '')));
                     $referenceNo = $getCol($firstRow, 'referenceno');
 
                     // ---- Service / shipping method ----
@@ -684,7 +684,7 @@ class BulkUploadController extends Controller
                 $consigneeCity = $getCol($firstRow, 'consigneecity');
                 $consigneeState = $getCol($firstRow, 'consigneestate');
                 $consigneeZip = $getCol($firstRow, 'consigneezipcode');
-                $destination = $getCol($firstRow, 'destination');
+                $destination = strtoupper(trim((string) ($getCol($firstRow, 'destination') ?? '')));
                 $serviceType = $getCol($firstRow, 'servicetype');
 
                 // Calculate total chargeable weight

@@ -1087,7 +1087,8 @@
                                                     @php
                                                         $hawbConsignee = $invoice->shipperInfo ? $invoice->shipperInfo->consigneeInfo : null;
                                                         $hawbDestName = $hawbConsignee?->delivery_destination;
-                                                        $hawbIsoCode = $destinationIsoMap[$hawbDestName] ?? ($fallbackIsoMap[$hawbDestName] ?? '-');
+                                                        $hawbDestKey = strtoupper(trim((string) ($hawbDestName ?? '')));
+                                                        $hawbIsoCode = $destinationIsoMap[$hawbDestKey] ?? ($fallbackIsoMap[$hawbDestKey] ?? '-');
                                                     @endphp
                                                     <div class="hawb-sub-info">
                                                         <div class="hawb-sub-row">
