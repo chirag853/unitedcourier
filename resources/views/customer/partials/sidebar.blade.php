@@ -14,17 +14,17 @@
             <div class="sidebar-logo">
                 <div>
             <!-- Logo Normal -->
-            <a href="{{ url('index-2.html') }}" class="logo logo-normal">
+            <a href="#" class="logo logo-normal">
                 <img src="{{ asset('assets/img/logo.png') }}" alt="Logo" style = "width: 90%">
             </a>
 
             <!-- Logo Small -->
-            <a href="{{ url('index-2.html') }}" class="logo-small">
+            <a href="#" class="logo-small">
                 <img src="{{ asset('assets/img/logo_without_text.jpg') }}" alt="Logo" style = "width: 100%">
             </a>
 
             <!-- Logo Dark -->
-            <a href="{{ url('index-2.html') }}" class="dark-logo">
+            <a href="#" class="dark-logo">
                 <img src="{{ asset('assets/img/logo-white.svg') }}" alt="Logo">
             </a>
         </div>
