@@ -192,35 +192,6 @@
             font-weight: 600;
             color: #111827;
         }
-        .totals .grand-total td {
-            background: #1a56db;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        .awb-box {
-            background: #fffbeb;
-            border: 1px solid #fcd34d;
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .awb-box .label {
-            font-size: 10px;
-            color: #92400e;
-            text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: .6px;
-        }
-        .awb-box .value {
-            font-size: 16px;
-            font-weight: 800;
-            color: #78350f;
-            letter-spacing: 1px;
-        }
         .terms {
             background: #f8fafc;
             border: 1px dashed #cbd5e1;
@@ -364,18 +335,6 @@
             </div>
         </div>
 
-        <!-- AWB Highlight -->
-        <div class="awb-box">
-            <div>
-                <div class="label">Air Waybill Number</div>
-                <div class="value">{{ $shipper->awb_number }}</div>
-            </div>
-            <div class="text-right">
-                <div class="label">Total Chargeable Weight</div>
-                <div class="value">{{ number_format($totalWeight, 2) }} kg</div>
-            </div>
-        </div>
-
         <!-- Box-wise items with dimensions -->
         <div class="section-title">Shipment Contents — Box Wise</div>
         @php
@@ -440,12 +399,6 @@
                     <td>Subtotal ({{ $invoice->invoice_currency }}):</td>
                     <td class="text-right">{{ number_format($invoice->invoice_amount, 2) }}</td>
                 </tr>
-                @if(!empty($rateDetails['price']))
-                <tr>
-                    <td>Shipping Cost:</td>
-                    <td class="text-right">{{ number_format($rateDetails['price'], 2) }}</td>
-                </tr>
-                @endif
                 @if(!empty($rateDetails['fuel_charge']))
                 <tr>
                     <td>Fuel Charge:</td>
@@ -458,10 +411,6 @@
                     <td class="text-right">{{ number_format($rateDetails['gst_amount'], 2) }}</td>
                 </tr>
                 @endif
-                <tr class="grand-total">
-                    <td>Grand Total:</td>
-                    <td class="text-right">{{ number_format(($rateDetails['total'] ?? 0) + $invoice->invoice_amount, 2) }} {{ $invoice->invoice_currency }}</td>
-                </tr>
             </table>
         </div>
 

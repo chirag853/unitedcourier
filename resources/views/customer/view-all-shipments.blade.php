@@ -2691,23 +2691,9 @@
                     return Number(v).toFixed(2);
                 };
 
-                // Total chargeable weight from packages
-                let totalChargeableWeight = 0;
-                packages.forEach(function (pkg) {
-                    totalChargeableWeight += num(pkg.chargeable);
-                });
-
                 // Shipping-side totals (mirrors rateDetails in the A4 invoice)
-                const shippingCost = pb && pb.base != null ? num(pb.base) : 0;
                 const fuelCharge = pb && pb.fuel != null ? num(pb.fuel) : 0;
-                const surchargeAmt = pb && pb.surcharge != null ? num(pb.surcharge) : 0;
                 const gstAmt = pb && pb.gst != null ? num(pb.gst) : 0;
-                const shippingTotal = pb && pb.total != null
-                    ? num(pb.total)
-                    : (shippingCost + fuelCharge + surchargeAmt + gstAmt);
-
-                // Grand Total = shipping total only (goods subtotal excluded)
-                const grandTotal = shippingTotal;
 
                 const gstPct = (data.gst_percentage != null && data.gst_percentage !== '')
                     ? parseFloat(data.gst_percentage)
@@ -2763,21 +2749,14 @@
                         '</div>';
                 }).join('') : '<p class="text-center">No items</p>';
 
-                // Totals block mirrors the A4 invoice
-                // (Shipping Cost, Fuel Charge, GST and Grand Total).
+                // Totals block mirrors the A4 invoice (Fuel Charge, GST).
                 let totalsHtml = '';
-                if (shippingCost > 0) {
-                    totalsHtml += '<tr><td>Shipping Cost:</td><td class="text-right">' + fmt(shippingCost) + '</td></tr>';
-                }
                 if (fuelCharge > 0) {
                     totalsHtml += '<tr><td>Fuel Charge:</td><td class="text-right">' + fmt(fuelCharge) + '</td></tr>';
                 }
                 if (gstAmt > 0) {
                     totalsHtml += '<tr><td>GST (' + gstPct + '%):</td><td class="text-right">' + fmt(gstAmt) + '</td></tr>';
                 }
-                totalsHtml += '<tr class="grand-total"><td>Grand Total:</td><td class="text-right">' + fmt(grandTotal) + ' ' + currency + '</td></tr>';
-
-                const weightHtml = packages.length ? fmt(totalChargeableWeight) + ' kg' : '-';
 
                 const printWindow = window.open('', '_blank', 'width=900,height=750');
                 if (!printWindow) {
@@ -2831,10 +2810,6 @@
                 printWindow.document.write('.totals tr:last-child td { border-bottom: none; }');
                 printWindow.document.write('.totals td:first-child { color: #6b7280; }');
                 printWindow.document.write('.totals td:last-child { font-weight: 600; color: #111827; }');
-                printWindow.document.write('.totals .grand-total td { background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%); color: #fff; font-size: 13px; font-weight: 800; }');
-                printWindow.document.write('.awb-box { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fcd34d; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }');
-                printWindow.document.write('.awb-box .label { font-size: 10px; color: #92400e; text-transform: uppercase; font-weight: 700; letter-spacing: .6px; }');
-                printWindow.document.write('.awb-box .value { font-size: 17px; font-weight: 800; color: #78350f; letter-spacing: 1px; }');
                 printWindow.document.write('.terms { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; font-size: 10px; color: #64748b; line-height: 1.6; }');
                 printWindow.document.write('.footer { margin-top: 24px; padding-top: 14px; border-top: 2px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 10px; line-height: 1.6; }');
                 printWindow.document.write('.footer strong { color: #4b5563; }');
@@ -2895,12 +2870,6 @@
                 printWindow.document.write('<p>' + (consignee.city_state_zip || '') + '</p>');
                 printWindow.document.write('<p>Phone: ' + (consignee.phone || '-') + '</p>');
                 printWindow.document.write('</div>');
-                printWindow.document.write('</div>');
-
-                // AWB highlight
-                printWindow.document.write('<div class="awb-box">');
-                printWindow.document.write('<div><div class="label">Air Waybill Number</div><div class="value">' + (data.awb_number || '-') + '</div></div>');
-                printWindow.document.write('<div class="text-right"><div class="label">Total Chargeable Weight</div><div class="value">' + weightHtml + '</div></div>');
                 printWindow.document.write('</div>');
 
                 // Box-wise items with dimensions

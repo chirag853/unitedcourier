@@ -120,7 +120,7 @@ class BulkUploadController extends Controller
             }
 
             if (empty($grouped)) {
-                return back()->with('error', 'No valid rows with AwbNo found in the uploaded file.');
+                return back()->with('info', 'No valid rows with AwbNo found in the uploaded file.');
             }
 
             // Parse the selected rate map: { awb_no => rate_id }
