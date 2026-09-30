@@ -78,6 +78,20 @@ class PrimusShipmentServiceTest extends TestCase
         $this->assertNotSame(base64_encode((string) $shipper->custom_label), $shipment['Base64StringInvoice']);
     }
 
+    public function test_it_sends_usa_as_destination_code_for_us(): void
+    {
+        $service = $this->service();
+        $method = new \ReflectionMethod(PrimusShipmentService::class, 'destinationCode');
+        $method->setAccessible(true);
+
+        foreach (['US', 'USA', 'United States', 'United States of America', 'US- United State of America'] as $input) {
+            $this->assertSame('USA', $method->invoke($service, $input), 'Failed for input: '.$input);
+        }
+
+        // Dusre desh waisa hi rahe — UK ab bhi full name bheje.
+        $this->assertSame('United Kingdom', $method->invoke($service, 'UK'));
+    }
+
     public function test_it_reads_legacy_root_public_custom_label_urls(): void
     {
         $labelBytes = "%PDF-1.4\nLegacy public label bytes";

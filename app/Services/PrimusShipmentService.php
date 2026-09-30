@@ -543,6 +543,25 @@ class PrimusShipmentService
         $destination = trim($destination);
         $normalized = strtoupper($destination);
 
+        // US ke liye Primus ko hamesha "USA" bhejo — destinations table me
+        // "US- United State of America" stored hai, isliye DB lookup se pehle
+        // override zaroori hai (warna wahi lamba naam chala jata hai).
+        // Input kabhi country code ("US") hota hai, kabhi consignee ka poora
+        // label ("US- United State of America") — dono cover karo.
+        $usaAliases = [
+            'US',
+            'USA',
+            'UNITED STATES',
+            'UNITED STATES OF AMERICA',
+            'UNITED STATE OF AMERICA',
+            'US- UNITED STATES',
+            'US- UNITED STATES OF AMERICA',
+            'US- UNITED STATE OF AMERICA',
+        ];
+        if (in_array($normalized, $usaAliases, true)) {
+            return 'USA';
+        }
+
         // Courier services store a short country code. Resolve it through the
         // destinations table so Primus always receives the full country name.
         $record = Destination::query()
@@ -564,10 +583,10 @@ class PrimusShipmentService
         }
 
         $fullNames = [
-            'US' => 'United States of America',
-            'USA' => 'United States of America',
-            'UNITED STATES' => 'United States of America',
-            'UNITED STATES OF AMERICA' => 'United States of America',
+            'US' => 'USA',
+            'USA' => 'USA',
+            'UNITED STATES' => 'USA',
+            'UNITED STATES OF AMERICA' => 'USA',
             'UK' => 'United Kingdom',
             'GB' => 'United Kingdom',
             'GBR' => 'United Kingdom',

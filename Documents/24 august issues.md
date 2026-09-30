@@ -85,7 +85,7 @@ Create Shipment
   KYC signature path check - agreement after rejection **(DONE)**
 
 
-
+  customer sheet upload krne ke bad apne service ko select krega or vo shipment draft mai show ho jayegi kyuki customer galat service na dal de excel sheet mai issi liye **(DONE)**
 
 
 
