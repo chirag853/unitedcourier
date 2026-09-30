@@ -6757,39 +6757,52 @@ class CustomerController extends Controller
         // Build a lookup of delivery_destination name to ISO country code so
         // the draft view can show the destination country ISO next to the
         // consignee pin code without an N+1 query per row.
-        $destinationNames = $invoices->getCollection()
-            ->pluck('shipperInfo.consigneeInfo.delivery_destination')
-            ->filter()
-            ->unique()
-            ->values();
-        $destinationNamesUpper = $destinationNames
-            ->map(fn ($n) => strtoupper(trim((string) $n)))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
         // Destinations table is tiny — load once and match in PHP on
-        // upper-cased names so 'SINGAPORE' matches master 'Singapore'
+        // upper-cased keys so 'SINGAPORE' matches master 'Singapore'
         // regardless of DB collation (case-sensitive or not).
+        // Every destination registers 3 keys (name, code, country_code) so
+        // bare codes ('UK', 'SG') resolve just like full names.
         $destinationIsoMap = Destination::query()
-            ->get(['name', 'country_code'])
+            ->get(['name', 'code', 'country_code'])
             ->mapWithKeys(function ($destination) {
                 // Keys upper-cased so lookups match regardless of stored case
                 // (e.g. bulk upload now stores SINGAPORE vs master Singapore).
-                return [strtoupper(trim((string) $destination->name)) => strtoupper((string) ($destination->country_code ?? ''))];
+                $iso = strtoupper((string) ($destination->country_code ?? ''));
+                if ($iso === '') {
+                    return [];
+                }
+                $keys = [];
+                foreach ([$destination->name, $destination->code, $destination->country_code] as $raw) {
+                    $key = strtoupper(trim((string) ($raw ?? '')));
+                    if ($key !== '') {
+                        $keys[$key] = $iso;
+                    }
+                }
+                return $keys;
             })
-            ->filter(fn ($code, $name) => $code !== '' && in_array($name, $destinationNamesUpper, true))
             ->all();
-        // Fallback mapping for legacy or unmapped destination names so the
-        // ISO is never blank in the shipments table (keys upper-cased for
-        // case-insensitive lookup).
+        // Fallback mapping for legacy or unmapped destination names/aliases
+        // so the ISO is never blank in the shipments table (keys upper-cased
+        // for case-insensitive lookup; values mirror what the master rows show).
         $fallbackIsoMap = [
             'US- UNITED STATE OF AMERICA' => 'US',
+            'USA' => 'US',
+            'US' => 'US',
+            'UNITED STATES' => 'US',
+            'UNITED STATES OF AMERICA' => 'US',
             'INDIA' => 'IN',
+            'IN' => 'IN',
             'UK - UNITED KINGDOM' => 'GB',
+            'UNITED KINGDOM' => 'UK',
+            'GREAT BRITAIN' => 'UK',
+            'GB' => 'UK',
             'CHINA' => 'CN',
+            'CN' => 'CN',
             'RUSSIA' => 'RU',
+            'RU' => 'RU',
             'SRILANKA' => 'LK',
+            'SRI LANKA' => 'LK',
+            'LK' => 'LK',
         ];
 
         // Prepare shipment details data for the detail modal (JS-friendly format)
