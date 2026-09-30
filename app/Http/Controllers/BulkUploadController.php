@@ -57,6 +57,14 @@ class BulkUploadController extends Controller
         ]);
 
         try {
+            // Badi file (100+ shipments) same request me process hoti hai —
+            // PHP default time/memory limit me fail na ho isliye guard lagao.
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(300);
+            }
+            @ini_set('max_execution_time', '300');
+            @ini_set('memory_limit', '512M');
+
             $file = $request->file('excel_file');
             $filePath = $file->getRealPath();
 
@@ -140,6 +148,15 @@ class BulkUploadController extends Controller
             $errors = [];
             $successCount = 0;
 
+            // Performance: har shipment par CourierRate/CourierService/surcharge
+            // queries na chale isliye sab kuch ek baar preload karo.
+            // (100 shipments × 4-5 queries = ~500 queries bachte hain.)
+            $preloadedRates = \App\Models\CourierRate::whereIn('customer_id', [$customerId, 0])
+                ->get()->keyBy('id');
+            $preloadedServices = \App\Models\CourierService::where('status', 1)
+                ->get()->keyBy('id');
+            $preloadedSurcharges = \App\Models\SurCharge::all()->keyBy('id');
+
             DB::beginTransaction();
 
             foreach ($grouped as $awbNo => $rowGroup) {
@@ -207,9 +224,17 @@ class BulkUploadController extends Controller
                     $courierService = null;
 
                     if ($selectedRateId) {
-                        $matchedRate = \App\Models\CourierRate::find($selectedRateId);
+                        // Preloaded collection se nikalo — per-shipment
+                        // CourierRate::find + CourierService::find + 2 surcharge
+                        // queries bachte hain. Sirf apne/default customer ke
+                        // rates allowed hain (preview wahi bhejta hai).
+                        $matchedRate = $preloadedRates->get($selectedRateId);
+                        if ($matchedRate && ! in_array((int) $matchedRate->customer_id, [$customerId, 0], true)) {
+                            $matchedRate = null;
+                        }
                         if ($matchedRate) {
-                            $courierService = \App\Models\CourierService::find($matchedRate->service_id);
+                            $courierService = $preloadedServices->get($matchedRate->service_id)
+                                ?? \App\Models\CourierService::find($matchedRate->service_id);
 
                             $price = floatval($matchedRate->price);
                             $fuelPercentage = floatval($matchedRate->fuel_percentage);
@@ -219,15 +244,37 @@ class BulkUploadController extends Controller
 
                             // Mirror create-shipments computation exactly.
                             // GST is charged on the full amount (base + fuel + surcharges).
-                            $surchargeAmount = $matchedRate->surcharge_amount;
-                            $surchargeData = $matchedRate->surchargeModels()->map(function ($s) {
-                                return [
-                                    'id' => $s->id,
-                                    'name' => $s->name,
-                                    'code' => $s->code,
-                                    'price' => (float) $s->price,
-                                ];
-                            })->values()->all();
+                            // surcharge_id cast 'array' hai, lekin purane data me
+                            // JSON-string/CSV bhi ho sakta hai — defensively normalize karo.
+                            $rawSurchargeIds = $matchedRate->surcharge_id;
+                            if (is_string($rawSurchargeIds)) {
+                                $rawSurchargeIds = trim($rawSurchargeIds);
+                                if ($rawSurchargeIds === '' || $rawSurchargeIds === 'null' || $rawSurchargeIds === '[]') {
+                                    $rawSurchargeIds = [];
+                                } else {
+                                    $decodedIds = json_decode($rawSurchargeIds, true);
+                                    $rawSurchargeIds = is_array($decodedIds) ? $decodedIds : explode(',', $rawSurchargeIds);
+                                }
+                            }
+                            if (! is_array($rawSurchargeIds)) {
+                                $rawSurchargeIds = [];
+                            }
+                            $surchargeIds = array_values(array_filter(array_map('intval', $rawSurchargeIds)));
+                            $surchargeData = [];
+                            $surchargeAmount = 0.0;
+                            foreach ($surchargeIds as $sid) {
+                                $sModel = $preloadedSurcharges->get($sid);
+                                if ($sModel) {
+                                    $surchargeData[] = [
+                                        'id' => $sModel->id,
+                                        'name' => $sModel->name,
+                                        'code' => $sModel->code,
+                                        'price' => (float) $sModel->price,
+                                    ];
+                                    $surchargeAmount += (float) $sModel->price;
+                                }
+                            }
+                            $surchargeAmount = round($surchargeAmount, 2);
                             $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
                             $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel + $surchargeAmount) * $gstPercentage / 100);
                             $total = $price + $computedFuel + $computedGst + $surchargeAmount;
@@ -474,19 +521,14 @@ class BulkUploadController extends Controller
                         'customer'
                     );
 
-                    // ---- Generate PDF invoice for this consignee ----
-                    // PDF failure (e.g. missing PHP GD extension for the logo PNG on the
-                    // server) must NOT fail the whole shipment - the shipper/consignee/
-                    // invoice rows above are already inserted. Record PDF as null and
-                    // still count the shipment as success.
-                    try {
-                        $pdfPath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalChgWeight);
-                    } catch (\Exception $pdfEx) {
-                        \Log::warning('Bulk upload PDF skipped for AwbNo ' . $awbNo . ': ' . $pdfEx->getMessage());
-                        $pdfPath = null;
-                    }
+                    // ---- Invoice PDF ab loop me generate nahi hota ----
+                    // DomPDF render sabse slow step tha (100+ shipments par minutes).
+                    // PDF ab Download button par on-demand banti hai
+                    // (downloadBulkInvoicePdf) — isliye process seconds me pura hota hai.
+                    $pdfPath = null;
 
                     $createdShipments[] = [
+                        'shipper_id' => $shipperId,
                         'awb_number' => $newAwbNumber,
                         'consignee_name' => $consigneeName,
                         'consignee_city' => $consigneeCity,
@@ -540,6 +582,13 @@ class BulkUploadController extends Controller
         ]);
 
         try {
+            // Badi file par preview calculation me timeout na ho isliye guard lagao.
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(300);
+            }
+            @ini_set('max_execution_time', '300');
+            @ini_set('memory_limit', '512M');
+
             $file = $request->file('excel_file');
             $filePath = $file->getRealPath();
 
@@ -610,6 +659,17 @@ class BulkUploadController extends Controller
             // Disabled services (status = 0) are excluded so their rates are not shown.
             $allServices = \App\Models\CourierService::where('status', 1)->orderBy('network')->orderBy('method')->get();
 
+            // Performance: har shipment × har service par CourierRate/Zone/surcharge
+            // queries na chale isliye sab kuch ek baar preload karo.
+            // (100 shipments × 10 services × queries = hazaaron queries bachte hain.)
+            $allCustomerRates = \App\Models\CourierRate::whereIn('customer_id', [$customerId, 0])
+                ->get()
+                ->groupBy('service_id');
+            $preloadedSurcharges = \App\Models\SurCharge::all()->keyBy('id');
+            $preloadedZones = \App\Models\Zone::all()->keyBy(function ($z) {
+                return strtoupper(trim((string) $z->zone_code));
+            });
+
             foreach ($grouped as $awbNo => $rowGroup) {
                 $firstRow = $rowGroup[0];
 
@@ -633,10 +693,11 @@ class BulkUploadController extends Controller
                     $totalChgWeight = $totalActWeight;
                 }
 
-                // Look up zone by consignee state (mirrors getUpsRate)
+                // Look up zone by consignee state (mirrors getUpsRate).
+                // Preloaded map se — per-shipment Zone query bachti hai.
                 $zone = null;
                 if (!empty($consigneeState)) {
-                    $zone = \App\Models\Zone::where('zone_code', $consigneeState)->first();
+                    $zone = $preloadedZones->get(strtoupper(trim((string) $consigneeState)));
                 }
 
                 // Destination-based service filtering now uses the `country` column on
@@ -658,18 +719,21 @@ class BulkUploadController extends Controller
                         continue; // country mismatch → skip this service
                     }
 
-                    // Fetch rates: customer-specific first, then default fallback
-                    $rates = \App\Models\CourierRate::where('customer_id', $customerId)
-                        ->where('service_id', $service->id)
-                        ->orderBy('wt_range_start')
-                        ->get();
+                    // Fetch rates from preloaded collection: customer-specific first,
+                    // then default fallback (pehle jaisa behaviour, bina query ke).
+                    $rates = $allCustomerRates->get($service->id, collect())->filter(function ($r) use ($customerId) {
+                        return (int) $r->customer_id === (int) $customerId;
+                    });
 
                     if ($rates->isEmpty() && $customerId !== 0) {
-                        $rates = \App\Models\CourierRate::where('customer_id', 0)
-                            ->where('service_id', $service->id)
-                            ->orderBy('wt_range_start')
-                            ->get();
+                        $rates = $allCustomerRates->get($service->id, collect())->filter(function ($r) {
+                            return (int) $r->customer_id === 0;
+                        });
                     }
+                    // SQL wali ordering (wt_range_start numeric) preserve karo.
+                    $rates = $rates->sortBy(function ($r) {
+                        return (float) $r->wt_range_start;
+                    })->values();
 
                     // Find rates matching weight AND zone.
                     // Matching uses the zone's `zone_number_testing` field (compared against
@@ -700,15 +764,36 @@ class BulkUploadController extends Controller
                         // Mirror create-shipments computation exactly:
                         // each rate's own surcharges are included and GST is
                         // charged on the full amount (base + fuel + surcharges).
-                        $surchargeAmount = $matchedRate->surcharge_amount;
-                        $surchargeData = $matchedRate->surchargeModels()->map(function ($s) {
-                            return [
-                                'id' => $s->id,
-                                'name' => $s->name,
-                                'code' => $s->code,
-                                'price' => (float) $s->price,
-                            ];
-                        })->values()->all();
+                        // Preloaded surcharge map se — per-rate 2 queries bachti hain.
+                        $rawSurchargeIds = $matchedRate->surcharge_id;
+                        if (is_string($rawSurchargeIds)) {
+                            $rawSurchargeIds = trim($rawSurchargeIds);
+                            if ($rawSurchargeIds === '' || $rawSurchargeIds === 'null' || $rawSurchargeIds === '[]') {
+                                $rawSurchargeIds = [];
+                            } else {
+                                $decodedIds = json_decode($rawSurchargeIds, true);
+                                $rawSurchargeIds = is_array($decodedIds) ? $decodedIds : explode(',', $rawSurchargeIds);
+                            }
+                        }
+                        if (! is_array($rawSurchargeIds)) {
+                            $rawSurchargeIds = [];
+                        }
+                        $surchargeIds = array_values(array_filter(array_map('intval', $rawSurchargeIds)));
+                        $surchargeData = [];
+                        $surchargeAmount = 0.0;
+                        foreach ($surchargeIds as $sid) {
+                            $sModel = $preloadedSurcharges->get($sid);
+                            if ($sModel) {
+                                $surchargeData[] = [
+                                    'id' => $sModel->id,
+                                    'name' => $sModel->name,
+                                    'code' => $sModel->code,
+                                    'price' => (float) $sModel->price,
+                                ];
+                                $surchargeAmount += (float) $sModel->price;
+                            }
+                        }
+                        $surchargeAmount = round($surchargeAmount, 2);
                         $computedFuel = $fuelChargeStored > 0 ? $fuelChargeStored : ($price * $fuelPercentage / 100);
                         $computedGst = $gstAmountStored > 0 ? $gstAmountStored : (($price + $computedFuel + $surchargeAmount) * $gstPercentage / 100);
                         $total = $price + $computedFuel + $computedGst + $surchargeAmount;
@@ -950,6 +1035,70 @@ class BulkUploadController extends Controller
         $pdf->save($fullPath);
 
         return $relativePath;
+    }
+
+    /**
+     * Download the invoice PDF for a bulk-uploaded shipment (on-demand).
+     *
+     * Process step me PDF generate nahi hoti (speed ke liye) — user jab
+     * Download dabata hai tab banti hai aur turant download hoti hai.
+     */
+    public function downloadBulkInvoicePdf($shipperId)
+    {
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customer = auth()->guard('customer')->user();
+
+        $shipper = ShipperInfo::where('id', (int) $shipperId)
+            ->where('customer_id', $customer->id)
+            ->firstOrFail();
+
+        $consignee = ConsigneeInfo::where('shipper_id', $shipper->id)->firstOrFail();
+        $invoice = ShipmentInvoice::where('shipper_id', $shipper->id)->firstOrFail();
+
+        // Rate details shipper par stored values se rebuild karo
+        // (process step me calculate hokar base_price/fuel_price/gst_* me save hui thi).
+        $rateDetails = [
+            'rate_id' => $shipper->service_rate_id,
+            'price' => (float) ($shipper->base_price ?? 0),
+            'fuel_charge' => (float) ($shipper->fuel_price ?? 0),
+            'fuel_percentage' => 0,
+            'gst_percentage' => (float) ($shipper->gst_percentage ?? 0),
+            'gst_amount' => (float) ($shipper->gst_amount ?? 0),
+            'surcharge' => [],
+            'surcharge_total' => (float) ($shipper->surcharge_total ?? 0),
+            'total_base_price' => (float) ($shipper->base_price ?? 0),
+            'total_fuel_price' => (float) ($shipper->fuel_price ?? 0),
+            'total_surcharge' => (float) ($shipper->surcharge_total ?? 0),
+            'total' => (float) ($shipper->total_price ?? 0),
+        ];
+        if ($shipper->service_rate_id) {
+            $rate = \App\Models\CourierRate::find($shipper->service_rate_id);
+            if ($rate) {
+                $rateDetails['fuel_percentage'] = (float) ($rate->fuel_percentage ?? 0);
+                $rateDetails['surcharge'] = $rate->surchargeModels()->map(function ($s) {
+                    return [
+                        'id' => $s->id,
+                        'name' => $s->name,
+                        'code' => $s->code,
+                        'price' => (float) $s->price,
+                    ];
+                })->values()->all();
+            }
+        }
+
+        $totalWeight = (float) PackageDimension::where('shipper_id', $shipper->id)->sum('chargeable_weight');
+
+        try {
+            $relativePath = $this->generateBulkInvoicePdf($shipper, $consignee, $invoice, $rateDetails, $totalWeight);
+        } catch (\Exception $e) {
+            Log::warning('Bulk invoice PDF download failed for shipper ' . $shipper->id . ': ' . $e->getMessage());
+            return back()->with('error', 'Invoice PDF could not be generated: ' . $e->getMessage());
+        }
+
+        return response()->download(public_path($relativePath), 'invoice_' . $shipper->awb_number . '.pdf');
     }
 
     /**
