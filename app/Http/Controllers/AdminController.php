@@ -3425,13 +3425,13 @@ class AdminController extends Controller
 
             // Build ONE shipment entry for the Delhivery API with hub drop details
             return [
-                'name' => $hubCfg['hub_name'] ?? 'ac549e-UNITEDWORLDWIDECOURI-do',
-                'add' => $hubCfg['hub_address'] ?? 'BUILDING NO. 1, BYPASS ROAD',
+                'name' => $hubCfg['hub_name'] ?? 'United Worldwide Couriers Private Limited',
+                'add' => $hubCfg['hub_address'] ?? 'Plot/Khasra # 629, 630, 631/1 Near Kela Godown Village Rang Puri',
                 'pin' => $hubCfg['hub_pin'] ?? '110037',
                 'city' => $hubCfg['hub_city'] ?? 'Delhi',
                 'state' => $hubCfg['hub_state'] ?? 'Delhi',
                 'country' => 'India',
-                'phone' => $hubCfg['hub_phone'] ?? '',
+                'phone' => $hubCfg['hub_phone'] ?? '9717094691',
                 'order' => $shipment->reference_number ?? $shipment->invoice_number ?? '',
                 'payment_mode' => $paymentMode,
                 'quantity' => 1,

@@ -279,13 +279,13 @@ return [
         'fm_pickup_url' => env('DELHIVERY_FM_PICKUP_URL', 'https://track.delhivery.com/fm/request/new/'),
         'pickup_time' => env('DELHIVERY_PICKUP_TIME', '11:00:00'),
         // Hub drop address: Delhivery CMU me shipments[] (drop) isi se bharta hai.
-        // Exact values .env me set karo (screenshot: Delhi - 110037).
-        'hub_name' => env('DELHIVERY_HUB_NAME', 'ac549e-UNITEDWORLDWIDECOURI-do'),
-        'hub_address' => env('DELHIVERY_HUB_ADDRESS', 'BUILDING NO. 1, BYPASS ROAD'),
+        // Exact values .env me set karo (Rang Puri hub - 110037).
+        'hub_name' => env('DELHIVERY_HUB_NAME', 'United Worldwide Couriers Private Limited'),
+        'hub_address' => env('DELHIVERY_HUB_ADDRESS', 'Plot/Khasra # 629, 630, 631/1 Near Kela Godown Village Rang Puri'),
         'hub_pin' => env('DELHIVERY_HUB_PIN', '110037'),
         'hub_city' => env('DELHIVERY_HUB_CITY', 'Delhi'),
         'hub_state' => env('DELHIVERY_HUB_STATE', 'Delhi'),
-        'hub_phone' => env('DELHIVERY_HUB_PHONE', ''),
+        'hub_phone' => env('DELHIVERY_HUB_PHONE', '9717094691'),
         // Client warehouse create: customer ke Add Warehouse par hit hota hai.
         'warehouse_create_url' => env('DELHIVERY_WAREHOUSE_CREATE_URL', 'https://track.delhivery.com/api/backend/clientwarehouse/create/'),
         // Client warehouse edit: customer ke Update Warehouse par hit hota hai (name/phone/address).
