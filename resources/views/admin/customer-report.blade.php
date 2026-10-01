@@ -333,7 +333,7 @@
                         <div class="text-muted" style="font-size:12.5px;">
                             Showing {{ $invoices->firstItem() }} to {{ $invoices->lastItem() }} of {{ $invoices->total() }} shipments
                         </div>
-                        <div>{{ $invoices->links() }}</div>
+                        <div>{{ $invoices->links('pagination::bootstrap-5') }}</div>
                     </div>
                 @endif
             </div>
