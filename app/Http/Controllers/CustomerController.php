@@ -9565,8 +9565,11 @@ class CustomerController extends Controller
             // Strict pre-booking gate: block the manifest unless the wallet
             // can cover the shipment charge. This guarantees every successful
             // manifest deducts (no unpaid bookings).
+            // Packed shipments skip this check (business decision: no balance
+            // gate on packed manifest); the post-booking charge attempt still
+            // runs, so a sufficient balance is deducted, otherwise unpaid.
             $gateInfo = $this->getShipmentChargeInfo($shipper, $customerId);
-            if (! $gateInfo['can_manifest']) {
+            if ($shipper->status !== 'packed' && ! $gateInfo['can_manifest']) {
                 return response()->json([
                     'success' => false,
                     'message' => $gateInfo['message'] ?? 'Insufficient wallet balance to manifest this shipment.',
@@ -10397,8 +10400,10 @@ class CustomerController extends Controller
 
                     // Strict pre-booking gate per shipment: insufficient balance
                     // fails only this shipment, the rest of the batch continues.
+                    // Packed shipments skip this check (business decision: no
+                    // balance gate on packed manifest).
                     $bulkGateInfo = $this->getShipmentChargeInfo($shipper, $customerId);
-                    if (! $bulkGateInfo['can_manifest']) {
+                    if ($shipper->status !== 'packed' && ! $bulkGateInfo['can_manifest']) {
                         $results['failed'][] = ['shipper_id' => $shipperId, 'message' => $bulkGateInfo['message'] ?? 'Insufficient wallet balance.'];
 
                         continue;
