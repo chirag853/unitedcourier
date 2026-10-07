@@ -855,6 +855,7 @@
             transition: all .2s ease;
             vertical-align: middle;
             margin-right: 6px;
+            cursor: pointer;
         }
 
         .md-view-btn:hover {
@@ -867,6 +868,47 @@
 
         .md-view-btn i {
             font-size: 17px;
+        }
+
+        /* ===== Print (Delhivery) Button ===== */
+        .md-print-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 36px;
+            min-width: 40px;
+            padding: 0 12px;
+            background: #e7f8f1;
+            border: 1px solid #a7e3c5;
+            color: #0a7d33;
+            font-weight: 700;
+            font-size: 13px;
+            border-radius: 10px;
+            transition: all .2s ease;
+            vertical-align: middle;
+            margin-right: 6px;
+            cursor: pointer;
+        }
+
+        .md-print-btn:hover {
+            background: #0a7d33;
+            border-color: #0a7d33;
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(10, 125, 51, .3);
+        }
+
+        .md-print-btn i {
+            font-size: 17px;
+        }
+
+        .md-delhivery-frame {
+            width: 100%;
+            height: 62vh;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #fff;
         }
 
         /* ===== Shipment Detail Modal ===== */
@@ -1283,6 +1325,18 @@
                                                     data-shipper-id="{{ $shipment['shipper_id'] }}">
                                                 <i class="ti ti-eye"></i>
                                             </button>
+                                            @php $isDelhiveryLabel = strtolower(trim((string) ($shipment['delivery_type'] ?? ''))) === 'delhivery'; @endphp
+                                            @if($isDelhiveryLabel && !empty($shipment['delivery_label']))
+                                            <button type="button"
+                                                    class="md-print-btn"
+                                                    title="Print Delhivery Label ({{ $shipment['awb_number'] }})"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#mdDelhiveryLabelModal"
+                                                    data-awb="{{ $shipment['awb_number'] }}"
+                                                    data-label="{{ $shipment['delivery_label'] }}">
+                                                <i class="ti ti-printer"></i>
+                                            </button>
+                                            @endif
                                             @if($mdManifestStatus === \App\Models\Manifest::STATUS_OPEN && empty($isAdminView))
                                             <form method="POST"
                                                   action="{{ route('customer.manifest-remove') }}"
@@ -1682,6 +1736,26 @@
         </div>
     </div>
 
+    <!-- Delhivery Label Modal -->
+    <div class="modal fade md-modal" id="mdDelhiveryLabelModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title"><i class="ti ti-printer me-2"></i>Delhivery Label <span class="md-awb-chip" id="mdDelhiveryAwb">—</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <iframe id="mdDelhiveryFrame" class="md-delhivery-frame" title="Delhivery shipping label"></iframe>
+                    <div class="text-muted small mt-2">Preview na khule to <a id="mdDelhiveryOpenLink" href="#" target="_blank" rel="noopener">yaha click karke label kholo</a>.</div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="mdDelhiveryNewTab" href="#" target="_blank" rel="noopener" class="btn btn-primary"><i class="ti ti-printer me-1"></i>Open Label</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="md-toast-wrap" id="mdToastWrap"></div>
 
@@ -1695,6 +1769,22 @@
         var manifestShipmentData = @json($shipmentDetails ?? []);
 
         $(document).ready(function () {
+
+            // Delhivery label popup: button ke data-label (Delhivery slip link)
+            // ko iframe + Open Label link me lagao; band karne par clear.
+            var delhiveryModal = document.getElementById('mdDelhiveryLabelModal');
+            delhiveryModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var awb = button.getAttribute('data-awb') || '-';
+                var label = button.getAttribute('data-label') || '#';
+                document.getElementById('mdDelhiveryAwb').textContent = awb;
+                document.getElementById('mdDelhiveryFrame').setAttribute('src', label);
+                document.getElementById('mdDelhiveryOpenLink').setAttribute('href', label);
+                document.getElementById('mdDelhiveryNewTab').setAttribute('href', label);
+            });
+            delhiveryModal.addEventListener('hidden.bs.modal', function () {
+                document.getElementById('mdDelhiveryFrame').removeAttribute('src');
+            });
 
             // Copy manifest number
             $('#mdCopyManifest').on('click', function () {

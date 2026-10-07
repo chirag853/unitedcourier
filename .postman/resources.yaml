@@ -1,0 +1,5 @@
+localResources:
+  collections:
+    - ../Documents/United.postman_collection.json
+workspace:
+  id: ''

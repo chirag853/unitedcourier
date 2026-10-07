@@ -655,6 +655,15 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/services', [AdminController::class, 'services'])->name('admin.services');
     Route::post('/services/{id}/toggle-status', [AdminController::class, 'toggleServiceStatus'])->name('admin.services.toggle-status');
 
+    // Manage Customer API (under Courier Services): customer -> service -> country -> data
+    Route::get('/manage-customer-api', [AdminController::class, 'manageCustomerApi'])->name('admin.manage-customer-api');
+    Route::get('/manage-customer-api/data', [AdminController::class, 'getCustomerApiData'])->name('admin.manage-customer-api.data');
+    Route::get('/manage-customer-api/preview-add', [AdminController::class, 'previewCustomerApiAdd'])->name('admin.manage-customer-api.preview-add');
+    Route::post('/manage-customer-api/add', [AdminController::class, 'addCustomerApi'])->name('admin.manage-customer-api.add');
+    Route::post('/manage-customer-api/remove', [AdminController::class, 'removeCustomerApi'])->name('admin.manage-customer-api.remove');
+    Route::post('/manage-customer-api/save', [AdminController::class, 'saveCustomerApi'])->name('admin.manage-customer-api.save');
+    Route::post('/manage-customer-api/toggle', [AdminController::class, 'toggleCustomerApi'])->name('admin.manage-customer-api.toggle');
+
     // Super Admin Routes
     Route::get('/company', [AdminController::class, 'company'])->name('admin.company');
     Route::get('/subscription', [AdminController::class, 'subscription'])->name('admin.subscription');

@@ -6003,6 +6003,254 @@ class AdminController extends Controller
         return redirect()->back()->with('success', $message);
     }
 
+    /**
+     * Manage Customer API page (under Courier Services).
+     * Flow: select Customer -> select Service -> select Country -> data table.
+     */
+    public function manageCustomerApi(Request $request)
+    {
+        $customers = \App\Models\Customer::orderBy('first_name')->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'customer_code']);
+
+        // DISTINCT service groups (api_provider + service_code), same as Bulk Upload.
+        $serviceGroups = \App\Models\CourierService::selectRaw('MIN(id) as id, api_provider, service_code, MIN(method) as method, MIN(network) as network')
+            ->groupBy('api_provider', 'service_code')
+            ->orderBy('api_provider')
+            ->orderBy('service_code')
+            ->get();
+
+        // Per service group: how many distinct countries it covers (+ the list).
+        // Key = "lower(api_provider)||lower(service_code)" (matches the dropdown value).
+        $groupRows = \App\Models\CourierService::selectRaw('LOWER(TRIM(api_provider)) as api, LOWER(TRIM(service_code)) as code, country, COUNT(*) as cnt')
+            ->whereNotNull('country')
+            ->where('country', '!=', '')
+            ->groupBy('api', 'code', 'country')
+            ->get();
+        $serviceCountryMap = [];
+        foreach ($groupRows as $gr) {
+            $key = $gr->api . '||' . $gr->code;
+            $serviceCountryMap[$key]['countries'][] = $gr->country;
+            $serviceCountryMap[$key]['rows'] = ($serviceCountryMap[$key]['rows'] ?? 0) + (int) $gr->cnt;
+        }
+        foreach ($serviceCountryMap as $key => &$info) {
+            $info['countries'] = array_values(array_unique($info['countries']));
+            sort($info['countries']);
+            $info['count'] = count($info['countries']);
+        }
+        unset($info);
+
+        $countries = \App\Models\CourierService::distinct()
+            ->whereNotNull('country')
+            ->where('country', '!=', '')
+            ->orderBy('country')
+            ->pluck('country');
+
+        return view('admin.manage-customer-api', compact('customers', 'serviceGroups', 'countries', 'serviceCountryMap'));
+    }
+
+    /**
+     * JSON data for the Manage Customer API table — read from the customer_api
+     * table (with service details joined).
+     * GET params: customer_id (required), service_key = "api_provider||service_code" (optional), country (optional).
+     */
+    public function getCustomerApiData(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+            'service_key' => 'nullable|string|max:200',
+            'country' => 'nullable|string|max:50',
+        ]);
+
+        $query = \App\Models\CustomerApi::query()
+            ->join('courier_services', 'courier_services.id', '=', 'customer_api.service_id')
+            ->where('customer_api.customer_id', $validated['customer_id']);
+
+        if (! empty($validated['service_key']) && str_contains($validated['service_key'], '||')) {
+            [$api, $code] = explode('||', $validated['service_key'], 2);
+            $query->whereRaw('LOWER(courier_services.api_provider) = ?', [strtolower(trim($api))])
+                ->whereRaw('LOWER(courier_services.service_code) = ?', [strtolower(trim($code))]);
+        }
+
+        if (! empty($validated['country'])) {
+            $query->whereRaw('LOWER(courier_services.country) = ?', [strtolower(trim($validated['country']))]);
+        }
+
+        $rows = $query->orderBy('courier_services.api_provider')->orderBy('courier_services.method')->orderBy('courier_services.country')
+            ->get([
+                'customer_api.id as map_id',
+                'customer_api.service_id as id',
+                'customer_api.status as api_status',
+                'courier_services.method',
+                'courier_services.network',
+                'courier_services.service_code',
+                'courier_services.api_provider',
+                'courier_services.country',
+            ])
+            ->map(function ($r) {
+                return [
+                    'map_id' => $r->map_id,
+                    'id' => $r->id,
+                    'method' => $r->method,
+                    'network' => $r->network,
+                    'service_code' => $r->service_code,
+                    'api_provider' => $r->api_provider,
+                    'country' => $r->country,
+                    'api_status' => (int) $r->api_status,
+                    'api_allowed' => ((int) $r->api_status === 1),
+                ];
+            });
+
+        $restricted = \App\Models\CustomerApi::where('customer_id', $validated['customer_id'])->exists();
+
+        return response()->json([
+            'success' => true,
+            'restricted' => $restricted,
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * Preview how many enabled services match a service_key + country filter.
+     * Used by the Add form ("N services will be added").
+     */
+    public function previewCustomerApiAdd(Request $request)
+    {
+        $ids = $this->resolveCustomerApiServiceIds($request);
+
+        return response()->json(['success' => true, 'count' => count($ids)]);
+    }
+
+    /**
+     * Add new customer_api mappings by filter: {customer_id, service_key, country, status}.
+     * Resolves every matching enabled courier_services row and inserts missing mappings.
+     */
+    public function addCustomerApi(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+            'service_key' => 'nullable|string|max:200',
+            'country' => 'nullable|string|max:50',
+            'status' => 'nullable|integer|in:0,1',
+        ]);
+
+        $ids = $this->resolveCustomerApiServiceIds($request);
+        if (empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'No enabled services match this service + country.'], 422);
+        }
+
+        $status = (int) ($validated['status'] ?? 1);
+        $added = 0;
+        foreach ($ids as $sid) {
+            $row = \App\Models\CustomerApi::firstOrNew([
+                'customer_id' => $validated['customer_id'],
+                'service_id' => $sid,
+            ]);
+            if (! $row->exists || (int) $row->status !== $status) {
+                $row->status = $status;
+                $row->save();
+                $added++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $added . ' mapping(s) added (' . count($ids) . ' service(s) matched).',
+            'matched' => count($ids),
+            'added' => $added,
+        ]);
+    }
+
+    /**
+     * Delete one customer_api mapping (customer goes back toward open access
+     * when their last mapping is removed).
+     */
+    public function removeCustomerApi(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+            'service_id' => 'required|integer|exists:courier_services,id',
+        ]);
+
+        $deleted = \App\Models\CustomerApi::where('customer_id', $validated['customer_id'])
+            ->where('service_id', $validated['service_id'])
+            ->delete();
+
+        return response()->json([
+            'success' => (bool) $deleted,
+            'message' => $deleted ? 'Mapping removed.' : 'Mapping not found.',
+        ]);
+    }
+
+    /**
+     * Resolve enabled courier_services ids for a service_key + country filter.
+     */
+    private function resolveCustomerApiServiceIds(Request $request): array
+    {
+        $serviceKey = trim((string) $request->input('service_key', ''));
+        $country = trim((string) $request->input('country', ''));
+
+        $query = \App\Models\CourierService::query()->where('status', 1);
+
+        if ($serviceKey !== '' && str_contains($serviceKey, '||')) {
+            [$api, $code] = explode('||', $serviceKey, 2);
+            $query->whereRaw('LOWER(api_provider) = ?', [strtolower(trim($api))])
+                ->whereRaw('LOWER(service_code) = ?', [strtolower(trim($code))]);
+        }
+
+        if ($country !== '') {
+            $query->whereRaw('LOWER(country) = ?', [strtolower($country)]);
+        }
+
+        return $query->pluck('id')->all();
+    }
+
+    /**
+     * Bulk save customer_api mappings: {customer_id, rows: [{service_id, status}]}.
+     * Uses updateOrCreate per row so re-saving is idempotent.
+     */
+    public function saveCustomerApi(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+            'rows' => 'required|array|min:1|max:1000',
+            'rows.*.service_id' => 'required|integer|exists:courier_services,id',
+            'rows.*.status' => 'required|integer|in:0,1',
+        ]);
+
+        foreach ($validated['rows'] as $row) {
+            \App\Models\CustomerApi::updateOrCreate(
+                ['customer_id' => $validated['customer_id'], 'service_id' => $row['service_id']],
+                ['status' => (int) $row['status']]
+            );
+        }
+
+        return response()->json(['success' => true, 'message' => 'Customer API access saved.']);
+    }
+
+    /**
+     * Toggle a single customer_api mapping.
+     */
+    public function toggleCustomerApi(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|integer|exists:customers,id',
+            'service_id' => 'required|integer|exists:courier_services,id',
+        ]);
+
+        $row = \App\Models\CustomerApi::firstOrNew([
+            'customer_id' => $validated['customer_id'],
+            'service_id' => $validated['service_id'],
+        ]);
+        $row->status = $row->exists ? (((int) $row->status === 1) ? 0 : 1) : 1;
+        $row->save();
+
+        return response()->json([
+            'success' => true,
+            'status' => (int) $row->status,
+            'message' => 'Service ' . ((int) $row->status === 1 ? 'ENABLED' : 'DISABLED') . ' for this customer.',
+        ]);
+    }
+
     public function getCustomerRates(Request $request)
     {
         $customerId = $request->customer_id;

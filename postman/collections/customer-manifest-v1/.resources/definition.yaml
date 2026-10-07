@@ -1,0 +1,8 @@
+$kind: collection
+name: Customer Manifest API v1
+description: Unified customer manifest APIs - same payload, api_provider plus method decide carrier.
+variables:
+  - key: base_url
+    value: 'http://localhost:8000'
+  - key: api_token
+    value: ''

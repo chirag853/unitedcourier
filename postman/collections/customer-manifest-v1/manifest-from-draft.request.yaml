@@ -1,0 +1,17 @@
+$kind: http-request
+method: POST
+url: '{{base_url}}/api/v1/manifests/from-draft'
+order: 4000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+  - key: Authorization
+    value: 'Bearer {{api_token}}'
+body:
+  type: json
+  content: |-
+    {
+      "awb_number": "UWC26100600007"
+    }

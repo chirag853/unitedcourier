@@ -7559,6 +7559,8 @@ class CustomerController extends Controller
             return [
                 'shipper_id' => $shipper ? (int) $shipper->id : null,
                 'awb_number' => $shipper ? ($shipper->awb_number ?? 'N/A') : 'N/A',
+                'delivery_type' => $manifest->delivery_type ?? null,
+                'delivery_label' => $manifest->delivery_label ?? null,
                 'invoice_number' => $invoice ? ($invoice->invoice_number ?? 'N/A') : 'N/A',
                 'shipper_company' => $shipper ? ($shipper->company_name ?: ($shipper->contact_person ?: 'N/A')) : 'N/A',
                 'consignee_name' => $consignee ? ($consignee->consignee_name ?: ($consignee->contact_person ?: 'N/A')) : 'N/A',

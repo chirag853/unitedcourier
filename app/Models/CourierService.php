@@ -18,6 +18,7 @@ class CourierService extends Model
         'method_code',
         'network',
         'service_code',
+        'api_code',
         'scode',
         'type',
         'method',

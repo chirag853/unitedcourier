@@ -1,0 +1,9 @@
+$kind: http-request
+method: GET
+url: '{{base_url}}/api/v1/access'
+order: 2500
+headers:
+  - key: Accept
+    value: application/json
+  - key: Authorization
+    value: 'Bearer {{api_token}}'

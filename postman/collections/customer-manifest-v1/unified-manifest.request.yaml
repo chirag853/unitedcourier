@@ -1,0 +1,63 @@
+$kind: http-request
+method: POST
+url: '{{base_url}}/api/v1/manifests'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+  - key: Authorization
+    value: 'Bearer {{api_token}}'
+body:
+  type: json
+  content: |-
+    {
+      "api_provider": "shipuniversal",
+      "method": "UNITED EXPRESS SAVER",
+      "origin_type": "CSB IV",
+      "delivery_destination": "UNITED STATES",
+      "shipper": {
+        "company_name": "Test Exporter",
+        "contact_person": "Rahul",
+        "address_line1": "Plot 1, MIDC",
+        "pincode": "400001",
+        "city": "Mumbai",
+        "state": "MH",
+        "phone_number": "9999999999",
+        "email": "shipper@example.com"
+      },
+      "consignee": {
+        "name": "John Doe",
+        "address_line1": "123 Main St",
+        "zip_code": "10018",
+        "city": "New York",
+        "state": "NY",
+        "phone_number": "12125551212",
+        "email": "consignee@example.com"
+      },
+      "packages": [
+        {
+          "actual_weight_kg": 1.5,
+          "length_cm": 30,
+          "width_cm": 20,
+          "height_cm": 10
+        }
+      ],
+      "invoice": {
+        "invoice_number": "INV-0001",
+        "invoice_date": "2026-10-01",
+        "invoice_amount": 5000,
+        "incoterms": "CIF",
+        "invoice_currency": "INR"
+      },
+      "items": [
+        {
+          "box_no": 1,
+          "description": "General Merchandise",
+          "qty": 1,
+          "unit_rate": 5000,
+          "unit_type": "PCS"
+        }
+      ]
+    }

@@ -349,10 +349,17 @@
                         </li>
                         @endif
                         @if($authAdmin && $authAdmin->hasModuleAccess('services'))
-                        <li>
-                            <a href="{{ url('/admin/services') }}" class="{{ request()->is('admin/services*') ? 'active' : '' }}">
-                                <i class="ti ti-truck"></i><span>Courier Services</span>
+                        <li class="submenu">
+                            <a href="javascript:void(0);"
+                                class="{{ request()->is('admin/services*') || request()->is('admin/manage-customer-api*') ? 'active subdrop' : '' }}">
+                                <i class="ti ti-truck"></i><span>Courier Services</span><span class="menu-arrow"></span>
                             </a>
+                            <ul>
+                                <li><a href="{{ url('/admin/services') }}"
+                                        class="{{ request()->is('admin/services') ? 'active' : '' }}">All Services</a></li>
+                                <li><a href="{{ route('admin.manage-customer-api') }}"
+                                        class="{{ request()->is('admin/manage-customer-api*') ? 'active' : '' }}">Manage Customer API</a></li>
+                            </ul>
                         </li>
                         @endif
                         @if($authAdmin && $authAdmin->hasModuleAccess('admin_management'))

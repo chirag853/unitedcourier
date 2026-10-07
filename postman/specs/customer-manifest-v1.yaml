@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: United Courier Customer Manifest API
+  version: 1.0.0
+  description: |
+    Unified customer API. Same payload for every carrier.
+    `api_provider` + `method` decide which carrier API is hit inside:
+    self / shipuniversal / primus / overseas / postshipping / flyingtigers / shipglobal / ups.
+servers:
+  - url: '{{base_url}}'
+    description: Local / production base URL
+paths:
+  /api/v1/auth/token:
+    post:
+      summary: Issue Bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                name: { type: string, example: api }
+      responses:
+        '200':
+          description: Token issued
+  /api/v1/services:
+    get:
+      summary: List enabled courier services
+      description: Full list with per-service api_allowed flag for the token customer.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Providers + services
+  /api/v1/services/{customerCode}:
+    get:
+      summary: Services mapped in customer_api for a customer_code
+      description: Returns ONLY customer_api rows with status=1 (service enabled). Empty when no mapping.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: customerCode
+          required: true
+          schema: { type: string }
+          example: UWC000064
+      responses:
+        '200':
+          description: Mapped services only
+        '404':
+          description: Customer not found
+  /api/v1/manifests:
+    post:
+      summary: Create shipment draft (no carrier hit)
+      description: |
+        Creates the draft shipment (ShipperInfo/Consignee/Packages/Invoice)
+        and stores api_provider + method on it. NO carrier API is hit and
+        NO wallet deduction happens here. Manifest via from-draft.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnifiedManifestRequest'
+      responses:
+        '200':
+          description: Manifested (or carrier error with same envelope)
+  /api/v1/manifests/from-draft:
+    post:
+      summary: Manifest an existing draft (carrier API is hit here)
+      description: |
+        Manifests a draft created via POST /manifests or web.
+        The Ready-style custom label PDF (same as view-all-shipments Print Label)
+        is generated into custom_label first, then the carrier API is hit.
+        Response includes custom_label_url.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [awb_number]
+              properties:
+                awb_number: { type: string, example: UWC26100600007 }
+      responses:
+        '200':
+          description: Manifest result
+  /api/v1/manifests/{reference}:
+    get:
+      summary: Fetch by AWB or manifest number, with full tracking
+      description: Same timeline as the website tracking page (tracking_history with title + timestamp), plus shipment/consignee summary.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: reference
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Shipment status
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    UnifiedManifestRequest:
+      type: object
+      required: [api_provider, method, delivery_destination, shipper, consignee, packages, invoice, items]
+      properties:
+        api_provider:
+          type: string
+          enum: [self, shipuniversal, primus, overseas, postshipping, flyingtigers, shipglobal, ups]
+          example: shipuniversal
+        method:
+          type: string
+          example: UNITED EXPRESS SAVER
+        service_rate_id:
+          type: integer
+          nullable: true
+        origin_type:
+          type: string
+          enum: [CSB IV, CSB V]
+          default: CSB IV
+        delivery_destination:
+          oneOf: [{ type: string }, { type: integer }]
+          example: UNITED STATES
+        shipper:
+          type: object
+          required: [company_name, contact_person, address_line1, pincode, city, state, phone_number, email]
+          properties:
+            company_name: { type: string }
+            contact_person: { type: string }
+            address_line1: { type: string }
+            address_line2: { type: string, nullable: true }
+            address_line3: { type: string, nullable: true }
+            pincode: { type: string }
+            city: { type: string }
+            state: { type: string, description: 2-letter code for Overseas }
+            phone_number: { type: string }
+            email: { type: string, format: email }
+            kyc_type: { type: string, nullable: true }
+            kyc_number: { type: string, nullable: true }
+        consignee:
+          type: object
+          required: [name, address_line1, zip_code, city, phone_number, email]
+          properties:
+            name: { type: string }
+            contact_person: { type: string, nullable: true }
+            address_line1: { type: string }
+            address_line2: { type: string, nullable: true }
+            address_line3: { type: string, nullable: true }
+            zip_code: { type: string }
+            city: { type: string }
+            state: { type: string, nullable: true }
+            phone_number: { type: string }
+            email: { type: string, format: email }
+        packages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [actual_weight_kg, length_cm, width_cm, height_cm]
+            properties:
+              actual_weight_kg: { type: number }
+              length_cm: { type: number }
+              width_cm: { type: number }
+              height_cm: { type: number }
+              volumetric_weight: { type: number, nullable: true }
+              chargeable_weight: { type: number, nullable: true }
+        invoice:
+          type: object
+          required: [invoice_number, invoice_date, invoice_amount]
+          properties:
+            invoice_number: { type: string }
+            invoice_date: { type: string, format: date }
+            invoice_amount: { type: number }
+            incoterms: { type: string, default: CIF }
+            invoice_currency: { type: string, default: INR }
+            reference_number: { type: string, nullable: true }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              box_no: { type: integer, default: 1 }
+              description: { type: string }
+              hs_code: { type: string, nullable: true }
+              hts_code: { type: string, nullable: true }
+              unit_type: { type: string, default: PCS }
+              qty: { type: number, default: 1 }
+              unit_rate: { type: number, default: 0 }
+              igst_percentage: { type: number, default: 0 }
+              igst_amount: { type: number, default: 0 }
+              amount: { type: number, nullable: true }
+        csb:
+          type: object
+          properties:
+            ecommerce: { type: string, enum: [Yes, No], default: No }
+            scheme: { type: string, enum: [Yes, No], default: No }
+            bond_ut_igst: { type: string, enum: [Bond UT, IGST], nullable: true }
+            lut_number: { type: string, nullable: true }
+            iec_code: { type: string, nullable: true }
+            gst_number: { type: string, nullable: true }
+            ad_code: { type: string, nullable: true }
+            bank_account_number: { type: string, nullable: true }
+            bank_ifsc_code: { type: string, nullable: true }
