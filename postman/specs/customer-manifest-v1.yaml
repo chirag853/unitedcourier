@@ -38,7 +38,7 @@ paths:
   /api/v1/services/{customerCode}:
     get:
       summary: Services mapped in customer_api for a customer_code
-      description: Returns ONLY customer_api rows with status=1 (service enabled). Empty when no mapping.
+      description: Returns ONLY customer_api rows with status=1 (service enabled). Empty when no mapping. The Bearer token must belong to the same customer (customer_code or id); otherwise 403.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path

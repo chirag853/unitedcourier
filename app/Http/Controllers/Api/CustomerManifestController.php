@@ -41,12 +41,28 @@ class CustomerManifestController extends Controller
         }
 
         $plain = bin2hex(random_bytes(32));
+        $name = $validated['name'] ?? 'api';
 
-        CustomerApiToken::create([
-            'customer_id' => $customer->id,
-            'name' => $validated['name'] ?? 'api',
-            'token' => hash('sha256', $plain),
-        ]);
+        // Same customer + name par wahi row update hogi, nayi row nahi banegi.
+        // Isse repeat hit par tokens accumulate nahi hote; purana token
+        // re-hit ke baad invalid ho jata hai.
+        $record = CustomerApiToken::where('customer_id', $customer->id)
+            ->where('name', $name)
+            ->latest('id')
+            ->first();
+
+        if ($record) {
+            $record->forceFill([
+                'token' => hash('sha256', $plain),
+                'last_used_at' => null,
+            ])->save();
+        } else {
+            $record = CustomerApiToken::create([
+                'customer_id' => $customer->id,
+                'name' => $name,
+                'token' => hash('sha256', $plain),
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -107,6 +123,14 @@ class CustomerManifestController extends Controller
         }
         if (! $customer) {
             return response()->json(['success' => false, 'message' => 'Customer not found.'], 404);
+        }
+
+        // Ek token sirf apne customer ke liye: URL ka customerCode
+        // token wale customer se match hona chahiye.
+        /** @var Customer|null $apiCustomer */
+        $apiCustomer = $request->attributes->get('api_customer');
+        if ($apiCustomer && (int) $apiCustomer->id !== (int) $customer->id) {
+            return response()->json(['success' => false, 'message' => 'This token belongs to another customer.'], 403);
         }
 
         // $services = CourierService::join('customer_api', 'customer_api.service_id', '=', 'courier_services.id')
