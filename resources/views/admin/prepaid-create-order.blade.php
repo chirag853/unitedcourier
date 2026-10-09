@@ -7743,7 +7743,7 @@
                                                                     <label class="form-label">Invoice Amount </label>
                                                                     <input type="number" class="form-control"
                                                                         name="invoice_amount" value="{{ old('invoice_amount') }}"
-                                                                        placeholder="Invoice Amount">
+                                                                        placeholder="Invoice Amount" readonly>
                                                                 </div>
                                                             </div>
                                                             <div class="col-md-6">
@@ -8177,6 +8177,9 @@
                                                             });
                                                             const totalInput = document.getElementById('totalAmount');
                                                             if (totalInput) totalInput.value = total;
+                                                            // Autofill Invoice Amount with the same items total
+                                                            const invoiceAmountInput = document.querySelector('[name="invoice_amount"]');
+                                                            if (invoiceAmountInput) invoiceAmountInput.value = total;
                                                             // Validate against max allowed total
                                                             const maxTotal = window.getMaxInvoiceTotal();
                                                             const totalAmountEl = document.getElementById('totalAmount');
