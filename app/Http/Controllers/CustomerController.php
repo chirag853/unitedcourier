@@ -11639,9 +11639,52 @@ class CustomerController extends Controller
 
             $apiResponse = $orderResponse->json();
 
-            // Ship Global may return HTTP 200 but with "success": false in the body
-            // (e.g., label: "manual" means order created but label needs manual generation)
-            // We treat it as success if an order_number was returned, regardless of body success flag
+            // Strict rule: Ship Global may return HTTP 200 with "success": false
+            // in the body (e.g. label "manual"). An explicit false means the
+            // booking did NOT succeed, so the manifest must stop here — no
+            // tracking row, no manifest record, no wallet deduction — even if
+            // an order_number is present in the response.
+            $bodySuccess = null;
+            if (is_array($apiResponse)) {
+                if (array_key_exists('success', $apiResponse)) {
+                    $bodySuccess = $apiResponse['success'];
+                } elseif (isset($apiResponse['data']) && is_array($apiResponse['data']) && array_key_exists('success', $apiResponse['data'])) {
+                    $bodySuccess = $apiResponse['data']['success'];
+                }
+            }
+            $bodyFailed = $bodySuccess === false || $bodySuccess === 0 || $bodySuccess === 'false' || $bodySuccess === '0';
+            if ($orderResponse->successful() && $bodyFailed) {
+                $errorMessage = 'Ship Global API returned success: false.';
+                if (is_array($apiResponse)) {
+                    if (isset($apiResponse['error'])) {
+                        $errorMessage = is_string($apiResponse['error']) ? $apiResponse['error'] : json_encode($apiResponse['error']);
+                    } elseif (isset($apiResponse['message'])) {
+                        $errorMessage = $apiResponse['message'];
+                    }
+                    if (isset($apiResponse['details']) && is_array($apiResponse['details']) && ! empty($apiResponse['details'])) {
+                        $errorMessage .= ' — '.implode('; ', $apiResponse['details']);
+                    }
+                }
+                $failedOrderNumber = null;
+                if (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
+                    $failedOrderNumber = $apiResponse['data']['order_number'];
+                } elseif (isset($apiResponse['order_number'])) {
+                    $failedOrderNumber = $apiResponse['order_number'];
+                }
+                if ($failedOrderNumber) {
+                    $errorMessage .= ' (Ship Global order#: '.$failedOrderNumber.')';
+                }
+                \Log::error('Ship Global order creation: body success=false for shipper #'.$shipper->id.'. Response: '.json_encode($apiResponse));
+
+                return [
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'data' => $apiResponse,
+                ];
+            }
+
+            // Order number present + no explicit failure flag => success.
+            // (HTTP 200 with no order_number is handled as failure below.)
             $orderNumber = null;
             if (isset($apiResponse['data']) && isset($apiResponse['data']['order_number'])) {
                 $orderNumber = $apiResponse['data']['order_number'];
