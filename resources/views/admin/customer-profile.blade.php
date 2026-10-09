@@ -2389,6 +2389,7 @@
                                 <select class="form-select" id="rechargeMode" name="mode">
                                     <option value="credit" selected>Credit</option>
                                     <option value="cash" selected>Cash</option>
+                                    <option value="bank">Bank</option>
                                 </select>
                             </div>
                             <div class="col-md-6">

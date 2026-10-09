@@ -18,6 +18,7 @@ use App\Models\CreateShipment;
 use App\Models\CsbInformation;
 use App\Models\Customer;
 use App\Models\Destination;
+use App\Models\ExporterCustomer;
 use App\Models\Manifest;
 use App\Models\PackageDimension;
 use App\Models\ShipmentInvoice;
@@ -72,6 +73,12 @@ class CodController extends Controller
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
+        // "Select Customer" lists every saved export customer (shipper) with
+        // its owning parent customer. "Bill To" is auto-selected from it.
+        $exporterCustomers = ExporterCustomer::with('exporter')
+            ->orderBy('company_name')
+            ->orderBy('contact_person')
+            ->get();
 
         return view('admin.cod-create-order', compact(
             'customer',
@@ -80,7 +87,8 @@ class CodController extends Controller
             'zones',
             'destinations',
             'canCreateShipment',
-            'codCustomers'
+            'codCustomers',
+            'exporterCustomers'
         ));
     }
 
@@ -116,12 +124,25 @@ class CodController extends Controller
                 ]);
             }
 
+            // Normalize reference number: empty/blank becomes null so the
+            // global uniqueness check only applies to actually filled values.
+            // Trim shipper phone so accidental spaces don't fail the 10-digit check.
+            $request->merge([
+                'reference_number' => $request->filled('reference_number')
+                    ? trim((string) $request->input('reference_number'))
+                    : null,
+                'shipper_phone_number' => trim((string) $request->input('shipper_phone_number')),
+            ]);
+
             // Validate the request data (identical rules to the customer create-shipment page)
             $validatedData = $request->validate([
                 // Shipper Info
                 'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
-                'selected_exporter_customer_id' => 'nullable|integer',
+                'reason_for_export' => 'nullable|string|in:sample,gift,commercial,repair,return,others|max:20',
+                'business_type' => 'nullable|string|max:50',
+                'selected_exporter_customer_id' => 'nullable|integer|exists:exporter_customers,id',
+                'bill_to_customer_id' => 'nullable|integer|exists:customers,id',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
@@ -133,7 +154,7 @@ class CodController extends Controller
                 'shipper_pincode' => 'required|string|max:20',
                 'shipper_city' => 'required|string|max:100',
                 'shipper_state' => ['required', 'string', 'size:2', 'regex:/^[A-Z]{2}$/'],
-                'shipper_phone_number' => 'required|string|max:30',
+                'shipper_phone_number' => 'required|string|regex:/^[0-9]{10}$/',
                 'shipper_emails' => 'required|email|max:150',
                 'shipper_email_opt_out' => 'boolean',
                 'shipper_kyc_type' => 'nullable|string|max:50',
@@ -152,7 +173,7 @@ class CodController extends Controller
                 'consignee_city' => 'required|string|max:100',
                 'consignee_state' => 'nullable|string|max:100',
                 'consignee_phone_number' => 'required|string|max:30',
-                'consignee_email' => 'required|email|max:150',
+                'consignee_email' => 'nullable|email|max:150',
                 'consignee_email_opt_out' => 'boolean',
 
                 // Package Dimension
@@ -175,6 +196,7 @@ class CodController extends Controller
                 'bond_ut_igst' => 'nullable|in:Bond UT,IGST',
                 'lut_number' => 'nullable|string|max:100',
                 'iec_code' => 'nullable|string|max:50',
+                'inv_terms' => 'nullable|string|in:CF,DAP,FOB,CIF|max:20',
                 'gst_number' => 'nullable|string|max:50',
                 'ad_code' => 'nullable|string|max:100',
                 'bank_account_number' => 'nullable|string|max:50',
@@ -186,7 +208,8 @@ class CodController extends Controller
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
-                'reference_number' => 'nullable|string|max:100',
+                'reference_number' => 'nullable|string|max:100|unique:shipment_invoice,reference_number',
+                'tax_code' => 'nullable|string|max:50',
 
                 // Remark
                 'entry_remark' => 'required|string|max:1000',
@@ -195,6 +218,7 @@ class CodController extends Controller
                 // invoice items
                 'items.*.box_no' => 'nullable|integer',
                 'items.*.description' => 'nullable|string|max:500',
+                'items.*.product_sku' => 'nullable|string|max:100',
                 'items.*.hs_code' => 'nullable|string|max:50',
                 'items.*.hts_code' => 'nullable|string|max:50',
                 'items.*.unit_type' => 'nullable|string|max:50',
@@ -204,6 +228,16 @@ class CodController extends Controller
                 'items.*.igst_amount' => 'nullable|numeric|min:0',
                 'items.*.amount' => 'nullable|numeric|min:0',
             ]);
+
+            // The "Select Customer" dropdown submits an ExporterCustomer
+            // (saved shipper) id. Resolve it to the owning parent customer id
+            // used across shipper/shipment/remark/bill-to/manifest records.
+            // "Bill To" is auto-selected from the same export customer.
+            $selectedExporter = ! empty($validatedData['selected_exporter_customer_id'])
+                ? ExporterCustomer::find($validatedData['selected_exporter_customer_id'])
+                : null;
+            $orderCustomerId = $selectedExporter ? (int) $selectedExporter->exporter_id : null;
+            $billToCustomerId = $validatedData['bill_to_customer_id'] ?? $orderCustomerId;
 
             // ------------------------------------------------------------------
             // Every box declared in the package dimensions must have at least
@@ -739,7 +773,7 @@ class CodController extends Controller
             $totalPrice = round($basePrice + $fuelPrice + $gstAmt + $surchargeTotal, 2);
 
             $shipper = ShipperInfo::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                'customer_id' => $orderCustomerId,
                 'awb_number' => $awbNumber,
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
@@ -777,7 +811,7 @@ class CodController extends Controller
             // Store the shipment remark (entry remark captured at creation time,
             // finance remark can be filled later by the finance team).
             ShipmentRemark::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
+                'customer_id' => $orderCustomerId ?? 0,
                 'shipper_id' => $shipperId,
                 'entry_remark' => $validatedData['entry_remark'] ?? null,
                 'finance_remark' => $validatedData['finance_remark'] ?? null,
@@ -786,7 +820,7 @@ class CodController extends Controller
             // Store Bill To info
             BillTo::create([
                 'shipper_id' => $shipperId,
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                'customer_id' => $billToCustomerId,
                 'biller_name' => $validatedData['biller_name']
                     ?? $validatedData['shipper_contact_person']
                     ?? null,
@@ -797,6 +831,8 @@ class CodController extends Controller
                 'shipper_id' => $shipperId,
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
+                'reason_for_export' => $validatedData['reason_for_export'] ?? 'sample',
+                'business_type' => $validatedData['business_type'] ?? null,
                 'consignee_name' => $validatedData['consignee_name'],
                 'contact_person' => $validatedData['consignee_contact_person'],
                 'address_line1' => $validatedData['consignee_address_line1'],
@@ -806,7 +842,7 @@ class CodController extends Controller
                 'city' => $validatedData['consignee_city'],
                 'state' => $validatedData['consignee_state'] ?? null,
                 'phone_number' => $validatedData['consignee_phone_number'],
-                'email' => $validatedData['consignee_email'],
+                'email' => $validatedData['consignee_email'] ?? null,
                 'email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
             ]);
 
@@ -846,6 +882,7 @@ class CodController extends Controller
                 'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
                 'lut_number' => $validatedData['lut_number'] ?? null,
                 'iec_code' => $validatedData['iec_code'] ?? null,
+                'inv_terms' => $validatedData['inv_terms'] ?? null,
                 'gst_number' => $validatedData['gst_number'] ?? null,
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
@@ -862,6 +899,7 @@ class CodController extends Controller
                 'incoterms' => $validatedData['incoterms'],
                 'invoice_currency' => $validatedData['invoice_currency'],
                 'reference_number' => $validatedData['reference_number'] ?? null,
+                'tax_code' => $validatedData['tax_code'] ?? null,
                 'status' => 'draft',
                 'delivery_type' => 'DDU',
             ]);
@@ -881,6 +919,7 @@ class CodController extends Controller
                         'package_dimension_id' => $packageDimensionId,
                         'box_no' => $boxNo,
                         'description' => $item['description'] ?? null,
+                        'product_sku' => $item['product_sku'] ?? null,
                         'hs_code' => $item['hs_code'] ?? null,
                         'hts_code' => $item['hts_code'] ?? null,
                         'unit_type' => $item['unit_type'] ?? null,
@@ -901,7 +940,7 @@ class CodController extends Controller
             // customer id when one was chosen, otherwise 0 (the admin "default
             // rates" sentinel already used throughout this flow).
             $createShipment = CreateShipment::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
+                'customer_id' => $orderCustomerId ?? 0,
                 'shipper_id' => $shipperId,
                 'awb_number' => $awbNumber,
                 'delivery_destination' => $validatedData['delivery_destination'],
@@ -930,7 +969,7 @@ class CodController extends Controller
                 'consignee_city' => $validatedData['consignee_city'],
                 'consignee_state' => $validatedData['consignee_state'] ?? null,
                 'consignee_phone_number' => $validatedData['consignee_phone_number'],
-                'consignee_email' => $validatedData['consignee_email'],
+                'consignee_email' => $validatedData['consignee_email'] ?? null,
                 'consignee_email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
                 'invoice_number' => $invoiceNumber,
                 'invoice_date' => $validatedData['invoice_date'],
@@ -971,7 +1010,7 @@ class CodController extends Controller
                 'manifested',
                 null,
                 'COD order created (manifested)',
-                $validatedData['selected_exporter_customer_id'] ?? null,
+                $orderCustomerId,
                 'admin'
             );
 
@@ -980,7 +1019,7 @@ class CodController extends Controller
             // manifest flow does for regular shipments.
             Manifest::createForShipper(
                 $shipper->id,
-                (int) ($validatedData['selected_exporter_customer_id'] ?? 0)
+                (int) ($orderCustomerId ?? 0)
             );
 
             // ============================================================
@@ -1033,7 +1072,7 @@ class CodController extends Controller
             ShipmentTracking::updateOrCreate(
                 ['shipper_id' => $shipper->id],
                 [
-                    'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                    'customer_id' => $orderCustomerId,
                     'create_shipment_id' => $createShipment->id,
                     'response_status_code' => $shipmentResponse['Response']['ResponseStatus']['Code'] ?? null,
                     'response_status_description' => $shipmentResponse['Response']['ResponseStatus']['Description'] ?? null,

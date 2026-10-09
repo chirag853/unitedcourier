@@ -62,7 +62,7 @@
                             </a>
                         </li>
                         @endif
-                        @if($authAdmin && $authAdmin->canAccessDeliveryDashboard())
+                        @if($authAdmin && ($authAdmin->canAccessDeliveryDashboard() || $authAdmin->hasModuleAccess('delivery')))
                         <li>
                             <a href="{{ route('admin.delivery-dashboard') }}" class="{{ request()->is('admin/delivery-dashboard') ? 'active' : '' }}">
                                 <i class="ti ti-dashboard"></i>

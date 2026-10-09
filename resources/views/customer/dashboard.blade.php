@@ -1439,13 +1439,13 @@
                                             style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 20px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                             onclick="document.getElementById('bizGstCertFileInput').click()">
                                             <input type="file" id="bizGstCertFileInput"
-                                                accept=".pdf,application/pdf" style="display: none;">
+                                                accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
                                             <div id="bizGstCertUploadPlaceholder">
                                                 <i class="fas fa-file-invoice"
                                                     style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
                                                 <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to
-                                                    upload GST Certificate PDF</p>
-                                                <p class="text-muted small mb-0">PDF only (max 5MB)</p>
+                                                    upload GST Certificate</p>
+                                                <p class="text-muted small mb-0">PDF, JPG, or PNG (max 5MB)</p>
                                             </div>
                                             <div id="bizGstCertPreview" style="display: none;">
                                                 <i class="fas fa-check-circle"
@@ -1803,13 +1803,13 @@
                                     <div id="bizLutUploadArea"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; min-height: 180px; padding: 24px; display: flex; align-items: center; justify-content: center; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('bizLutFileInput').click()">
-                                        <input type="file" id="bizLutFileInput" accept="application/pdf"
+                                        <input type="file" id="bizLutFileInput" accept=".pdf,.jpg,.jpeg,.png,image/png,image/jpeg"
                                             style="display: none;">
                                         <div id="bizLutUploadPlaceholder" style="width: 100%; text-align: center;">
                                             <i class="fas fa-file-contract"
                                                 style="font-size: 36px; color: #6366f1; margin-bottom: 8px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca; font-size: 14px;">Click to upload LUT Document</p>
-                                            <p class="text-muted small mb-0">PDF only (max 5MB)</p>
+                                            <p class="text-muted small mb-0">PDF, JPG, or PNG (max 5MB)</p>
                                         </div>
                                         <div id="bizLutPreview" style="display: none; width: 100%; text-align: center;">
                                             <i class="fas fa-check-circle"
@@ -1935,13 +1935,13 @@
                                         onclick="document.getElementById('bizSignatureFileInput').click()"
                                         onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('bizSignatureFileInput').click(); }">
                                         <input type="file" id="bizSignatureFileInput" name="signature_document"
-                                            accept=".png,.jpg,.jpeg,image/png,image/jpeg" style="display: none;"
+                                            accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" style="display: none;"
                                             onclick="event.stopPropagation()">
                                         <div id="bizSignatureUploadPlaceholder">
                                             <i class="fas fa-signature"
                                                 style="font-size: 48px; color: #6366f1; margin-bottom: 12px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca;">Click to upload your signature</p>
-                                            <p class="text-muted small mb-0">PNG or JPG, transparent background preferred (max 5MB)</p>
+                                            <p class="text-muted small mb-0">PNG, JPG, or PDF, transparent background preferred (max 5MB)</p>
                                         </div>
                                         <div id="bizSignaturePreviewWrap" style="display: none;">
                                             <img id="bizSignaturePreviewImg" alt="Authorized signature preview"
@@ -1978,13 +1978,13 @@
                                     <div id="signatureUploadArea"
                                         style="border: 2px dashed #c7d2fe; border-radius: 16px; padding: 24px; text-align: center; background: #f8faff; cursor: pointer; transition: all 0.2s ease;"
                                         onclick="document.getElementById('signatureFileInput').click()">
-                                        <input type="file" id="signatureFileInput" accept="image/png, image/jpeg, image/jpg"
+                                        <input type="file" id="signatureFileInput" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
                                             style="display: none;">
                                         <div id="signatureUploadPlaceholder">
                                             <i class="fas fa-signature"
                                                 style="font-size: 48px; color: #6366f1; margin-bottom: 12px; display: block;"></i>
                                             <p class="mb-1 fw-semibold" style="color: #4338ca;">Click to upload your signature</p>
-                                            <p class="text-muted small mb-0">PNG or JPG, transparent background preferred</p>
+                                            <p class="text-muted small mb-0">PNG, JPG, or PDF, transparent background preferred</p>
                                         </div>
                                         <div id="signaturePreviewWrap" style="display: none;">
                                             <img id="signaturePreviewImg" alt="Signature preview"
@@ -4018,15 +4018,17 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         return true;
                     }
 
-                    function validatePdfOnlyKycFile(file, input) {
+                    function validateGstCertKycFile(file, input) {
                         const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-                        if (extension !== 'pdf' || file.type !== 'application/pdf') {
-                            showKycAlert('Attention Needed', 'Only a PDF file is allowed for the GST Certificate.');
+                        const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+                        const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+                        if (!allowedExtensions.includes(extension) || !allowedMimeTypes.includes(file.type)) {
+                            showKycAlert('Attention Needed', 'Only PDF, JPG, JPEG, or PNG files are allowed for the GST Certificate.');
                             input.value = '';
                             return false;
                         }
                         if (file.size > 5 * 1024 * 1024) {
-                            showKycAlert('Attention Needed', 'The GST Certificate PDF must not exceed 5 MB.');
+                            showKycAlert('Attention Needed', 'The GST Certificate must not exceed 5 MB.');
                             input.value = '';
                             return false;
                         }
@@ -4035,9 +4037,9 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
 
                     function validateBusinessSignatureFile(file, input) {
                         const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-                        const allowedExtensions = ['jpg', 'jpeg', 'png'];
+                        const allowedExtensions = ['jpg', 'jpeg', 'png', 'pdf'];
                         if (!allowedExtensions.includes(extension)) {
-                            showKycAlert('Attention Needed', 'Authorized Signature must be a JPG, JPEG, or PNG image.');
+                            showKycAlert('Attention Needed', 'Authorized Signature must be a JPG, JPEG, PNG, or PDF file.');
                             input.value = '';
                             return false;
                         }
@@ -4110,7 +4112,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             }
                             if (this.files && this.files[0]) {
                                 const file = this.files[0];
-                                if (gstCertificateInputIds.has(fileInputId) && !validatePdfOnlyKycFile(file, this)) {
+                                if (gstCertificateInputIds.has(fileInputId) && !validateGstCertKycFile(file, this)) {
                                     delete kycData[dataKey];
                                     return;
                                 }
@@ -4380,7 +4382,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                                     const minimumExpiryDate = `${startYear + 1}-01-01`;
                                     if (lutExpiry.value < minimumExpiryDate) return fail(`LUT Expiry Date must be on or after ${minimumExpiryDate}.`, lutExpiry);
                                     if (!lutBondYear || !/^\d{4}-\d{2}$/.test(lutBondYear.value)) return fail('Please select valid LUT Bond Start and End Years.', lutStartYear);
-                                    if (!validateFile(lutFile, 'LUT Document', ['application/pdf'], fiveMb, kycData.lut_document)) return false;
+                                    if (!validateFile(lutFile, 'LUT Document', allowedDocumentTypes, fiveMb, kycData.lut_document)) return false;
                                 }
                                 if (!bankType || !['private', 'government'].includes(bankType.value)) return fail('Please select your Bank Category.', bankType);
                                 if (!bankAccount || !/^\d{9,18}$/.test(bankAccount.value.trim())) return fail('Bank Account Number must contain 9 to 18 digits.', bankAccount);
@@ -4590,7 +4592,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                         const hasFreshGstFile = gstFileInput && gstFileInput.files && gstFileInput.files[0];
 
                         if (!hasFreshGstFile && !hasStoredGstDoc) {
-                            missingItems.push('GST Certificate PDF');
+                            missingItems.push('GST Certificate (PDF, JPG, or PNG)');
                             invalidFields.push(gstFileInput ? gstFileInput.closest('#bizGstCertUploadArea') : null);
                         }
 
@@ -4605,7 +4607,7 @@ Mahipalpur Extension, New Delhi 110037, offering 'Logistics Management Services'
                             );
                             return;
                         }
-                        if (hasFreshGstFile && !validatePdfOnlyKycFile(gstFileInput.files[0], gstFileInput)) {
+                        if (hasFreshGstFile && !validateGstCertKycFile(gstFileInput.files[0], gstFileInput)) {
                             return;
                         }
 

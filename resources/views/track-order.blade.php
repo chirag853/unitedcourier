@@ -265,7 +265,7 @@
                     {!! $heroContent->title !!}
                 </h1>
                 <p style="max-width: 100%;" class="mb-5 lead">
-                    {{ $heroContent->description ?? "Just enter AWB tracking number & it's done." }}
+                    {{ $heroContent->description ?? "Enter AWB or reference numbers & track them all." }}
                 </p>
 
             </div>
@@ -276,11 +276,12 @@
                  <form id="trackingForm" onsubmit="return false;">
                     <div class="row g-3 mb-3">
                         <div class="col-md-12">
-                            <label class="form-label">{!! $trackFormContent->title ?? 'AWB Number' !!}</label>
+                            <label class="form-label">{!! $trackFormContent->title ?? 'AWB / Reference Number' !!}</label>
                             <div class="input-group-custom">
-                                <input type="text" id="awb_number_input" class="form-control input-custom" placeholder="{{ $trackFormContent->description ?? 'Airway Bill Number' }}" required>
+                                <textarea id="awb_number_input" class="form-control input-custom" rows="3" placeholder="{{ $trackFormContent->description ?? 'AWB or Reference numbers (comma or new line separated)' }}"></textarea>
                                 <i class="fa-solid fa-box"></i>
                             </div>
+                            <small style="color:#64748b;">Multiple numbers? Separate them with a comma or a new line. (Ctrl + Enter to track)</small>
                         </div>
                         
                     </div>
@@ -300,7 +301,7 @@
         <!-- Loading State -->
         <div id="trackingLoading" class="tracking-loading" style="display: none;">
             <div class="spinner"></div>
-            <p style="margin-top: 10px;">Searching for your shipment...</p>
+            <p style="margin-top: 10px;">Searching for your shipment(s)...</p>
         </div>
 
         <!-- Error State -->
@@ -311,43 +312,9 @@
             </div>
         </div>
 
-        <!-- Success State -->
+        <!-- Success State : one accordion per AWB / reference number -->
         <div id="trackingSuccess" style="display: none;">
-            <!-- Current Status Card -->
-            <div class="tracking-results-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <div>
-                        <h3 style="font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 5px;">
-                            AWB: <span id="resultAwbNumber" class="gradient-text"></span>
-                        </h3>
-                        <span id="resultStatusBadge" class="tracking-status-badge"></span>
-                    </div>
-                    <div style="text-align: right;">
-                        <p style="font-size: 13px; color: #64748b;">Current Status</p>
-                        <p id="resultCurrentTitle" style="font-size: 18px; font-weight: 600; color: #0f172a;"></p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Shipment & Consignee Details Card -->
-            <div class="tracking-results-card">
-                <h4 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 20px;">
-                    <i class="fa-solid fa-file-lines" style="color: #8b5cf6;"></i> Shipment Details
-                </h4>
-                <div class="detail-grid" id="shipmentDetailsGrid">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-
-            <!-- Tracking Timeline Card -->
-            <div class="tracking-results-card">
-                <h4 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 20px;">
-                    <i class="fa-solid fa-timeline" style="color: #06b6d4;"></i> Tracking History
-                </h4>
-                <div class="tracking-timeline" id="trackingTimeline">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
+            <div class="accordion" id="trackingResultsAccordion"></div>
         </div>
     </div>
 </section>
@@ -760,14 +727,14 @@
             .then(data => {
                 loadingDiv.style.display = 'none';
 
-                if (data.success) {
+                if (data.success && data.results && data.results.length > 0) {
                     errorDiv.style.display = 'none';
                     successDiv.style.display = 'block';
-                    renderTrackingResults(data);
+                    renderTrackingAccordions(data.results);
                 } else {
                     successDiv.style.display = 'none';
                     errorDiv.style.display = 'block';
-                    document.getElementById('trackingErrorMsg').textContent = data.message || 'No tracking information found for this AWB number.';
+                    document.getElementById('trackingErrorMsg').textContent = data.message || 'No tracking information found. Please check the numbers and try again.';
                 }
             })
             .catch(error => {
@@ -779,86 +746,127 @@
             });
         }
 
-        function renderTrackingResults(data) {
-            // AWB Number & Current Status
-            document.getElementById('resultAwbNumber').textContent = data.awb_number;
-            document.getElementById('resultCurrentTitle').textContent = data.current_title;
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, function(c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
 
-            const statusBadge = document.getElementById('resultStatusBadge');
-            statusBadge.textContent = data.current_title;
-            statusBadge.className = 'tracking-status-badge status-' + data.current_status;
-
-            // Shipment Details
-            const detailsGrid = document.getElementById('shipmentDetailsGrid');
+        function buildDetailsHtml(shipment, consignee) {
             let detailsHtml = '';
 
-            if (data.shipment) {
+            if (shipment) {
                 const shipmentFields = [
-                    { label: 'AWB Number', value: data.shipment?.awb_number, icon: 'fa-solid fa-barcode' },
-                    { label: 'Shipping Method', value: data.shipment?.shipping_method, icon: 'fa-solid fa-truck' },
-                    { label: 'Shipper Name', value: data.shipment?.shipper_name, icon: 'fa-solid fa-user' },
-                    { label: 'Company', value: data.shipment?.shipper_company, icon: 'fa-solid fa-building' },
-                    { label: 'Origin City', value: data.shipment?.shipper_city, icon: 'fa-solid fa-city' },
-                    { label: 'Origin State', value: data.shipment?.shipper_state, icon: 'fa-solid fa-map' },
-                    { label: 'Phone', value: data.shipment?.shipper_phone, icon: 'fa-solid fa-phone' },
-                    { label: 'Email', value: data.shipment?.shipper_email, icon: 'fa-solid fa-envelope' },
+                    { label: 'AWB Number', value: shipment?.awb_number, icon: 'fa-solid fa-barcode' },
+                    { label: 'Shipping Method', value: shipment?.shipping_method, icon: 'fa-solid fa-truck' },
+                    { label: 'Shipper Name', value: shipment?.shipper_name, icon: 'fa-solid fa-user' },
+                    { label: 'Company', value: shipment?.shipper_company, icon: 'fa-solid fa-building' },
+                    { label: 'Origin City', value: shipment?.shipper_city, icon: 'fa-solid fa-city' },
+                    { label: 'Origin State', value: shipment?.shipper_state, icon: 'fa-solid fa-map' },
+                    { label: 'Phone', value: shipment?.shipper_phone, icon: 'fa-solid fa-phone' },
+                    { label: 'Email', value: shipment?.shipper_email, icon: 'fa-solid fa-envelope' },
                 ];
 
                 shipmentFields.forEach(field => {
                     if (field.value) {
                         detailsHtml += `<div class="detail-item">
                             <div class="detail-label"><i class="${field.icon}" style="margin-right: 5px;"></i>${field.label}</div>
-                            <div class="detail-value">${field.value}</div>
+                            <div class="detail-value">${escapeHtml(field.value)}</div>
                         </div>`;
                     }
                 });
             }
 
-            if (data.consignee) {
+            if (consignee) {
                 const consigneeFields = [
-                    { label: 'Consignee Name', value: data.consignee?.consignee_name, icon: 'fa-solid fa-user-tag' },
-                    { label: 'Destination City', value: data.consignee?.consignee_city, icon: 'fa-solid fa-city' },
-                    { label: 'Destination State', value: data.consignee?.consignee_state, icon: 'fa-solid fa-map' },
-                    { label: 'Destination Country', value: data.consignee?.consignee_country, icon: 'fa-solid fa-globe' },
-                    { label: 'Consignee Phone', value: data.consignee?.consignee_phone, icon: 'fa-solid fa-phone' },
+                    { label: 'Consignee Name', value: consignee?.consignee_name, icon: 'fa-solid fa-user-tag' },
+                    { label: 'Destination City', value: consignee?.consignee_city, icon: 'fa-solid fa-city' },
+                    { label: 'Destination State', value: consignee?.consignee_state, icon: 'fa-solid fa-map' },
+                    { label: 'Destination Country', value: consignee?.consignee_country, icon: 'fa-solid fa-globe' },
+                    { label: 'Consignee Phone', value: consignee?.consignee_phone, icon: 'fa-solid fa-phone' },
                 ];
 
                 consigneeFields.forEach(field => {
                     if (field.value) {
                         detailsHtml += `<div class="detail-item">
                             <div class="detail-label"><i class="${field.icon}" style="margin-right: 5px;"></i>${field.label}</div>
-                            <div class="detail-value">${field.value}</div>
+                            <div class="detail-value">${escapeHtml(field.value)}</div>
                         </div>`;
                     }
                 });
             }
 
-            detailsGrid.innerHTML = detailsHtml || '<p style="color: #64748b;">No shipment details available.</p>';
+            return detailsHtml || '<p style="color: #64748b;">No shipment details available.</p>';
+        }
 
-            // Tracking Timeline
-            const timelineDiv = document.getElementById('trackingTimeline');
+        function buildTimelineHtml(history, currentStatus) {
             let timelineHtml = '';
 
-            if (data.history && data.history.length > 0) {
-                data.history.forEach((entry, index) => {
-                    const isLast = index === data.history.length - 1;
-                    const isActive = entry.status === data.current_status;
+            if (history && history.length > 0) {
+                history.forEach((entry, index) => {
+                    const isActive = entry.status === currentStatus;
                     timelineHtml += `<div class="timeline-entry ${isActive ? 'active-entry' : ''}">
                         <div class="timeline-dot"></div>
-                        <div class="timeline-title">${entry.title}</div>
-                        <div class="timeline-time">${entry.timestamp || 'Time not available'}</div>
+                        <div class="timeline-title">${escapeHtml(entry.title)}</div>
+                        <div class="timeline-time">${escapeHtml(entry.timestamp || 'Time not available')}</div>
                     </div>`;
                 });
             } else {
                 timelineHtml = '<p style="color: #64748b;">No tracking history available.</p>';
             }
 
-            timelineDiv.innerHTML = timelineHtml;
+            return timelineHtml;
         }
 
-        // Allow Enter key to trigger search
-        document.getElementById('awb_number_input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
+        function renderTrackingAccordions(results) {
+            const accordion = document.getElementById('trackingResultsAccordion');
+            let html = '';
+            let firstOpenDone = false;
+
+            results.forEach(function(item, index) {
+                const headingId = 'trackHeading' + index;
+                const collapseId = 'trackCollapse' + index;
+                const open = !!item.found && !firstOpenDone;
+                if (open) firstOpenDone = true;
+
+                let headerHtml = '';
+                let bodyHtml = '';
+
+                if (!item.found) {
+                    headerHtml = '<span style="font-weight:700;">' + escapeHtml(item.query) + '</span>'
+                        + '<span class="tracking-status-badge status-cancelled" style="margin:0 0 0 10px;">Not Found</span>';
+                    bodyHtml = '<p style="color:#ef4444;margin:0;">' + escapeHtml(item.message || 'No tracking information found.') + '</p>';
+                } else {
+                    headerHtml = '<span style="font-weight:700;">AWB: ' + escapeHtml(item.awb_number) + '</span>'
+                        + ((item.matched_via === 'reference' && item.reference_number)
+                            ? '<span style="font-size:12px;color:#64748b;margin-left:8px;">(Ref: ' + escapeHtml(item.reference_number) + ')</span>'
+                            : '')
+                        + '<span class="tracking-status-badge status-' + escapeHtml(item.current_status) + '" style="margin:0 0 0 10px;">' + escapeHtml(item.current_title) + '</span>';
+                    bodyHtml = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:15px;">'
+                        + '<div><p style="font-size:13px;color:#64748b;margin:0;">Current Status</p>'
+                        + '<p style="font-size:18px;font-weight:600;color:#0f172a;margin:0;">' + escapeHtml(item.current_title) + '</p></div></div>'
+                        + '<h4 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px;"><i class="fa-solid fa-file-lines" style="color:#8b5cf6;"></i> Shipment Details</h4>'
+                        + '<div class="detail-grid" style="margin-bottom:20px;">' + buildDetailsHtml(item.shipment, item.consignee) + '</div>'
+                        + '<h4 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px;"><i class="fa-solid fa-timeline" style="color:#06b6d4;"></i> Tracking History</h4>'
+                        + '<div class="tracking-timeline">' + buildTimelineHtml(item.history, item.current_status) + '</div>';
+                }
+
+                html += '<div class="accordion-item">'
+                    + '<h2 class="accordion-header" id="' + headingId + '">'
+                    + '<button class="accordion-button' + (open ? '' : ' collapsed') + '" type="button" data-bs-toggle="collapse" data-bs-target="#' + collapseId + '" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="' + collapseId + '">'
+                    + headerHtml
+                    + '</button></h2>'
+                    + '<div id="' + collapseId + '" class="accordion-collapse collapse' + (open ? ' show' : '') + '" aria-labelledby="' + headingId + '" data-bs-parent="#trackingResultsAccordion">'
+                    + '<div class="accordion-body">' + bodyHtml + '</div>'
+                    + '</div></div>';
+            });
+
+            accordion.innerHTML = html;
+        }
+
+        // Ctrl + Enter triggers search (Enter alone adds a new line for multiple numbers)
+        document.getElementById('awb_number_input').addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
                 searchTracking();
             }

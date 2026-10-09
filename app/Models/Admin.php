@@ -56,6 +56,11 @@ class Admin extends Authenticatable
                 'icon' => 'ti-dashboard',
                 'routes' => ['dashboard', 'dashboard-chart-data'],
             ],
+            'delivery' => [
+                'label' => 'Delivery',
+                'icon' => 'ti-truck-delivery',
+                'routes' => ['delivery-dashboard', 'delivery-dashboard-chart-data', 'delivery-orders', 'pickup-delivery', 'pickup-manifest', 'received-in-hub', 'received-manifest'],
+            ],
             'website' => [
                 'label' => 'Website Management',
                 'icon' => 'ti-world',

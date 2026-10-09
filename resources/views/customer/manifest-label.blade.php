@@ -110,13 +110,6 @@
             height: 64px;
         }
 
-        .barcode .barcode-number {
-            font-size: 15px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            margin-top: 2px;
-        }
-
         /* Address section */
         .address-section {
             border: 1px solid #999;
@@ -239,8 +232,7 @@
 
             <div class="barcode">
                 <img src="https://barcode.tec-it.com/barcode.ashx?data={{ urlencode($label['awb_number']) }}&code=Code128&translate-esc=false"
-                     alt="Barcode">
-                <div class="barcode-number">{{ $label['awb_number'] }}</div>
+                     alt="Barcode {{ $label['awb_number'] }}">
             </div>
 
             <div class="address-section">
@@ -272,12 +264,6 @@
                     @endforeach
                 </tbody>
             </table>
-
-            <div class="barcode">
-                <img src="https://barcode.tec-it.com/barcode.ashx?data={{ urlencode($label['awb_number']) }}&code=Code128&translate-esc=false"
-                     alt="Barcode">
-                <div class="barcode-number">{{ $label['awb_number'] }}</div>
-            </div>
 
             <div class="sender">
                 <div class="sender-title gradient-text">Sender & Return Details</div>

@@ -1522,11 +1522,59 @@
         }
 
         /**
+         * Multi-package labels ko modal me dikhao — pehla existing iframe me,
+         * baaki dynamic iframes me (tracking caption ke sath). Blob URLs return.
+         */
+        function renderCodLabelPdfs(pdfList) {
+            var urls = pdfList.map(function (item) {
+                const binaryString = atob(item.pdf_base64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            });
+            $('#printLabelLoading').addClass('d-none');
+            $('#printLabelPdfFrame').attr('src', urls[0]).css('display', 'block');
+            $('.extra-label-frame').remove();
+            urls.slice(1).forEach(function (blobUrl, idx) {
+                var tracking = pdfList[idx + 1].tracking_number;
+                var caption = tracking ? 'Tracking: ' + tracking : ('Label ' + (idx + 2));
+                $('#printLabelPdfFrame').after(
+                    '<div class="extra-label-frame" style="margin-top:10px;">' +
+                    '<div class="text-muted small mb-1">' + $('<div>').text(caption).html() + '</div>' +
+                    '<iframe src="' + blobUrl + '" style="width:100%;height:500px;border:none;"></iframe></div>'
+                );
+            });
+            $('#printLabelPrintBtn').removeClass('d-none');
+            return urls;
+        }
+
+        /**
+         * Saare label PDFs ko ek-ek karke print window me kholo.
+         */
+        function printCodLabelBlobUrls(urls) {
+            (urls || []).forEach(function (blobUrl, idx) {
+                setTimeout(function () {
+                    const printWindow = window.open(blobUrl, '_blank');
+                    if (printWindow) {
+                        printWindow.onload = function() {
+                            setTimeout(function() {
+                                printWindow.print();
+                            }, 500);
+                        };
+                    }
+                }, idx * 800);
+            });
+        }
+
+        /**
          * Print shipping label - fetches base64 PDF from server (shipment_tracking
          * label via admin.generate-label) and displays it in the modal.
          * @param {number} shipmentId - The shipment_invoice ID
          */
         function printCodLabel(shipmentId) {
+            $('.extra-label-frame').remove();
             $('#printLabelLoading').removeClass('d-none');
             $('#printLabelError').addClass('d-none');
             $('#printLabelPdfFrame').css('display', 'none');
@@ -1542,20 +1590,13 @@
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
                 success: function(response) {
-                    if (response.success && response.pdf_base64) {
-                        const binaryString = atob(response.pdf_base64);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
-                        const blobUrl = URL.createObjectURL(pdfBlob);
-
-                        $('#printLabelLoading').addClass('d-none');
-                        $('#printLabelPdfFrame').attr('src', blobUrl).css('display', 'block');
-                        $('#printLabelPrintBtn').removeClass('d-none');
-
-                        window._codLabelPdfBlobUrl = blobUrl;
+                    var pdfList = (response.pdfs && response.pdfs.length)
+                        ? response.pdfs
+                        : (response.pdf_base64 ? [{ pdf_base64: response.pdf_base64, tracking_number: null }] : []);
+                    if (response.success && pdfList.length) {
+                        window._codLabelPdfBlobUrls = renderCodLabelPdfs(pdfList);
+                        // Backward compat: pehle label ka single URL.
+                        window._codLabelPdfBlobUrl = window._codLabelPdfBlobUrls[0];
                     } else {
                         $('#printLabelLoading').addClass('d-none');
                         $('#printLabelError').removeClass('d-none');
@@ -1578,25 +1619,18 @@
          * Trigger browser print for the PDF label.
          */
         function triggerCodPdfPrint() {
-            if (window._codLabelPdfBlobUrl) {
-                const printWindow = window.open(window._codLabelPdfBlobUrl, '_blank');
-                if (printWindow) {
-                    printWindow.onload = function() {
-                        setTimeout(function() {
-                            printWindow.print();
-                        }, 500);
-                    };
-                }
-            }
+            printCodLabelBlobUrls(window._codLabelPdfBlobUrls || (window._codLabelPdfBlobUrl ? [window._codLabelPdfBlobUrl] : []));
         }
 
         document.addEventListener('DOMContentLoaded', function () {
             // Revoke the blob URL to free memory when the modal closes.
             $('#printLabelModal').on('hidden.bs.modal', function() {
-                if (window._codLabelPdfBlobUrl) {
-                    URL.revokeObjectURL(window._codLabelPdfBlobUrl);
-                    window._codLabelPdfBlobUrl = null;
-                }
+                (window._codLabelPdfBlobUrls || []).forEach(function (blobUrl) {
+                    URL.revokeObjectURL(blobUrl);
+                });
+                window._codLabelPdfBlobUrls = null;
+                window._codLabelPdfBlobUrl = null;
+                $('.extra-label-frame').remove();
                 $('#printLabelLoading').addClass('d-none');
                 $('#printLabelError').addClass('d-none');
                 $('#printLabelPdfFrame').css('display', 'none').attr('src', '');

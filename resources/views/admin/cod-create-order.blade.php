@@ -393,29 +393,29 @@
                                                         </div>
                                                         <div class="col-md-12 mb-3">
                                                             <label class="form-label" for="exporterCustomerSelect">Select Customer</label>
-                                                            <small class="text-muted d-block mb-1">(Only KYC-approved, active customers are listed. Selecting one fills Shipper Info automatically.)</small>
+                                                            <small class="text-muted d-block mb-1">(All saved export customers are listed with their parent customer. Selecting one fills Shipper Info automatically.)</small>
                                                             <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
                                                                 <option value="" data-csb-color="#212529" data-initial-visible="1">Enter shipper details manually</option>
-                                                                @foreach($codCustomers as $codCustomer)
+                                                                @foreach($exporterCustomers as $expCustomer)
                                                                     @php
-                                                                        $isCsbV = (int) $codCustomer->csb_status === 2;
-                                                                        // CSB V origin is offered only when the customer has a
-                                                                        // CSB-V profile in csb_forms (no extra query: csbForm is eager-loaded).
-                                                                        $hasCsbVProfile = (bool) ($codCustomer->csbForm?->is_csb_v);
-                                                                        $csbLabel = $isCsbV ? 'CSB 5' : 'CSB 4';
-                                                                        $csbColor = $isCsbV ? '#198754' : '#dc3545';
-                                                                        $customerDisplayName = trim(($codCustomer->first_name ?? '') . ' ' . ($codCustomer->last_name ?? ''));
+                                                                        $isCsbVExp = strtolower(trim((string) ($expCustomer->csb_type ?? ''))) === 'csb_v';
+                                                                        $hasCsbVExpProfile = $isCsbVExp;
+                                                                        $csbLabelExp = $isCsbVExp ? 'CSB 5' : 'CSB 4';
+                                                                        $csbColorExp = $isCsbVExp ? '#198754' : '#dc3545';
+                                                                        $parentExp = $expCustomer->exporter;
+                                                                        $parentExpName = $parentExp ? trim(($parentExp->first_name ?? '') . ' ' . ($parentExp->last_name ?? '')) : '';
+                                                                        $expDisplayName = trim((string) ($expCustomer->company_name !== '' && $expCustomer->company_name !== null ? $expCustomer->company_name : $expCustomer->contact_person));
                                                                     @endphp
                                                                     <option
-                                                                        value="{{ $codCustomer->id }}"
-                                                                        data-csb-color="{{ $csbColor }}"
-                                                                        data-csb-label="{{ $csbLabel }}"
-                                                                        data-has-csb-v="{{ $hasCsbVProfile ? '1' : '0' }}"
-                                                                        data-initial-visible="{{ $loop->iteration <= 10 ? '1' : '0' }}"
-                                                                        style="color: {{ $csbColor }}; font-weight: 600;"
-                                                                        {{ old('selected_exporter_customer_id') == $codCustomer->id ? 'selected' : '' }}
+                                                                        value="{{ $expCustomer->id }}"
+                                                                        data-csb-color="{{ $csbColorExp }}"
+                                                                        data-csb-label="{{ $csbLabelExp }}"
+                                                                        data-has-csb-v="{{ $hasCsbVExpProfile ? '1' : '0' }}"
+                                                                        data-initial-visible="1"
+                                                                        style="color: {{ $csbColorExp }}; font-weight: 600;"
+                                                                        {{ old('selected_exporter_customer_id') == $expCustomer->id ? 'selected' : '' }}
                                                                     >
-                                                                        {{ $customerDisplayName }} — {{ $codCustomer->phone_number }} — {{ $csbLabel }}
+                                                                        {{ $expDisplayName }}{{ $parentExpName !== '' ? ' (' . $parentExpName . ')' : '' }} — {{ $csbLabelExp }}
                                                                     </option>
                                                                 @endforeach
                                                             </select>
@@ -3736,7 +3736,7 @@
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Biller Name <span class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control" name="biller_name" value="{{ old('biller_name') }}" placeholder="Biller Name">
+                                                                <input type="text" class="form-control" name="biller_name" value="{{ old('biller_name') }}" placeholder="Biller Name" readonly>
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
@@ -3762,7 +3762,7 @@
                                                 <div class="accordion-body border-top">
                                                     <h5 style="margin-bottom: 20px;">Shipment Type</h5>
                                                     <div class="row">
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Delivery Destination<span
                                                                         class="text-danger ms-1">*</span></label>
@@ -3783,9 +3783,9 @@
                                                                 </select>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Origin Type<span
+                                                                <label class="form-label">Inco Term<span
                                                                         class="text-danger ms-1">*</span></label>
                                                                 <select class="select2 select2-hidden-accessible"
                                                                     name="origin_type" data-toggle="select2"
@@ -3794,6 +3794,7 @@
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
                                                                     <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
+                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -3803,6 +3804,29 @@
                                                                         class="text-danger fw-bold">Go to CSB V
                                                                         Onboarding</a>
                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Reason for Export<span
+                                                                        class="text-danger ms-1">*</span></label>
+                                                                <select class="form-control" name="reason_for_export" id="reasonForExport">
+                                                                    <option value="sample" {{ old('reason_for_export', 'sample') == 'sample' ? 'selected' : '' }}>Sample</option>
+                                                                    <option value="gift" {{ old('reason_for_export', 'sample') == 'gift' ? 'selected' : '' }}>Gift</option>
+                                                                    <option value="commercial" {{ old('reason_for_export', 'sample') == 'commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="repair" {{ old('reason_for_export', 'sample') == 'repair' ? 'selected' : '' }}>Repair</option>
+                                                                    <option value="return" {{ old('reason_for_export', 'sample') == 'return' ? 'selected' : '' }}>Return</option>
+                                                                    <option value="others" {{ old('reason_for_export', 'sample') == 'others' ? 'selected' : '' }}>Others</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Business Type</label>
+                                                                <input type="text" class="form-control"
+                                                                    name="business_type" value="{{ old('business_type') }}" placeholder="Business Type">
                                                             </div>
                                                         </div>
                                                     </div>
@@ -7047,8 +7071,7 @@
                                                             <div class="mb-3">
                                                                 <div
                                                                     class="d-flex justify-content-between align-items-center">
-                                                                    <label class="form-label">Email <span
-                                                                            class="text-danger">*</span></label>
+                                                                    <label class="form-label">Email</label>
                                                                     <!-- <div class="form-check form-switch mb-1">
                                                                         <label
                                                                             class="form-check-label d-flex align-items-center gap-2">
@@ -7626,6 +7649,18 @@
                                                                     placeholder="IEC Code">
                                                             </div>
                                                         </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Duty & Taxes Type</label>
+                                                                <select class="form-control" name="inv_terms">
+                                                                    <option value="">Select</option>
+                                                                    <option value="CF" {{ old('inv_terms') == 'CF' ? 'selected' : '' }}>C & F</option>
+                                                                    <option value="DAP" {{ old('inv_terms') == 'DAP' ? 'selected' : '' }}>DAP</option>
+                                                                    <option value="FOB" {{ old('inv_terms') == 'FOB' ? 'selected' : '' }}>FOB</option>
+                                                                    <option value="CIF" {{ old('inv_terms') == 'CIF' ? 'selected' : '' }}>CIF</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
                                                         <div class="col-md-4" id="csbGstDetails" style="display: {{ $hasCsbGst ? ($defaultCsbTaxType === 'gst' ? 'block' : 'none') : 'none' }};">
                                                             <div class="mb-3">
                                                                 <label class="form-label">GST Number</label>
@@ -7742,6 +7777,14 @@
                                                                         placeholder="Reference Number">
                                                                 </div>
                                                             </div>
+                                                            <div class="col-md-6">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Tax Code</label>
+                                                                    <input type="text" class="form-control"
+                                                                        name="tax_code" value="{{ old('tax_code') }}"
+                                                                        placeholder="Tax Code">
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <h5 class="mb-3">Shipment Invoice Items</h5>
                                                         <div style="overflow-x:auto;">
@@ -7751,6 +7794,7 @@
                                                                     <tr>
                                                                         <th>Box No.</th>
                                                                         <th>Description</th>
+                                                                        <th>Product SKU</th>
                                                                         <th>HS Code</th>
                                                                         <th>HTS Code</th>
                                                                         <th>Unit Type</th>
@@ -7777,6 +7821,11 @@
                                                                             <input type="text" class="form-control description-input"
                                                                                 name="items[0][description]" value="{{ old('items.0.description') }}"
                                                                                 placeholder="Description" autocomplete="off">
+                                                                        </td>
+                                                                        <td>
+                                                                            <input type="text" class="form-control"
+                                                                                name="items[0][product_sku]" value="{{ old('items.0.product_sku') }}"
+                                                                                placeholder="Product SKU" autocomplete="off">
                                                                         </td>
                                                                         <td><input type="text" class="form-control hs-code-input"
                                                                                 name="items[0][hs_code]" value="{{ old('items.0.hs_code') }}"
@@ -8000,17 +8049,19 @@
                                                             const boxNoSelect = newRow.querySelector('.boxNo');
                                                             if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
                                                             let inputs = newRow.querySelectorAll('input');
-                                                            // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
+                                                            // inputs: description, product_sku, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
                                                             if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
-                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
-                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
+                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][product_sku]';
+                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hs_code]';
+                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][hts_code]';
                                                             if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
-                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
-                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
-                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
-                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][qty]';
+                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][unit_rate]';
+                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_percentage]';
+                                                            if (inputs[7]) inputs[7].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[8]) inputs[8].name = 'items[' + newIndex + '][amount]';
                                                             // remove old button
-                                                            let actionCell = newRow.children[10];
+                                                            let actionCell = newRow.children[11];
                                                             actionCell.innerHTML = '';
                                                             // add delete button
                                                             let btn = document.createElement('button');
@@ -8160,14 +8211,15 @@
                                                                 let inputs = row.querySelectorAll('input');
                                                                 let unitTypeSelect = row.querySelector('select[name$="[unit_type]"]');
                                                                 if (inputs[0]) inputs[0].name = 'items[' + index + '][description]';
-                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][hs_code]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hts_code]';
+                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][product_sku]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hs_code]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][hts_code]';
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][qty]';
-                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][unit_rate]';
-                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][igst_percentage]';
-                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_amount]';
-                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][amount]';
+                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][qty]';
+                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][unit_rate]';
+                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_percentage]';
+                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][igst_amount]';
+                                                                if (inputs[8]) inputs[8].name = 'items[' + index + '][amount]';
                                                             });
                                                         }
                                                         // Initialize dropdowns on DOM ready
@@ -8765,8 +8817,12 @@
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-4"><strong>Delivery Destination:</strong> <span id="preview_delivery_destination"></span></div>
-                                <div class="col-md-4"><strong>Origin Type:</strong> <span id="preview_origin_type"></span></div>
+                                <div class="col-md-4"><strong>Inco Term:</strong> <span id="preview_origin_type"></span></div>
                                 <div class="col-md-4"><strong>Shipping Method:</strong> <span id="preview_shipping_method"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Reason for Export:</strong> <span id="preview_reason_for_export"></span></div>
+                                <div class="col-md-4"><strong>Business Type:</strong> <span id="preview_business_type"></span></div>
                             </div>
                         </div>
                     </div>
@@ -8819,6 +8875,7 @@
                             <div class="row mt-2">
                                 <div class="col-md-3"><strong>Currency:</strong> <span id="preview_invoice_currency"></span></div>
                                 <div class="col-md-3"><strong>Reference Number:</strong> <span id="preview_reference_number"></span></div>
+                                <div class="col-md-3"><strong>Tax Code:</strong> <span id="preview_tax_code"></span></div>
                             </div>
                         </div>
                     </div>
@@ -9912,73 +9969,46 @@
                 ? ($csbForPrefill->bank_account_number ?? '')
                 : '',
         ];
-        $exporterCustomerPrefill = $codCustomers->mapWithKeys(function ($codCustomer) {
-            $kyc = $codCustomer->kycDetail;
-            $csb = $codCustomer->csbForm;
-            $isCsbV = (int) $codCustomer->csb_status === 2;
-            // CSB V origin + tax profile come from the csb_forms row (1a: row must exist with is_csb_v).
-            $hasCsbVProfile = (bool) ($csb?->is_csb_v);
-
-            $customerGstNumber = collect([
-                $csb?->gst_certificate_number,
-                $csb?->billing_gst,
-                $kyc?->gst_number,
-                $kyc?->billing_gst,
-            ])->first(fn ($value) => filled($value)) ?? '';
-            $hasCsbGst = (bool) ($csb?->is_gst || filled($customerGstNumber));
-            $hasCsbLut = (bool) $csb?->is_lut;
-            $csbTaxType = ! $hasCsbVProfile
+        $exporterCustomerPrefill = $exporterCustomers->mapWithKeys(function ($expCustomer) {
+            $parent = $expCustomer->exporter;
+            $parentName = $parent ? trim(($parent->first_name ?? '') . ' ' . ($parent->last_name ?? '')) : '';
+            $isCsbVExp = strtolower(trim((string) ($expCustomer->csb_type ?? ''))) === 'csb_v';
+            $hasCsbVExpProfile = $isCsbVExp;
+            $hasCsbExpGst = (bool) ($expCustomer->is_gst || filled($expCustomer->gst_certificate_number));
+            $hasCsbExpLut = (bool) $expCustomer->is_lut;
+            $csbExpTaxType = ! $hasCsbVExpProfile
                 ? ''
-                : ($hasCsbGst && ! $hasCsbLut
+                : ($hasCsbExpGst && ! $hasCsbExpLut
                     ? 'gst'
-                    : (! $hasCsbGst && $hasCsbLut ? 'lut' : ($hasCsbGst && $hasCsbLut ? 'lut' : '')));
-            $customerAadharNumber = collect([
-                $kyc?->aadhar_number,
-                $csb?->aadhar_number,
-            ])->first(fn ($value) => filled($value)) ?? '';
-            $customerPanNumber = $kyc?->pan_number ?? '';
-            $customerKycType = $customerGstNumber !== ''
-                ? 'GST (Normal)'
-                : ($customerAadharNumber !== '' ? 'Aadhar Card' : ($customerPanNumber !== '' ? 'PAN Card' : ''));
-            $customerKycNumber = $customerGstNumber
-                ?: ($customerAadharNumber ?: $customerPanNumber);
-            $customerName = trim(($codCustomer->first_name ?? '') . ' ' . ($codCustomer->last_name ?? ''));
+                    : (! $hasCsbExpGst && $hasCsbExpLut ? 'lut' : ($hasCsbExpGst && $hasCsbExpLut ? 'lut' : '')));
 
             return [
-                $codCustomer->id => [
-                    'shipper_company_names' => $kyc?->organization_name ?? $customerName,
-                    'shipper_contact_person' => $customerName,
-                    'shipper_address_line1' => $kyc?->billing_address ?? '',
-                    'shipper_address_line2' => '',
-                    'shipper_address_line3' => '',
-                    'shipper_pincode' => '',
-                    'shipper_city' => '',
-                    'shipper_state' => '',
-                    'shipper_phone_number' => $codCustomer->phone_number ?? '',
-                    'shipper_emails' => $codCustomer->email ?? '',
-                    'shipper_email_opt_out' => '',
-                    'shipper_kyc_type' => $customerKycType,
-                    'shipper_kyc_number' => $customerKycNumber,
-                    'csb_type' => $isCsbV ? 'csb_v' : 'csb_iv',
-                    'csb_label' => $isCsbV ? 'CSB 5' : 'CSB 4',
-                    'has_csb_v_profile' => $hasCsbVProfile,
-                    'is_gst' => $hasCsbGst,
-                    'is_lut' => $hasCsbLut,
-                    'csb_tax_type' => $csbTaxType,
-                    'bond_ut_igst' => $isCsbV
-                        ? ($csb?->is_lut ? 'Bond UT' : 'IGST')
-                        : '',
-                    'lut_number' => $isCsbV && $csb?->is_lut
-                        ? ($csb?->lut_number ?? '')
-                        : '',
-                    'iec_code' => $isCsbV ? ($csb?->iec_number ?? '') : '',
-                    'gst_number' => $customerGstNumber,
-                    'ad_code' => $isCsbV ? ($csb?->ad_code ?? '') : '',
-                    'bank_account_number' => $isCsbV
-                        ? ($csb?->bank_account_number ?? '')
-                        : '',
-                    'addresses' => [],
-                ],
+                $expCustomer->id => array_merge(
+                    $expCustomer->toShipperArray(),
+                    [
+                        'csb_type' => $isCsbVExp ? 'csb_v' : 'csb_iv',
+                        'csb_label' => $isCsbVExp ? 'CSB 5' : 'CSB 4',
+                        'has_csb_v_profile' => $hasCsbVExpProfile,
+                        'is_gst' => $hasCsbExpGst,
+                        'is_lut' => $hasCsbExpLut,
+                        'csb_tax_type' => $csbExpTaxType,
+                        'bond_ut_igst' => $isCsbVExp
+                            ? ($expCustomer->is_lut ? 'Bond UT' : 'IGST')
+                            : '',
+                        'lut_number' => $isCsbVExp && $expCustomer->is_lut
+                            ? ($expCustomer->lut_number ?? '')
+                            : '',
+                        'iec_code' => $isCsbVExp ? ($expCustomer->iec_number ?? '') : '',
+                        'gst_number' => $expCustomer->gst_certificate_number ?? '',
+                        'ad_code' => $isCsbVExp ? ($expCustomer->ad_code ?? '') : '',
+                        'bank_account_number' => $isCsbVExp
+                            ? ($expCustomer->bank_account_number ?? '')
+                            : '',
+                        'addresses' => $expCustomer->displayAddresses(),
+                        'parent_id' => $expCustomer->exporter_id,
+                        'parent_name' => $parentName,
+                    ]
+                ),
             ];
         });
     @endphp
@@ -10539,6 +10569,35 @@
             if (exporterCustomerSelect.value) {
                 setTimeout(applySelectedExporterCustomer, 0);
             }
+            // Bill To follows the selected export customer automatically.
+            exporterCustomerSelect.addEventListener('change', function () {
+                syncBillToFromExporterCustomer(true);
+            });
+            if (window.jQuery && jQuery(exporterCustomerSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(exporterCustomerSelect).on('select2:select.billTo', function () {
+                    window.requestAnimationFrame(function () { syncBillToFromExporterCustomer(true); });
+                });
+            }
+            syncBillToFromExporterCustomer(false);
+        }
+
+        // Keep the "Bill To" customer + biller name in sync with the selected
+        // export customer. The Bill To dropdown itself is disabled (auto-only).
+        function syncBillToFromExporterCustomer(overwriteBiller) {
+            const sel = document.getElementById('exporterCustomerSelect');
+            const billSel = document.getElementById('billToCustomerSelect');
+            const billHidden = document.getElementById('billToCustomerId');
+            const billerInput = document.querySelector('[name="biller_name"]');
+            const sc = (sel && sel.value) ? (exporterCustomerData[String(sel.value)] || null) : null;
+            const parentId = sc && sc.parent_id ? String(sc.parent_id) : '';
+            if (billSel) {
+                billSel.value = parentId;
+                if (billSel.value !== parentId) billSel.value = '';
+            }
+            if (billHidden) billHidden.value = parentId;
+            if (billerInput && sc && sc.parent_name && (overwriteBiller || !billerInput.value.trim())) {
+                billerInput.value = sc.parent_name;
+            }
         }
 
         // Select2 fires jQuery "change" events rather than native ones. Bind
@@ -10797,6 +10856,11 @@
                 addError(shipperEmail, 'Enter a valid shipper email address.', 'basic');
             }
 
+            const shipperPhone = form.querySelector('[name="shipper_phone_number"]');
+            if (shipperPhone && shipperPhone.value.trim() && !/^[0-9]{10}$/.test(shipperPhone.value.trim())) {
+                addError(shipperPhone, 'Shipper phone number must be exactly 10 digits.', 'basic');
+            }
+
             const shipperState = form.querySelector('[name="shipper_state"]');
             const shipperStateValue = shipperState ? shipperState.value : '';
             if (shipperStateValue && !/^[A-Z]{2}$/.test(shipperStateValue)) {
@@ -10813,14 +10877,13 @@
 
             requireFields([
                 { name: 'delivery_destination', label: 'Delivery destination' },
-                { name: 'origin_type', label: 'Origin type' },
+                { name: 'origin_type', label: 'Inco term' },
                 { name: 'consignee_name', label: 'Consignee name' },
                 { name: 'consignee_contact_person', label: 'Consignee contact person' },
                 { name: 'consignee_address_line1', label: 'Consignee address' },
                 { name: 'consignee_zip_code', label: 'Consignee zip code' },
                 { name: 'consignee_city', label: 'Consignee city' },
-                { name: 'consignee_phone_number', label: 'Consignee phone number' },
-                { name: 'consignee_email', label: 'Consignee email' }
+                { name: 'consignee_phone_number', label: 'Consignee phone number' }
             ], 'address');
 
             const consigneeEmail = form.querySelector('[name="consignee_email"]');
@@ -11075,6 +11138,8 @@
                 document.getElementById('preview_delivery_destination').textContent = destDisplay;
             }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
+            document.getElementById('preview_reason_for_export').textContent = getSelectVal('reason_for_export');
+            document.getElementById('preview_business_type').textContent = getVal('business_type');
             // Prefer the selected rate card's method (covers SELF); fall back
             // to the hidden shipping_method select for older flows.
             (function() {
@@ -11139,6 +11204,7 @@
             document.getElementById('preview_incoterms').textContent = getSelectVal('incoterms');
             document.getElementById('preview_invoice_currency').textContent = getSelectVal('invoice_currency');
             document.getElementById('preview_reference_number').textContent = getVal('reference_number');
+            document.getElementById('preview_tax_code').textContent = getVal('tax_code');
 
             // Remark
             document.getElementById('preview_entry_remark').textContent = getVal('entry_remark') || '-';

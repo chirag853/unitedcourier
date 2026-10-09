@@ -995,7 +995,7 @@
                                                 </div>
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
-                                                        <label class="section-label">GST Certificate (PDF)</label>
+                                                        <label class="section-label">GST Certificate (PDF, JPG, PNG)</label>
                                                         <div class="doc-item compact" id="gstKycDocContainer">
                                                             <div class="doc-meta">
                                                                 <div class="doc-file-icon"><i class="fas fa-file-pdf"></i></div>
@@ -1005,7 +1005,7 @@
                                                                 </div>
                                                             </div>
                                                             <div class="text-end d-flex align-items-center">
-                                                                <input type="file" id="gstKycFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf" required
+                                                                <input type="file" id="gstKycFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf,.jpg,.jpeg,.png" required
                                                                     onchange="handleDocSelect(this, 'gstKycFileNameDisplay', 'gstKycFileInfo', 'gstKycRemoveFile', '.gstKycUploadBtn', '#gstKycDocContainer');">
                                                                 <button type="button" class="link-alt border-0 bg-transparent gstKycUploadBtn" onclick="document.getElementById('gstKycFileInput').click();">
                                                                     <i class="fas fa-cloud-upload-alt me-1"></i> Upload
@@ -1014,7 +1014,7 @@
                                                                     onclick="clearDocInput('gstKycFileInput', 'gstKycFileNameDisplay', 'gstKycFileInfo', 'gstKycRemoveFile', '.gstKycUploadBtn', '#gstKycDocContainer');"><i class="fas fa-trash-alt"></i> Remove</span>
                                                             </div>
                                                         </div>
-                                                        <small class="text-muted">GST certificate in PDF format, up to 5 MB.</small>
+                                                        <small class="text-muted">GST certificate in PDF, JPG, or PNG format, up to 5 MB.</small>
                                                     </div>
                                                 </div>
                                                 <div class="row g-3 mt-2">
@@ -1137,7 +1137,7 @@
                                                     // Reuse the account's Cashfree-verified GST (session-based). When a
                                                     // valid verification is present, GST is auto-selected and the GSTIN +
                                                     // registered business name are prefilled read-only so the customer can
-                                                    // save without re-verifying. The GST certificate PDF is still required
+                                                    // save without re-verifying. The GST certificate file is still required
                                                     // because every saved customer stores its own copy.
                                                     $reuseGst = $verifiedGstReusable ?? false;
                                                     $prefilledGstNumber = $reuseGst ? ($verifiedGstNumber ?? '') : old('gst_certificate_number');
@@ -1282,12 +1282,12 @@
                                                             <div class="doc-item compact" id="lutDocContainer">
                                                                 <div class="doc-meta">
                                                                     <div>
-                                                                        <span class="doc-name">LUT Document (PDF)</span>
+                                                                        <span class="doc-name">LUT Document (PDF, JPG, PNG)</span>
                                                                         <div id="lutFileInfo" class="file-status">Selected: <span id="lutFileNameDisplay">file</span></div>
                                                                     </div>
                                                                 </div>
                                                                 <div class="text-end d-flex align-items-center">
-                                                                    <input type="file" id="lutFileInput" name="lut_document" style="display: none;" accept=".pdf"
+                                                                    <input type="file" id="lutFileInput" name="lut_document" style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                                         onchange="handleDocSelect(this, 'lutFileNameDisplay', 'lutFileInfo', 'lutRemoveFile', '.lutUploadBtn', '#lutDocContainer');">
                                                                     <button type="button" class="link-alt border-0 bg-transparent lutUploadBtn" onclick="document.getElementById('lutFileInput').click();">
                                                                         <i class="fas fa-cloud-upload-alt me-1"></i> Upload
@@ -1296,7 +1296,7 @@
                                                                         onclick="clearDocInput('lutFileInput', 'lutFileNameDisplay', 'lutFileInfo', 'lutRemoveFile', '.lutUploadBtn', '#lutDocContainer');"><i class="fas fa-trash-alt"></i> Remove</span>
                                                                 </div>
                                                             </div>
-                                                            <small class="text-muted">Letter of Undertaking in PDF format, up to 5 MB.</small>
+                                                            <small class="text-muted">Letter of Undertaking in PDF, JPG, or PNG format, up to 5 MB.</small>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1327,16 +1327,16 @@
                                                             </div>
                                                         </div>
                                                         <div class="col-12">
-                                                            <label class="section-label">GST Certificate (PDF) <span class="text-danger">*</span></label>
+                                                            <label class="section-label">GST Certificate (PDF, JPG, PNG) <span class="text-danger">*</span></label>
                                                             <div class="doc-item compact" id="gstDocContainer">
                                                                 <div class="doc-meta">
                                                                     <div>
-                                                                        <span class="doc-name">GST Certificate (PDF)</span>
+                                                                        <span class="doc-name">GST Certificate (PDF, JPG, PNG)</span>
                                                                         <div id="gstFileInfo" class="file-status">Selected: <span id="gstFileNameDisplay">file</span></div>
                                                                     </div>
                                                                 </div>
                                                                 <div class="text-end d-flex align-items-center">
-                                                                    <input type="file" id="gstFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf"
+                                                                    <input type="file" id="gstFileInput" name="gst_certificate_document" style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                                         onchange="handleDocSelect(this, 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');">
                                                                     <button type="button" class="link-alt border-0 bg-transparent gstUploadBtn" onclick="document.getElementById('gstFileInput').click();">
                                                                         <i class="fas fa-cloud-upload-alt me-1"></i> Upload
@@ -1345,7 +1345,7 @@
                                                                         onclick="clearDocInput('gstFileInput', 'gstFileNameDisplay', 'gstFileInfo', 'gstRemoveFile', '.gstUploadBtn', '#gstDocContainer');"><i class="fas fa-trash-alt"></i> Remove</span>
                                                                 </div>
                                                             </div>
-                                                            <small class="text-muted">GST certificate in PDF format, up to 5 MB.</small>
+                                                            <small class="text-muted">GST certificate in PDF, JPG, or PNG format, up to 5 MB.</small>
                                                         </div>
                                                         <div class="col-12">
                                                             <div id="gstVerifyStatus" class="small text-muted" role="status">Click VERIFY GST to validate your details through Cashfree before submission.</div>
@@ -1746,9 +1746,9 @@
                                 <small class="text-muted">Auto: 31 March of End Year.</small>
                             </div>
                             <div class="col-12">
-                                <label class="section-label">LUT Document (PDF) <span class="text-danger">*</span></label>
-                                <input type="file" class="form-control" id="csb5LutDoc" name="lut_document" accept=".pdf">
-                                <small class="text-muted">PDF, up to 5 MB.</small>
+                                <label class="section-label">LUT Document (PDF, JPG, PNG) <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" id="csb5LutDoc" name="lut_document" accept=".pdf,.jpg,.jpeg,.png">
+                                <small class="text-muted">PDF, JPG, or PNG, up to 5 MB.</small>
                             </div>
                         </div>
                     </div>
@@ -1772,9 +1772,9 @@
                                 </div>
                             </div>
                             <div class="col-12">
-                                <label class="section-label">GST Certificate (PDF) <span class="text-danger">*</span></label>
-                                <input type="file" class="form-control" id="csb5GstDoc" name="gst_certificate_document" accept=".pdf">
-                                <small class="text-muted">PDF, up to 5 MB.</small>
+                                <label class="section-label">GST Certificate (PDF, JPG, PNG) <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" id="csb5GstDoc" name="gst_certificate_document" accept=".pdf,.jpg,.jpeg,.png">
+                                <small class="text-muted">PDF, JPG, or PNG, up to 5 MB.</small>
                             </div>
                         </div>
                     </div>

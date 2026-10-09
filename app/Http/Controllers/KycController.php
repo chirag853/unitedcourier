@@ -119,12 +119,12 @@ class KycController extends Controller
     private function kycDraftDocumentRules(): array
     {
         return [
-            'gst_certificate_document' => ['file', 'mimes:pdf', 'max:5120'],
+            'gst_certificate_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'aadhar_front_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'aadhar_back_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'pan_document' => ['image', 'mimes:jpg,jpeg,png', 'max:5120'],
-            'signature_document' => ['image', 'mimes:jpg,jpeg,png', 'max:2048'],
-            'lut_document' => ['file', 'mimes:pdf', 'max:5120'],
+            'signature_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:2048'],
+            'lut_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'iec_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'ad_code_document' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ];
@@ -374,16 +374,16 @@ class KycController extends Controller
                 'aadhar_back_document_path' => 'nullable|string',
                 'pan_document' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
                 'pan_document_path' => 'nullable|string',
-                'signature_document' => 'required_without:signature_document_path|nullable|image|mimes:jpg,jpeg,png|max:2048',
+                'signature_document' => 'required_without:signature_document_path|nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
                 'signature_document_path' => 'required_without:signature_document|nullable|string',
             ], [
                 'gst_number.regex' => 'The GST number format is invalid. It must be a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).',
                 'gst_number.size' => 'The GST number must be exactly 15 characters.',
-                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
-                'gst_certificate_document.max' => 'The GST Certificate PDF must not exceed 5 MB.',
+                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF, JPG, JPEG, or PNG file.',
+                'gst_certificate_document.max' => 'The GST Certificate must not exceed 5 MB.',
                 'signature_document.required' => 'Upload your signature before submitting KYC.',
-                'signature_document.image' => 'The signature must be a JPG, JPEG, or PNG image.',
-                'signature_document.mimes' => 'The signature must be a JPG, JPEG, or PNG image.',
+                'signature_document.image' => 'The signature must be a PDF, JPG, JPEG, or PNG file.',
+                'signature_document.mimes' => 'The signature must be a PDF, JPG, JPEG, or PNG file.',
                 'signature_document.max' => 'The signature image must not exceed 2 MB.',
             ]);
 
@@ -425,7 +425,7 @@ class KycController extends Controller
             if ($hasAnyGstData && ($gstNumber === null || $gstBusinessName === '' || !$hasGstCertificate)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'GST is optional for Personal KYC. To provide GST, enter the GSTIN and Business Name, verify them, and upload the GST Certificate PDF; otherwise leave all GST fields empty.',
+                    'message' => 'GST is optional for Personal KYC. To provide GST, enter the GSTIN and Business Name, verify them, and upload the GST Certificate (PDF, JPG, or PNG); otherwise leave all GST fields empty.',
                 ], 422);
             }
 
@@ -739,12 +739,12 @@ class KycController extends Controller
             $validated = $request->validate([
                 'gst_number' => ['required', 'string', 'size:15'],
                 'business_name' => ['required', 'string', 'max:255'],
-                'gst_certificate_document' => ['required_without:gst_certificate_document_path', 'nullable', 'file', 'mimes:pdf', 'max:5120'],
+                'gst_certificate_document' => ['required_without:gst_certificate_document_path', 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
                 'gst_certificate_document_path' => ['required_without:gst_certificate_document', 'nullable', 'string'],
             ], [
-                'gst_certificate_document.required' => 'Upload the GST Certificate PDF before verification.',
-                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF file only.',
-                'gst_certificate_document.max' => 'The GST Certificate PDF must not exceed 5 MB.',
+                'gst_certificate_document.required' => 'Upload the GST Certificate before verification.',
+                'gst_certificate_document.mimes' => 'The GST Certificate must be a PDF, JPG, JPEG, or PNG file.',
+                'gst_certificate_document.max' => 'The GST Certificate must not exceed 5 MB.',
             ]);
 
             $gst = strtoupper(preg_replace('/\s+/', '', $validated['gst_number']));

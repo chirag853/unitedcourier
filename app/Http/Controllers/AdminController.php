@@ -3154,27 +3154,41 @@ class AdminController extends Controller
                     $packageResults = $trackingRecord->package_results;
                 }
 
-                $firstPkg = is_array($packageResults) && isset($packageResults[0]) ? $packageResults[0] : $packageResults;
+                $firstPkg = null;
+                $packageList = [];
+                if (is_array($packageResults) && isset($packageResults[0])) {
+                    $packageList = array_values(array_filter($packageResults, 'is_array'));
+                    $firstPkg = $packageList[0] ?? null;
+                } elseif (is_array($packageResults)) {
+                    $packageList = [$packageResults];
+                    $firstPkg = $packageResults;
+                }
 
                 // Attempt 1: UPS GraphicImage (newer UPS Ship API + older formats).
-                if ($firstPkg) {
+                // Multi-package shipments me HAR package ka apna label hota hai —
+                // saare packages loop karo taaki koi label miss na ho.
+                $labelPdfs = [];
+                foreach ($packageList as $pkg) {
                     $graphicImage = null;
                     $labelFormat = null;
 
                     // Try ShippingLabel key (newer UPS Ship API format)
-                    if (isset($firstPkg['ShippingLabel'])) {
-                        $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
-                        $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
-                    } elseif (isset($firstPkg['LabelImage'])) {
+                    if (isset($pkg['ShippingLabel'])) {
+                        $labelFormat = $pkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                        $graphicImage = $pkg['ShippingLabel']['GraphicImage'] ?? null;
+                    } elseif (isset($pkg['LabelImage'])) {
                         // Older/different UPS response format
-                        $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
-                        $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+                        $labelFormat = $pkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                        $graphicImage = $pkg['LabelImage']['GraphicImage'] ?? null;
                     }
 
                     if ($graphicImage) {
                         if ($labelFormat === 'PDF') {
                             // GraphicImage is already base64-encoded PDF — return directly
-                            $pdfBase64 = $graphicImage;
+                            $labelPdfs[] = [
+                                'tracking_number' => $pkg['TrackingNumber'] ?? null,
+                                'pdf_base64' => $graphicImage,
+                            ];
                         } else {
                             // GraphicImage is base64-encoded image (GIF/SPL/EPL etc.)
                             // Convert to PDF by embedding the image in a Dompdf HTML template
@@ -3197,10 +3211,15 @@ class AdminController extends Controller
                             $html = '<html><body style="margin:0;padding:0;"><img src="' . $imageBase64Src . '" style="width:100%;height:auto;"></body></html>';
                             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
                             $pdf->setPaper([0, 0, 400, 600], 'portrait');
-                            $pdfBase64 = base64_encode($pdf->output());
+                            $labelPdfs[] = [
+                                'tracking_number' => $pkg['TrackingNumber'] ?? null,
+                                'pdf_base64' => base64_encode($pdf->output()),
+                            ];
                         }
                     }
                 }
+
+                $pdfBase64 = $labelPdfs[0]['pdf_base64'] ?? null;
 
                 // Attempt 2: Ship Global pdf_base64.
                 if (empty($pdfBase64)) {
@@ -3255,6 +3274,8 @@ class AdminController extends Controller
                     return response()->json([
                         'success'    => true,
                         'pdf_base64' => $pdfBase64,
+                        // Multi-package shipments me har package ka label.
+                        'pdfs'       => ! empty($labelPdfs) ? $labelPdfs : [['tracking_number' => null, 'pdf_base64' => $pdfBase64]],
                         'awb_number' => $awbNumber,
                         'source'     => 'shipment_tracking',
                     ]);

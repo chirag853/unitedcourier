@@ -1558,6 +1558,53 @@
         }
 
         /**
+         * Multi-package labels ko modal me dikhao — pehla existing iframe me,
+         * baaki dynamic iframes me (tracking caption ke sath). Blob URLs return.
+         */
+        function renderPrepaidLabelPdfs(pdfList) {
+            var urls = pdfList.map(function (item) {
+                const binaryString = atob(item.pdf_base64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            });
+            $('#printLabelLoading').addClass('d-none');
+            $('#printLabelPdfFrame').attr('src', urls[0]).css('display', 'block');
+            $('.extra-label-frame').remove();
+            urls.slice(1).forEach(function (blobUrl, idx) {
+                var tracking = pdfList[idx + 1].tracking_number;
+                var caption = tracking ? 'Tracking: ' + tracking : ('Label ' + (idx + 2));
+                $('#printLabelPdfFrame').after(
+                    '<div class="extra-label-frame" style="margin-top:10px;">' +
+                    '<div class="text-muted small mb-1">' + $('<div>').text(caption).html() + '</div>' +
+                    '<iframe src="' + blobUrl + '" style="width:100%;height:500px;border:none;"></iframe></div>'
+                );
+            });
+            $('#printLabelPrintBtn').removeClass('d-none');
+            return urls;
+        }
+
+        /**
+         * Saare label PDFs ko ek-ek karke print window me kholo.
+         */
+        function printPrepaidLabelBlobUrls(urls) {
+            (urls || []).forEach(function (blobUrl, idx) {
+                setTimeout(function () {
+                    const printWindow = window.open(blobUrl, '_blank');
+                    if (printWindow) {
+                        printWindow.onload = function() {
+                            setTimeout(function() {
+                                printWindow.print();
+                            }, 500);
+                        };
+                    }
+                }, idx * 800);
+            });
+        }
+
+        /**
          * Print shipping label - fetches base64 PDF from server (shipment_tracking
          * label via admin.generate-label) and displays it in the modal.
          * @param {number} shipmentId - The shipment_invoice ID
@@ -1572,6 +1619,7 @@
             if (typeof btn !== 'undefined') {
                 window._prepaidPrintingBtn = btn || window._prepaidPrintingBtn || null;
             }
+            $('.extra-label-frame').remove();
             $('#printLabelLoading').removeClass('d-none');
             $('#printLabelError').addClass('d-none');
             $('#printLabelPdfFrame').css('display', 'none');
@@ -1587,20 +1635,13 @@
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
                 success: function(response) {
-                    if (response.success && response.pdf_base64) {
-                        const binaryString = atob(response.pdf_base64);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
-                        const blobUrl = URL.createObjectURL(pdfBlob);
-
-                        $('#printLabelLoading').addClass('d-none');
-                        $('#printLabelPdfFrame').attr('src', blobUrl).css('display', 'block');
-                        $('#printLabelPrintBtn').removeClass('d-none');
-
-                        window._prepaidLabelPdfBlobUrl = blobUrl;
+                    var pdfList = (response.pdfs && response.pdfs.length)
+                        ? response.pdfs
+                        : (response.pdf_base64 ? [{ pdf_base64: response.pdf_base64, tracking_number: null }] : []);
+                    if (response.success && pdfList.length) {
+                        window._prepaidLabelPdfBlobUrls = renderPrepaidLabelPdfs(pdfList);
+                        // Backward compat: pehle label ka single URL.
+                        window._prepaidLabelPdfBlobUrl = window._prepaidLabelPdfBlobUrls[0];
                     } else {
                         $('#printLabelLoading').addClass('d-none');
                         $('#printLabelError').removeClass('d-none');
@@ -1624,27 +1665,23 @@
          * Print click par status ko dispatched me update karo.
          */
         function triggerPrepaidPdfPrint() {
-            if (window._prepaidLabelPdfBlobUrl) {
+            var urls = window._prepaidLabelPdfBlobUrls || (window._prepaidLabelPdfBlobUrl ? [window._prepaidLabelPdfBlobUrl] : []);
+            if (urls.length) {
                 // Status update: modal ke Print Label click par dispatched.
                 prepaidMarkDispatchedOnPrint(window._prepaidPrintingInvoiceId, window._prepaidPrintingShipperId, window._prepaidPrintingBtn);
-                const printWindow = window.open(window._prepaidLabelPdfBlobUrl, '_blank');
-                if (printWindow) {
-                    printWindow.onload = function() {
-                        setTimeout(function() {
-                            printWindow.print();
-                        }, 500);
-                    };
-                }
+                printPrepaidLabelBlobUrls(urls);
             }
         }
 
         document.addEventListener('DOMContentLoaded', function () {
             // Revoke the blob URL to free memory when the modal closes.
             $('#printLabelModal').on('hidden.bs.modal', function() {
-                if (window._prepaidLabelPdfBlobUrl) {
-                    URL.revokeObjectURL(window._prepaidLabelPdfBlobUrl);
-                    window._prepaidLabelPdfBlobUrl = null;
-                }
+                (window._prepaidLabelPdfBlobUrls || []).forEach(function (blobUrl) {
+                    URL.revokeObjectURL(blobUrl);
+                });
+                window._prepaidLabelPdfBlobUrls = null;
+                window._prepaidLabelPdfBlobUrl = null;
+                $('.extra-label-frame').remove();
                 $('#printLabelLoading').addClass('d-none');
                 $('#printLabelError').addClass('d-none');
                 $('#printLabelPdfFrame').css('display', 'none').attr('src', '');

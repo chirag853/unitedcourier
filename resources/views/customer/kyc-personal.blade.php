@@ -343,7 +343,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="signatureFileInput" name="signature_document"
-                                                    style="display: none;" accept=".jpg,.jpeg,.png"
+                                                    style="display: none;" accept=".jpg,.jpeg,.png,.pdf"
                                                     onchange="handleDocSelect(this, 'signatureFileNameDisplay', 'signatureFileInfo', 'signatureRemoveFile', '.signatureUploadBtn', '#signatureDocContainer');">
                                                 <button type="button" id="signatureUploadBtn"
                                                     class="link-alt border-0 bg-transparent signatureUploadBtn"
@@ -481,7 +481,7 @@
                                             <div class="doc-meta">
                                                 <div>
                                                     <div class="d-flex align-items-center">
-                                                        <span class="doc-name">Merchant Agreement (PDF)</span>
+                                                        <span class="doc-name">Merchant Agreement (PDF, JPG, PNG)</span>
                                                         <i class="fas fa-info-circle info-circle ms-2"
                                                             title="Upload the signed merchant agreement document"></i>
                                                     </div>
@@ -491,7 +491,7 @@
                                             </div>
                                             <div class="text-end d-flex align-items-center">
                                                 <input type="file" id="merchantAgreementFileInput" name="merchant_agreement"
-                                                    style="display: none;" accept=".pdf"
+                                                    style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                     onchange="handleDocSelect(this, 'merchantAgreementFileNameDisplay', 'merchantAgreementFileInfo', 'merchantAgreementRemoveFile', '.merchantAgreementUploadBtn', '#merchantAgreementContainer');">
                                                 <button type="button"
                                                     class="link-alt border-0 bg-transparent merchantAgreementUploadBtn"

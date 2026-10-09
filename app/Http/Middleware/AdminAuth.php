@@ -49,9 +49,10 @@ class AdminAuth
                 ->with('error', 'You do not have permission to access the dashboard.');
         }
 
-        // Delivery pages are exclusively scoped to Delivery_person accounts.
+        // Delivery pages are scoped to Delivery_person accounts, plus any
+        // admin explicitly granted the 'delivery' module (Super Admin bypasses).
         if ($admin && in_array($routeUri, ['delivery-dashboard', 'delivery-dashboard-chart-data', 'delivery-orders', 'pickup-delivery', 'pickup-manifest', 'received-in-hub', 'received-manifest'], true)) {
-            if (!$admin->canAccessDeliveryDashboard()) {
+            if (!$admin->canAccessDeliveryDashboard() && !$admin->hasModuleAccess('delivery')) {
                 if ($request->expectsJson()) {
                     return response()->json([
                         'message' => 'You do not have permission to access delivery pages.',

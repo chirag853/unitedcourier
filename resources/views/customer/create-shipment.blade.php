@@ -484,6 +484,9 @@
                                                                         name="shipper_address_line1" value="{{ old('shipper_address_line1') }}"
                                                                         placeholder="Address Line 1">
                                                                 @endif
+                                                                <div class="mt-2">
+                                                                    <a href="{{ route('customer.warehouse-addresses') }}" target="blank" class="btn btn-sm btn-outline-primary">+ Add Address</a>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div class="col-md-4">
@@ -3766,9 +3769,22 @@
                                             <div class="accordion-collapse collapse" id="address"
                                                 data-bs-parent="#main_accordion">
                                                 <div class="accordion-body border-top">
+                                                    <div class="row mb-3" id="savedConsigneeWrap" style="display: {{ $savedConsignees->isNotEmpty() ? '' : 'none' }};">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3 mb-md-0">
+                                                                <label class="form-label">Choose Consignee</label>
+                                                                <select class="form-control" id="savedConsigneeSelect">
+                                                                    <option value="">-- Select Saved Consignee --</option>
+                                                                    @foreach($savedConsignees as $savedConsignee)
+                                                                        <option value="{{ $savedConsignee->id }}">{{ $savedConsignee->consignee_name }}{{ $savedConsignee->city ? ' — ' . $savedConsignee->city : '' }}{{ $savedConsignee->phone_number ? ' — ' . $savedConsignee->phone_number : '' }}</option>
+                                                                    @endforeach
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <h5 style="margin-bottom: 20px;">Shipment Type</h5>
                                                     <div class="row">
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Delivery Destination<span
                                                                         class="text-danger ms-1">*</span></label>
@@ -3789,9 +3805,9 @@
                                                                 </select>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Origin Type<span
+                                                                <label class="form-label">Inco Term<span
                                                                         class="text-danger ms-1">*</span></label>
                                                                 <select class="select2 select2-hidden-accessible"
                                                                     name="origin_type" data-toggle="select2"
@@ -3800,6 +3816,7 @@
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
                                                                     <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
+                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -3813,6 +3830,29 @@
                                                                     style="display: none;" role="alert">
                                                                     CSB5 is under review
                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Reason for Export<span
+                                                                        class="text-danger ms-1">*</span></label>
+                                                                <select class="form-control" name="reason_for_export" id="reasonForExport">
+                                                                    <option value="sample" {{ old('reason_for_export', 'sample') == 'sample' ? 'selected' : '' }}>Sample</option>
+                                                                    <option value="gift" {{ old('reason_for_export', 'sample') == 'gift' ? 'selected' : '' }}>Gift</option>
+                                                                    <option value="commercial" {{ old('reason_for_export', 'sample') == 'commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="repair" {{ old('reason_for_export', 'sample') == 'repair' ? 'selected' : '' }}>Repair</option>
+                                                                    <option value="return" {{ old('reason_for_export', 'sample') == 'return' ? 'selected' : '' }}>Return</option>
+                                                                    <option value="others" {{ old('reason_for_export', 'sample') == 'others' ? 'selected' : '' }}>Others</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Business Type</label>
+                                                                <input type="text" class="form-control"
+                                                                    name="business_type" value="{{ old('business_type') }}" placeholder="Business Type">
                                                             </div>
                                                         </div>
                                                     </div>
@@ -7058,8 +7098,7 @@
                                                             <div class="mb-3">
                                                                 <div
                                                                     class="d-flex justify-content-between align-items-center">
-                                                                    <label class="form-label">Email <span
-                                                                            class="text-danger">*</span></label>
+                                                                    <label class="form-label">Email</label>
                                                                     <!-- <div class="form-check form-switch mb-1">
                                                                         <label
                                                                             class="form-check-label d-flex align-items-center gap-2">
@@ -7075,13 +7114,175 @@
                                                                     name="consignee_email" value="{{ old('consignee_email') }}" placeholder="Email Address">
                                                             </div>
                                                         </div>
-                                                        <div class="mt-4 d-flex align-items-center">
+                                                        <div class="mt-4 d-flex align-items-center gap-2 flex-wrap">
                                                             <!-- <button type="button" class="btn btn-primary"
                                                                 data-bs-toggle="modal"
                                                                 data-bs-target="#create_success">Save Consignee</button> -->
                                                                 <button type="button" class="btn btn-primary"
                                                                 id="nextTopackage">Next</button>
+                                                            <button type="button" class="btn btn-outline-primary" id="saveConsigneeBtn">Save Consignee Info to the next shipment</button>
+                                                            <span id="saveConsigneeMsg" class="small ms-1"></span>
                                                         </div>
+                                                    <script>
+                                                    (function () {
+                                                        const savedConsigneeMap = @json($savedConsignees->keyBy('id'));
+
+                                                        function setConsigneeField(name, value) {
+                                                            const el = document.querySelector('[name="' + name + '"]');
+                                                            if (!el) return;
+                                                            const val = value ?? '';
+                                                            if (el.tagName === 'SELECT') {
+                                                                if (name === 'delivery_destination') {
+                                                                    // Options carry data-name; saved value is the destination NAME.
+                                                                    let matched = false;
+                                                                    Array.from(el.options).forEach(function (opt) {
+                                                                        if (!matched && opt.dataset && opt.dataset.name && String(opt.dataset.name).trim() === String(val).trim()) {
+                                                                            el.value = opt.value;
+                                                                            matched = true;
+                                                                        }
+                                                                    });
+                                                                    if (!matched) el.value = val;
+                                                                } else {
+                                                                    el.value = val;
+                                                                }
+                                                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                                                                if (window.jQuery) jQuery(el).trigger('change');
+                                                                return;
+                                                            }
+                                                            if (el.classList.contains('phone') && window.intlTelInputGlobals) {
+                                                                try {
+                                                                    const iti = window.intlTelInputGlobals.getInstance(el);
+                                                                    if (iti && val) { iti.setNumber(val); }
+                                                                    else { el.value = val; }
+                                                                } catch (e) { el.value = val; }
+                                                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                                                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                                                                return;
+                                                            }
+                                                            el.value = val;
+                                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                                        }
+
+                                                        function fillConsigneeFromSaved(sc) {
+                                                            if (!sc) return;
+                                                            setConsigneeField('delivery_destination', sc.delivery_destination || '');
+                                                            setConsigneeField('origin_type', sc.origin_type || '');
+                                                            setConsigneeField('reason_for_export', sc.reason_for_export || 'sample');
+                                                            setConsigneeField('business_type', sc.business_type || '');
+                                                            setConsigneeField('consignee_name', sc.consignee_name || '');
+                                                            setConsigneeField('consignee_contact_person', sc.contact_person || '');
+                                                            setConsigneeField('consignee_address_line1', sc.address_line1 || '');
+                                                            setConsigneeField('consignee_address_line2', sc.address_line2 || '');
+                                                            setConsigneeField('consignee_address_line3', sc.address_line3 || '');
+                                                            setConsigneeField('consignee_zip_code', sc.zip_code || '');
+                                                            setConsigneeField('consignee_city', sc.city || '');
+                                                            setConsigneeField('consignee_state', sc.state || '');
+                                                            setConsigneeField('consignee_phone_number', sc.phone_number || '');
+                                                            setConsigneeField('consignee_email', sc.email || '');
+                                                        }
+
+                                                        function consigneeFieldValue(name) {
+                                                            const el = document.querySelector('[name="' + name + '"]');
+                                                            return el ? (el.value || '').trim() : '';
+                                                        }
+
+                                                        const savedSel = document.getElementById('savedConsigneeSelect');
+                                                        if (savedSel) {
+                                                            savedSel.addEventListener('change', function () {
+                                                                const sc = this.value ? savedConsigneeMap[this.value] : null;
+                                                                if (sc) fillConsigneeFromSaved(sc);
+                                                            });
+                                                        }
+
+                                                        const saveBtn = document.getElementById('saveConsigneeBtn');
+                                                        const saveMsg = document.getElementById('saveConsigneeMsg');
+                                                        if (saveBtn) {
+                                                            saveBtn.addEventListener('click', function () {
+                                                                if (saveMsg) { saveMsg.textContent = ''; saveMsg.className = 'small ms-1'; }
+                                                                const payload = {
+                                                                    delivery_destination: consigneeFieldValue('delivery_destination'),
+                                                                    origin_type: consigneeFieldValue('origin_type'),
+                                                                    reason_for_export: consigneeFieldValue('reason_for_export'),
+                                                                    business_type: consigneeFieldValue('business_type'),
+                                                                    consignee_name: consigneeFieldValue('consignee_name'),
+                                                                    consignee_contact_person: consigneeFieldValue('consignee_contact_person'),
+                                                                    consignee_address_line1: consigneeFieldValue('consignee_address_line1'),
+                                                                    consignee_address_line2: consigneeFieldValue('consignee_address_line2'),
+                                                                    consignee_address_line3: consigneeFieldValue('consignee_address_line3'),
+                                                                    consignee_zip_code: consigneeFieldValue('consignee_zip_code'),
+                                                                    consignee_city: consigneeFieldValue('consignee_city'),
+                                                                    consignee_state: consigneeFieldValue('consignee_state'),
+                                                                    consignee_phone_number: consigneeFieldValue('consignee_phone_number'),
+                                                                    consignee_email: consigneeFieldValue('consignee_email')
+                                                                };
+                                                                const requiredLabels = [
+                                                                    ['consignee_name', 'Consignee name'],
+                                                                    ['consignee_contact_person', 'Contact person'],
+                                                                    ['consignee_address_line1', 'Address line 1'],
+                                                                    ['consignee_zip_code', 'ZIP code'],
+                                                                    ['consignee_city', 'City'],
+                                                                    ['consignee_phone_number', 'Phone number']
+                                                                ];
+                                                                const missing = requiredLabels.filter(function (pair) { return !payload[pair[0]]; });
+                                                                if (missing.length) {
+                                                                    if (saveMsg) {
+                                                                        saveMsg.textContent = 'Please fill: ' + missing.map(function (pair) { return pair[1]; }).join(', ') + '.';
+                                                                        saveMsg.classList.add('text-danger');
+                                                                    }
+                                                                    return;
+                                                                }
+                                                                saveBtn.disabled = true;
+                                                                fetch('{{ route("customer.saved-consignees.store") }}', {
+                                                                    method: 'POST',
+                                                                    headers: {
+                                                                        'Content-Type': 'application/json',
+                                                                        'Accept': 'application/json',
+                                                                        'X-Requested-With': 'XMLHttpRequest',
+                                                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                                                                    },
+                                                                    body: JSON.stringify(payload)
+                                                                })
+                                                                .then(function (res) {
+                                                                    return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+                                                                })
+                                                                .then(function ({ ok, data }) {
+                                                                    saveBtn.disabled = false;
+                                                                    if (ok && data.success && data.consignee) {
+                                                                        const sc = data.consignee;
+                                                                        savedConsigneeMap[sc.id] = sc;
+                                                                        if (savedSel) {
+                                                                            const opt = document.createElement('option');
+                                                                            opt.value = sc.id;
+                                                                            opt.textContent = [sc.consignee_name, sc.city, sc.phone_number].filter(Boolean).join(' — ');
+                                                                            savedSel.appendChild(opt);
+                                                                            savedSel.value = sc.id;
+                                                                        }
+                                                                        const wrap = document.getElementById('savedConsigneeWrap');
+                                                                        if (wrap) wrap.style.display = '';
+                                                                        if (saveMsg) {
+                                                                            saveMsg.textContent = 'Saved! Available in Choose Consignee.';
+                                                                            saveMsg.classList.add('text-success');
+                                                                        }
+                                                                    } else {
+                                                                        const errs = data.errors ? Object.values(data.errors).flat().join(' ') : (data.message || 'Could not save.');
+                                                                        if (saveMsg) {
+                                                                            saveMsg.textContent = errs;
+                                                                            saveMsg.classList.add('text-danger');
+                                                                        }
+                                                                    }
+                                                                })
+                                                                .catch(function () {
+                                                                    saveBtn.disabled = false;
+                                                                    if (saveMsg) {
+                                                                        saveMsg.textContent = 'Network error. Please try again.';
+                                                                        saveMsg.classList.add('text-danger');
+                                                                    }
+                                                                });
+                                                            });
+                                                        }
+                                                    })();
+                                                    </script>
                                                     </div>
                                                 </div>
                                             </div>
@@ -7639,11 +7840,11 @@
                                                         </div>
                                                         <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">INV Terms</label>
+                                                                <label class="form-label">Duty & Taxes Type</label>
                                                                 <select class="form-control" name="inv_terms">
                                                                     <option value="">Select</option>
-                                                                    <option value="CF" {{ old('inv_terms') == 'CF' ? 'selected' : '' }}>CF</option>
-                                                                    <option value="CI" {{ old('inv_terms') == 'CI' ? 'selected' : '' }}>CI</option>
+                                                                    <option value="CF" {{ old('inv_terms') == 'CF' ? 'selected' : '' }}>C & F</option>
+                                                                    <option value="DAP" {{ old('inv_terms') == 'DAP' ? 'selected' : '' }}>DAP</option>
                                                                     <option value="FOB" {{ old('inv_terms') == 'FOB' ? 'selected' : '' }}>FOB</option>
                                                                     <option value="CIF" {{ old('inv_terms') == 'CIF' ? 'selected' : '' }}>CIF</option>
                                                                 </select>
@@ -7765,6 +7966,14 @@
                                                                         placeholder="Reference Number">
                                                                 </div>
                                                             </div>
+                                                            <div class="col-md-6">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Tax Code</label>
+                                                                    <input type="text" class="form-control"
+                                                                        name="tax_code" value="{{ old('tax_code') }}"
+                                                                        placeholder="Tax Code">
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <h5 class="mb-3">Shipment Invoice Items</h5>
                                                         <div style="overflow-x:auto;">
@@ -7774,6 +7983,7 @@
                                                                     <tr>
                                                                         <th>Box No.</th>
                                                                         <th>Description</th>
+                                                                        <th>Product SKU (Optional)</th>
                                                                         <th>HS Code</th>
                                                                         <th>HTS Code</th>
                                                                         <th>Unit Type</th>
@@ -7800,6 +8010,11 @@
                                                                             <input type="text" class="form-control description-input"
                                                                                 name="items[0][description]" value="{{ old('items.0.description') }}"
                                                                                 placeholder="Description" autocomplete="off">
+                                                                        </td>
+                                                                        <td>
+                                                                            <input type="text" class="form-control"
+                                                                                name="items[0][product_sku]" value="{{ old('items.0.product_sku') }}"
+                                                                                placeholder="Product SKU" autocomplete="off">
                                                                         </td>
                                                                         <td><input type="text" class="form-control hs-code-input"
                                                                                 name="items[0][hs_code]" value="{{ old('items.0.hs_code') }}"
@@ -8023,17 +8238,19 @@
                                                             const boxNoSelect = newRow.querySelector('.boxNo');
                                                             if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
                                                             let inputs = newRow.querySelectorAll('input');
-                                                            // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
+                                                            // inputs: description, product_sku, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
                                                             if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
-                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
-                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
+                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][product_sku]';
+                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hs_code]';
+                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][hts_code]';
                                                             if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
-                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
-                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
-                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
-                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][qty]';
+                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][unit_rate]';
+                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_percentage]';
+                                                            if (inputs[7]) inputs[7].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[8]) inputs[8].name = 'items[' + newIndex + '][amount]';
                                                             // remove old button
-                                                            let actionCell = newRow.children[10];
+                                                            let actionCell = newRow.children[11];
                                                             actionCell.innerHTML = '';
                                                             // add delete button
                                                             let btn = document.createElement('button');
@@ -8210,14 +8427,15 @@
                                                                 let inputs = row.querySelectorAll('input');
                                                                 let unitTypeSelect = row.querySelector('select[name$="[unit_type]"]');
                                                                 if (inputs[0]) inputs[0].name = 'items[' + index + '][description]';
-                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][hs_code]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hts_code]';
+                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][product_sku]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hs_code]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][hts_code]';
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][qty]';
-                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][unit_rate]';
-                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][igst_percentage]';
-                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_amount]';
-                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][amount]';
+                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][qty]';
+                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][unit_rate]';
+                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_percentage]';
+                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][igst_amount]';
+                                                                if (inputs[8]) inputs[8].name = 'items[' + index + '][amount]';
                                                             });
                                                         }
                                                         // Initialize dropdowns on DOM ready
@@ -8805,8 +9023,12 @@
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-4"><strong>Delivery Destination:</strong> <span id="preview_delivery_destination"></span></div>
-                                <div class="col-md-4"><strong>Origin Type:</strong> <span id="preview_origin_type"></span></div>
+                                <div class="col-md-4"><strong>Inco Term:</strong> <span id="preview_origin_type"></span></div>
                                 <div class="col-md-4"><strong>Shipping Method:</strong> <span id="preview_shipping_method"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Reason for Export:</strong> <span id="preview_reason_for_export"></span></div>
+                                <div class="col-md-4"><strong>Business Type:</strong> <span id="preview_business_type"></span></div>
                             </div>
                         </div>
                     </div>
@@ -8859,6 +9081,7 @@
                             <div class="row mt-2">
                                 <div class="col-md-3"><strong>Currency:</strong> <span id="preview_invoice_currency"></span></div>
                                 <div class="col-md-3"><strong>Reference Number:</strong> <span id="preview_reference_number"></span></div>
+                                <div class="col-md-3"><strong>Tax Code:</strong> <span id="preview_tax_code"></span></div>
                             </div>
                         </div>
                     </div>
@@ -9419,6 +9642,29 @@
                 // Build selectable rate cards with breakdown — grouped by zone
                 let cardsHtml = '';
                 if (data.all_rates && data.all_rates.length > 0) {
+                    // Total payable for a rate row (same math as the card below).
+                    // Used to sort rates in ascending order — cheapest first.
+                    function getRateTotal(r) {
+                        const basePrice = parseFloat(r.price) || 0;
+                        const fuelPct = parseFloat(r.fuel_percentage) || 0;
+                        const fuelCharge = parseFloat(r.fuel_charge) || 0;
+                        const gstPct = parseFloat(r.gst_percentage) || 0;
+                        const gstAmount = parseFloat(r.gst_amount) || 0;
+                        const computedFuel = fuelCharge > 0 ? fuelCharge : (basePrice * fuelPct / 100);
+                        const surchargeTotal = parseFloat(r.surcharge_total) || 0;
+                        const totalBasePrice = parseFloat(r.total_base_price) || basePrice;
+                        const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
+                        const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
+                        const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
+                        const disputeTotal = parseFloat(r.dispute_total) || 0;
+                        const ddpTotal = parseFloat(r.ddp_total) || 0;
+                        const greenTotal = parseFloat(r.green_total) || 0;
+                        return parseFloat(r.grand_total) || (totalBasePrice + totalFuelPrice + computedGst + totalSurcharge + disputeTotal + ddpTotal + greenTotal);
+                    }
+                    // Ascending order — cheapest rate first
+                    const sortedRates = data.all_rates.slice().sort(function(a, b) {
+                        return getRateTotal(a) - getRateTotal(b);
+                    });
                     // Helper function to render a single rate card
                     function renderRateCard(r, idx, isChecked) {
                         const checked = isChecked ? 'checked' : '';
@@ -9448,7 +9694,7 @@
                         const greenTotal = parseFloat(r.green_total) || 0;
                         const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0) + (ddpMatched ? ddpTotal : 0) + (greenMatched ? greenTotal : 0);
                         const hasItemSurcharges = !!(r.surcharges && r.surcharges.length);
-                        const totalPrice = parseFloat(r.grand_total) || (totalBasePrice + totalFuelPrice + computedGst + totalSurcharge + disputeTotal + ddpTotal + greenTotal);
+                        const totalPrice = getRateTotal(r);
                         // Per-box tax: shipment GST ko (base + fuel) ke proportion me baanto,
                         // taaki box tax ka sum neeche wali GST row se hamesha match kare
                         const combinedTaxable = totalBasePrice + totalFuelPrice;
@@ -9647,7 +9893,7 @@
 
                     // Group rates by zone_no
                     const zoneGroups = {};
-                    data.all_rates.forEach(function(r) {
+                    sortedRates.forEach(function(r) {
                         const zoneKey = r.zone_no ? String(r.zone_no) : 'general';
                         if (!zoneGroups[zoneKey]) {
                             zoneGroups[zoneKey] = [];
@@ -10788,6 +11034,11 @@
                 addError(shipperEmail, 'Enter a valid shipper email address.', 'basic');
             }
 
+            const shipperPhone = form.querySelector('[name="shipper_phone_number"]');
+            if (shipperPhone && shipperPhone.value.trim() && !/^[0-9]{10}$/.test(shipperPhone.value.trim())) {
+                addError(shipperPhone, 'Shipper phone number must be exactly 10 digits.', 'basic');
+            }
+
             const shipperState = form.querySelector('[name="shipper_state"]');
             const shipperStateValue = shipperState ? shipperState.value : '';
             if (shipperStateValue && !/^[A-Z]{2}$/.test(shipperStateValue)) {
@@ -10804,14 +11055,13 @@
 
             requireFields([
                 { name: 'delivery_destination', label: 'Delivery destination' },
-                { name: 'origin_type', label: 'Origin type' },
+                { name: 'origin_type', label: 'Inco term' },
                 { name: 'consignee_name', label: 'Consignee name' },
                 { name: 'consignee_contact_person', label: 'Consignee contact person' },
                 { name: 'consignee_address_line1', label: 'Consignee address' },
                 { name: 'consignee_zip_code', label: 'Consignee zip code' },
                 { name: 'consignee_city', label: 'Consignee city' },
-                { name: 'consignee_phone_number', label: 'Consignee phone number' },
-                { name: 'consignee_email', label: 'Consignee email' }
+                { name: 'consignee_phone_number', label: 'Consignee phone number' }
             ], 'address');
 
             const consigneeEmail = form.querySelector('[name="consignee_email"]');
@@ -11075,6 +11325,8 @@
                 document.getElementById('preview_delivery_destination').textContent = destDisplay;
             }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
+            document.getElementById('preview_reason_for_export').textContent = getSelectVal('reason_for_export');
+            document.getElementById('preview_business_type').textContent = getVal('business_type');
             document.getElementById('preview_shipping_method').textContent = getSelectVal('shipping_method');
 
             // Package Dimensions
@@ -11133,6 +11385,7 @@
             document.getElementById('preview_incoterms').textContent = getSelectVal('incoterms');
             document.getElementById('preview_invoice_currency').textContent = getSelectVal('invoice_currency');
             document.getElementById('preview_reference_number').textContent = getVal('reference_number');
+            document.getElementById('preview_tax_code').textContent = getVal('tax_code');
 
             // Invoice Items
             // IGST columns only show for CSB V shipments (reuse originTypeValue declared above)

@@ -19,6 +19,7 @@ class ShipmentInvoice extends Model
         'incoterms',
         'invoice_currency',
         'reference_number',
+        'tax_code',
         'status',
         'delivery_type',
         'assigned_delivery_person',

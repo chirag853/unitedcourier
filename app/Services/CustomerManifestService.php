@@ -355,6 +355,7 @@ class CustomerManifestService
                 'shipper_id' => $shipper->id,
                 'delivery_destination' => $destName,
                 'origin_type' => $data['origin_type'] ?? 'CSB IV',
+                'reason_for_export' => $data['reason_for_export'] ?? 'sample',
                 'consignee_name' => $data['consignee']['name'],
                 'contact_person' => $data['consignee']['contact_person'] ?? $data['consignee']['name'],
                 'address_line1' => $data['consignee']['address_line1'],

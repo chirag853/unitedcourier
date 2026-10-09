@@ -3762,7 +3762,7 @@
                                                 <div class="accordion-body border-top">
                                                     <h5 style="margin-bottom: 20px;">Shipment Type</h5>
                                                     <div class="row">
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Delivery Destination<span
                                                                         class="text-danger ms-1">*</span></label>
@@ -3783,9 +3783,9 @@
                                                                 </select>
                                                             </div>
                                                         </div>
-                                                        <div class="col-md-6">
+                                                        <div class="col-md-4">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Origin Type<span
+                                                                <label class="form-label">Inco Term<span
                                                                         class="text-danger ms-1">*</span></label>
                                                                 <select class="select2 select2-hidden-accessible"
                                                                     name="origin_type" data-toggle="select2"
@@ -3794,6 +3794,7 @@
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
                                                                     <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
+                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -3803,6 +3804,29 @@
                                                                         class="text-danger fw-bold">Go to CSB V
                                                                         Onboarding</a>
                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Reason for Export<span
+                                                                        class="text-danger ms-1">*</span></label>
+                                                                <select class="form-control" name="reason_for_export" id="reasonForExport">
+                                                                    <option value="sample" {{ old('reason_for_export', 'sample') == 'sample' ? 'selected' : '' }}>Sample</option>
+                                                                    <option value="gift" {{ old('reason_for_export', 'sample') == 'gift' ? 'selected' : '' }}>Gift</option>
+                                                                    <option value="commercial" {{ old('reason_for_export', 'sample') == 'commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="repair" {{ old('reason_for_export', 'sample') == 'repair' ? 'selected' : '' }}>Repair</option>
+                                                                    <option value="return" {{ old('reason_for_export', 'sample') == 'return' ? 'selected' : '' }}>Return</option>
+                                                                    <option value="others" {{ old('reason_for_export', 'sample') == 'others' ? 'selected' : '' }}>Others</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Business Type</label>
+                                                                <input type="text" class="form-control"
+                                                                    name="business_type" value="{{ old('business_type') }}" placeholder="Business Type">
                                                             </div>
                                                         </div>
                                                     </div>
@@ -7047,8 +7071,7 @@
                                                             <div class="mb-3">
                                                                 <div
                                                                     class="d-flex justify-content-between align-items-center">
-                                                                    <label class="form-label">Email <span
-                                                                            class="text-danger">*</span></label>
+                                                                    <label class="form-label">Email</label>
                                                                     <!-- <div class="form-check form-switch mb-1">
                                                                         <label
                                                                             class="form-check-label d-flex align-items-center gap-2">
@@ -7626,6 +7649,18 @@
                                                                     placeholder="IEC Code">
                                                             </div>
                                                         </div>
+                                                        <div class="col-md-4">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Duty & Taxes Type</label>
+                                                                <select class="form-control" name="inv_terms">
+                                                                    <option value="">Select</option>
+                                                                    <option value="CF" {{ old('inv_terms') == 'CF' ? 'selected' : '' }}>C & F</option>
+                                                                    <option value="DAP" {{ old('inv_terms') == 'DAP' ? 'selected' : '' }}>DAP</option>
+                                                                    <option value="FOB" {{ old('inv_terms') == 'FOB' ? 'selected' : '' }}>FOB</option>
+                                                                    <option value="CIF" {{ old('inv_terms') == 'CIF' ? 'selected' : '' }}>CIF</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
                                                         <div class="col-md-4" id="csbGstDetails" style="display: {{ $hasCsbGst ? ($defaultCsbTaxType === 'gst' ? 'block' : 'none') : 'none' }};">
                                                             <div class="mb-3">
                                                                 <label class="form-label">GST Number</label>
@@ -7742,6 +7777,14 @@
                                                                         placeholder="Reference Number">
                                                                 </div>
                                                             </div>
+                                                            <div class="col-md-6">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Tax Code</label>
+                                                                    <input type="text" class="form-control"
+                                                                        name="tax_code" value="{{ old('tax_code') }}"
+                                                                        placeholder="Tax Code">
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <h5 class="mb-3">Shipment Invoice Items</h5>
                                                         <div style="overflow-x:auto;">
@@ -7751,6 +7794,7 @@
                                                                     <tr>
                                                                         <th>Box No.</th>
                                                                         <th>Description</th>
+                                                                        <th>Product SKU</th>
                                                                         <th>HS Code</th>
                                                                         <th>HTS Code</th>
                                                                         <th>Unit Type</th>
@@ -7777,6 +7821,11 @@
                                                                             <input type="text" class="form-control description-input"
                                                                                 name="items[0][description]" value="{{ old('items.0.description') }}"
                                                                                 placeholder="Description" autocomplete="off">
+                                                                        </td>
+                                                                        <td>
+                                                                            <input type="text" class="form-control"
+                                                                                name="items[0][product_sku]" value="{{ old('items.0.product_sku') }}"
+                                                                                placeholder="Product SKU" autocomplete="off">
                                                                         </td>
                                                                         <td><input type="text" class="form-control hs-code-input"
                                                                                 name="items[0][hs_code]" value="{{ old('items.0.hs_code') }}"
@@ -8000,17 +8049,19 @@
                                                             const boxNoSelect = newRow.querySelector('.boxNo');
                                                             if (boxNoSelect) boxNoSelect.name = 'items[' + newIndex + '][box_no]';
                                                             let inputs = newRow.querySelectorAll('input');
-                                                            // inputs: description, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
+                                                            // inputs: description, product_sku, hs_code, hts_code, qty, unit_rate, igst_percentage, igst_amount, amount
                                                             if (inputs[0]) inputs[0].name = 'items[' + newIndex + '][description]';
-                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][hs_code]';
-                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hts_code]';
+                                                            if (inputs[1]) inputs[1].name = 'items[' + newIndex + '][product_sku]';
+                                                            if (inputs[2]) inputs[2].name = 'items[' + newIndex + '][hs_code]';
+                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][hts_code]';
                                                             if (unitTypeSelect) unitTypeSelect.name = 'items[' + newIndex + '][unit_type]';
-                                                            if (inputs[3]) inputs[3].name = 'items[' + newIndex + '][qty]';
-                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][unit_rate]';
-                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][igst_percentage]';
-                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[4]) inputs[4].name = 'items[' + newIndex + '][qty]';
+                                                            if (inputs[5]) inputs[5].name = 'items[' + newIndex + '][unit_rate]';
+                                                            if (inputs[6]) inputs[6].name = 'items[' + newIndex + '][igst_percentage]';
+                                                            if (inputs[7]) inputs[7].name = 'items[' + newIndex + '][igst_amount]';
+                                                            if (inputs[8]) inputs[8].name = 'items[' + newIndex + '][amount]';
                                                             // remove old button
-                                                            let actionCell = newRow.children[10];
+                                                            let actionCell = newRow.children[11];
                                                             actionCell.innerHTML = '';
                                                             // add delete button
                                                             let btn = document.createElement('button');
@@ -8160,14 +8211,15 @@
                                                                 let inputs = row.querySelectorAll('input');
                                                                 let unitTypeSelect = row.querySelector('select[name$="[unit_type]"]');
                                                                 if (inputs[0]) inputs[0].name = 'items[' + index + '][description]';
-                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][hs_code]';
-                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hts_code]';
+                                                                if (inputs[1]) inputs[1].name = 'items[' + index + '][product_sku]';
+                                                                if (inputs[2]) inputs[2].name = 'items[' + index + '][hs_code]';
+                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][hts_code]';
                                                                 if (unitTypeSelect) unitTypeSelect.name = 'items[' + index + '][unit_type]';
-                                                                if (inputs[3]) inputs[3].name = 'items[' + index + '][qty]';
-                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][unit_rate]';
-                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][igst_percentage]';
-                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_amount]';
-                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][amount]';
+                                                                if (inputs[4]) inputs[4].name = 'items[' + index + '][qty]';
+                                                                if (inputs[5]) inputs[5].name = 'items[' + index + '][unit_rate]';
+                                                                if (inputs[6]) inputs[6].name = 'items[' + index + '][igst_percentage]';
+                                                                if (inputs[7]) inputs[7].name = 'items[' + index + '][igst_amount]';
+                                                                if (inputs[8]) inputs[8].name = 'items[' + index + '][amount]';
                                                             });
                                                         }
                                                         // Initialize dropdowns on DOM ready
@@ -8765,8 +8817,12 @@
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-4"><strong>Delivery Destination:</strong> <span id="preview_delivery_destination"></span></div>
-                                <div class="col-md-4"><strong>Origin Type:</strong> <span id="preview_origin_type"></span></div>
+                                <div class="col-md-4"><strong>Inco Term:</strong> <span id="preview_origin_type"></span></div>
                                 <div class="col-md-4"><strong>Shipping Method:</strong> <span id="preview_shipping_method"></span></div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4"><strong>Reason for Export:</strong> <span id="preview_reason_for_export"></span></div>
+                                <div class="col-md-4"><strong>Business Type:</strong> <span id="preview_business_type"></span></div>
                             </div>
                         </div>
                     </div>
@@ -8819,6 +8875,7 @@
                             <div class="row mt-2">
                                 <div class="col-md-3"><strong>Currency:</strong> <span id="preview_invoice_currency"></span></div>
                                 <div class="col-md-3"><strong>Reference Number:</strong> <span id="preview_reference_number"></span></div>
+                                <div class="col-md-3"><strong>Tax Code:</strong> <span id="preview_tax_code"></span></div>
                             </div>
                         </div>
                     </div>
@@ -9358,6 +9415,26 @@
                 // Build selectable rate cards with breakdown — grouped by zone
                 let cardsHtml = '';
                 if (data.all_rates && data.all_rates.length > 0) {
+                    // Total payable for a rate row (same math as the card below).
+                    // Used to sort rates in ascending order — cheapest first.
+                    function getRateTotal(r) {
+                        const basePrice = parseFloat(r.price) || 0;
+                        const fuelPct = parseFloat(r.fuel_percentage) || 0;
+                        const fuelCharge = parseFloat(r.fuel_charge) || 0;
+                        const gstPct = parseFloat(r.gst_percentage) || 0;
+                        const gstAmount = parseFloat(r.gst_amount) || 0;
+                        const computedFuel = fuelCharge > 0 ? fuelCharge : (basePrice * fuelPct / 100);
+                        const surchargeTotal = parseFloat(r.surcharge_total) || 0;
+                        const totalBasePrice = parseFloat(r.total_base_price) || basePrice;
+                        const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
+                        const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
+                        const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
+                        return totalBasePrice + totalFuelPrice + computedGst + totalSurcharge;
+                    }
+                    // Ascending order — cheapest rate first
+                    const sortedRates = data.all_rates.slice().sort(function(a, b) {
+                        return getRateTotal(a) - getRateTotal(b);
+                    });
                     // Helper function to render a single rate card
                     function renderRateCard(r, idx, isChecked) {
                         const checked = isChecked ? 'checked' : '';
@@ -9375,7 +9452,7 @@
                         const totalFuelPrice = parseFloat(r.total_fuel_price) || computedFuel;
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
-                        const totalPrice = totalBasePrice + totalFuelPrice + computedGst + totalSurcharge;
+                        const totalPrice = getRateTotal(r);
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
@@ -9554,7 +9631,7 @@
 
                     // Group rates by zone_no
                     const zoneGroups = {};
-                    data.all_rates.forEach(function(r) {
+                    sortedRates.forEach(function(r) {
                         const zoneKey = r.zone_no ? String(r.zone_no) : 'general';
                         if (!zoneGroups[zoneKey]) {
                             zoneGroups[zoneKey] = [];
@@ -10756,6 +10833,11 @@
                 addError(shipperEmail, 'Enter a valid shipper email address.', 'basic');
             }
 
+            const shipperPhone = form.querySelector('[name="shipper_phone_number"]');
+            if (shipperPhone && shipperPhone.value.trim() && !/^[0-9]{10}$/.test(shipperPhone.value.trim())) {
+                addError(shipperPhone, 'Shipper phone number must be exactly 10 digits.', 'basic');
+            }
+
             const shipperState = form.querySelector('[name="shipper_state"]');
             const shipperStateValue = shipperState ? shipperState.value : '';
             if (shipperStateValue && !/^[A-Z]{2}$/.test(shipperStateValue)) {
@@ -10772,14 +10854,13 @@
 
             requireFields([
                 { name: 'delivery_destination', label: 'Delivery destination' },
-                { name: 'origin_type', label: 'Origin type' },
+                { name: 'origin_type', label: 'Inco term' },
                 { name: 'consignee_name', label: 'Consignee name' },
                 { name: 'consignee_contact_person', label: 'Consignee contact person' },
                 { name: 'consignee_address_line1', label: 'Consignee address' },
                 { name: 'consignee_zip_code', label: 'Consignee zip code' },
                 { name: 'consignee_city', label: 'Consignee city' },
-                { name: 'consignee_phone_number', label: 'Consignee phone number' },
-                { name: 'consignee_email', label: 'Consignee email' }
+                { name: 'consignee_phone_number', label: 'Consignee phone number' }
             ], 'address');
 
             const consigneeEmail = form.querySelector('[name="consignee_email"]');
@@ -11034,6 +11115,8 @@
                 document.getElementById('preview_delivery_destination').textContent = destDisplay;
             }
             document.getElementById('preview_origin_type').textContent = getSelectVal('origin_type');
+            document.getElementById('preview_reason_for_export').textContent = getSelectVal('reason_for_export');
+            document.getElementById('preview_business_type').textContent = getVal('business_type');
             // Prefer the selected rate card's method; fall back
             // to the hidden shipping_method select for older flows.
             (function() {
@@ -11098,6 +11181,7 @@
             document.getElementById('preview_incoterms').textContent = getSelectVal('incoterms');
             document.getElementById('preview_invoice_currency').textContent = getSelectVal('invoice_currency');
             document.getElementById('preview_reference_number').textContent = getVal('reference_number');
+            document.getElementById('preview_tax_code').textContent = getVal('tax_code');
 
             // Remark
             document.getElementById('preview_entry_remark').textContent = getVal('entry_remark') || '-';

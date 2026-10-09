@@ -167,15 +167,15 @@
                                 <input type="hidden" id="csbGstCertPath"
                                     value="{{ $csbForm->gst_certificate_document ?? ($csbForm->gst_document ?? ($verifiedGstSource->gst_certificate_document ?? '')) }}">
                                 <div class="col-12">
-                                    <label class="section-label" for="csbGstCertificate">GST Certificate PDF</label>
+                                    <label class="section-label" for="csbGstCertificate">GST Certificate (PDF, JPG, PNG)</label>
                                     <div class="doc-item compact" id="csbGstDocContainer">
                                         <div class="doc-meta">
-                                            <span class="doc-name">GST Certificate (PDF)</span>
+                                            <span class="doc-name">GST Certificate (PDF, JPG, PNG)</span>
                                             <div id="csbGstFileInfo" class="file-status">Selected: <span id="csbGstFileName">file.pdf</span></div>
                                         </div>
                                         <div class="text-end d-flex align-items-center">
                                             <input type="file" id="csbGstCertificate" name="gst_certificate_document"
-                                                style="display: none;" accept=".pdf,application/pdf"
+                                                style="display: none;" accept=".pdf,.jpg,.jpeg,.png"
                                                 onchange="handleDocSelect(this, 'csbGstFileName', 'csbGstFileInfo', 'csbGstRemoveFile', '.csbGstUploadBtn', '#csbGstDocContainer'); setCsb5GstDirty();">
                                             <button type="button" id="csbGstUploadBtn" class="link-alt border-0 bg-transparent csbGstUploadBtn"
                                                 onclick="document.getElementById('csbGstCertificate').click();">
@@ -399,7 +399,7 @@
                                 </div>
                                 <div class="text-end d-flex align-items-center">
                                     <input type="file" id="lutFileInput" name="lut_document" style="display: none;"
-                                        accept=".pdf">
+                                        accept=".pdf,.jpg,.jpeg,.png">
                                     <button type="button" id="uploadBtn" class="link-alt border-0 bg-transparent">
                                         <i class="fas fa-cloud-upload-alt me-1"></i> Upload
                                     </button>
@@ -677,10 +677,10 @@
                                 return;
                             }
                             if (!file && !storedPath) {
-                                showCsb5ValidationError('Please upload the GST Certificate PDF.', csbGstCertificate);
+                                showCsb5ValidationError('Please upload the GST Certificate (PDF, JPG, or PNG).', csbGstCertificate);
                                 return;
                             }
-                            if (file && !validateCsb5File(form, 'gst_certificate_document', 'the GST Certificate', ['pdf'], 5)) return;
+                            if (file && !validateCsb5File(form, 'gst_certificate_document', 'the GST Certificate', ['pdf', 'jpg', 'jpeg', 'png'], 5)) return;
 
                             // Same payload shape as the KYC "Verify GST" request.
                             var formData = new FormData();
@@ -800,8 +800,8 @@
                                     return showCsb5ValidationError('Enter a valid 15-character GSTIN.', targetForm.querySelector('[name="gst_certificate_number"]'));
                                 }
                                 if (!fieldValue('gst_business_name')) return showCsb5ValidationError('Please enter the registered Business Name.', targetForm.querySelector('[name="gst_business_name"]'));
-                                if (!hasGstCertFile && !storedGstCertPath) return showCsb5ValidationError('Please upload the GST Certificate PDF.', gstCertInput);
-                                if (hasGstCertFile && !validateCsb5File(targetForm, 'gst_certificate_document', 'the GST Certificate', ['pdf'], 5)) return false;
+                                if (!hasGstCertFile && !storedGstCertPath) return showCsb5ValidationError('Please upload the GST Certificate (PDF, JPG, or PNG).', gstCertInput);
+                                if (hasGstCertFile && !validateCsb5File(targetForm, 'gst_certificate_document', 'the GST Certificate', ['pdf', 'jpg', 'jpeg', 'png'], 5)) return false;
                                 if (!csbGstVerified) return showCsb5ValidationError('Verify the GSTIN and Business Name through Cashfree before continuing.', verifyCsbGstBtn);
                             }
 
@@ -822,7 +822,7 @@
                                 if (endYear < startYear + 1 || endYear > startYear + 5) return showCsb5ValidationError('LUT Bond End Year must be within five years after the Start Year.', targetForm.querySelector('[name="lut_bond_end_year"]'));
                                 if (!fieldValue('lut_expiry_date')) return showCsb5ValidationError('Please select the LUT Expiry Date.', targetForm.querySelector('[name="lut_expiry_date"]'));
                                 if (fieldValue('lut_expiry_date') < (startYear + 1) + '-01-01') return showCsb5ValidationError('LUT Expiry Date must be on or after ' + (startYear + 1) + '-01-01.', targetForm.querySelector('[name="lut_expiry_date"]'));
-                                if (!validateCsb5File(targetForm, 'lut_document', 'the LUT Document', ['pdf'], 5)) return false;
+                                if (!validateCsb5File(targetForm, 'lut_document', 'the LUT Document', ['pdf', 'jpg', 'jpeg', 'png'], 5)) return false;
                             }
 
                             @if(! $isCourierOrAggregator)

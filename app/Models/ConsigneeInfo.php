@@ -15,6 +15,8 @@ class ConsigneeInfo extends Model
         'shipper_id',
         'delivery_destination',
         'origin_type',
+        'reason_for_export',
+        'business_type',
         'consignee_name',
         'contact_person',
         'address_line1',

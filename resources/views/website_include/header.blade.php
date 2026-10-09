@@ -159,17 +159,15 @@
                                         <p>Enter your package dimensions to instantly calculate</p>
                                     </div>
                                 </a>
-                                <a href="{{ url('/shipping-rate-calculator') }}" class="menu-item">
-                                <!-- <a href="{{ url('/world-weather') }}" class="menu-item"> -->
+                                <!-- <a href="{{ url('/shipping-rate-calculator') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-calculator"></i>
                                     </div>
                                     <div class="menu-info">
-                                        <!-- <h6>World Weather</h6> -->
                                         <h6>Shipping Rate Calculator</h6>
                                         <p>Get accurate, all‑inclusive rates in seconds.</p>
                                     </div>
-                                </a>
+                                </a> -->
                                 <!-- <a href="{{ url('/world-time') }}" class="menu-item">
                                     <div class="menu-icon-box" style="background: #5f91ff1f; color: #2563eb;">
                                         <i class="fa-solid fa-box"></i>

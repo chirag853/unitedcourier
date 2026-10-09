@@ -722,6 +722,7 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
         'showExporterCustomer'])->name('exporter-customers.show');
     Route::get('/warehouse-addresses', [CustomerController::class, 'warehouseAddresses'])->name('warehouse-addresses');
     Route::post('/warehouse-addresses', [CustomerController::class, 'storeWarehouseAddress'])->name('warehouse-addresses.store');
+    Route::post('/saved-consignees', [CustomerController::class, 'storeSavedConsignee'])->name('saved-consignees.store');
     Route::put('/warehouse-addresses/{id}', [CustomerController::class, 'updateWarehouseAddress'])->name('warehouse-addresses.update');
     Route::post('/verify-exporter-customer-aadhar', [KycController::class, 'verifyExporterCustomerAadhar'])->name('verify.exporter-customer-aadhar');
     Route::post('/verify-exporter-customer-pan', [KycController::class, 'verifyExporterCustomerPan'])->name('verify.exporter-customer-pan');

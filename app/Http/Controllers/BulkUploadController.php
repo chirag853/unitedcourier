@@ -356,6 +356,7 @@ class BulkUploadController extends Controller
                         'shipper_id' => $shipperId,
                         'delivery_destination' => $destination,
                         'origin_type' => 'CSB IV',
+                        'reason_for_export' => 'sample',
                         'consignee_name' => $consigneeName,
                         'contact_person' => $consigneeContactPerson,
                         'address_line1' => $consigneeAddress1,

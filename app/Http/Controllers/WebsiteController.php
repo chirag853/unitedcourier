@@ -430,22 +430,95 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
             'awb_number' => 'required|string|min:3',
         ]);
 
-        $awbNumber = $request->input('awb_number');
+        // Accept multiple AWB / reference numbers separated by comma, space or new line.
+        $tokens = preg_split('/[\s,;]+/', (string) $request->input('awb_number'), -1, PREG_SPLIT_NO_EMPTY);
+        $tokens = array_values(array_unique(array_map('trim', $tokens)));
+        $tokens = array_slice($tokens, 0, 20);
 
-        $trackingRecords = \App\Models\Tracking::where('awb_number', $awbNumber)
+        $results = [];
+        $seenAwb = [];
+        foreach ($tokens as $token) {
+            $result = $this->findTrackingByToken($token);
+            if (! empty($result['found'])) {
+                $awbKey = strtoupper((string) $result['awb_number']);
+                if (isset($seenAwb[$awbKey])) {
+                    // Same shipment already listed (e.g. both AWB and its reference entered).
+                    continue;
+                }
+                $seenAwb[$awbKey] = true;
+            }
+            $results[] = $result;
+        }
+
+        return response()->json([
+            'success' => true,
+            'results' => $results,
+        ]);
+    }
+
+    /**
+     * Resolve one search token to tracking data. Tries the AWB number
+     * first, then the shipment reference number (invoice, then shipment
+     * record) which maps back to the shipment's AWB number.
+     *
+     * @param  string  $token
+     * @return array
+     */
+    private function findTrackingByToken(string $token): array
+    {
+        // 1) Direct AWB match.
+        $trackingRecords = \App\Models\Tracking::where('awb_number', $token)
             ->orderBy('created_at', 'asc')
             ->get();
 
-        if ($trackingRecords->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No tracking information found for this AWB number. Please check the number and try again.',
-            ]);
+        if ($trackingRecords->isNotEmpty()) {
+            return $this->buildTrackingResult($token, $trackingRecords, 'awb', null);
         }
 
+        // 2) Reference number on the shipment invoice -> shipper AWB.
+        $invoice = \App\Models\ShipmentInvoice::where('reference_number', $token)
+            ->orderByDesc('id')
+            ->first();
+        $awbNumber = ($invoice && $invoice->shipperInfo) ? $invoice->shipperInfo->awb_number : null;
+
+        if (! $awbNumber) {
+            // 3) Fallback: reference number on the shipment record itself.
+            $awbNumber = \App\Models\CreateShipment::where('reference_number', $token)
+                ->orderByDesc('id')
+                ->value('awb_number');
+        }
+
+        if ($awbNumber) {
+            $trackingRecords = \App\Models\Tracking::where('awb_number', $awbNumber)
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            if ($trackingRecords->isNotEmpty()) {
+                return $this->buildTrackingResult($awbNumber, $trackingRecords, 'reference', $token);
+            }
+        }
+
+        return [
+            'found' => false,
+            'query' => $token,
+            'awb_number' => null,
+            'message' => 'No tracking information found for "' . $token . '". Please check the AWB / reference number and try again.',
+        ];
+    }
+
+    /**
+     * Build the tracking payload for one AWB number from its tracking records.
+     *
+     * @param  string  $awbNumber
+     * @param  \Illuminate\Support\Collection  $trackingRecords
+     * @param  string  $matchedVia  'awb' or 'reference'
+     * @param  string|null  $referenceNumber
+     * @return array
+     */
+    private function buildTrackingResult(string $awbNumber, $trackingRecords, string $matchedVia, $referenceNumber): array
+    {
         $shipper = $trackingRecords->first()->shipper;
         $consignee = $shipper ? $shipper->consigneeInfo : null;
-        $shipment = $trackingRecords->first()->shipment;
 
         $statusMap = \App\Models\Tracking::getStatusTitleMap();
 
@@ -486,15 +559,18 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
             ];
         }
 
-        return response()->json([
-            'success' => true,
+        return [
+            'found' => true,
+            'query' => $awbNumber,
             'awb_number' => $awbNumber,
+            'matched_via' => $matchedVia,
+            'reference_number' => $referenceNumber,
             'current_status' => $currentStatus,
             'current_title' => $currentTitle,
             'history' => $history,
             'shipment' => $shipmentDetails,
             'consignee' => $consigneeDetails,
-        ]);
+        ];
     }
 
     public function eBooks()

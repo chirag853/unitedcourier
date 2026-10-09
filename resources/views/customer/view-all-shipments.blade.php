@@ -2307,18 +2307,27 @@
         })
         .then(function (res) { return res.json(); })
         .then(function (response) {
-            if (!response.success || !response.graphic_image) {
+            // Multi-package shipments (jaise UPS 3 boxes) me labels array
+            // aata hai — saare labels ek-ek karke kholo taaki sab print hon.
+            var labelList = (response.labels && response.labels.length)
+                ? response.labels
+                : (response.graphic_image ? [{ graphic_image: response.graphic_image, label_format: response.label_format || 'PDF', tracking_number: null }] : []);
+            if (!response.success || !labelList.length) {
                 showAlert(response.message || 'Label not available for this shipment.', 'warning');
                 return;
             }
-            openLabelFromBase64(response.graphic_image, response.label_format || 'PDF', response.awb_number || invoiceId);
+            var awb = response.awb_number || invoiceId;
+            labelList.forEach(function (lbl, idx) {
+                var suffix = awb + (lbl.tracking_number ? '_' + lbl.tracking_number : (labelList.length > 1 ? '_' + (idx + 1) : ''));
+                openLabelFromBase64(lbl.graphic_image, lbl.label_format || 'PDF', awb, suffix);
+            });
         })
         .catch(function () {
             showAlert('Failed to load the label. Please try again.', 'error');
         });
     }
 
-    function openLabelFromBase64(base64Data, format, awbNumber) {
+    function openLabelFromBase64(base64Data, format, awbNumber, fileSuffix) {
         // Decode base64 GraphicImage and open as PDF
         format = (format || 'PDF').toUpperCase();
 
@@ -2357,7 +2366,7 @@
             // If popup blocked, try downloading
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'label_' + (awbNumber || 'shipment') + '.' + extension;
+            a.download = 'label_' + (fileSuffix || awbNumber || 'shipment') + '.' + extension;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -4170,17 +4179,21 @@
             '.ship-row{height:26px;display:flex;border-bottom:1px solid #222;align-items:center;flex-shrink:0;}' +
             '.ship-title{width:70%;padding-left:8px;font-size:12px;font-weight:700;}' +
             '.date{width:30%;padding-right:8px;text-align:right;font-size:10px;}' +
+            '.id-date-row{display:flex;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.id-cell{width:42%;padding:6px 8px;font-size:12px;font-weight:700;display:flex;align-items:center;}' +
+            '.date-cell{width:58%;padding:5px 8px;text-align:right;font-size:10px;line-height:15px;border-left:1px solid #222;}' +
             '.section-title{height:24px;padding:5px 8px 4px;font-size:12px;font-weight:700;border-bottom:1px solid #222;display:flex;align-items:center;flex-shrink:0;}' +
             '.address{padding:6px 24px 6px;font-size:11px;line-height:15px;border-bottom:1px solid #222;}' +
             '.from-address{flex:1;min-height:48px;}' +
             '.to-address{flex:1.35;min-height:70px;}' +
             '.receiver-name{font-size:13px;font-weight:700;margin-bottom:4px;}' +
-            '.shipping-info{height:45px;display:grid;grid-template-columns:1.15fr 1fr .65fr .55fr .85fr;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.shipping-info{min-height:45px;display:grid;grid-template-columns:1fr 1.7fr .5fr .9fr;border-bottom:1px solid #222;flex-shrink:0;}' +
             '.info{padding:5px 6px 4px;font-size:10px;line-height:13px;}' +
             '.info-title{font-size:10px;font-weight:700;margin-bottom:3px;}' +
             '.center{text-align:center;}' +
             '.content{height:34px;display:flex;align-items:center;padding:4px 8px;border-bottom:1px solid #222;font-size:11px;flex-shrink:0;}' +
             '.content-title{width:72px;font-weight:700;}' +
+            '.reference-row{padding:4px 8px;border-bottom:1px solid #222;font-size:11px;flex-shrink:0;}' +
             '.barcode-area{height:104px;padding-top:11px;text-align:center;border-bottom:1px solid #222;flex-shrink:0;}' +
             '.barcode-area svg{height:52px;max-width:100%;}' +
             '.barcode-number{margin-top:8px;font-size:13px;font-weight:700;}' +
@@ -4212,6 +4225,16 @@
             if (map[dest]) return map[dest];
             const m = dest.match(/^([A-Z]{2,3})[\s-]/);
             return m ? m[1].toUpperCase() : dest.toUpperCase();
+        }
+
+        // Full destination country name for the label's bottom "country" box.
+        // Strips a leading code prefix like "US- " and uppercases the rest.
+        function getDestinationCountryName(destination) {
+            if (!destination) return 'INTL';
+            const dest = String(destination).trim();
+            const m = dest.match(/^[A-Z]{2,3}[\s\-–—:]+(.+)$/);
+            if (m) return m[1].trim().toUpperCase();
+            return dest.toUpperCase();
         }
 
         // D/S (destination service code) derived from the destination name
@@ -4266,13 +4289,14 @@
 
             const awb = data.awb_number || 'N/A';
             const date = data.invoice_date || new Date().toLocaleDateString('en-GB');
-            // NETWORK comes from the courier service's api_provider; SERVICE is
-            // the courier service's service_code. Fall back to the shipping
-            // method / service_code if the courier service lookup is missing.
-            const network = data.api_provider || (data.shipping_method || '-');
-            const service = data.service_code || '-';
-            const country = getDestinationCountryCode(data.destination);
-            const ds = getDestinationDs(data.destination);
+            const invoiceNo = data.invoice_number || '-';
+            const customerCode = data.customer_code || data.customer_id || '-';
+            const refNo = data.reference_number || '-';
+            // METHOD shows the shipping method name (earlier NETWORK showed api_provider).
+            const method = data.shipping_method || '-';
+            // Full destination name in place of the short D/S code.
+            const destinationName = data.destination || '-';
+            const country = getDestinationCountryName(data.destination);
 
             const labelHtml =
                 '<div class="label">' +
@@ -4282,15 +4306,9 @@
                         '<div class="company-contact">TEL:-011-46122222,www.unitedcouriers.biz</div>' +
                         '<div class="box-badge">BOX ' + boxIdx + ' OF ' + boxTot + '</div>' +
                     '</div>' +
-                    '<div class="ship-row">' +
-                        '<div class="ship-title">SHIP FROM:</div>' +
-                        '<div class="date"><b>DATE:</b>&nbsp;&nbsp;&nbsp;' + date + '</div>' +
-                    '</div>' +
-                    '<div class="section-title">' + (shipper.company || 'SHIPPER') + '</div>' +
-                    '<div class="address from-address">' +
-                        (shipper.address || '') + '<br>' +
-                        (shipper.city_state_pin || '') + '<br>' +
-                        (shipper.phone || '') +
+                    '<div class="id-date-row">' +
+                        '<div class="id-cell">ID : ' + customerCode + '</div>' +
+                        '<div class="date-cell"><b>DATE:</b>&nbsp;&nbsp;' + date + '<br><b>INVOICE NO:</b>&nbsp;&nbsp;' + invoiceNo + '</div>' +
                     '</div>' +
                     '<div class="section-title">SHIP TO:</div>' +
                     '<div class="address to-address">' +
@@ -4300,9 +4318,8 @@
                         (consignee.phone || '-') +
                     '</div>' +
                     '<div class="shipping-info">' +
-                        '<div class="info"><div class="info-title">NETWORK</div>' + network + '</div>' +
-                        '<div class="info"><div class="info-title">SERVICE</div>' + service + '</div>' +
-                        '<div class="info center"><div class="info-title">D/S</div>' + ds + '</div>' +
+                        '<div class="info"><div class="info-title">METHOD</div>' + method + '</div>' +
+                        '<div class="info"><div class="info-title">DESTINATION</div>' + destinationName + '</div>' +
                         '<div class="info center"><div class="info-title">PCS</div>' + packageCount + '</div>' +
                         '<div class="info center"><div class="info-title">ACT WT.</div>' + actualWeight.toFixed(3) + '</div>' +
                     '</div>' +
@@ -4310,6 +4327,7 @@
                         '<div class="content-title">CONTENT</div>' +
                         '<div>' + itemText + '</div>' +
                     '</div>' +
+                    '<div class="reference-row"><b>REFERENCE NO:</b>&nbsp;&nbsp;' + refNo + '</div>' +
                     '<div class="barcode-area">' +
                         '<svg data-label-barcode></svg>' +
                         '<div class="barcode-number">' + awb + '</div>' +

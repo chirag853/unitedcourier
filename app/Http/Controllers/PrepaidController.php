@@ -126,11 +126,23 @@ class PrepaidController extends Controller
                 ]);
             }
 
+            // Normalize reference number: empty/blank becomes null so the
+            // global uniqueness check only applies to actually filled values.
+            // Trim shipper phone so accidental spaces don't fail the 10-digit check.
+            $request->merge([
+                'reference_number' => $request->filled('reference_number')
+                    ? trim((string) $request->input('reference_number'))
+                    : null,
+                'shipper_phone_number' => trim((string) $request->input('shipper_phone_number')),
+            ]);
+
             // Validate the request data (identical rules to the customer create-shipment page)
             $validatedData = $request->validate([
                 // Shipper Info
                 'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
+                'reason_for_export' => 'nullable|string|in:sample,gift,commercial,repair,return,others|max:20',
+                'business_type' => 'nullable|string|max:50',
                 'selected_exporter_customer_id' => 'nullable|integer',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
@@ -143,7 +155,7 @@ class PrepaidController extends Controller
                 'shipper_pincode' => 'required|string|max:20',
                 'shipper_city' => 'required|string|max:100',
                 'shipper_state' => ['required', 'string', 'size:2', 'regex:/^[A-Z]{2}$/'],
-                'shipper_phone_number' => 'required|string|max:30',
+                'shipper_phone_number' => 'required|string|regex:/^[0-9]{10}$/',
                 'shipper_emails' => 'required|email|max:150',
                 'shipper_email_opt_out' => 'boolean',
                 'shipper_kyc_type' => 'nullable|string|max:50',
@@ -162,7 +174,7 @@ class PrepaidController extends Controller
                 'consignee_city' => 'required|string|max:100',
                 'consignee_state' => 'nullable|string|max:100',
                 'consignee_phone_number' => 'required|string|max:30',
-                'consignee_email' => 'required|email|max:150',
+                'consignee_email' => 'nullable|email|max:150',
                 'consignee_email_opt_out' => 'boolean',
 
                 // Package Dimension
@@ -185,6 +197,7 @@ class PrepaidController extends Controller
                 'bond_ut_igst' => 'nullable|in:Bond UT,IGST',
                 'lut_number' => 'nullable|string|max:100',
                 'iec_code' => 'nullable|string|max:50',
+                'inv_terms' => 'nullable|string|in:CF,DAP,FOB,CIF|max:20',
                 'gst_number' => 'nullable|string|max:50',
                 'ad_code' => 'nullable|string|max:100',
                 'bank_account_number' => 'nullable|string|max:50',
@@ -196,7 +209,8 @@ class PrepaidController extends Controller
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
-                'reference_number' => 'nullable|string|max:100',
+                'reference_number' => 'nullable|string|max:100|unique:shipment_invoice,reference_number',
+                'tax_code' => 'nullable|string|max:50',
 
                 // Remark
                 'entry_remark' => 'required|string|max:1000',
@@ -205,6 +219,7 @@ class PrepaidController extends Controller
                 // invoice items
                 'items.*.box_no' => 'nullable|integer',
                 'items.*.description' => 'nullable|string|max:500',
+                'items.*.product_sku' => 'nullable|string|max:100',
                 'items.*.hs_code' => 'nullable|string|max:50',
                 'items.*.hts_code' => 'nullable|string|max:50',
                 'items.*.unit_type' => 'nullable|string|max:50',
@@ -804,6 +819,8 @@ class PrepaidController extends Controller
                 'shipper_id' => $shipperId,
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
+                'reason_for_export' => $validatedData['reason_for_export'] ?? 'sample',
+                'business_type' => $validatedData['business_type'] ?? null,
                 'consignee_name' => $validatedData['consignee_name'],
                 'contact_person' => $validatedData['consignee_contact_person'],
                 'address_line1' => $validatedData['consignee_address_line1'],
@@ -813,7 +830,7 @@ class PrepaidController extends Controller
                 'city' => $validatedData['consignee_city'],
                 'state' => $validatedData['consignee_state'] ?? null,
                 'phone_number' => $validatedData['consignee_phone_number'],
-                'email' => $validatedData['consignee_email'],
+                'email' => $validatedData['consignee_email'] ?? null,
                 'email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
             ]);
 
@@ -853,6 +870,7 @@ class PrepaidController extends Controller
                 'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
                 'lut_number' => $validatedData['lut_number'] ?? null,
                 'iec_code' => $validatedData['iec_code'] ?? null,
+                'inv_terms' => $validatedData['inv_terms'] ?? null,
                 'gst_number' => $validatedData['gst_number'] ?? null,
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
@@ -869,6 +887,7 @@ class PrepaidController extends Controller
                 'incoterms' => $validatedData['incoterms'],
                 'invoice_currency' => $validatedData['invoice_currency'],
                 'reference_number' => $validatedData['reference_number'] ?? null,
+                'tax_code' => $validatedData['tax_code'] ?? null,
                 'status' => 'draft',
                 'delivery_type' => 'DDU',
             ]);
@@ -888,6 +907,7 @@ class PrepaidController extends Controller
                         'package_dimension_id' => $packageDimensionId,
                         'box_no' => $boxNo,
                         'description' => $item['description'] ?? null,
+                        'product_sku' => $item['product_sku'] ?? null,
                         'hs_code' => $item['hs_code'] ?? null,
                         'hts_code' => $item['hts_code'] ?? null,
                         'unit_type' => $item['unit_type'] ?? null,
@@ -937,7 +957,7 @@ class PrepaidController extends Controller
                 'consignee_city' => $validatedData['consignee_city'],
                 'consignee_state' => $validatedData['consignee_state'] ?? null,
                 'consignee_phone_number' => $validatedData['consignee_phone_number'],
-                'consignee_email' => $validatedData['consignee_email'],
+                'consignee_email' => $validatedData['consignee_email'] ?? null,
                 'consignee_email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
                 'invoice_number' => $invoiceNumber,
                 'invoice_date' => $validatedData['invoice_date'],
@@ -4007,28 +4027,48 @@ class PrepaidController extends Controller
 
         $tracking = $invoice->shipperInfo->shipmentTracking;
         $pkgResults = $tracking->package_results;
-        $firstPkg = is_array($pkgResults) && isset($pkgResults[0]) ? $pkgResults[0] : $pkgResults;
-
-        $labelFormat = null;
-        $graphicImage = null;
-        if (isset($firstPkg['ShippingLabel'])) {
-            $labelFormat = $firstPkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
-            $graphicImage = $firstPkg['ShippingLabel']['GraphicImage'] ?? null;
-        } elseif (isset($firstPkg['LabelImage'])) {
-            // Fallback for older/different UPS response format
-            $labelFormat = $firstPkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
-            $graphicImage = $firstPkg['LabelImage']['GraphicImage'] ?? null;
+        // Multi-package responses me har package ka apna label hota hai.
+        if (! is_array($pkgResults)) {
+            $pkgResults = [];
+        } elseif (! isset($pkgResults[0])) {
+            $pkgResults = [$pkgResults];
         }
 
-        if (! $graphicImage) {
+        $labels = [];
+        foreach ($pkgResults as $pkg) {
+            if (! is_array($pkg)) {
+                continue;
+            }
+            $labelFormat = null;
+            $graphicImage = null;
+            if (isset($pkg['ShippingLabel'])) {
+                $labelFormat = $pkg['ShippingLabel']['ImageFormat']['Code'] ?? 'GIF';
+                $graphicImage = $pkg['ShippingLabel']['GraphicImage'] ?? null;
+            } elseif (isset($pkg['LabelImage'])) {
+                // Fallback for older/different UPS response format
+                $labelFormat = $pkg['LabelImage']['LabelImageFormat']['Code'] ?? 'PDF';
+                $graphicImage = $pkg['LabelImage']['GraphicImage'] ?? null;
+            }
+            if ($graphicImage) {
+                $labels[] = [
+                    'tracking_number' => $pkg['TrackingNumber'] ?? null,
+                    'label_format' => $labelFormat,
+                    'graphic_image' => $graphicImage,
+                ];
+            }
+        }
+
+        if (empty($labels)) {
             return response()->json(['success' => false, 'message' => 'Label not available for this shipment.']);
         }
 
         return response()->json([
             'success' => true,
             'awb_number' => $invoice->shipperInfo->awb_number,
-            'label_format' => $labelFormat,
-            'graphic_image' => $graphicImage,
+            'labels' => $labels,
+            // Backward compat: pehle package ke fields.
+            'label_format' => $labels[0]['label_format'],
+            'graphic_image' => $labels[0]['graphic_image'],
         ]);
     }
 

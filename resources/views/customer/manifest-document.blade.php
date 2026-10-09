@@ -107,12 +107,6 @@
             height: 58px;
         }
 
-        .barcode-band .band-barcode .band-number {
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 2px;
-        }
-
         .barcode-band .band-meta {
             text-align: right;
             font-size: 12px;
@@ -126,7 +120,7 @@
         /* ===== Meta grid ===== */
         .meta-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-bottom: 14px;
         }
@@ -267,22 +261,16 @@
             <div class="barcode-band">
                 <div class="band-barcode">
                     <img src="https://barcode.tec-it.com/barcode.ashx?data={{ urlencode($manifest->manifest_number) }}&code=Code128&translate-esc=false"
-                         alt="Manifest Barcode">
-                    <div class="band-number">{{ $manifest->manifest_number }}</div>
+                         alt="Manifest Barcode {{ $manifest->manifest_number }}">
                 </div>
                 <div class="band-meta">
                     <div><span class="strong">Status:</span>
                         {{ \App\Models\Manifest::statusLabel((int) $manifest->status) }}</div>
-                    <div><span class="strong">Customer:</span> {{ $manifest->customer_name ?: '-' }}</div>
-                    <div><span class="strong">Phone:</span> {{ $manifest->customer_phone ?: '-' }}</div>
+                    <div><span class="strong">Customer Code:</span> {{ $manifest->customer_code ?: '-' }}</div>
                 </div>
             </div>
 
             <div class="meta-grid">
-                <div class="meta-box">
-                    <div class="meta-label">Manifest No.</div>
-                    <div class="meta-value">{{ $manifest->manifest_number }}</div>
-                </div>
                 <div class="meta-box">
                     <div class="meta-label">Manifest Date</div>
                     <div class="meta-value">
@@ -355,7 +343,7 @@
                 <div class="sender-title gradient-text">Sender & Return Details</div>
                 <div class="sender-line">
                     Plot No. Khasara No. 629, 630, 631/1, Village Rangpuri, New Delhi - 110037<br>
-                    Phone: 8130470109
+                    Phone: +91 9999911176
                 </div>
             </div>
 

@@ -16,6 +16,7 @@ class ShipmentInvoiceItem extends Model
         'package_dimension_id',
         'box_no',
         'description',
+        'product_sku',
         'hs_code',
         'hts_code',
         'unit_type',
