@@ -7169,6 +7169,14 @@
 
                                                         function fillConsigneeFromSaved(sc) {
                                                             if (!sc) return;
+                                                            // Choose Consignee par KOI api hit nahi honi
+                                                            // chahiye (zones / states / zip lookup) — isliye
+                                                            // fill ke dauraan saare consignee api guards on.
+                                                            window.suppressConsigneeApis = true;
+                                                            if (window.__suppressConsigneeTimer) clearTimeout(window.__suppressConsigneeTimer);
+                                                            window.__suppressConsigneeTimer = setTimeout(function () {
+                                                                window.suppressConsigneeApis = false;
+                                                            }, 1000);
                                                             setConsigneeField('delivery_destination', sc.delivery_destination || '');
                                                             setConsigneeField('origin_type', sc.origin_type || '');
                                                             setConsigneeField('reason_for_export', sc.reason_for_export || 'sample');
@@ -7182,21 +7190,54 @@
                                                             setConsigneeField('consignee_city', sc.city || '');
                                                             setConsigneeField('consignee_phone_number', sc.phone_number || '');
                                                             setConsigneeField('consignee_email', sc.email || '');
-                                                            // State dropdown destination ke hisab se dobara
-                                                            // banta hai — saved state park karo taaki options
-                                                            // aate hi wahi value select ho jaye.
-                                                            window.pendingConsigneeState = String(sc.state || '').trim();
+                                                            // Api suppressed hai to dropdown rebuild nahi
+                                                            // hoga — saved state ko existing option se match
+                                                            // karo, nahi mile to temporary option banao taaki
+                                                            // DB wali value dikhe + submit ho.
+                                                            applySavedStateNoApi(sc.state);
+                                                        }
+
+                                                        function applySavedStateNoApi(savedState) {
+                                                            const target = String(savedState || '').trim();
+                                                            const sel = document.querySelector('select[name="consignee_state"]');
+                                                            if (!sel) return;
                                                             const prevLock = document.getElementById('consignee_state_api_value');
                                                             if (prevLock) prevLock.remove();
-                                                            const stateSel = document.querySelector('select[name="consignee_state"]');
-                                                            if (stateSel) {
-                                                                if (stateSel.dataset.autofilled === 'true') stateSel.dataset.autofilled = 'false';
-                                                                stateSel.disabled = false;
+                                                            if (sel.dataset.autofilled === 'true') sel.dataset.autofilled = 'false';
+                                                            sel.disabled = false;
+                                                            window.pendingConsigneeState = '';
+                                                            if (!target) {
+                                                                sel.selectedIndex = 0;
+                                                                return;
                                                             }
-                                                            if (window.__pendingConsigneeTimer) clearTimeout(window.__pendingConsigneeTimer);
-                                                            window.__pendingConsigneeTimer = setTimeout(function () {
-                                                                window.pendingConsigneeState = '';
-                                                            }, 8000);
+                                                            const lower = target.toLowerCase();
+                                                            let matched = false;
+                                                            Array.from(sel.options).forEach(function (opt) {
+                                                                if (matched) return;
+                                                                const v = String(opt.value || '').trim();
+                                                                if (!v) return;
+                                                                const t = String(opt.textContent || '').trim();
+                                                                const vl = v.toLowerCase();
+                                                                const tl = t.toLowerCase();
+                                                                if (vl === lower || tl === lower || tl.indexOf('(' + lower + ')') !== -1) {
+                                                                    sel.value = opt.value;
+                                                                    matched = true;
+                                                                }
+                                                            });
+                                                            if (!matched) {
+                                                                sel.innerHTML = '';
+                                                                const placeholder = document.createElement('option');
+                                                                placeholder.value = '';
+                                                                placeholder.textContent = '-- Select State --';
+                                                                sel.appendChild(placeholder);
+                                                                const opt = document.createElement('option');
+                                                                opt.value = target;
+                                                                opt.textContent = target;
+                                                                opt.selected = true;
+                                                                sel.appendChild(opt);
+                                                            }
+                                                            sel.dispatchEvent(new Event('change', { bubbles: true }));
+                                                            if (window.jQuery) jQuery(sel).trigger('change');
                                                         }
 
                                                         function consigneeFieldValue(name) {
@@ -12995,6 +13036,8 @@ if (rateRadio && rateRadio.dataset.rate) {
         // Fetch zones for the selected destination_id and apply them.
         // ---------------------------------------------------------------
         function loadZonesForDestination() {
+            // Choose Consignee fill ke dauraan koi api hit nahi.
+            if (window.suppressConsigneeApis) return;
             const destId = destSelect ? destSelect.value : '';
             currentDestName = getDestinationName();
 
@@ -13168,6 +13211,8 @@ if (rateRadio && rateRadio.dataset.rate) {
 
         if (zipInput) {
             zipInput.addEventListener('input', function() {
+                // Choose Consignee fill (programmatic) par zip lookup nahi.
+                if (window.suppressConsigneeApis) return;
                 const zip = zipInput.value.trim();
 
                 // State-category destinations use the zone table as the source
@@ -13215,6 +13260,7 @@ if (rateRadio && rateRadio.dataset.rate) {
             // ZIP suggestions set the value programmatically and dispatch
             // `change`, not `input`; perform the lookup in that case as well.
             zipInput.addEventListener('change', function() {
+                if (window.suppressConsigneeApis) return;
                 if (currentCategory === 'state') return;
 
                 const zip = zipInput.value.trim();
@@ -13231,6 +13277,7 @@ if (rateRadio && rateRadio.dataset.rate) {
             // firing native input/change events. Capture the selection itself
             // at mousedown/click level and trigger the lookup from the value.
             zipInput.addEventListener('click', function() {
+                if (window.suppressConsigneeApis) return;
                 if (currentCategory === 'state') return;
 
                 const zip = zipInput.value.trim();
