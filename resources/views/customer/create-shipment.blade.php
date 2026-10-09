@@ -10807,8 +10807,8 @@
             }
         }
 
-        // Warehouse dropdown: shipper info ke address wale fields bharta hai.
-        // (Contact person/state warehouse me nahi hote, wo manual rahenge.)
+        // Warehouse dropdown: address + pincode + city + state badalte hain,
+        // baaki shipper fields (company, phone, email) untouched rehte hain.
         const warehouseSelect = document.getElementById('warehouseSelect');
         const warehouseData = @json($warehousesMap);
         function applySelectedWarehouse() {
@@ -10816,16 +10816,10 @@
             const selectedWarehouse = warehouseData[String(warehouseSelect.value || '')];
             if (!selectedWarehouse) return;
 
-            setField('shipper_company_names', selectedWarehouse.registered_name || selectedWarehouse.name || '');
             setField('shipper_address_line1', selectedWarehouse.address || '');
             setField('shipper_pincode', selectedWarehouse.pin || '');
             setField('shipper_city', selectedWarehouse.city || '');
-            setField('shipper_phone_number', selectedWarehouse.phone || '');
-            setField('shipper_emails', selectedWarehouse.email || '');
-
-            if (sameAsCustomer) {
-                sameAsCustomer.checked = false;
-            }
+            setField('shipper_state', selectedWarehouse.state || '');
         }
         if (warehouseSelect) {
             warehouseSelect.addEventListener('change', applySelectedWarehouse);

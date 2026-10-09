@@ -2172,6 +2172,7 @@ class CustomerController extends Controller
                 'email' => $warehouse->email,
                 'address' => $warehouse->address,
                 'city' => $warehouse->city,
+                'state' => $warehouse->state,
                 'pin' => $warehouse->pin,
                 'country' => $warehouse->country,
                 'registered_name' => $warehouse->registered_name,
