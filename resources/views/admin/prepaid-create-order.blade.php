@@ -393,29 +393,29 @@
                                                         </div>
                                                         <div class="col-md-12 mb-3">
                                                             <label class="form-label" for="exporterCustomerSelect">Select Customer</label>
-                                                            <small class="text-muted d-block mb-1">(Only KYC-approved, active customers are listed. Selecting one fills Shipper Info automatically.)</small>
+                                                            <small class="text-muted d-block mb-1">(All saved export customers are listed with their parent customer. Selecting one fills Shipper Info automatically.)</small>
                                                             <select class="form-select" id="exporterCustomerSelect" name="selected_exporter_customer_id">
                                                                 <option value="" data-csb-color="#212529" data-initial-visible="1">Enter shipper details manually</option>
-                                                                @foreach($prepaidCustomers as $prepaidCustomer)
+                                                                @foreach($exporterCustomers as $expCustomer)
                                                                     @php
-                                                                        $isCsbV = (int) $prepaidCustomer->csb_status === 2;
-                                                                        // CSB V origin is offered only when the customer has a
-                                                                        // CSB-V profile in csb_forms (no extra query: csbForm is eager-loaded).
-                                                                        $hasCsbVProfile = (bool) ($prepaidCustomer->csbForm?->is_csb_v);
-                                                                        $csbLabel = $isCsbV ? 'CSB 5' : 'CSB 4';
-                                                                        $csbColor = $isCsbV ? '#198754' : '#dc3545';
-                                                                        $customerDisplayName = trim(($prepaidCustomer->first_name ?? '') . ' ' . ($prepaidCustomer->last_name ?? ''));
+                                                                        $isCsbVExp = strtolower(trim((string) ($expCustomer->csb_type ?? ''))) === 'csb_v';
+                                                                        $hasCsbVExpProfile = $isCsbVExp;
+                                                                        $csbLabelExp = $isCsbVExp ? 'CSB 5' : 'CSB 4';
+                                                                        $csbColorExp = $isCsbVExp ? '#198754' : '#dc3545';
+                                                                        $parentExp = $expCustomer->exporter;
+                                                                        $parentExpName = $parentExp ? trim(($parentExp->first_name ?? '') . ' ' . ($parentExp->last_name ?? '')) : '';
+                                                                        $expDisplayName = trim((string) ($expCustomer->company_name !== '' && $expCustomer->company_name !== null ? $expCustomer->company_name : $expCustomer->contact_person));
                                                                     @endphp
                                                                     <option
-                                                                        value="{{ $prepaidCustomer->id }}"
-                                                                        data-csb-color="{{ $csbColor }}"
-                                                                        data-csb-label="{{ $csbLabel }}"
-                                                                        data-has-csb-v="{{ $hasCsbVProfile ? '1' : '0' }}"
-                                                                        data-initial-visible="{{ $loop->iteration <= 10 ? '1' : '0' }}"
-                                                                        style="color: {{ $csbColor }}; font-weight: 600;"
-                                                                        {{ old('selected_exporter_customer_id') == $prepaidCustomer->id ? 'selected' : '' }}
+                                                                        value="{{ $expCustomer->id }}"
+                                                                        data-csb-color="{{ $csbColorExp }}"
+                                                                        data-csb-label="{{ $csbLabelExp }}"
+                                                                        data-has-csb-v="{{ $hasCsbVExpProfile ? '1' : '0' }}"
+                                                                        data-initial-visible="1"
+                                                                        style="color: {{ $csbColorExp }}; font-weight: 600;"
+                                                                        {{ old('selected_exporter_customer_id') == $expCustomer->id ? 'selected' : '' }}
                                                                     >
-                                                                        {{ $customerDisplayName }} — {{ $prepaidCustomer->phone_number }} — {{ $csbLabel }}
+                                                                        {{ $expDisplayName }}{{ $parentExpName !== '' ? ' (' . $parentExpName . ')' : '' }} — {{ $csbLabelExp }}
                                                                     </option>
                                                                 @endforeach
                                                             </select>
@@ -3736,7 +3736,7 @@
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Biller Name <span class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control" name="biller_name" value="{{ old('biller_name') }}" placeholder="Biller Name">
+                                                                <input type="text" class="form-control" name="biller_name" value="{{ old('biller_name') }}" placeholder="Biller Name" readonly>
                                                             </div>
                                                         </div>
                                                         <div class="mt-4 d-flex align-items-center">
@@ -9954,73 +9954,46 @@
                 ? ($csbForPrefill->bank_account_number ?? '')
                 : '',
         ];
-        $exporterCustomerPrefill = $prepaidCustomers->mapWithKeys(function ($prepaidCustomer) {
-            $kyc = $prepaidCustomer->kycDetail;
-            $csb = $prepaidCustomer->csbForm;
-            $isCsbV = (int) $prepaidCustomer->csb_status === 2;
-            // CSB V origin + tax profile come from the csb_forms row (1a: row must exist with is_csb_v).
-            $hasCsbVProfile = (bool) ($csb?->is_csb_v);
-
-            $customerGstNumber = collect([
-                $csb?->gst_certificate_number,
-                $csb?->billing_gst,
-                $kyc?->gst_number,
-                $kyc?->billing_gst,
-            ])->first(fn ($value) => filled($value)) ?? '';
-            $hasCsbGst = (bool) ($csb?->is_gst || filled($customerGstNumber));
-            $hasCsbLut = (bool) $csb?->is_lut;
-            $csbTaxType = ! $hasCsbVProfile
+        $exporterCustomerPrefill = $exporterCustomers->mapWithKeys(function ($expCustomer) {
+            $parent = $expCustomer->exporter;
+            $parentName = $parent ? trim(($parent->first_name ?? '') . ' ' . ($parent->last_name ?? '')) : '';
+            $isCsbVExp = strtolower(trim((string) ($expCustomer->csb_type ?? ''))) === 'csb_v';
+            $hasCsbVExpProfile = $isCsbVExp;
+            $hasCsbExpGst = (bool) ($expCustomer->is_gst || filled($expCustomer->gst_certificate_number));
+            $hasCsbExpLut = (bool) $expCustomer->is_lut;
+            $csbExpTaxType = ! $hasCsbVExpProfile
                 ? ''
-                : ($hasCsbGst && ! $hasCsbLut
+                : ($hasCsbExpGst && ! $hasCsbExpLut
                     ? 'gst'
-                    : (! $hasCsbGst && $hasCsbLut ? 'lut' : ($hasCsbGst && $hasCsbLut ? 'lut' : '')));
-            $customerAadharNumber = collect([
-                $kyc?->aadhar_number,
-                $csb?->aadhar_number,
-            ])->first(fn ($value) => filled($value)) ?? '';
-            $customerPanNumber = $kyc?->pan_number ?? '';
-            $customerKycType = $customerGstNumber !== ''
-                ? 'GST (Normal)'
-                : ($customerAadharNumber !== '' ? 'Aadhar Card' : ($customerPanNumber !== '' ? 'PAN Card' : ''));
-            $customerKycNumber = $customerGstNumber
-                ?: ($customerAadharNumber ?: $customerPanNumber);
-            $customerName = trim(($prepaidCustomer->first_name ?? '') . ' ' . ($prepaidCustomer->last_name ?? ''));
+                    : (! $hasCsbExpGst && $hasCsbExpLut ? 'lut' : ($hasCsbExpGst && $hasCsbExpLut ? 'lut' : '')));
 
             return [
-                $prepaidCustomer->id => [
-                    'shipper_company_names' => $kyc?->organization_name ?? $customerName,
-                    'shipper_contact_person' => $customerName,
-                    'shipper_address_line1' => $kyc?->billing_address ?? '',
-                    'shipper_address_line2' => '',
-                    'shipper_address_line3' => '',
-                    'shipper_pincode' => '',
-                    'shipper_city' => '',
-                    'shipper_state' => '',
-                    'shipper_phone_number' => $prepaidCustomer->phone_number ?? '',
-                    'shipper_emails' => $prepaidCustomer->email ?? '',
-                    'shipper_email_opt_out' => '',
-                    'shipper_kyc_type' => $customerKycType,
-                    'shipper_kyc_number' => $customerKycNumber,
-                    'csb_type' => $isCsbV ? 'csb_v' : 'csb_iv',
-                    'csb_label' => $isCsbV ? 'CSB 5' : 'CSB 4',
-                    'has_csb_v_profile' => $hasCsbVProfile,
-                    'is_gst' => $hasCsbGst,
-                    'is_lut' => $hasCsbLut,
-                    'csb_tax_type' => $csbTaxType,
-                    'bond_ut_igst' => $isCsbV
-                        ? ($csb?->is_lut ? 'Bond UT' : 'IGST')
-                        : '',
-                    'lut_number' => $isCsbV && $csb?->is_lut
-                        ? ($csb?->lut_number ?? '')
-                        : '',
-                    'iec_code' => $isCsbV ? ($csb?->iec_number ?? '') : '',
-                    'gst_number' => $customerGstNumber,
-                    'ad_code' => $isCsbV ? ($csb?->ad_code ?? '') : '',
-                    'bank_account_number' => $isCsbV
-                        ? ($csb?->bank_account_number ?? '')
-                        : '',
-                    'addresses' => [],
-                ],
+                $expCustomer->id => array_merge(
+                    $expCustomer->toShipperArray(),
+                    [
+                        'csb_type' => $isCsbVExp ? 'csb_v' : 'csb_iv',
+                        'csb_label' => $isCsbVExp ? 'CSB 5' : 'CSB 4',
+                        'has_csb_v_profile' => $hasCsbVExpProfile,
+                        'is_gst' => $hasCsbExpGst,
+                        'is_lut' => $hasCsbExpLut,
+                        'csb_tax_type' => $csbExpTaxType,
+                        'bond_ut_igst' => $isCsbVExp
+                            ? ($expCustomer->is_lut ? 'Bond UT' : 'IGST')
+                            : '',
+                        'lut_number' => $isCsbVExp && $expCustomer->is_lut
+                            ? ($expCustomer->lut_number ?? '')
+                            : '',
+                        'iec_code' => $isCsbVExp ? ($expCustomer->iec_number ?? '') : '',
+                        'gst_number' => $expCustomer->gst_certificate_number ?? '',
+                        'ad_code' => $isCsbVExp ? ($expCustomer->ad_code ?? '') : '',
+                        'bank_account_number' => $isCsbVExp
+                            ? ($expCustomer->bank_account_number ?? '')
+                            : '',
+                        'addresses' => $expCustomer->displayAddresses(),
+                        'parent_id' => $expCustomer->exporter_id,
+                        'parent_name' => $parentName,
+                    ]
+                ),
             ];
         });
     @endphp
@@ -10574,6 +10547,17 @@
                 });
             }
 
+            // Bill To follows the selected export customer automatically.
+            exporterCustomerSelect.addEventListener('change', function () {
+                syncBillToFromExporterCustomer(true);
+            });
+            if (window.jQuery && jQuery(exporterCustomerSelect).hasClass('select2-hidden-accessible')) {
+                jQuery(exporterCustomerSelect).on('select2:select.billTo', function () {
+                    window.requestAnimationFrame(function () { syncBillToFromExporterCustomer(true); });
+                });
+            }
+            syncBillToFromExporterCustomer(false);
+
             syncExporterCustomerCsbColor();
 
             // Apply an old-input selection after a validation redirect. On a normal
@@ -10587,6 +10571,25 @@
         // through jQuery (un-namespaced so both the programmatic
         // trigger('change.select2') after population and real user selections
         // run the fill handler); fall back to the native listener otherwise.
+        // Keep the "Bill To" customer + biller name in sync with the selected
+        // export customer.
+        function syncBillToFromExporterCustomer(overwriteBiller) {
+            const sel = document.getElementById('exporterCustomerSelect');
+            const billSel = document.getElementById('billToCustomerSelect');
+            const billHidden = document.getElementById('billToCustomerId');
+            const billerInput = document.querySelector('[name="biller_name"]');
+            const sc = (sel && sel.value) ? (exporterCustomerData[String(sel.value)] || null) : null;
+            const parentId = sc && sc.parent_id ? String(sc.parent_id) : '';
+            if (billSel) {
+                billSel.value = parentId;
+                if (billSel.value !== parentId) billSel.value = '';
+            }
+            if (billHidden) billHidden.value = parentId;
+            if (billerInput && sc && sc.parent_name && (overwriteBiller || !billerInput.value.trim())) {
+                billerInput.value = sc.parent_name;
+            }
+        }
+
         if (exporterCustomerAddressSelect) {
             if (window.jQuery) {
                 jQuery(exporterCustomerAddressSelect).on('change', applySelectedExporterCustomerAddress);

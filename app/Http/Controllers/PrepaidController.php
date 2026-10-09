@@ -20,6 +20,7 @@ use App\Models\CreateShipment;
 use App\Models\CsbInformation;
 use App\Models\Customer;
 use App\Models\Destination;
+use App\Models\ExporterCustomer;
 use App\Models\Manifest;
 use App\Models\PackageDimension;
 use App\Models\ShipmentInvoice;
@@ -82,6 +83,12 @@ class PrepaidController extends Controller
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
+        // "Select Customer" lists every saved export customer (shipper) with
+        // its owning parent customer. "Bill To" is auto-selected from it.
+        $exporterCustomers = ExporterCustomer::with('exporter')
+            ->orderBy('company_name')
+            ->orderBy('contact_person')
+            ->get();
 
         return view('admin.prepaid-create-order', compact(
             'customer',
@@ -90,7 +97,8 @@ class PrepaidController extends Controller
             'zones',
             'destinations',
             'canCreateShipment',
-            'prepaidCustomers'
+            'prepaidCustomers',
+            'exporterCustomers'
         ));
     }
 
@@ -143,7 +151,8 @@ class PrepaidController extends Controller
                 'origin_type' => 'required|string|max:50',
                 'reason_for_export' => 'nullable|string|in:sample,gift,commercial,repair,return,others|max:20',
                 'business_type' => 'nullable|string|in:business,customer|max:50',
-                'selected_exporter_customer_id' => 'nullable|integer',
+                'selected_exporter_customer_id' => 'nullable|integer|exists:exporter_customers,id',
+                'bill_to_customer_id' => 'nullable|integer|exists:customers,id',
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
@@ -229,6 +238,16 @@ class PrepaidController extends Controller
                 'items.*.igst_amount' => 'nullable|numeric|min:0',
                 'items.*.amount' => 'nullable|numeric|min:0',
             ]);
+
+            // The "Select Customer" dropdown submits an ExporterCustomer
+            // (saved shipper) id. Resolve it to the owning parent customer id
+            // used across shipper/shipment/remark/bill-to/manifest records.
+            // "Bill To" is auto-selected from the same export customer.
+            $selectedExporter = ! empty($validatedData['selected_exporter_customer_id'])
+                ? ExporterCustomer::find($validatedData['selected_exporter_customer_id'])
+                : null;
+            $orderCustomerId = $selectedExporter ? (int) $selectedExporter->exporter_id : null;
+            $billToCustomerId = $validatedData['bill_to_customer_id'] ?? $orderCustomerId;
 
             // ------------------------------------------------------------------
             // Every box declared in the package dimensions must have at least
@@ -542,7 +561,8 @@ class PrepaidController extends Controller
             // customer create-shipment page, the exporter's own rates are
             // accepted first, then the shared default rates (customer_id = 0).
             // Skipped for SELF (zero price, no courier rate row).
-            $exporterCustomerId = (int) ($validatedData['selected_exporter_customer_id'] ?? 0);
+            // Rates belong to the owning parent customer (resolved above).
+            $exporterCustomerId = (int) ($orderCustomerId ?? 0);
             $rateOwnerIds = $exporterCustomerId > 0 ? [$exporterCustomerId, 0] : [0];
             $courierRate = null;
             if (! $isSelfService && ! empty($validatedData['service_rate_id'])) {
@@ -761,7 +781,7 @@ class PrepaidController extends Controller
             $totalPrice = round($basePrice + $fuelPrice + $gstAmt + $surchargeTotal, 2);
 
             $shipper = ShipperInfo::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                'customer_id' => $orderCustomerId,
                 'awb_number' => $awbNumber,
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
@@ -799,7 +819,7 @@ class PrepaidController extends Controller
             // Store the shipment remark (entry remark captured at creation time,
             // finance remark can be filled later by the finance team).
             ShipmentRemark::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
+                'customer_id' => $orderCustomerId ?? 0,
                 'shipper_id' => $shipperId,
                 'entry_remark' => $validatedData['entry_remark'] ?? null,
                 'finance_remark' => $validatedData['finance_remark'] ?? null,
@@ -808,7 +828,7 @@ class PrepaidController extends Controller
             // Store Bill To info
             BillTo::create([
                 'shipper_id' => $shipperId,
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? null,
+                'customer_id' => $billToCustomerId,
                 'biller_name' => $validatedData['biller_name']
                     ?? $validatedData['shipper_contact_person']
                     ?? null,
@@ -928,7 +948,7 @@ class PrepaidController extends Controller
             // customer id when one was chosen, otherwise 0 (the admin "default
             // rates" sentinel already used throughout this flow).
             $createShipment = CreateShipment::create([
-                'customer_id' => $validatedData['selected_exporter_customer_id'] ?? 0,
+                'customer_id' => $orderCustomerId ?? 0,
                 'shipper_id' => $shipperId,
                 'awb_number' => $awbNumber,
                 'delivery_destination' => $validatedData['delivery_destination'],
@@ -998,7 +1018,7 @@ class PrepaidController extends Controller
                 'manifested',
                 null,
                 'Prepaid order created (manifested)',
-                $validatedData['selected_exporter_customer_id'] ?? null,
+                $orderCustomerId,
                 'admin'
             );
 
@@ -1007,7 +1027,7 @@ class PrepaidController extends Controller
             // manifest flow does for regular shipments.
             Manifest::createForShipper(
                 $shipper->id,
-                (int) ($validatedData['selected_exporter_customer_id'] ?? 0)
+                (int) ($orderCustomerId ?? 0)
             );
 
             // ============================================================
@@ -1083,7 +1103,7 @@ class PrepaidController extends Controller
             // non-UPS orders keep this base row) so tracking/label lookups
             // always find one. customer_id is NOT NULL + FK constrained, so a
             // row is only possible when an exporter customer was selected.
-            $trackingCustomerId = $validatedData['selected_exporter_customer_id'] ?? $shipper->customer_id ?? null;
+            $trackingCustomerId = $orderCustomerId ?? $shipper->customer_id ?? null;
             if ($trackingCustomerId) {
                 ShipmentTracking::firstOrCreate(
                     ['shipper_id' => $shipper->id],
@@ -2362,9 +2382,13 @@ class PrepaidController extends Controller
         $consigneeZipCode = $request->consignee_zip_code;
         $deliveryDestination = $request->delivery_destination;
         $packageWeights = $request->package_weights;
-        // Selected exporter customer: their own rates apply first (same as
-        // create-shipment), shared default rates (customer_id = 0) otherwise.
-        $rateCustomerId = (int) ($request->input('selected_exporter_customer_id') ?? 0);
+        // Selected exporter customer: the owning parent customer's rates
+        // apply first (same as create-shipment), shared default rates
+        // (customer_id = 0) otherwise.
+        $selectedExporterId = (int) ($request->input('selected_exporter_customer_id') ?? 0);
+        $rateCustomerId = $selectedExporterId > 0
+            ? (int) (ExporterCustomer::whereKey($selectedExporterId)->value('exporter_id') ?? 0)
+            : 0;
         $rateCustomerIds = $rateCustomerId > 0 ? [$rateCustomerId, 0] : [0];
         $rateCustomer = $rateCustomerId > 0
             ? Customer::select('id', 'first_name', 'last_name')->find($rateCustomerId)

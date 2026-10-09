@@ -7180,9 +7180,23 @@
                                                             setConsigneeField('consignee_address_line3', sc.address_line3 || '');
                                                             setConsigneeField('consignee_zip_code', sc.zip_code || '');
                                                             setConsigneeField('consignee_city', sc.city || '');
-                                                            setConsigneeField('consignee_state', sc.state || '');
                                                             setConsigneeField('consignee_phone_number', sc.phone_number || '');
                                                             setConsigneeField('consignee_email', sc.email || '');
+                                                            // State dropdown destination ke hisab se dobara
+                                                            // banta hai — saved state park karo taaki options
+                                                            // aate hi wahi value select ho jaye.
+                                                            window.pendingConsigneeState = String(sc.state || '').trim();
+                                                            const prevLock = document.getElementById('consignee_state_api_value');
+                                                            if (prevLock) prevLock.remove();
+                                                            const stateSel = document.querySelector('select[name="consignee_state"]');
+                                                            if (stateSel) {
+                                                                if (stateSel.dataset.autofilled === 'true') stateSel.dataset.autofilled = 'false';
+                                                                stateSel.disabled = false;
+                                                            }
+                                                            if (window.__pendingConsigneeTimer) clearTimeout(window.__pendingConsigneeTimer);
+                                                            window.__pendingConsigneeTimer = setTimeout(function () {
+                                                                window.pendingConsigneeState = '';
+                                                            }, 8000);
                                                         }
 
                                                         function consigneeFieldValue(name) {
@@ -12494,7 +12508,36 @@ if (rateRadio && rateRadio.dataset.rate) {
 
         // ---------------------------------------------------------------
         // Populate the consignee_state dropdown with the given zones.
+        //
+        // Choose Consignee se chuna gaya saved state
+        // (window.pendingConsigneeState) options bante hi select ho
+        // jata hai — value ("NY"), naam ("New York") ya label me code
+        // ("New York (Zone NY)") se match karke.
         // ---------------------------------------------------------------
+        function applyPendingSavedState() {
+            const pending = String(window.pendingConsigneeState || '').trim();
+            if (!pending || !stateSelect) return;
+            const lower = pending.toLowerCase();
+            let matched = false;
+            Array.from(stateSelect.options).forEach(function (opt) {
+                if (matched) return;
+                const v = String(opt.value || '').trim();
+                if (!v) return;
+                const t = String(opt.textContent || '').trim();
+                const vl = v.toLowerCase();
+                const tl = t.toLowerCase();
+                if (vl === lower || tl === lower || tl.indexOf('(' + lower + ')') !== -1) {
+                    stateSelect.value = opt.value;
+                    matched = true;
+                }
+            });
+            if (matched) {
+                window.pendingConsigneeState = '';
+                stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                if (typeof $ !== 'undefined') $(stateSelect).trigger('change');
+            }
+        }
+
         function populateStateDropdown(zones) {
             if (!stateSelect || stateSelect.dataset.autofilled === 'true') return;
             stateSelect.innerHTML = '';
@@ -12510,6 +12553,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                 stateSelect.appendChild(opt);
             });
             stateSelect.disabled = false;
+            applyPendingSavedState();
         }
 
         // ---------------------------------------------------------------
@@ -12676,6 +12720,7 @@ if (rateRadio && rateRadio.dataset.rate) {
                     stateSelect.appendChild(opt);
                 });
                 stateSelect.disabled = false;
+                applyPendingSavedState();
             }
 
             function applyFromCache() {
