@@ -1370,7 +1370,7 @@ class CodController extends Controller
             'invoices.invoiceItems',
             'serviceRate.service',
             'manifest.customer' => function ($query) {
-                $query->select('id', 'first_name', 'last_name', 'phone_number', 'email');
+                $query->select('id', 'first_name', 'last_name', 'phone_number', 'email', 'customer_code');
             },
         ])->find($shipperId);
 
@@ -1390,7 +1390,7 @@ class CodController extends Controller
         // Customer: manifest owner first, else the exporter's own customer record.
         $customerModel = $shipper->manifest?->customer;
         if (! $customerModel && $shipper->customer_id) {
-            $customerModel = Customer::select('id', 'first_name', 'last_name', 'phone_number', 'email')
+            $customerModel = Customer::select('id', 'first_name', 'last_name', 'phone_number', 'email', 'customer_code')
                 ->find($shipper->customer_id);
         }
 
@@ -1418,6 +1418,8 @@ class CodController extends Controller
                 'phone' => $customerModel->phone_number ?? null,
                 'email' => $customerModel->email ?? null,
             ] : null,
+            'customer_id' => $customerModel ? $customerModel->id : null,
+            'customer_code' => $customerModel ? ($customerModel->customer_code ?? null) : null,
             'ship_from' => trim(($shipper->city ?? '') . ', ' . ($shipper->state ?? '') . ' - ' . ($shipper->pincode ?? '') . ', India'),
             'ship_to' => $consignee
                 ? trim(($consignee->city ?? '') . ', ' . ($consignee->state ?? '') . ' - ' . ($consignee->zip_code ?? '') . ', ' . ($consignee->delivery_destination ?? ''))

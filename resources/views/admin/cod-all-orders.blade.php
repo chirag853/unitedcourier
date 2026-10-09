@@ -1273,17 +1273,21 @@
             '.ship-row{height:26px;display:flex;border-bottom:1px solid #222;align-items:center;flex-shrink:0;}' +
             '.ship-title{width:70%;padding-left:8px;font-size:12px;font-weight:700;}' +
             '.date{width:30%;padding-right:8px;text-align:right;font-size:10px;}' +
+            '.id-date-row{display:flex;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.id-cell{width:42%;padding:6px 8px;font-size:12px;font-weight:700;display:flex;align-items:center;}' +
+            '.date-cell{width:58%;padding:5px 8px;text-align:right;font-size:10px;line-height:15px;border-left:1px solid #222;}' +
             '.section-title{height:24px;padding:5px 8px 4px;font-size:12px;font-weight:700;border-bottom:1px solid #222;display:flex;align-items:center;flex-shrink:0;}' +
             '.address{padding:6px 24px 6px;font-size:11px;line-height:15px;border-bottom:1px solid #222;}' +
             '.from-address{flex:1;min-height:48px;}' +
             '.to-address{flex:1.35;min-height:70px;}' +
             '.receiver-name{font-size:13px;font-weight:700;margin-bottom:4px;}' +
-            '.shipping-info{height:45px;display:grid;grid-template-columns:1.15fr 1fr .65fr .55fr .85fr;border-bottom:1px solid #222;flex-shrink:0;}' +
+            '.shipping-info{min-height:45px;display:grid;grid-template-columns:1fr 1.7fr .5fr .9fr;border-bottom:1px solid #222;flex-shrink:0;}' +
             '.info{padding:5px 6px 4px;font-size:10px;line-height:13px;}' +
             '.info-title{font-size:10px;font-weight:700;margin-bottom:3px;}' +
             '.center{text-align:center;}' +
             '.content{height:34px;display:flex;align-items:center;padding:4px 8px;border-bottom:1px solid #222;font-size:11px;flex-shrink:0;}' +
             '.content-title{width:72px;font-weight:700;}' +
+            '.reference-row{padding:4px 8px;border-bottom:1px solid #222;font-size:11px;flex-shrink:0;}' +
             '.barcode-area{height:104px;padding-top:11px;text-align:center;border-bottom:1px solid #222;flex-shrink:0;}' +
             '.barcode-area svg{height:52px;max-width:100%;}' +
             '.barcode-number{margin-top:8px;font-size:13px;font-weight:700;}' +
@@ -1323,6 +1327,16 @@
             return m ? m[1].toUpperCase() : dest.slice(0, 4).toUpperCase();
         }
 
+        // Full destination country name for the label's bottom "country" box.
+        // Strips a leading code prefix like "US- " and uppercases the rest.
+        function codGetDestinationCountryName(destination) {
+            if (!destination) return 'INTL';
+            const dest = String(destination).trim();
+            const m = dest.match(/^[A-Z]{2,3}[\s\-–—:]+(.+)$/);
+            if (m) return m[1].trim().toUpperCase();
+            return dest.toUpperCase();
+        }
+
         function codBuildCourierLabelHtml(data, boxIndex, boxCount) {
             const shipper = data.shipper || {};
             const consignee = data.consignee || {};
@@ -1358,11 +1372,14 @@
 
             const awb = data.awb_number || 'N/A';
             const date = data.invoice_date || new Date().toLocaleDateString('en-GB');
-            const service = data.service || {};
-            const network = service.api_provider || data.api_provider || (data.shipping_method || '-');
-            const serviceCode = service.service_code || data.service_code || '-';
-            const country = codGetDestinationCountryCode(data.destination);
-            const ds = codGetDestinationDs(data.destination);
+            const invoiceNo = data.invoice_number || '-';
+            const customerCode = data.customer_code || data.customer_id || '-';
+            const refNo = data.reference_number || '-';
+            // METHOD shows the shipping method name (earlier NETWORK showed api_provider).
+            const method = data.shipping_method || '-';
+            // Full destination name in place of the short D/S code.
+            const destinationName = data.destination || '-';
+            const country = codGetDestinationCountryName(data.destination);
 
             const labelHtml =
                 '<div class="label">' +
@@ -1372,15 +1389,9 @@
                         '<div class="company-contact">TEL:-011-46122222,www.unitedcouriers.biz</div>' +
                         '<div class="box-badge">BOX ' + boxIdx + ' OF ' + boxTot + '</div>' +
                     '</div>' +
-                    '<div class="ship-row">' +
-                        '<div class="ship-title">SHIP FROM:</div>' +
-                        '<div class="date"><b>DATE:</b>&nbsp;&nbsp;&nbsp;' + date + '</div>' +
-                    '</div>' +
-                    '<div class="section-title">' + (shipper.company || 'SHIPPER') + '</div>' +
-                    '<div class="address from-address">' +
-                        (shipper.address || '') + '<br>' +
-                        (shipper.city_state_pin || '') + '<br>' +
-                        (shipper.phone || '') +
+                    '<div class="id-date-row">' +
+                        '<div class="id-cell">ID : ' + customerCode + '</div>' +
+                        '<div class="date-cell"><b>DATE:</b>&nbsp;&nbsp;' + date + '<br><b>INVOICE NO:</b>&nbsp;&nbsp;' + invoiceNo + '</div>' +
                     '</div>' +
                     '<div class="section-title">SHIP TO:</div>' +
                     '<div class="address to-address">' +
@@ -1390,9 +1401,8 @@
                         (consignee.phone || '-') +
                     '</div>' +
                     '<div class="shipping-info">' +
-                        '<div class="info"><div class="info-title">NETWORK</div>' + network + '</div>' +
-                        '<div class="info"><div class="info-title">SERVICE</div>' + serviceCode + '</div>' +
-                        '<div class="info center"><div class="info-title">D/S</div>' + ds + '</div>' +
+                        '<div class="info"><div class="info-title">METHOD</div>' + method + '</div>' +
+                        '<div class="info"><div class="info-title">DESTINATION</div>' + destinationName + '</div>' +
                         '<div class="info center"><div class="info-title">PCS</div>' + packageCount + '</div>' +
                         '<div class="info center"><div class="info-title">ACT WT.</div>' + actualWeight.toFixed(3) + '</div>' +
                     '</div>' +
@@ -1400,6 +1410,7 @@
                         '<div class="content-title">CONTENT</div>' +
                         '<div>' + itemText + '</div>' +
                     '</div>' +
+                    '<div class="reference-row"><b>REFERENCE NO:</b>&nbsp;&nbsp;' + refNo + '</div>' +
                     '<div class="barcode-area">' +
                         '<svg data-label-barcode></svg>' +
                         '<div class="barcode-number">' + awb + '</div>' +
