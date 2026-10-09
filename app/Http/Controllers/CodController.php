@@ -140,7 +140,7 @@ class CodController extends Controller
                 'delivery_destination' => 'required',
                 'origin_type' => 'required|string|max:50',
                 'reason_for_export' => 'nullable|string|in:sample,gift,commercial,repair,return,others|max:20',
-                'business_type' => 'nullable|string|max:50',
+                'business_type' => 'nullable|string|in:business,customer|max:50',
                 'selected_exporter_customer_id' => 'nullable|integer|exists:exporter_customers,id',
                 'bill_to_customer_id' => 'nullable|integer|exists:customers,id',
                 'shipping_method' => 'nullable|string|max:100',

@@ -3851,8 +3851,11 @@
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
                                                                 <label class="form-label">Business Type</label>
-                                                                <input type="text" class="form-control"
-                                                                    name="business_type" value="{{ old('business_type') }}" placeholder="Business Type">
+                                                                <select class="form-control" name="business_type">
+                                                                    <option value="">-- Select Business Type --</option>
+                                                                    <option value="business" {{ old('business_type') == 'business' ? 'selected' : '' }}>Business</option>
+                                                                    <option value="customer" {{ old('business_type') == 'customer' ? 'selected' : '' }}>Customer</option>
+                                                                </select>
                                                             </div>
                                                         </div>
                                                     </div>
