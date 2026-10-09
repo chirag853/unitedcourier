@@ -9004,7 +9004,7 @@ class CustomerController extends Controller
                 if (empty($payShippingMethod)) {
                     $payShippingMethod = $this->resolveShippingMethod($shipper);
                 }
-                $payCourierService = $this->findCourierService($payShippingMethod, $shipper->id);
+                $payCourierService = $this->resolveCourierService($shipper, $payShippingMethod);
             }
             $payApiProvider = strtolower(trim((string) ($payCourierService->api_provider ?? '')));
             $isSelfService = ($payApiProvider === 'self')
@@ -9769,7 +9769,7 @@ class CustomerController extends Controller
 
             // Determine the network from the shipping method's CourierService
             $shippingMethod = $this->resolveShippingMethod($shipper);
-            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $courierService = $this->resolveCourierService($shipper, $shippingMethod);
             $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
             // Resolve the API provider: database-first (courier_services.api_provider)
@@ -10530,7 +10530,7 @@ class CustomerController extends Controller
 
                     // Determine the network from the shipping method's CourierService
                     $shippingMethod = $this->resolveShippingMethod($shipper);
-                    $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+                    $courierService = $this->resolveCourierService($shipper, $shippingMethod);
                     $network = $courierService ? strtolower(trim($courierService->network)) : 'ups';
 
                     // Resolve the API provider: database-first (courier_services.api_provider)
@@ -11222,7 +11222,7 @@ class CustomerController extends Controller
         }
 
         // Multi-tier CourierService lookup
-        $service = $this->findCourierService($shippingMethod, $shipper->id);
+        $service = $this->resolveCourierService($shipper, $shippingMethod);
 
         if (! $service) {
             return ['success' => false, 'message' => 'No matching courier service found for shipping method: "'.$shippingMethod.'".'];
@@ -11263,6 +11263,29 @@ class CustomerController extends Controller
      * Tiers: exact → case-insensitive → str_contains → word-by-word → collapsed-string
      * Logs all available methods on total failure for diagnostics.
      */
+    /**
+     * Resolve the exact CourierService row for a shipment.
+     *
+     * shipper_info.service_id (stored at order time) points at the precise
+     * row, which matters when one method name exists under several providers
+     * (e.g. "UNITED PRIOR POST" under shipglobal/overseas/shipuniversal).
+     * Falls back to fuzzy method matching for legacy rows without service_id.
+     */
+    private function resolveCourierService($shipper, $shippingMethod = null)
+    {
+        if ($shipper && ! empty($shipper->service_id)) {
+            $service = CourierService::find((int) $shipper->service_id);
+            if ($service) {
+                return $service;
+            }
+        }
+
+        return $this->findCourierService(
+            $shippingMethod ?? $this->resolveShippingMethod($shipper),
+            $shipper ? $shipper->id : 0
+        );
+    }
+
     public function findCourierService($shippingMethod, $shipperId)
     {
         // Tier 1: Exact match
@@ -11401,6 +11424,16 @@ class CustomerController extends Controller
      */
     private function resolveShippingMethod($shipper)
     {
+        // service_id is the source of truth: the exact courier service row
+        // chosen at order time. Its method is used first so manifest/label
+        // always follow the selected service, not a stale method string.
+        if (! empty($shipper->service_id)) {
+            $serviceMethod = CourierService::whereKey((int) $shipper->service_id)->value('method');
+            if (! empty($serviceMethod)) {
+                return $serviceMethod;
+            }
+        }
+
         $shippingMethod = $shipper->shipping_method;
 
         if (! $shippingMethod) {
@@ -11552,7 +11585,7 @@ class CustomerController extends Controller
 
             // Get the courier service code for the shipping method
             $shippingMethod = $this->resolveShippingMethod($shipper);
-            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $courierService = $this->resolveCourierService($shipper, $shippingMethod);
             $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
 
             // Build vendor_order_items from invoice items
@@ -12163,7 +12196,7 @@ class CustomerController extends Controller
 
         // Resolve shipping method + courier service
         $shippingMethod = $this->resolveShippingMethod($shipper);
-        $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+        $courierService = $this->resolveCourierService($shipper, $shippingMethod);
 
         // Consignee country code from delivery_destination
         $consigneeCountryCode = $this->getCountryCodeFromDestination($consignee->delivery_destination ?? '');
@@ -12876,7 +12909,7 @@ class CustomerController extends Controller
         // Reuse a pre-resolved service when the caller already has one;
         // otherwise look it up now.
         if (! $courierService) {
-            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $courierService = $this->resolveCourierService($shipper, $shippingMethod);
         }
 
         // Explicit service-name guard: a ShipGlobal service must always go
@@ -13244,7 +13277,7 @@ class CustomerController extends Controller
             ? CourierService::find($shipper->service_id)
             : null;
         if (! $courierService) {
-            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $courierService = $this->resolveCourierService($shipper, $shippingMethod);
         }
 
         $serviceCode = trim((string) (
@@ -13852,7 +13885,7 @@ class CustomerController extends Controller
         // 2) Fallback: legacy fuzzy match (for older rows where service_id is NULL
         //    or points at a non-overseas service).
         if (! $courierService) {
-            $courierService = $this->findCourierService($shippingMethod, $shipper->id);
+            $courierService = $this->resolveCourierService($shipper, $shippingMethod);
         }
 
         $serviceCode = $courierService ? ($courierService->service_code ?? $courierService->scode ?? '') : '';
