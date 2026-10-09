@@ -12879,6 +12879,19 @@ class CustomerController extends Controller
             $courierService = $this->findCourierService($shippingMethod, $shipper->id);
         }
 
+        // Explicit service-name guard: a ShipGlobal service must always go
+        // to the ShipGlobal API, even if its courier_services row carries a
+        // wrong api_provider (e.g. "ShipGlobal Premium" mapped to
+        // shipuniversal, which rejects it with "Invalid service name").
+        $methodUpper = strtoupper(trim((string) $shippingMethod));
+        $codeUpper = $courierService
+            ? strtoupper(trim((string) ($courierService->service_code ?? $courierService->scode ?? '')))
+            : '';
+        if (str_contains($methodUpper, 'SHIPGLOBAL') || str_contains($methodUpper, 'SHIP GLOBAL')
+            || str_contains($codeUpper, 'SHIPGLOBAL') || str_contains($codeUpper, 'SHIP GLOBAL')) {
+            return 'shipglobal';
+        }
+
         if ($courierService) {
             $provider = strtolower(trim($courierService->api_provider ?? ''));
             if (! empty($provider)) {
