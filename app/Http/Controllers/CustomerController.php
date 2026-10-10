@@ -12912,14 +12912,22 @@ class CustomerController extends Controller
             $courierService = $this->resolveCourierService($shipper, $shippingMethod);
         }
 
+        // Services whose service_code is NOT_IMPLEMENTED behave like SELF:
+        // no carrier API is ever called; the shipment is manifested
+        // internally and the wallet is charged (when due) exactly like
+        // a SELF shipment. This wins over name-based guards below.
+        $codeUpper = $courierService
+            ? strtoupper(trim((string) ($courierService->service_code ?? $courierService->scode ?? '')))
+            : '';
+        if ($codeUpper === 'NOT_IMPLEMENTED') {
+            return 'self';
+        }
+
         // Explicit service-name guard: a ShipGlobal service must always go
         // to the ShipGlobal API, even if its courier_services row carries a
         // wrong api_provider (e.g. "ShipGlobal Premium" mapped to
         // shipuniversal, which rejects it with "Invalid service name").
         $methodUpper = strtoupper(trim((string) $shippingMethod));
-        $codeUpper = $courierService
-            ? strtoupper(trim((string) ($courierService->service_code ?? $courierService->scode ?? '')))
-            : '';
         if (str_contains($methodUpper, 'SHIPGLOBAL') || str_contains($methodUpper, 'SHIP GLOBAL')
             || str_contains($codeUpper, 'SHIPGLOBAL') || str_contains($codeUpper, 'SHIP GLOBAL')) {
             return 'shipglobal';

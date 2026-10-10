@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CodController;
 use App\Http\Controllers\Api\CustomerManifestController;
+use App\Http\Controllers\Api\WalletController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -11,6 +12,9 @@ Route::get('/user', function (Request $request) {
 
 // Close COD/FOC order by AWB: awb_number + type(cod/foc) + remark -> finance_remark
 Route::post('/close-cod', [CodController::class, 'close_cod'])->name('api.close-cod');
+
+// Wallet recharge by customer_code (no auth): customer_code + recharge_type + amount
+Route::post('/wallet-recharge', [WalletController::class, 'wallet_recharge'])->name('api.wallet-recharge');
 
 // Customer manifest APIs (v1): same payload, api_provider + method decide carrier.
 Route::prefix('v1')->group(function () {

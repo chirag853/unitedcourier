@@ -537,6 +537,15 @@ class PrepaidController extends Controller
                 $validatedData['service_rate_id'] = null;
                 $serviceId = null;
             }
+            // NOT_IMPLEMENTED services behave like SELF: no carrier API ever,
+            // wallet is charged at manifest time exactly like SELF. Unlike
+            // SELF the original method + service_id are kept (needed to
+            // resolve the exact row later).
+            $isNotImplementedService = false;
+            if (! $isSelfService && is_numeric($serviceId)) {
+                $notImplCode = CourierService::whereKey((int) $serviceId)->value('service_code');
+                $isNotImplementedService = strtoupper(trim((string) $notImplCode)) === 'NOT_IMPLEMENTED';
+            }
             $courierService = null;
             if (! $isSelfService && empty($validatedData['shipping_method']) && $serviceId) {
                 $courierService = CourierService::find($serviceId);
@@ -1045,7 +1054,7 @@ class PrepaidController extends Controller
             $carrierTrackingNumber = null;
             $shipmentResponse = null;
             $adomantraResponse = null;
-            if (! $isSelfService) {
+            if (! $isSelfService && ! $isNotImplementedService) {
                 $carrierResult = $this->bookPrepaidCarrierAtCreation($shipper, (int) $admin->id);
 
                 if (empty($carrierResult['success'])) {
@@ -1060,7 +1069,7 @@ class PrepaidController extends Controller
                 $shipmentResponse = $carrierResult['shipment_response'] ?? null;
             }
 
-            if (! $isSelfService) {
+            if (! $isSelfService && ! $isNotImplementedService) {
             $adomantraPayload = $this->buildAdomantraOrderPayload(
                 $validatedData,
                 $admin,
@@ -4946,14 +4955,22 @@ class PrepaidController extends Controller
             $courierService = $this->resolveCourierService($shipper, $shippingMethod);
         }
 
+        // Services whose service_code is NOT_IMPLEMENTED behave like SELF:
+        // no carrier API is ever called; the shipment is manifested
+        // internally and the wallet is charged (when due) exactly like
+        // a SELF shipment. This wins over name-based guards below.
+        $codeUpper = $courierService
+            ? strtoupper(trim((string) ($courierService->service_code ?? $courierService->scode ?? '')))
+            : '';
+        if ($codeUpper === 'NOT_IMPLEMENTED') {
+            return 'self';
+        }
+
         // Explicit service-name guard: a ShipGlobal service must always go
         // to the ShipGlobal API, even if its courier_services row carries a
         // wrong api_provider (e.g. "ShipGlobal Premium" mapped to
         // shipuniversal, which rejects it with "Invalid service name").
         $methodUpper = strtoupper(trim((string) $shippingMethod));
-        $codeUpper = $courierService
-            ? strtoupper(trim((string) ($courierService->service_code ?? $courierService->scode ?? '')))
-            : '';
         if (str_contains($methodUpper, 'SHIPGLOBAL') || str_contains($methodUpper, 'SHIP GLOBAL')
             || str_contains($codeUpper, 'SHIPGLOBAL') || str_contains($codeUpper, 'SHIP GLOBAL')) {
             return 'shipglobal';
