@@ -189,7 +189,7 @@
                             <ul>
                                 <li class="submenu submenu-two">
                                     <a href="javascript:void(0);"
-                                        class="{{ request()->is('admin/companies') || request()->is('admin/dispute-orders') || request()->is('admin/cancel-orders') || request()->is('admin/not-received-orders') ? 'active' : '' }}">Orders<span
+                                        class="{{ request()->is('admin/companies') || request()->is('admin/dispute-orders') || request()->is('admin/cancel-orders') || request()->is('admin/not-received-orders') || request()->is('admin/not-implemented-orders') ? 'active' : '' }}">Orders<span
                                             class="menu-arrow inside-submenu"></span></a>
                                     <ul>
                                         <li><a href="{{ url('/admin/companies') }}"
@@ -200,6 +200,8 @@
                                                 class="{{ request()->is('admin/cancel-orders') ? 'active' : '' }}">Cancel Orders</a></li>
                                         <li><a href="{{ route('admin.not-received-orders') }}"
                                                 class="{{ request()->is('admin/not-received-orders') ? 'active' : '' }}">Not Received at Hub</a></li>
+                                        <li><a href="{{ route('admin.not-implemented-orders') }}"
+                                                class="{{ request()->is('admin/not-implemented-orders') ? 'active' : '' }}">Not Implemented API Data</a></li>
                                     </ul>
                                 </li>
                                 <!-- <li class="submenu">

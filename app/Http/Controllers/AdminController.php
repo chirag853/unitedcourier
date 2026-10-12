@@ -2581,6 +2581,101 @@ class AdminController extends Controller
     }
 
     /**
+     * Not Implemented API Data page (sidebar: Manage Orders > Orders > Not Implemented API Data).
+     * Saare shipments jinki courier service ka service_code NOT_IMPLEMENTED hai —
+     * ye carrier API hit kiye bina internally manifest hote hain (SELF jaisa).
+     */
+    public function notImplementedOrders()
+    {
+        $orders = DB::table('shipment_invoice as si')
+            ->join('shipper_info as shp', 'shp.id', '=', 'si.shipper_id')
+            ->leftJoin('customers as c', 'c.id', '=', 'shp.customer_id')
+            ->leftJoin('consignee_info as con', 'con.shipper_id', '=', 'shp.id')
+            ->leftJoin('manifests', 'manifests.shipper_id', '=', 'shp.id')
+            ->leftJoin('courier_services as cs', 'cs.id', '=', 'shp.service_id')
+            ->whereRaw("UPPER(TRIM(COALESCE(cs.service_code, ''))) = 'NOT_IMPLEMENTED'")
+            ->select(
+                'si.id',
+                'si.invoice_number',
+                'si.invoice_currency',
+                'si.created_at as order_date',
+                'shp.id as shipper_id',
+                'shp.awb_number',
+                'shp.company_name as shipper_company',
+                'shp.contact_person as shipper_contact',
+                'shp.city as shipper_city',
+                'shp.state as shipper_state',
+                'shp.status as shipper_status',
+                'shp.shipping_method',
+                'shp.total_price',
+                'manifests.manifest_number',
+                'cs.method as service_method',
+                'cs.api_provider as service_provider',
+                'c.first_name',
+                'c.last_name',
+                'c.customer_code',
+                'c.email as customer_email',
+                'con.consignee_name',
+                'con.city as consignee_city',
+                'con.state as consignee_state',
+                'con.delivery_destination as consignee_destination'
+            )
+            ->orderByDesc('si.created_at')
+            ->get();
+
+        $totalAmount = (float) $orders->sum('total_price');
+
+        return view('admin.not-implemented-orders', compact('orders', 'totalAmount'));
+    }
+
+    /**
+     * Export Not Implemented orders to Excel — only HAWB Number + Tracking Number.
+     */
+    public function notImplementedExport()
+    {
+        $orders = DB::table('shipment_invoice as si')
+            ->join('shipper_info as shp', 'shp.id', '=', 'si.shipper_id')
+            ->leftJoin('courier_services as cs', 'cs.id', '=', 'shp.service_id')
+            ->leftJoin('shipment_tracking as st', 'st.shipper_id', '=', 'shp.id')
+            ->whereRaw("UPPER(TRIM(COALESCE(cs.service_code, ''))) = 'NOT_IMPLEMENTED'")
+            ->select('shp.awb_number', 'st.shipment_identification_number as tracking_number')
+            ->orderByDesc('si.created_at')
+            ->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Not Implemented Orders');
+        $headers = ['HAWB Number', 'Tracking Number'];
+        foreach ($headers as $index => $header) {
+            $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($columnLetter.'1', $header);
+        }
+
+        $rowNumber = 2;
+        foreach ($orders as $order) {
+            $sheet->setCellValue('A'.$rowNumber, $order->awb_number ?? '-');
+            $sheet->setCellValue('B'.$rowNumber, '');
+            $rowNumber++;
+        }
+
+        $sheet->getStyle('A1:B1')->getFont()->setBold(true);
+        $sheet->freezePane('A2');
+        if ($rowNumber > 2) {
+            $sheet->setAutoFilter('A1:B1');
+        }
+        foreach (range(1, count($headers)) as $column) {
+            $sheet->getColumnDimensionByColumn($column)->setAutoSize(true);
+        }
+
+        $fileName = 'not-implemented-orders-'.date('Y-m-d-His').'.xlsx';
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    /**
      * Wallet Transactions page (sidebar: Account > Wallet Transaction).
      * Customer select karne par uski wallet_transactions rows AJAX se aati hain.
      */

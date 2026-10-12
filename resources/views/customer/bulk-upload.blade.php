@@ -562,7 +562,9 @@
                     // Build the rate cards HTML
                     var rateCardsHtml = '';
                     if (allRates.length === 0) {
-                        rateCardsHtml = '<div class="no-rates"><i class="ti ti-alert-circle me-1"></i> No rates available for this shipment (check weight/zone/service configuration).</div>';
+                        var svcName = (s.service_type && s.service_type !== '-') ? " for service '" + escapeHtml(s.service_type) + "'" : '';
+                        var errMsg = s.error ? escapeHtml(s.error) : ('No rates available for this shipment' + svcName + ' (check weight/zone/service configuration).');
+                        rateCardsHtml = '<div class="no-rates"><i class="ti ti-alert-circle me-1"></i> ' + errMsg + '</div>';
                     } else {
                         allRates.forEach(function (r, rIdx) {
                             var isSelected = (defaultRate && r.rate_id === defaultRate.rate_id);

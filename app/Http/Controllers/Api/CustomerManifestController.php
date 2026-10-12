@@ -241,6 +241,7 @@ class CustomerManifestController extends Controller
                 'service_code' => 'nullable|string|max:100',
                 'method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
+                'ref_number' => 'nullable|string|max:100',
                 'origin_type' => 'nullable|string|in:CSB IV,CSB V',
                 'delivery_destination' => 'required',
 
@@ -328,6 +329,42 @@ class CustomerManifestController extends Controller
         // Internally everything runs on csb so CsbInformation flow is untouched.
         if (isset($validated['csb_v']) && is_array($validated['csb_v'])) {
             $validated['csb'] = $validated['csb_v'];
+        }
+
+        // ref_number is the public reference key. It must be unique across
+        // shipment_invoice + create_shipment, and wins over
+        // invoice.reference_number when both are sent.
+        if (! empty($validated['ref_number'])) {
+            $refNumber = trim((string) $validated['ref_number']);
+            $refExists = \App\Models\ShipmentInvoice::where('reference_number', $refNumber)->exists()
+                || \App\Models\CreateShipment::where('reference_number', $refNumber)->exists();
+            if ($refExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Reference number '{$refNumber}' already exists.",
+                    'errors' => ['ref_number' => ["Reference number '{$refNumber}' already exists."]],
+                ], 422);
+            }
+            if (! isset($validated['invoice']) || ! is_array($validated['invoice'])) {
+                $validated['invoice'] = [];
+            }
+            $validated['invoice']['reference_number'] = $refNumber;
+        }
+
+        // invoice.reference_number (purana field) par bhi same duplicate
+        // check — chahe ref_number bhejo ya invoice.reference_number.
+        $invRef = trim((string) ($validated['invoice']['reference_number'] ?? ''));
+        if ($invRef !== '') {
+            $invRefExists = \App\Models\ShipmentInvoice::where('reference_number', $invRef)->exists()
+                || \App\Models\CreateShipment::where('reference_number', $invRef)->exists();
+            if ($invRefExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Reference number '{$invRef}' already exists.",
+                    'errors' => ['invoice.reference_number' => ["Reference number '{$invRef}' already exists."]],
+                ], 422);
+            }
+            $validated['invoice']['reference_number'] = $invRef;
         }
 
         // Service identifier: service_code preferred (number jaise 1500 bhi

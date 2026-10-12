@@ -131,6 +131,27 @@ class BulkUploadController extends Controller
                 return back()->with('info', 'No valid rows with AwbNo found in the uploaded file.');
             }
 
+            // Pre-scan: same sheet me jo ReferenceNo 2+ baar aaya ho, uske
+            // saare AwbNo fail honge — pehli wali ki bhi DB entry nahi hogi.
+            $refToAwbs = [];
+            foreach ($grouped as $awbKey => $rowGroup) {
+                $refScan = $getCol($rowGroup[0], 'referenceno');
+                if ($refScan !== '' && $refScan !== null) {
+                    $refToAwbs[strtolower($refScan)][] = ['awb' => $awbKey, 'ref' => $refScan];
+                }
+            }
+            $duplicateAwbs = [];
+            foreach ($refToAwbs as $entries) {
+                if (count($entries) > 1) {
+                    $names = implode(', ', array_map(function ($e) {
+                        return "'" . $e['awb'] . "'";
+                    }, $entries));
+                    foreach ($entries as $e) {
+                        $duplicateAwbs[(string) $e['awb']] = "ReferenceNo '{$e['ref']}' is duplicate in the uploaded file (AwbNo {$names}). No entry created.";
+                    }
+                }
+            }
+
             // Parse the selected rate map: { awb_no => rate_id }
             // This comes from the preview modal where the user picks a rate card per shipment.
             $selectedRatesRaw = $request->input('selected_rates', '');
@@ -147,6 +168,7 @@ class BulkUploadController extends Controller
             $createdShipments = [];
             $errors = [];
             $successCount = 0;
+            $seenReferenceNos = [];
 
             // Performance: har shipment par CourierRate/CourierService/surcharge
             // queries na chale isliye sab kuch ek baar preload karo.
@@ -160,7 +182,21 @@ class BulkUploadController extends Controller
             DB::beginTransaction();
 
             foreach ($grouped as $awbNo => $rowGroup) {
+                // Sheet-level duplicate ReferenceNo: is AwbNo ko chhuo hi
+                // mat — koi DB entry nahi hogi (pehli wali bhi nahi).
+                if (isset($duplicateAwbs[(string) $awbNo])) {
+                    $errors[] = [
+                        'awb_no' => $awbNo,
+                        'message' => $duplicateAwbs[(string) $awbNo],
+                    ];
+                    \Log::error('Bulk upload skipped duplicate ReferenceNo for AwbNo ' . $awbNo);
+
+                    continue;
+                }
                 try {
+                    // Per-row savepoint: beech me kuch bhi fatenge to is row
+                    // ki saari writes rollback, baaki rows safe rahengi.
+                    DB::beginTransaction();
                     $firstRow = $rowGroup[0];
 
                     // ---- Shipper (Consignor) data ----
@@ -171,6 +207,11 @@ class BulkUploadController extends Controller
                     $shipperAddress3 = $getCol($firstRow, 'consignoraddressline3');
                     $shipperCity = $getCol($firstRow, 'consignorcity');
                     $shipperState = $getCol($firstRow, 'consignorstate');
+                    // ConsignorState hamesha exactly 2 letters (e.g. DL, WB).
+                    if ($shipperState === '' || $shipperState === null || ! preg_match('/^[A-Za-z]{2}$/', $shipperState)) {
+                        throw new \Exception("ConsignorState must be exactly 2 letters (e.g. DL). Got '" . ($shipperState ?? '') . "'.");
+                    }
+                    $shipperState = strtoupper($shipperState);
                     $shipperPincode = $getCol($firstRow, 'consignorpincode');
                     $shipperPhone = $getCol($firstRow, 'consignortelephone') ?: ($customer->phone_number ?? null);
                     $shipperEmailRaw = $getColAny($firstRow, ['consignoremail', 'consignormail', 'shipperemail', 'shippermail']);
@@ -197,6 +238,21 @@ class BulkUploadController extends Controller
 
                     $destination = strtoupper(trim((string) ($getCol($firstRow, 'destination') ?? '')));
                     $referenceNo = $getCol($firstRow, 'referenceno');
+
+                    // ReferenceNo same nahi hona chahiye — na file ke andar,
+                    // na database me (shipment_invoice / create_shipment).
+                    if ($referenceNo !== '' && $referenceNo !== null) {
+                        $refKey = strtolower($referenceNo);
+                        if (isset($seenReferenceNos[$refKey])) {
+                            throw new \Exception("ReferenceNo '{$referenceNo}' is duplicate in the uploaded file (AwbNo '{$awbNo}').");
+                        }
+                        $refExists = \App\Models\ShipmentInvoice::where('reference_number', $referenceNo)->exists()
+                            || \App\Models\CreateShipment::where('reference_number', $referenceNo)->exists();
+                        if ($refExists) {
+                            throw new \Exception("ReferenceNo '{$referenceNo}' already exists in the system (AwbNo '{$awbNo}').");
+                        }
+                        $seenReferenceNos[$refKey] = true;
+                    }
 
                     // ---- Service / shipping method ----
                     $serviceType = $getCol($firstRow, 'servicetype');
@@ -238,6 +294,17 @@ class BulkUploadController extends Controller
                         $matchedRate = $preloadedRates->get($selectedRateId);
                         if ($matchedRate && ! in_array((int) $matchedRate->customer_id, [$customerId, 0], true)) {
                             $matchedRate = null;
+                        }
+                        // ServiceType column diya hai to selected rate usi
+                        // service ka hona chahiye — warna row fail karo.
+                        if ($matchedRate && $serviceType) {
+                            $bulkServiceCheck = $this->resolveBulkService($serviceType, $this->resolveDestinationCountry($destination));
+                            if (! $bulkServiceCheck) {
+                                throw new \Exception("ServiceType '{$serviceType}' is not available for destination '{$destination}'.");
+                            }
+                            if ((int) $matchedRate->service_id !== (int) $bulkServiceCheck->id) {
+                                throw new \Exception("Selected rate does not belong to ServiceType '{$serviceType}' for destination '{$destination}'.");
+                            }
                         }
                         if ($matchedRate) {
                             $courierService = $preloadedServices->get($matchedRate->service_id)
@@ -303,15 +370,39 @@ class BulkUploadController extends Controller
                         }
                     }
 
-                    // Fallback: if no rate was selected (or rate_id not found), try ServiceType column
+                    // ServiceType column: resolve the exact service for this
+                    // destination. No fuzzy fallback — a missing service or a
+                    // missing weight+zone rate fails the row loudly instead of
+                    // creating a silent zero-price shipment.
                     if (!$courierService && $serviceType) {
-                        $courierService = $this->findCourierService($serviceType, null);
-                        if ($courierService) {
-                            $rateDetails = $this->calculateBulkRate($customerId, $courierService, $totalChgWeight, $consigneeState);
+                        $bulkDestCountry = $this->resolveDestinationCountry($destination);
+                        $courierService = $this->resolveBulkService($serviceType, $bulkDestCountry);
+                        if (! $courierService) {
+                            throw new \Exception("ServiceType '{$serviceType}' is not available for destination '{$destination}'.");
+                        }
+                        $rateDetails = $this->calculateBulkRate($customerId, $courierService, $totalChgWeight, $consigneeState);
+                        if (empty($rateDetails['rate_id'])) {
+                            $zoneLabel = $consigneeState ?: 'unknown zone';
+                            throw new \Exception("No rate found for weight {$totalChgWeight}kg in zone '{$zoneLabel}' for service '{$serviceType}' (destination '{$destination}').");
                         }
                     }
 
                     $shippingMethod = $courierService ? $courierService->method : ($serviceType ?: null);
+
+                    // ---- Fail fast: saare item rows ka HSN validate karo
+                    // kuch create karne SE PEHLE, taaki fail hone par koi
+                    // aadhi entry (shipper/consignee/invoice) DB me na rahe.
+                    $hsnBoxNo = 1;
+                    foreach ($rowGroup as $hr) {
+                        $hsnCheck = $getCol($hr, 'hscode');
+                        if ($hsnCheck === '' || $hsnCheck === null) {
+                            throw new \Exception("HSN Code is required (AwbNo '{$awbNo}', Box No. {$hsnBoxNo}).");
+                        }
+                        if (! preg_match('/^\d{4}(\d{2})?(\d{2})?$/', $hsnCheck)) {
+                            throw new \Exception("HSN Code must be 4, 6, or 8 digits. Got '{$hsnCheck}' (AwbNo '{$awbNo}', Box No. {$hsnBoxNo}).");
+                        }
+                        $hsnBoxNo++;
+                    }
 
                     // ---- Generate AWB number ----
                     $newAwbNumber = $this->generateAwbNumber();
@@ -444,6 +535,13 @@ class BulkUploadController extends Controller
                         $amount = round($qty * $unitRate, 2);
                         $hsCode = $getCol($r, 'hscode');
                         $htsCode = $getCol($r, 'htscode');
+                        // HSN Code required + 4, 6 ya 8 digits.
+                        if ($hsCode === '' || $hsCode === null) {
+                            throw new \Exception("HSN Code is required (AwbNo '{$awbNo}', Box No. {$itemBoxNo}).");
+                        }
+                        if (! preg_match('/^\d{4}(\d{2})?(\d{2})?$/', $hsCode)) {
+                            throw new \Exception("HSN Code must be 4, 6, or 8 digits. Got '{$hsCode}' (AwbNo '{$awbNo}', Box No. {$itemBoxNo}).");
+                        }
 
                         ShipmentInvoiceItem::create([
                             'invoice_id' => $invoice->id,
@@ -546,7 +644,9 @@ class BulkUploadController extends Controller
                         'invoice_number' => $invoiceNo,
                     ];
                     $successCount++;
+                    DB::commit();
                 } catch (\Exception $e) {
+                    DB::rollBack();
                     $errors[] = [
                         'awb_no' => $awbNo,
                         'message' => $e->getMessage(),
@@ -715,6 +815,20 @@ class BulkUploadController extends Controller
                 // value — a service is shown only when its country matches.
                 $destinationCountry = $this->resolveDestinationCountry($destination);
 
+                // ServiceType column diya hai to sirf usi service ke rates
+                // dikhao (same destination-scoped resolution as process).
+                // Service na mile ya rate na mile to error entry banao.
+                $serviceTypeError = null;
+                if ($serviceType) {
+                    $typedService = $this->resolveBulkService($serviceType, $destinationCountry);
+                    if (! $typedService) {
+                        $serviceTypeError = "ServiceType '{$serviceType}' is not available for destination '{$destination}'.";
+                        $allServices = collect();
+                    } else {
+                        $allServices = collect([$typedService]);
+                    }
+                }
+
                 // Collect ALL available service rates for this shipment (like getUpsRate all-services mode)
                 $allRates = [];
                 $defaultRate = null; // first available rate as default selection
@@ -852,6 +966,14 @@ class BulkUploadController extends Controller
                 $invoiceNo = $getCol($firstRow, 'invoiceno') ?: ('INV-' . $awbNo);
                 $invoiceValue = floatval($getCol($firstRow, 'invoicevalue') ?: 0);
 
+                // Zone check: ServiceType wali service ke liye weight+zone me
+                // koi rate na mile to preview me hi error dikhao.
+                $zoneError = null;
+                if ($serviceType && ! $serviceTypeError && empty($allRates)) {
+                    $zoneLabel = $consigneeState ?: 'unknown zone';
+                    $zoneError = "No rate found for weight {$totalChgWeight}kg in zone '{$zoneLabel}' for service '{$serviceType}' (destination '{$destination}').";
+                }
+
                 $previewShipments[] = [
                     'awb_no' => $awbNo,
                     'consignee_name' => $consigneeName ?: '-',
@@ -866,6 +988,8 @@ class BulkUploadController extends Controller
                     'all_rates' => $allRates,
                     'default_rate' => $defaultRate,
                     'row_count' => count($rowGroup),
+                    'service_type' => $serviceType ?: '-',
+                    'error' => $serviceTypeError ?? $zoneError,
                 ];
 
                 $grandTotal += $defaultRate['total'] ?? 0;
@@ -1112,6 +1236,39 @@ class BulkUploadController extends Controller
     /**
      * Shared with CustomerController: resolve a courier service by shipping method name.
      */
+    /**
+     * Resolve the exact enabled courier service for a bulk-upload row by its
+     * ServiceType column, scoped to the shipment's destination country.
+     * No fuzzy fallback: when nothing matches, null is returned so the row
+     * fails with a clear error instead of silently using a wrong service.
+     * Country rule mirrors the preview filter (empty service country = US).
+     */
+    private function resolveBulkService($serviceType, $destinationCountry)
+    {
+        $serviceType = trim((string) $serviceType);
+        if ($serviceType === '') {
+            return null;
+        }
+
+        $candidates = \App\Models\CourierService::where('status', 1)->get()
+            ->filter(function ($service) use ($serviceType) {
+                return $service->method === $serviceType
+                    || strcasecmp(trim((string) $service->method), $serviceType) === 0;
+            });
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        foreach ($candidates as $service) {
+            $serviceCountry = strtoupper(trim((string) ($service->country ?? 'US')));
+            if ($serviceCountry === 'ALL' || strcasecmp($serviceCountry, (string) $destinationCountry) === 0) {
+                return $service;
+            }
+        }
+
+        return null;
+    }
+
     private function findCourierService($shippingMethod, $shipperId)
     {
         return app(CustomerController::class)->findCourierService($shippingMethod, $shipperId);

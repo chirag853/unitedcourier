@@ -4,6 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CodController;
 use App\Http\Controllers\Api\CustomerManifestController;
+use App\Http\Controllers\Api\NotImplementedController;
+use App\Http\Controllers\Api\ShipmentCmsController;
 use App\Http\Controllers\Api\WalletController;
 
 Route::get('/user', function (Request $request) {
@@ -15,6 +17,14 @@ Route::post('/close-cod', [CodController::class, 'close_cod'])->name('api.close-
 
 // Wallet recharge by customer_code (no auth): customer_code + recharge_type + amount
 Route::post('/wallet-recharge', [WalletController::class, 'wallet_recharge'])->name('api.wallet-recharge');
+
+// NOT_IMPLEMENTED tracking update (no auth): awb_number + tracking_number
+// Rejected unless the shipment's service_code is NOT_IMPLEMENTED.
+Route::post('/update-tracking', [NotImplementedController::class, 'updateTracking'])->name('api.not-implemented-tracking');
+
+// Shipment creation CMS (no auth): same params as POST /api/v1/manifests
+// plus customer_code (used instead of the token customer).
+Route::post('/shipment-creation-cms', [ShipmentCmsController::class, 'store'])->name('api.shipment-creation-cms');
 
 // Customer manifest APIs (v1): same payload, api_provider + method decide carrier.
 Route::prefix('v1')->group(function () {
