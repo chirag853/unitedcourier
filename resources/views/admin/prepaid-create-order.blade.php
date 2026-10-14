@@ -3700,7 +3700,8 @@
                                                         </div>
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
-                                                                <label class="form-label">KYC Number</label>
+                                                                <label class="form-label">KYC Number <span
+                                                                        class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
                                                                     name="shipper_kyc_number" id="shipper_kyc_number"
                                                                     value="{{ old('shipper_kyc_number') }}"
@@ -3776,6 +3777,8 @@
                                                                                 data-name="{{ $destination->name }}"
                                                                                 data-code="{{ $destination->code }}"
                                                                                 data-country-code="{{ $destination->country_code }}"
+                                                                                data-currency="{{ $destination->currency_code }}"
+                                                                                data-rate="{{ $destination->rate }}"
                                                                                 {{ old('delivery_destination') == $destination->id ? 'selected' : '' }}>
                                                                             {{ $destination->name }}
                                                                         </option>
@@ -3793,8 +3796,7 @@
                                                                     aria-hidden="true">
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
-                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
-                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V/Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -7753,7 +7755,7 @@
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="incoterms">
                                                                         <option value="">Select</option>
-                                                                        <!-- <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option> -->
+                                                                        <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
                                                                         <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
                                                                         <!-- <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option> -->
                                                                     </select>
@@ -9157,6 +9159,54 @@
 
 
     // Fetch rates for ALL courier services and show as selectable card list
+    // Destination currency conversion (sirf display ke liye —
+    // database me invoice_currency hamesha INR jata hai).
+    window.destCurrencyInfo = function () {
+        var sel = document.querySelector('select[name="delivery_destination"]');
+        var opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+        var code = opt && opt.dataset.currency ? String(opt.dataset.currency).trim().toUpperCase() : '';
+        var rate = opt && opt.dataset.rate ? parseFloat(opt.dataset.rate) : 0;
+        return { code: code, rate: rate > 0 ? rate : 0 };
+    };
+    // Invoice Currency me INR + destination currency dikhao.
+    function syncInvoiceCurrency() {
+        var sel = document.querySelector('select[name="invoice_currency"]');
+        if (!sel) return;
+        var info = window.destCurrencyInfo();
+        var current = sel.value;
+        sel.innerHTML = '';
+        var inr = document.createElement('option');
+        inr.value = 'INR'; inr.textContent = 'INR';
+        sel.appendChild(inr);
+        if (info.code && info.code !== 'INR') {
+            var o = document.createElement('option');
+            o.value = info.code; o.textContent = info.code;
+            sel.appendChild(o);
+            if (current === info.code) sel.value = info.code;
+        }
+        if (window.jQuery && jQuery(sel).hasClass('select2-hidden-accessible')) jQuery(sel).trigger('change.select2');
+        else sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    function bindDestCurrencySync() {
+        var dest = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
+        if (!dest || dest.dataset.currencySyncBound) return;
+        dest.dataset.currencySyncBound = '1';
+        var handler = function () { syncInvoiceCurrency(); };
+        dest.addEventListener('change', handler);
+        if (window.jQuery) jQuery(dest).on('change', handler);
+    }
+    // Submit par invoice_currency force INR (display ke liye kuch bhi chuna ho).
+    function forceInvoiceCurrencyINR() {
+        var form = document.getElementById('shipmentForm');
+        if (!form || form.dataset.inrForced) return;
+        form.dataset.inrForced = '1';
+        form.addEventListener('submit', function () {
+            var sel = form.querySelector('[name="invoice_currency"]');
+            if (sel) sel.value = 'INR';
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function () { bindDestCurrencySync(); forceInvoiceCurrencyINR(); });
+
     function calculateRate() {
         const resultDiv = document.getElementById('upsRateResult');
         const cardList = document.getElementById('upsRateCardList');
@@ -9459,6 +9509,11 @@
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
                         const totalPrice = getRateTotal(r);
+                        // Display-only conversion in destination currency (DB me INR hi jata hai).
+                        const destConv = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
+                        const destConvHtml = (destConv.code && destConv.code !== 'INR' && destConv.rate > 0)
+                            ? '<div class="total-row"><div class="total-label"><i class="fas fa-exchange-alt"></i> Total Amount in ' + destConv.code + '</div><div class="total-amount">' + destConv.code + ' ' + (totalPrice / destConv.rate).toFixed(2) + '</div></div>'
+                            : '';
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
@@ -9628,6 +9683,7 @@
                                                     ₹ ${totalPrice.toFixed(2)}
                                                 </div>
                                             </div>
+                                            ${destConvHtml}
                                         </div>
                                     </div>
                                 </div>

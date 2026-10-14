@@ -6449,7 +6449,7 @@ class AdminController extends Controller
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $headers = ['Customer Code', 'Customer Name', 'Network', 'Country', 'Service Code', 'Method', 'TAT', 'Weight Start (gm)', 'Weight End (gm)', 'Zone No', 'Zone Category', 'Price', 'Default', 'Start Date', 'End Date'];
+        $headers = ['Customer Code', 'Customer Name', 'Network', 'Country', 'Service Code', 'Method', 'TAT', 'Weight Start (gm)', 'Weight End (gm)', 'Zone No', 'Zone Category', 'Price', 'Fuel %', 'GST %', 'Default', 'Start Date', 'End Date'];
 
         // PhpSpreadsheet 2.x+ removed setCellValueByColumnAndRow(), so we
         // build column letters (A, B, C, ...) and use coordinate-based addressing.
@@ -6482,6 +6482,8 @@ class AdminController extends Controller
                 $rate->zone_no,
                 '',
                 $rate->price,
+                $rate->fuel_percentage ?? '',
+                $rate->gst_percentage ?? '',
                 $rate->is_default ? 'Yes' : 'No',
                 $startDate,
                 $endDate,
@@ -6885,6 +6887,8 @@ class AdminController extends Controller
         $wtEndCol   = $findColumn(['weight end', 'weight end (gm)', 'wt end', 'wt_range_end']);
         $zoneNoCol  = $findColumn(['zone no', 'zone_no', 'zone number', 'zone']);
         $priceCol   = $findColumn(['price', 'rate', 'amount', 'cost']);
+        $fuelPctCol = $findColumn(['fuel %', 'fuel %', 'fuel_percentage', 'fuelpercentage', 'fuel pct', 'fuel_pct']);
+        $gstPctCol  = $findColumn(['gst %', 'gst percentage', 'gst_percentage', 'gstpercentage', 'gst pct', 'gst_pct', 'gst']);
         $customerIdCol = $findColumn(['customer id', 'customer_id', 'customerid']);
         $customerCodeCol = $findColumn(['customer code', 'customer_code', 'customercode', 'cust code', 'cust_code']);
         $serviceCodeCol = $findColumn(['service code', 'service_code', 'servicecode']);
@@ -6961,7 +6965,7 @@ class AdminController extends Controller
         $skipped = 0;
         $notFound = 0;
 
-        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $customerIdCol, $customerCodeCol, $fileCountryCol, $codeToIdAll, $serviceCodeCol, $networkCol, $methodCol, $validated, $filterApiProvider, $filterServiceCode, $filterServiceId, &$updated, &$skipped, &$notFound) {
+        \DB::transaction(function () use ($rows, $headerRowIndex, $wtStartCol, $wtEndCol, $zoneNoCol, $priceCol, $fuelPctCol, $gstPctCol, $customerIdCol, $customerCodeCol, $fileCountryCol, $codeToIdAll, $serviceCodeCol, $networkCol, $methodCol, $validated, $filterApiProvider, $filterServiceCode, $filterServiceId, &$updated, &$skipped, &$notFound) {
             $normalizeValue = function ($value) {
                 return strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
             };
@@ -7099,13 +7103,41 @@ class AdminController extends Controller
                     continue;
                 }
 
-                $pendingUpdates[$rate->id] = [
-                    'id'         => $rate->id,
-                    'price'      => $price,
-                    'start_date' => $validated['start_date'],
-                    'end_date'   => $validated['end_date'],
-                    'updated_at' => now(),
+                // Fuel % / GST % (export me aate hain): column ho aur cell
+                // bhari ho to numeric 0-100 hona chahiye, tabhi update hogi.
+                // Nahi to rate ki existing values rehti hain (uniform keys
+                // taaki chunked upsert na toote).
+                $rowExtraCharges = [
+                    'fuel_percentage' => (float) ($rate->fuel_percentage ?? 0),
+                    'gst_percentage' => (float) ($rate->gst_percentage ?? 0),
                 ];
+                $fuelPctRaw = ($fuelPctCol !== null && isset($row[$fuelPctCol])) ? trim((string) $row[$fuelPctCol]) : '';
+                if ($fuelPctRaw !== '') {
+                    if (! is_numeric($fuelPctRaw) || (float) $fuelPctRaw < 0 || (float) $fuelPctRaw > 100) {
+                        $skipped++;
+                        continue;
+                    }
+                    $rowExtraCharges['fuel_percentage'] = (float) $fuelPctRaw;
+                }
+                $gstPctRaw = ($gstPctCol !== null && isset($row[$gstPctCol])) ? trim((string) $row[$gstPctCol]) : '';
+                if ($gstPctRaw !== '') {
+                    if (! is_numeric($gstPctRaw) || (float) $gstPctRaw < 0 || (float) $gstPctRaw > 100) {
+                        $skipped++;
+                        continue;
+                    }
+                    $rowExtraCharges['gst_percentage'] = (float) $gstPctRaw;
+                }
+
+                $pendingUpdates[$rate->id] = array_merge(
+                    [
+                        'id'         => $rate->id,
+                        'price'      => $price,
+                        'start_date' => $validated['start_date'],
+                        'end_date'   => $validated['end_date'],
+                        'updated_at' => now(),
+                    ],
+                    $rowExtraCharges
+                );
             }
 
             $updated = count($pendingUpdates);
@@ -7114,7 +7146,7 @@ class AdminController extends Controller
                 \DB::table('courier_rates')->upsert(
                     $chunk,
                     ['id'],
-                    ['price', 'start_date', 'end_date', 'updated_at']
+                    ['price', 'fuel_percentage', 'gst_percentage', 'start_date', 'end_date', 'updated_at']
                 );
             }
         });
@@ -7369,7 +7401,8 @@ class AdminController extends Controller
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         // Vertical format: one row per (weight, zone) with a Zone No column.
-        $headers = ['Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel Charge', 'Fuel %', 'GST %'];
+        // No Fuel Charge column — fuel is always derived from Fuel % at shipment time.
+        $headers = ['Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel %', 'GST %'];
         foreach ($headers as $index => $header) {
             $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue($columnLetter . '1', $header);
@@ -7402,8 +7435,8 @@ class AdminController extends Controller
                 $rate = $rateRow['rate'];
                 $values = [$rateRow['start'], $rateRow['end'], $zoneNo];
                 $values = array_merge($values, $rate
-                    ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
-                    : ['', '', '', '']);
+                    ? [$rate->price, $rate->fuel_percentage, $rate->gst_percentage]
+                    : ['', '', '']);
                 foreach ($values as $colIdx => $value) {
                     $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
                     $sheet->setCellValue($columnLetter . $row, $value);
@@ -7433,7 +7466,7 @@ class AdminController extends Controller
 
     /**
      * Multi-country sample in vertical format: Country, Weight Start,
-     * Weight End, Zone No, Price, Fuel Charge, Fuel %, GST %. One row per
+     * Weight End, Zone No, Price, Fuel %, GST %. One row per
      * (country, weight, zone) with example rows pre-filled per zone.
      * Countries without any configured zones get example rows with a null
      * (empty) Zone No instead of per-zone rows. Existing default rates are
@@ -7458,7 +7491,8 @@ class AdminController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         // Vertical format: one row per (country, weight, zone) with a Zone No
         // column. Zones are listed vertically with example rows pre-filled.
-        $headers = ['Country', 'Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel Charge', 'Fuel %', 'GST %'];
+        // No Fuel Charge column — fuel is always derived from Fuel % at shipment time.
+        $headers = ['Country', 'Weight Start', 'Weight End', 'Zone No', 'Price', 'Fuel %', 'GST %'];
         foreach ($headers as $index => $header) {
             $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue($columnLetter . '1', $header);
@@ -7484,7 +7518,7 @@ class AdminController extends Controller
             }
             if (!$withoutZone && !$sampleHasZones) {
                 foreach ([[0.5, 1.0], [1.0, 2.0], [2.0, 3.0]] as $range) {
-                    $values = [$cc, $range[0], $range[1], '', '', '', '', ''];
+                    $values = [$cc, $range[0], $range[1], '', '', '', ''];
                     foreach ($values as $colIdx => $value) {
                         $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
                         $sheet->setCellValue($columnLetter . $row, $value);
@@ -7516,8 +7550,8 @@ class AdminController extends Controller
                     $rate = $rateRow['rate'];
                     $values = [$cc, $rateRow['start'], $rateRow['end'], $zoneNo];
                     $values = array_merge($values, $rate
-                        ? [$rate->price, $rate->fuel_charge, $rate->fuel_percentage, $rate->gst_percentage]
-                        : ['', '', '', '']);
+                        ? [$rate->price, $rate->fuel_percentage, $rate->gst_percentage]
+                        : ['', '', '']);
                     foreach ($values as $colIdx => $value) {
                         $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1);
                         $sheet->setCellValue($columnLetter . $row, $value);
@@ -7762,7 +7796,7 @@ class AdminController extends Controller
         if ($withoutZone && $isHorizontal) {
             return redirect()
                 ->route('admin.manage-rate')
-                ->with('error', 'A country without zones requires the without-zone sample file with plain Price, Fuel Charge, Fuel %, and GST % columns.');
+                ->with('error', 'A country without zones requires the without-zone sample file with plain Price, Fuel %, and GST % columns.');
         }
         if ($isHorizontal) {
             $normalizedRows = [$rows[0]];
@@ -7902,6 +7936,10 @@ class AdminController extends Controller
                     : ($formZoneNo !== null ? (string) $formZoneNo : ''));
 
             $fuelCharge = ($fuelChargeCol !== null && isset($row[$fuelChargeCol])) ? trim((string) $row[$fuelChargeCol]) : '';
+            // Fuel Charge column is retired from the sample — fuel is always
+            // derived from Fuel % at shipment time. Ignore any uploaded value
+            // so existing rates are never overwritten with it.
+            $fuelCharge = '';
             $fuelPct    = ($fuelPctCol !== null && isset($row[$fuelPctCol])) ? trim((string) $row[$fuelPctCol]) : '';
             $gstPct     = ($gstPctCol !== null && isset($row[$gstPctCol])) ? trim((string) $row[$gstPctCol]) : '';
 

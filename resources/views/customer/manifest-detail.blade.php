@@ -2021,12 +2021,23 @@
                     return;
                 }
 
-                // Tracking Number
+                // Tracking Number (carrier link in a new tab when the service has one)
                 var trackingBox = document.getElementById('mdDetailTrackingBox');
                 var trackingNum = document.getElementById('mdDetailTrackingNumber');
                 if (data.tracking_number) {
                     trackingBox.style.display = 'block';
-                    trackingNum.textContent = data.tracking_number;
+                    trackingNum.textContent = '';
+                    if (data.tracking_link) {
+                        var trackingAnchor = document.createElement('a');
+                        trackingAnchor.href = data.tracking_link;
+                        trackingAnchor.target = '_blank';
+                        trackingAnchor.rel = 'noopener';
+                        trackingAnchor.textContent = data.tracking_number;
+                        trackingAnchor.style.color = 'inherit';
+                        trackingNum.appendChild(trackingAnchor);
+                    } else {
+                        trackingNum.textContent = data.tracking_number;
+                    }
                 } else {
                     trackingBox.style.display = 'none';
                 }

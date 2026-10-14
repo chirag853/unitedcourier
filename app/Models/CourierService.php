@@ -29,6 +29,7 @@ class CourierService extends Model
         'country',
         'status',
         'api_provider',
+        'tracking_link',
     ];
 
     /**

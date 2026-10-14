@@ -2195,6 +2195,150 @@ class CustomerController extends Controller
     }
 
     /**
+     * Edit a draft shipment: load every stored detail (A to Z) into the
+     * create-shipment form via flashed old input, then redirect there.
+     * Only the owning customer's own draft shipments can be edited.
+     */
+    public function editShipment($shipperId)
+    {
+        if (! auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customerId = auth()->guard('customer')->id();
+
+        $shipper = ShipperInfo::with([
+            'consigneeInfo',
+            'packageDimensions',
+            'csbInformation',
+            'invoices.invoiceItems',
+        ])->where('id', $shipperId)
+            ->where('customer_id', $customerId)
+            ->where('status', 'draft')
+            ->first();
+
+        if (! $shipper) {
+            return redirect()->route('customer.view-all-shipments', ['status' => 'draft'])
+                ->with('error', 'Draft shipment not found.');
+        }
+
+        $consignee = $shipper->consigneeInfo ?? new ConsigneeInfo();
+        $invoice = $shipper->invoices->sortByDesc('id')->first();
+        $csb = $shipper->csbInformation ?? new CsbInformation();
+
+        // delivery_destination is stored as the human-readable NAME but the
+        // form dropdown submits the numeric destination_id.
+        $destinationId = null;
+        if ($consignee && $consignee->delivery_destination) {
+            $destinationId = Destination::where('name', $consignee->delivery_destination)->value('id');
+        }
+
+        // consignee_state may hold a zone name (states-API flow) — prefer the
+        // zone_code so the state dropdown can select it directly.
+        $consigneeState = $consignee->state ?? null;
+        if ($consigneeState) {
+            $zoneCode = Zone::where('zone_code', $consigneeState)->value('zone_code')
+                ?? Zone::where('zone_name', $consigneeState)->value('zone_code');
+            if ($zoneCode) {
+                $consigneeState = $zoneCode;
+            }
+        }
+
+        $packages = $shipper->packageDimensions->map(function ($pkg) {
+            return [
+                'actual_weight_kg' => $pkg->actual_weight_kg,
+                'length_cm' => $pkg->length_cm,
+                'width_cm' => $pkg->width_cm,
+                'height_cm' => $pkg->height_cm,
+                'volumetric_weight' => $pkg->volumetric_weight,
+                'chargeable_weight' => $pkg->chargeable_weight,
+            ];
+        })->values()->all();
+
+        $items = $invoice
+            ? $invoice->invoiceItems->sortBy('box_no')->values()->map(function ($item) {
+                return [
+                    'box_no' => $item->box_no,
+                    'description' => $item->description,
+                    'product_sku' => $item->product_sku,
+                    'hs_code' => $item->hs_code,
+                    'hts_code' => $item->hts_code,
+                    'unit_type' => $item->unit_type,
+                    'qty' => $item->qty,
+                    'unit_rate' => $item->unit_rate,
+                    'igst_percentage' => $item->igst_percentage,
+                    'igst_amount' => $item->igst_amount,
+                    'amount' => $item->amount,
+                ];
+            })->all()
+            : [];
+
+        $input = [
+            'edit_shipper_id' => $shipper->id,
+            'delivery_destination' => $destinationId,
+            'origin_type' => $consignee->origin_type ?? null,
+            'reason_for_export' => $consignee->reason_for_export ?? null,
+            'business_type' => $consignee->business_type ?? null,
+            'selected_exporter_customer_id' => null,
+            'selected_warehouse_id' => $shipper->warehouse_address_id,
+            'shipping_method' => $shipper->shipping_method,
+            'service_rate_id' => $shipper->service_rate_id,
+            'shipper_same_as_customer' => $shipper->shipper_same_as_customer ? '1' : null,
+            'shipper_company_names' => $shipper->company_name,
+            'shipper_contact_person' => $shipper->contact_person,
+            'shipper_address_line1' => $shipper->address_line1,
+            'shipper_address_line2' => $shipper->address_line2,
+            'shipper_address_line3' => $shipper->address_line3,
+            'shipper_pincode' => $shipper->pincode,
+            'shipper_city' => $shipper->city,
+            'shipper_state' => $shipper->state,
+            'shipper_phone_number' => $shipper->phone_number,
+            'shipper_emails' => $shipper->email,
+            'shipper_email_opt_out' => $shipper->email_opt_out ? '1' : null,
+            'shipper_kyc_type' => $shipper->kyc_type,
+            'shipper_kyc_number' => $shipper->kyc_number,
+            'consignee_name' => $consignee->consignee_name ?? null,
+            'consignee_contact_person' => $consignee->contact_person ?? null,
+            'consignee_address_line1' => $consignee->address_line1 ?? null,
+            'consignee_address_line2' => $consignee->address_line2 ?? null,
+            'consignee_address_line3' => $consignee->address_line3 ?? null,
+            'consignee_zip_code' => $consignee->zip_code ?? null,
+            'consignee_city' => $consignee->city ?? null,
+            'consignee_state' => $consigneeState,
+            'consignee_phone_number' => $consignee->phone_number ?? null,
+            'consignee_email' => $consignee->email ?? null,
+            'consignee_email_opt_out' => $consignee && $consignee->email_opt_out ? '1' : null,
+            'number_of_boxes' => max(1, count($packages)),
+            'package_shipping_method' => optional($shipper->packageDimensions->first())->shipping_method,
+            'packages' => $packages,
+            'oversize_charge' => CreateShipment::where('shipper_id', $shipper->id)->value('oversize_charge'),
+            'handling_charge' => CreateShipment::where('shipper_id', $shipper->id)->value('handling_charge'),
+            'ecommerce' => $csb->ecommerce ?? null,
+            'scheme' => $csb->scheme ?? null,
+            'bond_ut_igst' => $csb->bond_ut_igst ?? null,
+            'lut_number' => $csb->lut_number ?? null,
+            'iec_code' => $csb->iec_code ?? null,
+            'inv_terms' => $csb->inv_terms ?? null,
+            'gst_number' => $csb->gst_number ?? null,
+            'ad_code' => $csb->ad_code ?? null,
+            'bank_account_number' => $csb->bank_account_number ?? null,
+            'bank_ifsc_code' => $csb->bank_ifsc_code ?? null,
+            'invoice_number' => $invoice->invoice_number ?? null,
+            'invoice_date' => $invoice && $invoice->invoice_date ? $invoice->invoice_date->format('Y-m-d') : null,
+            'invoice_amount' => $invoice->invoice_amount ?? null,
+            'incoterms' => $invoice->incoterms ?? null,
+            'invoice_currency' => $invoice->invoice_currency ?? null,
+            'reference_number' => $invoice->reference_number ?? null,
+            'tax_code' => $invoice->tax_code ?? null,
+            'items' => $items,
+        ];
+
+        return redirect()->route('customer.create-shipment')
+            ->withInput($input)
+            ->with('edit_shipper_id', $shipper->id);
+    }
+
+    /**
      * Store the current Consignee Info block as a saved consignee for the
      * logged-in customer ("Save Consignee Info to the next shipment").
      * The saved rows power the "Choose Consignee" dropdown on the
@@ -3407,6 +3551,29 @@ class CustomerController extends Controller
                     ->with('error', $message);
             }
 
+            // Edit mode: update an existing draft instead of creating.
+            // Only the owning customer's own draft shipments can be edited.
+            $editingShipper = null;
+            $editingInvoiceId = null;
+            if ($request->filled('edit_shipper_id')) {
+                $editingShipper = ShipperInfo::where('id', $request->input('edit_shipper_id'))
+                    ->where('customer_id', $customer->id)
+                    ->where('status', 'draft')
+                    ->first();
+                if (! $editingShipper) {
+                    $message = 'Draft shipment not found for editing.';
+                    if ($request->ajax() || $request->wantsJson()) {
+                        return response()->json(['success' => false, 'message' => $message], 403);
+                    }
+
+                    return redirect()->route('customer.view-all-shipments', ['status' => 'draft'])
+                        ->with('error', $message);
+                }
+                $editingInvoiceId = ShipmentInvoice::where('shipper_id', $editingShipper->id)
+                    ->orderByDesc('id')
+                    ->value('id');
+            }
+
             // Keep shipper state as an uppercase two-letter code regardless of client-side behavior.
             if ($request->filled('shipper_state')) {
                 $request->merge([
@@ -3501,7 +3668,14 @@ class CustomerController extends Controller
                 'invoice_amount' => 'required|numeric|min:0',
                 'incoterms' => 'required|string|max:50',
                 'invoice_currency' => 'required|string|max:20',
-                'reference_number' => 'nullable|string|max:100|unique:shipment_invoice,reference_number',
+                'reference_number' => array_filter([
+                    'nullable',
+                    'string',
+                    'max:100',
+                    $editingInvoiceId
+                        ? Rule::unique('shipment_invoice', 'reference_number')->ignore($editingInvoiceId)
+                        : 'unique:shipment_invoice,reference_number',
+                ]),
                 'tax_code' => 'nullable|string|max:50',
 
                 // invoice items
@@ -4090,7 +4264,8 @@ class CustomerController extends Controller
             $transactionStarted = true;
 
             // Store Shipper Info
-            $awbNumber = $this->generateAwbNumber();
+            // Edit mode keeps the existing AWB number so tracking continuity is preserved.
+            $awbNumber = $editingShipper ? $editingShipper->awb_number : $this->generateAwbNumber();
 
             // Re-price every box from server-owned courier rates. The selected
             // rate supplies the service and zone; each box is matched by its
@@ -4297,9 +4472,7 @@ class CustomerController extends Controller
                     ->value('id');
             }
 
-            $shipper = ShipperInfo::create([
-                'customer_id' => auth()->guard('customer')->id(),
-                'awb_number' => $awbNumber,
+            $shipperAttributes = [
                 'warehouse_address_id' => $selectedWarehouseId,
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
                 'shipper_same_as_customer' => $validatedData['shipper_same_as_customer'] ?? false,
@@ -4328,13 +4501,21 @@ class CustomerController extends Controller
                 'total_fuel_price' => $fuelPrice,
                 'total_surcharge' => round($surchargeTotal + $disputeChargeTotal + $extraCreationDisputeTotal, 2),
                 'total_price' => $totalPrice,
-            ]);
+            ];
+            if ($editingShipper) {
+                $editingShipper->update($shipperAttributes);
+                $shipper = $editingShipper->fresh();
+            } else {
+                $shipper = ShipperInfo::create(array_merge([
+                    'customer_id' => auth()->guard('customer')->id(),
+                    'awb_number' => $awbNumber,
+                ], $shipperAttributes));
+            }
 
             $shipperId = $shipper->id;
 
             // Store Consignee Info
-            $consignee = ConsigneeInfo::create([
-                'shipper_id' => $shipperId,
+            $consigneeAttributes = [
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
                 'reason_for_export' => $validatedData['reason_for_export'] ?? 'sample',
@@ -4350,9 +4531,24 @@ class CustomerController extends Controller
                 'phone_number' => $validatedData['consignee_phone_number'],
                 'email' => $validatedData['consignee_email'] ?? null,
                 'email_opt_out' => $validatedData['consignee_email_opt_out'] ?? false,
-            ]);
+            ];
+            if ($editingShipper) {
+                $consignee = ConsigneeInfo::updateOrCreate(
+                    ['shipper_id' => $shipperId],
+                    $consigneeAttributes
+                );
+            } else {
+                $consignee = ConsigneeInfo::create(array_merge(
+                    ['shipper_id' => $shipperId],
+                    $consigneeAttributes
+                ));
+            }
 
             // Store Package Dimensions
+            if ($editingShipper) {
+                // Stale boxes are replaced wholesale by the submitted set.
+                PackageDimension::where('shipper_id', $shipperId)->delete();
+            }
             $packageIds = [];
             $packageShippingMethod = $validatedData['package_shipping_method'] ?? null;
             $packageRows = $validatedData['packages'] ?? [[]];
@@ -4381,8 +4577,7 @@ class CustomerController extends Controller
             }
 
             // Store CSB Information
-            $csb = CsbInformation::create([
-                'shipper_id' => $shipperId,
+            $csbAttributes = [
                 'ecommerce' => $validatedData['ecommerce'] ?? 'No',
                 'scheme' => $validatedData['scheme'] ?? 'No',
                 'bond_ut_igst' => $validatedData['bond_ut_igst'] ?? null,
@@ -4393,11 +4588,21 @@ class CustomerController extends Controller
                 'ad_code' => $validatedData['ad_code'] ?? null,
                 'bank_account_number' => $validatedData['bank_account_number'] ?? null,
                 'bank_ifsc_code' => $validatedData['bank_ifsc_code'] ?? null,
-            ]);
+            ];
+            if ($editingShipper) {
+                $csb = CsbInformation::updateOrCreate(
+                    ['shipper_id' => $shipperId],
+                    $csbAttributes
+                );
+            } else {
+                $csb = CsbInformation::create(array_merge(
+                    ['shipper_id' => $shipperId],
+                    $csbAttributes
+                ));
+            }
 
             // Store Shipment Invoice
-            $invoice = ShipmentInvoice::create([
-                'shipper_id' => $shipperId,
+            $invoiceAttributes = [
                 'invoice_number' => $validatedData['invoice_number'],
                 'invoice_date' => $validatedData['invoice_date'],
                 'invoice_amount' => $validatedData['invoice_amount'],
@@ -4405,7 +4610,27 @@ class CustomerController extends Controller
                 'invoice_currency' => $validatedData['invoice_currency'],
                 'reference_number' => $validatedData['reference_number'] ?? null,
                 'tax_code' => $validatedData['tax_code'] ?? null,
-            ]);
+            ];
+            if ($editingShipper && $editingInvoiceId) {
+                $invoice = ShipmentInvoice::where('id', $editingInvoiceId)
+                    ->where('shipper_id', $shipperId)
+                    ->first();
+                if ($invoice) {
+                    $invoice->update($invoiceAttributes);
+                } else {
+                    $invoice = ShipmentInvoice::create(array_merge(
+                        ['shipper_id' => $shipperId],
+                        $invoiceAttributes
+                    ));
+                }
+                // Stale item rows are replaced wholesale by the submitted set.
+                ShipmentInvoiceItem::where('invoice_id', $invoice->id)->delete();
+            } else {
+                $invoice = ShipmentInvoice::create(array_merge(
+                    ['shipper_id' => $shipperId],
+                    $invoiceAttributes
+                ));
+            }
 
             // Store Invoice Items
             \Log::info('Items data received:', $validatedData['items'] ?? []);
@@ -4439,10 +4664,7 @@ class CustomerController extends Controller
             }
 
             // Store into create_shipment table
-            $createShipment = CreateShipment::create([
-                'customer_id' => auth()->guard('customer')->id(),
-                'shipper_id' => $shipperId,
-                'awb_number' => $awbNumber,
+            $createShipmentAttributes = [
                 'delivery_destination' => $validatedData['delivery_destination'],
                 'origin_type' => $validatedData['origin_type'],
                 'shipping_method' => $validatedData['shipping_method'] ?? null,
@@ -4489,25 +4711,44 @@ class CustomerController extends Controller
                 'status' => 'draft',
                 'oversize_charge' => $oversizeCharge,
                 'handling_charge' => $handlingCharge,
-            ]);
+            ];
+            if ($editingShipper) {
+                $createShipment = CreateShipment::updateOrCreate(
+                    ['shipper_id' => $shipperId],
+                    $createShipmentAttributes
+                );
+            } else {
+                $createShipment = CreateShipment::create(array_merge(
+                    [
+                        'customer_id' => auth()->guard('customer')->id(),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $awbNumber,
+                    ],
+                    $createShipmentAttributes
+                ));
+            }
 
             // Create initial tracking record for the shipment
-            Tracking::create([
-                'awb_number' => $awbNumber,
-                'shipper_id' => $shipper->id,
-                'shipping_id' => $createShipment->id,
-                'uwc_id' => $awbNumber,
-                'title' => Tracking::getTitleForStatus('draft'),
-                'status' => 'draft',
-            ]);
+            Tracking::firstOrCreate(
+                [
+                    'shipper_id' => $shipper->id,
+                    'status' => 'draft',
+                ],
+                [
+                    'awb_number' => $awbNumber,
+                    'shipping_id' => $createShipment->id,
+                    'uwc_id' => $awbNumber,
+                    'title' => Tracking::getTitleForStatus('draft'),
+                ]
+            );
 
             // Log the draft status change
             ShipmentLog::logStatus(
                 $shipper->id,
                 $awbNumber,
                 'draft',
-                null,
-                'Shipment created (draft)',
+                $editingShipper ? 'draft' : null,
+                $editingShipper ? 'Shipment updated (draft)' : 'Shipment created (draft)',
                 auth()->guard('customer')->id(),
                 'customer'
             );
@@ -4521,12 +4762,17 @@ class CustomerController extends Controller
             $transactionStarted = false;
 
             if (! $request->expectsJson()) {
+                if ($editingShipper) {
+                    return redirect()->route('customer.view-all-shipments', ['status' => 'draft'])
+                        ->with('success', 'Shipment updated successfully!');
+                }
+
                 return back()->with('success', 'Shipment created successfully!');
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Shipment created successfully!',
+                'message' => $editingShipper ? 'Shipment updated successfully!' : 'Shipment created successfully!',
                 'data' => [
                     'create_shipment_id' => $createShipment->id,
                     'shipper_id' => $shipper->id,
@@ -6794,7 +7040,7 @@ class CustomerController extends Controller
                     $q->select('id', 'invoice_id', 'box_no', 'description', 'hs_code', 'hts_code', 'unit_type', 'qty', 'unit_rate', 'igst_percentage', 'igst_amount', 'amount');
                 },
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'awb_number', 'shipping_method', 'shipment_type', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'total_price', 'updated_at');
+                    $q->select('id', 'awb_number', 'shipping_method', 'shipment_type', 'company_name', 'contact_person', 'address_line1', 'address_line2', 'address_line3', 'pincode', 'city', 'state', 'phone_number', 'email', 'service_id', 'service_rate_id', 'status', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'kyc_number', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'total_price', 'updated_at');
                 },
                 'shipperInfo.manifest' => function ($q) {
                     $q->select('id', 'shipper_id', 'manifest_number', 'status', 'created_at');
@@ -6898,7 +7144,10 @@ class CustomerController extends Controller
         // All rows on this page belong to the logged-in customer, so one
         // lookup covers the customer code shown on every 4x6 label.
         $labelCustomerCode = Customer::where('id', $customerId)->value('customer_code');
-        $shipmentDetails = $invoices->getCollection()->mapWithKeys(function ($invoice) use ($labelCustomerCode) {
+        // Tracking links per courier service (one query — service_id exact row).
+        $trackingLinkByService = CourierService::whereNotNull('tracking_link')
+            ->pluck('tracking_link', 'id');
+        $shipmentDetails = $invoices->getCollection()->mapWithKeys(function ($invoice) use ($labelCustomerCode, $trackingLinkByService) {
             $shipper = $invoice->shipperInfo;
             $consignee = $shipper ? $shipper->consigneeInfo : null;
             $tracking = $shipper ? $shipper->shipmentTracking : null;
@@ -6928,6 +7177,9 @@ class CustomerController extends Controller
                     'awb_number' => $shipper ? $shipper->awb_number : null,
                     'manifest_number' => $manifest ? $manifest->manifest_number : null,
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+                    'tracking_link' => ($shipper && $shipper->service_id && isset($trackingLinkByService[$shipper->service_id]))
+                        ? $trackingLinkByService[$shipper->service_id]
+                        : null,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_date' => $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
                     'invoice_amount' => number_format($invoice->invoiceItems->sum('amount'), 2),
@@ -7119,7 +7371,7 @@ class CustomerController extends Controller
             }
         }
 
-        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap', 'manifestGroups', 'pendingDisputesByShipper'))
+        return view('customer.view-all-shipments', compact('invoices', 'shipmentDetails', 'trackingLinkByService', 'statusCounts', 'destinationIsoMap', 'fallbackIsoMap', 'manifestGroups', 'pendingDisputesByShipper'))
             ->with('pickupDateOptions', $this->getPickupDateOptions());
     }
 
@@ -7696,7 +7948,10 @@ class CustomerController extends Controller
         // Shipment detail data for the "View" modal (JS-friendly), keyed by shipper_id.
         // Mirrors the structure used on the view-all-shipments page so the same modal
         // rendering approach can be reused.
-        $shipmentDetails = $manifestRows->mapWithKeys(function ($manifest) {
+        // Tracking links per courier service (one query — service_id exact row).
+        $trackingLinkByService = CourierService::whereNotNull('tracking_link')
+            ->pluck('tracking_link', 'id');
+        $shipmentDetails = $manifestRows->mapWithKeys(function ($manifest) use ($trackingLinkByService) {
             $shipper = $manifest->shipper;
             $consignee = $shipper ? $shipper->consigneeInfo : null;
             $tracking = $shipper ? $shipper->shipmentTracking : null;
@@ -7722,6 +7977,9 @@ class CustomerController extends Controller
                     'awb_number' => $shipper->awb_number ?? null,
                     'manifest_number' => $manifest->manifest_number,
                     'tracking_number' => $tracking ? ($tracking->shipment_identification_number ?? null) : null,
+                    'tracking_link' => ($shipper && $shipper->service_id && isset($trackingLinkByService[$shipper->service_id]))
+                        ? $trackingLinkByService[$shipper->service_id]
+                        : null,
                     'invoice_number' => $invoice ? ($invoice->invoice_number ?? null) : null,
                     'invoice_date' => $invoice && $invoice->invoice_date ? $invoice->invoice_date->format('d-m-Y') : null,
                     'invoice_amount' => $invoice ? number_format((float) $items->sum('amount'), 2) : null,
@@ -8293,11 +8551,23 @@ class CustomerController extends Controller
 
         if ($pickupDate !== '') {
             try {
-                \Carbon\Carbon::parse($pickupDate)->format('Y-m-d');
+                $parsedDate = \Carbon\Carbon::parse($pickupDate)->format('Y-m-d');
             } catch (\Throwable $e) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid pickup date selected.',
+                ], 422);
+            }
+            // Same 12-noon cutoff as the date options: past dates never
+            // allowed; same-day pickup only before 12 PM IST.
+            $nowIst = \Carbon\Carbon::now('Asia/Kolkata');
+            $todayIst = $nowIst->format('Y-m-d');
+            if ($parsedDate < $todayIst
+                || ($parsedDate === $todayIst && (int) $nowIst->format('H') >= 12)
+            ) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Same-day pickup is closed after 12 PM. Please choose tomorrow or a later date.',
                 ], 422);
             }
         }

@@ -304,6 +304,9 @@
                             <div class="col-md-9">
                                 <form id="shipmentForm" action="{{ url('/customer/create-shipment') }}" method="POST" novalidate>
                                     @csrf
+                                    @if(old('edit_shipper_id'))
+                                        <input type="hidden" name="edit_shipper_id" value="{{ old('edit_shipper_id') }}">
+                                    @endif
                                     @if($canManageSavedCustomers)
                                         <div class="card border mb-3">
                                             <div class="card-body">
@@ -3738,7 +3741,8 @@
                                                         </div>
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
-                                                                <label class="form-label">KYC Number</label>
+                                                                <label class="form-label">KYC Number <span
+                                                                        class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
                                                                     name="shipper_kyc_number" id="shipper_kyc_number"
                                                                     value="{{ old('shipper_kyc_number') }}"
@@ -3773,7 +3777,7 @@
                                                         <div class="col-md-6">
                                                             <div class="mb-3 mb-md-0">
                                                                 <label class="form-label">Choose Consignee</label>
-                                                                <select class="form-control" id="savedConsigneeSelect">
+                                                                <select class="form-control select2" id="savedConsigneeSelect" data-toggle="select2" data-placeholder="Search or select saved consignee" style="width: 100%;">
                                                                     <option value="">-- Select Saved Consignee --</option>
                                                                     @foreach($savedConsignees as $savedConsignee)
                                                                         <option value="{{ $savedConsignee->id }}">{{ $savedConsignee->consignee_name }}{{ $savedConsignee->city ? ' — ' . $savedConsignee->city : '' }}{{ $savedConsignee->phone_number ? ' — ' . $savedConsignee->phone_number : '' }}</option>
@@ -3798,6 +3802,8 @@
                                                                                 data-name="{{ $destination->name }}"
                                                                                 data-code="{{ $destination->code }}"
                                                                                 data-country-code="{{ $destination->country_code }}"
+                                                                                data-currency="{{ $destination->currency_code }}"
+                                                                                data-rate="{{ $destination->rate }}"
                                                                                 {{ old('delivery_destination') == $destination->id ? 'selected' : '' }}>
                                                                             {{ $destination->name }}
                                                                         </option>
@@ -3815,8 +3821,7 @@
                                                                     aria-hidden="true">
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
-                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
-                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V/Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -7247,10 +7252,13 @@
 
                                                         const savedSel = document.getElementById('savedConsigneeSelect');
                                                         if (savedSel) {
-                                                            savedSel.addEventListener('change', function () {
-                                                                const sc = this.value ? savedConsigneeMap[this.value] : null;
+                                                            const onSavedConsigneeChange = function () {
+                                                                const sc = savedSel.value ? savedConsigneeMap[savedSel.value] : null;
                                                                 if (sc) fillConsigneeFromSaved(sc);
-                                                            });
+                                                            };
+                                                            savedSel.addEventListener('change', onSavedConsigneeChange);
+                                                            // Select2 fires jQuery change events — bind there too.
+                                                            if (window.jQuery) jQuery(savedSel).on('change', onSavedConsigneeChange);
                                                         }
 
                                                         const saveBtn = document.getElementById('saveConsigneeBtn');
@@ -7315,6 +7323,9 @@
                                                                             opt.textContent = [sc.consignee_name, sc.city, sc.phone_number].filter(Boolean).join(' — ');
                                                                             savedSel.appendChild(opt);
                                                                             savedSel.value = sc.id;
+                                                                            if (window.jQuery && jQuery(savedSel).hasClass('select2-hidden-accessible')) {
+                                                                                jQuery(savedSel).trigger('change.select2');
+                                                                            }
                                                                         }
                                                                         const wrap = document.getElementById('savedConsigneeWrap');
                                                                         if (wrap) wrap.style.display = '';
@@ -7997,7 +8008,7 @@
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="incoterms">
                                                                         <option value="">Select</option>
-                                                                        <!-- <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option> -->
+                                                                        <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
                                                                         <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
                                                                         <!-- <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option> -->
                                                                     </select>
@@ -9434,6 +9445,54 @@
 
 
     // Fetch rates for ALL courier services and show as selectable card list
+    // Destination currency conversion (sirf display ke liye —
+    // database me invoice_currency hamesha INR jata hai).
+    window.destCurrencyInfo = function () {
+        var sel = document.querySelector('select[name="delivery_destination"]');
+        var opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+        var code = opt && opt.dataset.currency ? String(opt.dataset.currency).trim().toUpperCase() : '';
+        var rate = opt && opt.dataset.rate ? parseFloat(opt.dataset.rate) : 0;
+        return { code: code, rate: rate > 0 ? rate : 0 };
+    };
+    // Invoice Currency me INR + destination currency dikhao.
+    function syncInvoiceCurrency() {
+        var sel = document.querySelector('select[name="invoice_currency"]');
+        if (!sel) return;
+        var info = window.destCurrencyInfo();
+        var current = sel.value;
+        sel.innerHTML = '';
+        var inr = document.createElement('option');
+        inr.value = 'INR'; inr.textContent = 'INR';
+        sel.appendChild(inr);
+        if (info.code && info.code !== 'INR') {
+            var o = document.createElement('option');
+            o.value = info.code; o.textContent = info.code;
+            sel.appendChild(o);
+            if (current === info.code) sel.value = info.code;
+        }
+        if (window.jQuery && jQuery(sel).hasClass('select2-hidden-accessible')) jQuery(sel).trigger('change.select2');
+        else sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    function bindDestCurrencySync() {
+        var dest = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
+        if (!dest || dest.dataset.currencySyncBound) return;
+        dest.dataset.currencySyncBound = '1';
+        var handler = function () { syncInvoiceCurrency(); };
+        dest.addEventListener('change', handler);
+        if (window.jQuery) jQuery(dest).on('change', handler);
+    }
+    // Submit par invoice_currency force INR (display ke liye kuch bhi chuna ho).
+    function forceInvoiceCurrencyINR() {
+        var form = document.getElementById('shipmentForm');
+        if (!form || form.dataset.inrForced) return;
+        form.dataset.inrForced = '1';
+        form.addEventListener('submit', function () {
+            var sel = form.querySelector('[name="invoice_currency"]');
+            if (sel) sel.value = 'INR';
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function () { bindDestCurrencySync(); forceInvoiceCurrencyINR(); });
+
     function calculateRate() {
         const resultDiv = document.getElementById('upsRateResult');
         const cardList = document.getElementById('upsRateCardList');
@@ -9753,6 +9812,11 @@
                         const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0) + (ddpMatched ? ddpTotal : 0) + (greenMatched ? greenTotal : 0);
                         const hasItemSurcharges = !!(r.surcharges && r.surcharges.length);
                         const totalPrice = getRateTotal(r);
+                        // Display-only conversion in destination currency (DB me INR hi jata hai).
+                        const destConv = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
+                        const destConvHtml = (destConv.code && destConv.code !== 'INR' && destConv.rate > 0)
+                            ? '<div class="total-row"><div class="total-label"><i class="fas fa-exchange-alt"></i> Total Amount in ' + destConv.code + '</div><div class="total-amount">' + destConv.code + ' ' + (totalPrice / destConv.rate).toFixed(2) + '</div></div>'
+                            : '';
                         // Per-box tax: shipment GST ko (base + fuel) ke proportion me baanto,
                         // taaki box tax ka sum neeche wali GST row se hamesha match kare
                         const combinedTaxable = totalBasePrice + totalFuelPrice;
@@ -9942,6 +10006,7 @@
                                                     ₹ ${totalPrice.toFixed(2)}
                                                 </div>
                                             </div>
+                                            ${destConvHtml}
                                         </div>
                                     </div>
                                 </div>
@@ -10318,7 +10383,7 @@
         }
         window.syncEffectiveCsbTaxProfile = syncEffectiveCsbTaxProfile;
 
-        // Remember user-entered values so unchecking restores them
+        // Uncheck par shipper info reset hota hai (purani values restore nahi hoti).
         const savedValues = {};
 
         // Indian states for the Shipper "State" dropdown: full name => short code.
@@ -10907,11 +10972,10 @@
                 setShipperFieldsLocked(sameCustomerToLock, true);
                 syncSameCustomerCsbFields();
             } else {
-                // Restore only the fields we had locked; keep whatever the user
-                // typed into the unlocked (previously empty) fields.
-                var sameCustomerLockedNames = savedValues.__sameCustomerLocked || [];
+                // Uncheck par shipper info saaf karo — saare shipper +
+                // CSB fields blank (locked wale bhi), taaki fresh entry ho.
                 fieldNames.concat(savedCustomerCsbFieldNames).forEach(function (n) {
-                    if (savedValues[n] !== undefined && sameCustomerLockedNames.indexOf(n) !== -1) setField(n, savedValues[n]);
+                    setField(n, '');
                 });
                 delete savedValues.__sameCustomerLocked;
                 setShipperFieldsLocked(savedCustomerCsbFieldNames, false);
@@ -13360,6 +13424,68 @@ if (rateRadio && rateRadio.dataset.rate) {
         integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ=="
         data-cf-beacon='{"rayId":"967b314f0fc122a8","version":"2025.7.0","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}},"token":"3ca157e612a14eccbb30cf6db6691c29","b":1}'
         crossorigin="anonymous"></script>
+    @if(old('edit_shipper_id'))
+    <script>
+        // Edit-draft mode: rebuild multi-row invoice items + package cards
+        // from the flashed old input (only row 0 renders server-side).
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(function () {
+                try {
+                    var oldItems = @json(old('items', [])) || [];
+                    var table = document.getElementById('invoiceTable');
+                    if (table && Array.isArray(oldItems) && oldItems.length > 1 && typeof window.addInvoiceRow === 'function') {
+                        for (var i = 1; i < oldItems.length; i++) {
+                            window.addInvoiceRow();
+                        }
+                        var rows = table.querySelectorAll('tr');
+                        oldItems.forEach(function (item, idx) {
+                            var row = rows[idx];
+                            if (!row || !item) return;
+                            Object.keys(item).forEach(function (key) {
+                                var input = row.querySelector('[name="items[' + idx + '][' + key + ']"]');
+                                if (input && item[key] !== null && item[key] !== undefined) {
+                                    input.value = item[key];
+                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            });
+                        });
+                    }
+
+                    var oldPackages = @json(old('packages', [])) || [];
+                    var numBoxesInput = document.getElementById('numberOfBoxes');
+                    if (numBoxesInput && Array.isArray(oldPackages) && oldPackages.length > 1) {
+                        numBoxesInput.value = oldPackages.length;
+                        numBoxesInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        numBoxesInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    // Fill per-package values (row 0 renders server-side).
+                    setTimeout(function () {
+                        var cards = document.querySelectorAll('.rowContaineraddmore');
+                        oldPackages.forEach(function (pkg, idx) {
+                            var card = cards[idx];
+                            if (!card || !pkg) return;
+                            ['actual_weight_kg', 'length_cm', 'width_cm', 'height_cm', 'volumetric_weight', 'chargeable_weight'].forEach(function (key) {
+                                var input = card.querySelector('[name="packages[' + idx + '][' + key + ']"]');
+                                if (input && pkg[key] !== null && pkg[key] !== undefined && pkg[key] !== '') {
+                                    input.value = pkg[key];
+                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            });
+                        });
+                        if (typeof window.updateTotal === 'function') window.updateTotal();
+                    }, 400);
+
+                    // Consignee state for the AJAX zone dropdown.
+                    var oldState = @json(old('consignee_state', ''));
+                    if (oldState) window.pendingConsigneeState = oldState;
+                    if (typeof window.updateTotal === 'function') window.updateTotal();
+                } catch (e) { console.log('Edit restore skipped:', e.message); }
+            }, 600);
+        });
+    </script>
+    @endif
 </body>
 
 

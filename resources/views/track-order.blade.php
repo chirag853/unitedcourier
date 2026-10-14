@@ -682,6 +682,18 @@
 
     <!-- Tracking Search Script -->
     <script>
+        // Deep link: /tracking?awb_number=XXX pre-fills and auto-searches.
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const linkedAwb = (params.get('awb_number') || '').trim();
+                if (linkedAwb) {
+                    document.getElementById('awb_number_input').value = linkedAwb;
+                    searchTracking();
+                }
+            } catch (e) { /* ignore */ }
+        });
+
         function searchTracking() {
             const awbInput = document.getElementById('awb_number_input');
             const awbNumber = awbInput.value.trim();

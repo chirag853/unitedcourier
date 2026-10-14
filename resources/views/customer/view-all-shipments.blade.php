@@ -1077,7 +1077,7 @@
                                                 @if($invoice->shipperInfo && $invoice->shipperInfo->awb_number)
                                                     <span class="badge bg-dark" style="cursor:pointer;"
                                                           data-invoice-id="{{ $invoice->id }}"
-                                                          onclick="showShipmentDetail({{ $invoice->id }});">
+                                                          onclick="showShipmentDetail({{ $invoice->id }});window.open('{{ url('/tracking') . '?awb_number=' . urlencode($invoice->shipperInfo->awb_number) }}', '_blank', 'noopener');">
                                                         {{ $invoice->shipperInfo->awb_number }}
                                                     </span>
                                                 @else
@@ -1131,7 +1131,16 @@
                                                         : null;
                                                 @endphp
                                                 @if($rowTrackingNumber)
-                                                    <span>{{ $rowTrackingNumber }}</span>
+                                                    @php
+                                                        $rowTrackingLink = ($invoice->shipperInfo && $invoice->shipperInfo->service_id && isset($trackingLinkByService[$invoice->shipperInfo->service_id]))
+                                                            ? $trackingLinkByService[$invoice->shipperInfo->service_id]
+                                                            : null;
+                                                    @endphp
+                                                    @if($rowTrackingLink)
+                                                        <a href="{{ $rowTrackingLink }}" target="_blank" rel="noopener" title="Track on carrier website">{{ $rowTrackingNumber }}</a>
+                                                    @else
+                                                        <span>{{ $rowTrackingNumber }}</span>
+                                                    @endif
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
@@ -1438,13 +1447,13 @@
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-ban" aria-hidden="true"></i>
                                                         </button>
-                                                        <button type="button"
+                                                        <a href="{{ $invoice->shipperInfo ? route('customer.shipments.edit', ['shipper' => $invoice->shipperInfo->id]) : '#' }}"
                                                                 class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
                                                                 title="Edit"
                                                                 aria-label="Edit"
                                                                 style="width:32px;height:32px;padding:0;border-radius:4px;">
                                                             <i class="ti ti-edit" aria-hidden="true"></i>
-                                                        </button>
+                                                        </a>
                                                     @endif
                                                 </div>
                                             </td>
@@ -1862,7 +1871,13 @@
                                     <span class="dp-date">{{ $option['display'] }}</span>
                                 </div>
                             @endforeach
+                            <div class="md-pickup-date-option" id="assignPickupCustomOpt" data-value="custom" title="Choose a custom date">
+                                <span class="dp-label">Custom</span>
+                                <span class="dp-date"><i class="ti ti-calendar"></i></span>
+                            </div>
                         </div>
+                        <input type="date" class="form-control mt-2 d-none" id="assignPickupCustomDate">
+                        <div class="text-danger mt-1 d-none" id="assignPickupDateError" style="font-size:12px;"></div>
                         <input type="hidden" id="assignPickupDate" value="{{ ($pickupDateOptions[0]['value'] ?? '') }}">
                     </div>
                 </div>
@@ -2153,12 +2168,23 @@
         const data = shipmentData[invoiceId];
         if (!data) return;
 
-        // Tracking Number
+        // Tracking Number (carrier link in a new tab when the service has one)
         const trackingBox = document.getElementById('detailTrackingBox');
         const trackingNum = document.getElementById('detailTrackingNumber');
         if (data.tracking_number) {
             trackingBox.style.display = 'block';
-            trackingNum.textContent = data.tracking_number;
+            trackingNum.textContent = '';
+            if (data.tracking_link) {
+                const trackingAnchor = document.createElement('a');
+                trackingAnchor.href = data.tracking_link;
+                trackingAnchor.target = '_blank';
+                trackingAnchor.rel = 'noopener';
+                trackingAnchor.textContent = data.tracking_number;
+                trackingAnchor.style.color = 'inherit';
+                trackingNum.appendChild(trackingAnchor);
+            } else {
+                trackingNum.textContent = data.tracking_number;
+            }
         } else {
             trackingBox.style.display = 'none';
         }
@@ -2741,21 +2767,16 @@
                             '<td>' + (idx + 1) + '</td>' +
                             '<td>' + (item.description || 'Goods') + '</td>' +
                             '<td class="text-center">' + (item.qty || '-') + '</td>' +
-                            '<td class="text-right">' + fmt(item.unit_rate) + '</td>' +
-                            '<td class="text-right">' + fmt(item.amount) + '</td>' +
                             '</tr>';
-                    }).join('') : '<tr><td colspan="5" class="text-center">No items in this box</td></tr>';
+                    }).join('') : '<tr><td colspan="3" class="text-center">No items in this box</td></tr>';
                     var countLabel = boxItems.length + (boxItems.length === 1 ? ' item' : ' items');
                     return '<div class="box-block">' +
                         '<div class="box-head"><span class="box-title">Box ' + bn + '</span>' +
                         '<span class="box-count">' + countLabel + '</span></div>' +
                         '<div class="box-dim">' + dimText(pkg) + '</div>' +
                         '<table class="items"><thead><tr><th style="width:40px;">#</th><th>Description</th>' +
-                        '<th class="text-center" style="width:60px;">Qty</th>' +
-                        '<th class="text-right" style="width:90px;">Unit Rate</th>' +
-                        '<th class="text-right" style="width:100px;">Amount</th></tr></thead>' +
+                        '<th class="text-center" style="width:60px;">Qty</th></tr></thead>' +
                         '<tbody>' + itemRows + '</tbody></table>' +
-                        '<div class="box-subtotal">Box ' + bn + ' Subtotal: ' + fmt(boxTotal) + ' ' + currency + '</div>' +
                         '</div>';
                 }).join('') : '<p class="text-center">No items</p>';
 
@@ -4107,9 +4128,43 @@
 
             $(document).on('click', '.md-pickup-date-option', function () {
                 const $opt = $(this);
-                $opt.closest('.modal').find('.md-pickup-date-option').removeClass('selected');
+                const $modal = $opt.closest('.modal');
+                $modal.find('.md-pickup-date-option').removeClass('selected');
                 $opt.addClass('selected');
-                $opt.closest('.modal').find('input[type="hidden"]').val($opt.data('value'));
+                const isCustom = String($opt.data('value') || '') === 'custom';
+                $modal.find('#assignPickupCustomDate').toggleClass('d-none', !isCustom);
+                $modal.find('#assignPickupDateError').addClass('d-none').text('');
+                if (!isCustom) {
+                    $modal.find('#assignPickupDate').val($opt.data('value'));
+                } else {
+                    // Same 12-noon cutoff as the preset options: after 12 PM
+                    // today cannot be picked — min date becomes tomorrow.
+                    $modal.find('#assignPickupDate').val('');
+                    const now = new Date();
+                    const min = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (now.getHours() < 12 ? 0 : 1));
+                    const minStr = min.getFullYear() + '-' + String(min.getMonth() + 1).padStart(2, '0') + '-' + String(min.getDate()).padStart(2, '0');
+                    const $custom = $modal.find('#assignPickupCustomDate');
+                    $custom.attr('min', minStr);
+                    if ($custom.val() && $custom.val() < minStr) $custom.val('');
+                }
+            });
+
+            $(document).on('change', '#assignPickupCustomDate', function () {
+                const $modal = $(this).closest('.modal');
+                const $err = $modal.find('#assignPickupDateError');
+                const val = String($(this).val() || '');
+                const min = String($(this).attr('min') || '');
+                if (!val) {
+                    $err.removeClass('d-none').text('Please choose a pickup date from the calendar.');
+                    return;
+                }
+                if (min && val < min) {
+                    $err.removeClass('d-none').text('Same-day pickup is closed after 12 PM. Please choose ' + (min === new Date().toISOString().slice(0, 10) ? 'today or later.' : 'tomorrow or later.'));
+                    $(this).val('');
+                    return;
+                }
+                $err.addClass('d-none').text('');
+                $modal.find('#assignPickupDate').val(val);
             });
 
             $(document).on('click', '.assign-pickup-btn', function () {
@@ -4119,6 +4174,13 @@
 
                 assignPickupNumber = manifestNumber;
                 $('#assignPickupNumberRef').text(manifestNumber);
+                // Reset date selection to the first preset option.
+                const $dates = $('#assignPickupDates');
+                $dates.find('.md-pickup-date-option').removeClass('selected');
+                $dates.find('.md-pickup-date-option[data-value!="custom"]').first().addClass('selected');
+                $('#assignPickupCustomDate').addClass('d-none').val('');
+                $('#assignPickupDateError').addClass('d-none').text('');
+                $('#assignPickupDate').val($dates.find('.md-pickup-date-option.selected').data('value') || '');
                 $('#assignPickupModal').modal('show');
             });
 
@@ -4126,6 +4188,12 @@
                 const $btn = $(this);
 
                 if (!assignPickupNumber) return;
+
+                // Custom date chosen but calendar value missing/invalid.
+                if ($('#assignPickupCustomOpt').hasClass('selected') && !$('#assignPickupDate').val()) {
+                    $('#assignPickupDateError').removeClass('d-none').text('Please choose a pickup date from the calendar.');
+                    return;
+                }
 
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Assigning...');
 

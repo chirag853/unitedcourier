@@ -3700,7 +3700,8 @@
                                                         </div>
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
-                                                                <label class="form-label">KYC Number</label>
+                                                                <label class="form-label">KYC Number <span
+                                                                        class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control"
                                                                     name="shipper_kyc_number" id="shipper_kyc_number"
                                                                     value="{{ old('shipper_kyc_number') }}"
@@ -3793,8 +3794,7 @@
                                                                     aria-hidden="true">
                                                                     
                                                                     <option value="CSB IV" {{ old('origin_type') == 'CSB IV' ? 'selected' : '' }}>CSB IV </option>
-                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V</option>
-                                                                    <option value="Commercial" {{ old('origin_type') == 'Commercial' ? 'selected' : '' }}>Commercial</option>
+                                                                    <option value="CSB V" {{ old('origin_type') == 'CSB V' ? 'selected' : '' }}>CSB V/Commercial</option>
                                                                 </select>
                                                                 <div id="originTypeError" class="text-danger mt-1"
                                                                     style="display: none;">
@@ -7753,7 +7753,7 @@
                                                                     <select class="select2" data-toggle="select2"
                                                                         name="incoterms">
                                                                         <option value="">Select</option>
-                                                                        <!-- <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option> -->
+                                                                        <option value="DDU" {{ old('incoterms') == 'DDU' ? 'selected' : '' }}>DDU</option>
                                                                         <option value="DDP" {{ old('incoterms') == 'DDP' ? 'selected' : '' }}>DDP</option>
                                                                         <!-- <option value="Silver" {{ old('incoterms') == 'Silver' ? 'selected' : '' }}>Silver</option> -->
                                                                     </select>
