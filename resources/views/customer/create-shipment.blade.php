@@ -10360,6 +10360,9 @@
         const exporterCustomerData = @json($exporterCustomerPrefill);
         // Expose for the CSB-V warning/CSB-info gates defined in other script blocks.
         window.exporterCustomerData = exporterCustomerData;
+        // Courier/Aggregator logins: lock ALL shipper fields once an
+        // exporter customer is selected (not just the filled ones).
+        window.isCourierAggregatorCustomer = @json($canManageSavedCustomers ?? false);
 
         // Login account's CSB numbers, captured before any saved-customer fill,
         // so switching back to manual entry restores them.
@@ -10578,6 +10581,13 @@
                 });
             });
         }
+        // Courier/Aggregator logins: shipper info is ALWAYS readonly —
+        // values only come from exporter-customer / warehouse /
+        // same-as-customer picks (all programmatic, lock never blocks those).
+        function enforceCourierAggregatorShipperLock() {
+            if (!window.isCourierAggregatorCustomer) return;
+            setShipperFieldsLocked(fieldNames.concat(savedCustomerCsbFieldNames), true);
+        }
         // Lock only the inputs that actually received information from the
         // selected saved customer. Empty fields stay editable so the user can
         // fill the missing details manually.
@@ -10588,6 +10598,11 @@
         }
         function lockFilledSavedCustomerFields(selectedCustomer) {
             const allNames = fieldNames.concat(savedCustomerCsbFieldNames);
+            // Courier/Aggregator login + customer selected => lock EVERYTHING.
+            if (window.isCourierAggregatorCustomer && selectedCustomer) {
+                setShipperFieldsLocked(allNames, true);
+                return;
+            }
             const toLock = [];
             const toUnlock = [];
             allNames.forEach(function (name) {
@@ -10751,6 +10766,8 @@
             // Readonly only the inputs that received information from the
             // selected customer. Empty ones stay editable.
             lockFilledSavedCustomerFields(selectedCustomer);
+            // Courier/Aggregator: re-assert full lock after the fill above.
+            enforceCourierAggregatorShipperLock();
 
             // Offer the selected customer's saved addresses so the user can choose
             // which one populates the Shipper address fields.
@@ -10954,6 +10971,7 @@
                 setField(name, isCsbV ? (customerData[name] || '') : '');
             });
             setShipperFieldsLocked(savedCustomerCsbFieldNames, isCsbV);
+            enforceCourierAggregatorShipperLock();
         }
 
         if (originTypeSelect) {
@@ -11026,6 +11044,7 @@
                 delete savedValues.__sameCustomerLocked;
                 setShipperFieldsLocked(savedCustomerCsbFieldNames, false);
             }
+            enforceCourierAggregatorShipperLock();
         });
 
         if (sameAsCustomer.checked) {
@@ -11033,6 +11052,8 @@
         } else {
             syncSameCustomerCsbFields();
         }
+        // Courier/Aggregator: lock from page load itself.
+        enforceCourierAggregatorShipperLock();
     });
 
     // Handle Next button click to open Consignee Info accordion
