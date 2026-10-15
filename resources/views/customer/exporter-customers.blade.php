@@ -1100,7 +1100,20 @@
                                                 <div class="col-md-4">
                                                     <label class="section-label">State <span class="text-danger">*</span></label>
                                                     <div class="input-wrapper">
-                                                        <input type="text" id="state" name="state" class="input-custom" value="{{ old('state') }}" minlength="2" maxlength="100" pattern="[A-Za-z][A-Za-z .'-]*" required>
+                                                        <select id="state" name="state" class="input-custom" required>
+                                                            <option value="" disabled {{ old('state') ? '' : 'selected' }}>Select State</option>
+                                                            @php
+                                                                $indiaStates = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'];
+                                                                sort($indiaStates);
+                                                                $indiaStatesOld = old('state');
+                                                            @endphp
+                                                            @if ($indiaStatesOld && ! in_array($indiaStatesOld, $indiaStates))
+                                                                <option value="{{ $indiaStatesOld }}" selected>{{ $indiaStatesOld }}</option>
+                                                            @endif
+                                                            @foreach ($indiaStates as $indiaState)
+                                                                <option value="{{ $indiaState }}" {{ $indiaStatesOld == $indiaState ? 'selected' : '' }}>{{ $indiaState }}</option>
+                                                            @endforeach
+                                                        </select>
                                                         <i class="fas fa-flag"></i>
                                                     </div>
                                                 </div>
@@ -1476,7 +1489,7 @@
                                                         <div class="saved-address-item">
                                                             <span class="badge bg-primary-subtle text-primary border me-1 saved-address-badge">Primary</span>
                                                             <span class="fw-semibold">{{ $savedCustomer->address_line1 }}</span>
-                                                            @php($extraAddressLines = collect([$savedCustomer->address_line2, $savedCustomer->address_line3])->filter())
+                                                            @php $extraAddressLines = collect([$savedCustomer->address_line2, $savedCustomer->address_line3])->filter(); @endphp
                                                             @if($extraAddressLines->isNotEmpty())
                                                                 <div class="small text-muted">{{ $extraAddressLines->implode(', ') }}</div>
                                                             @endif
@@ -1623,7 +1636,16 @@
                     <div class="mb-3">
                         <label class="section-label">State <span class="text-danger">*</span></label>
                         <div class="input-wrapper">
-                            <input type="text" id="modalAddressState" name="state" class="input-custom" minlength="2" maxlength="100" pattern="[A-Za-z][A-Za-z .'-]*" required>
+                            <select id="modalAddressState" name="state" class="input-custom" required>
+                                <option value="" disabled selected>Select State</option>
+                                @php
+                                    $modalIndiaStates = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'];
+                                    sort($modalIndiaStates);
+                                @endphp
+                                @foreach ($modalIndiaStates as $modalIndiaState)
+                                    <option value="{{ $modalIndiaState }}">{{ $modalIndiaState }}</option>
+                                @endforeach
+                            </select>
                             <i class="fas fa-flag"></i>
                         </div>
                     </div>
@@ -1714,7 +1736,7 @@
                     <div id="csb5LutFields" style="display: none;">
                         <hr>
                         <h6 class="fw-bold mb-3"><i class="fas fa-file-signature me-1"></i>LUT Details</h6>
-                        @php($csb5LutStartYears = range(now()->year, now()->year + 5))
+                        @php $csb5LutStartYears = range(now()->year, now()->year + 5); @endphp
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="section-label">LUT Bond Start Year <span class="text-danger">*</span></label>

@@ -759,6 +759,18 @@
         function setAutofillValue(id, value) {
             var el = document.getElementById(id);
             if (el && value) {
+                // State is a <select>: keep KYC-autofilled values that are
+                // not in the dropdown as a temporary option so no verified
+                // data is lost and validation still passes.
+                if (el.tagName === 'SELECT') {
+                    var matched = Array.prototype.some.call(el.options, function (opt) { return opt.value === value; });
+                    if (!matched) {
+                        var tempOption = document.createElement('option');
+                        tempOption.value = value;
+                        tempOption.textContent = value;
+                        el.appendChild(tempOption);
+                    }
+                }
                 el.value = value;
                 el.classList.add('auto-filled');
             }
