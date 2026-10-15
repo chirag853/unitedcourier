@@ -2569,6 +2569,9 @@ class PrepaidController extends Controller
             ? []
             : SurCharge::whereIn('id', array_keys($allSurchargeIds))->get()->keyBy('id')->all();
 
+        // Boxes no service could price (for the "no rates" message below).
+        $anyUnmatchedBoxes = [];
+
         foreach ($services as $key => $service) {
             // Preloaded rows for this service (bulk-fetched above — the
             // per-box matching below runs fully in memory, no SQL).
@@ -2590,6 +2593,7 @@ class PrepaidController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $unmatchedBoxes = [];
                 $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
@@ -2601,6 +2605,11 @@ class PrepaidController extends Controller
                     [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
+                    }
+
+                    if (empty($boxRate)) {
+                        $allBoxesMatched = false;
+                        $unmatchedBoxes[] = ['box' => $index + 1, 'weight' => $pkgWt];
                     }
 
                     if (! empty($boxRate)) {
@@ -2640,6 +2649,22 @@ class PrepaidController extends Controller
                         $combinedFuel += $fuel;
                         $combinedSurcharge += $boxSurcharge;
                     }
+                }
+
+                // Billing safety: every box must have a matching rate row.
+                // A box with no weight-band match is NEVER silently dropped —
+                // the whole service is skipped for this box combination.
+                if (! $allBoxesMatched) {
+                    \Log::warning('prepaidGetUpsRate: skipped service with unmatched box weight', [
+                        'service_id' => $service->id ?? null,
+                        'method' => $service->method ?? null,
+                        'zone' => $zoneNumber,
+                        'unmatched_boxes' => $unmatchedBoxes,
+                    ]);
+                    foreach ($unmatchedBoxes as $ub) {
+                        $anyUnmatchedBoxes['box_'.$ub['box']] = $ub;
+                    }
+                    continue;
                 }
 
                 $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
@@ -2687,6 +2712,7 @@ class PrepaidController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $unmatchedBoxes = [];
                 $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
@@ -2698,6 +2724,11 @@ class PrepaidController extends Controller
                     [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
+                    }
+
+                    if (empty($boxRate)) {
+                        $allBoxesMatched = false;
+                        $unmatchedBoxes[] = ['box' => $index + 1, 'weight' => $pkgWt];
                     }
 
                     if (! empty($boxRate)) {
@@ -2737,6 +2768,22 @@ class PrepaidController extends Controller
                         $combinedFuel += $fuel;
                         $combinedSurcharge += $boxSurcharge;
                     }
+                }
+
+                // Billing safety: every box must have a matching rate row.
+                // A box with no weight-band match is NEVER silently dropped —
+                // the whole service is skipped for this box combination.
+                if (! $allBoxesMatched) {
+                    \Log::warning('prepaidGetUpsRate: skipped service with unmatched box weight', [
+                        'service_id' => $service->id ?? null,
+                        'method' => $service->method ?? null,
+                        'zone' => $zoneNumber,
+                        'unmatched_boxes' => $unmatchedBoxes,
+                    ]);
+                    foreach ($unmatchedBoxes as $ub) {
+                        $anyUnmatchedBoxes['box_'.$ub['box']] = $ub;
+                    }
+                    continue;
                 }
 
                 $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
@@ -2788,6 +2835,7 @@ class PrepaidController extends Controller
                 $surchargeList = [];
                 $firstMatchedRate = null;
                 $allBoxesMatched = true;
+                $unmatchedBoxes = [];
                 $usedFallback = false;
 
                 foreach ($packageWeights as $index => $pkgWt) {
@@ -2799,6 +2847,11 @@ class PrepaidController extends Controller
                     [$boxRate, $boxFallback] = $this->matchPrepaidBoxRate($serviceRates, $zoneNumber, $pkgWt, $rateCustomerId);
                     if ($boxFallback) {
                         $usedFallback = true;
+                    }
+
+                    if (empty($boxRate)) {
+                        $allBoxesMatched = false;
+                        $unmatchedBoxes[] = ['box' => $index + 1, 'weight' => $pkgWt];
                     }
 
                     if (! empty($boxRate)) {
@@ -2838,6 +2891,22 @@ class PrepaidController extends Controller
                         $combinedFuel += $fuel;
                         $combinedSurcharge += $boxSurcharge;
                     }
+                }
+
+                // Billing safety: every box must have a matching rate row.
+                // A box with no weight-band match is NEVER silently dropped —
+                // the whole service is skipped for this box combination.
+                if (! $allBoxesMatched) {
+                    \Log::warning('prepaidGetUpsRate: skipped service with unmatched box weight', [
+                        'service_id' => $service->id ?? null,
+                        'method' => $service->method ?? null,
+                        'zone' => $zoneNumber,
+                        'unmatched_boxes' => $unmatchedBoxes,
+                    ]);
+                    foreach ($unmatchedBoxes as $ub) {
+                        $anyUnmatchedBoxes['box_'.$ub['box']] = $ub;
+                    }
+                    continue;
                 }
 
                 $gstPctForTotal = $firstMatchedRate ? (float) $firstMatchedRate->gst_percentage : 0;
@@ -2979,6 +3048,7 @@ class PrepaidController extends Controller
                 'message' => 'No zone found for the selected state',
             ],
             'all_rates' => $allRates,
+            'unmatched_boxes' => array_values($anyUnmatchedBoxes),
         ];
 
         return response()->json($response);

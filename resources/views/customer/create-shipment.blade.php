@@ -10099,6 +10099,9 @@
                         });
                         cardsHtml += `</div>`;
                     });
+                } else if (data.unmatched_boxes && data.unmatched_boxes.length > 0) {
+                    const ubTxt = data.unmatched_boxes.map(function (b) { return 'Box #' + b.box + ' (' + Number(b.weight).toFixed(2) + ' kg)'; }).join(', ');
+                    cardsHtml = '<div class="text-center text-muted py-4">No rates found — no service has a rate covering ' + ubTxt + ' for this zone. Please add the missing weight band in Manage Rate or contact support.</div>';
                 } else {
                     cardsHtml = '<div class="text-center text-muted py-4">No rates found. Please check consignee state and package weights.</div>';
                 }

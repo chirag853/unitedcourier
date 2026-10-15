@@ -5854,6 +5854,37 @@ class CustomerController extends Controller
         // print_r($allRates);
         // exit;
 
+        // Billing safety: drop any box-wise card that priced fewer boxes
+        // than were requested. A box with no matching weight-band row must
+        // NEVER be silently excluded from the total — the service is hidden
+        // for this box combination instead (missing boxes are logged and
+        // reported so the band can be added in Manage Rate).
+        $anyUnmatchedBoxes = [];
+        $expectedBoxCount = is_array($packageWeights) ? count($packageWeights) : 0;
+        $allRates = array_values(array_filter($allRates, function ($r) use ($expectedBoxCount, $packageWeights, &$anyUnmatchedBoxes) {
+            if (! isset($r['box_breakdown']) || ! is_array($r['box_breakdown'])) {
+                return true;
+            }
+            if (count($r['box_breakdown']) >= $expectedBoxCount) {
+                return true;
+            }
+            $matchedNums = array_column($r['box_breakdown'], 'box');
+            foreach ((array) $packageWeights as $idx => $w) {
+                if (! in_array($idx + 1, $matchedNums)) {
+                    $anyUnmatchedBoxes['box_'.($idx + 1)] = ['box' => $idx + 1, 'weight' => floatval($w)];
+                }
+            }
+            \Log::warning('getUpsRate: dropped service with unmatched box weight', [
+                'service_id' => $r['service_id'] ?? null,
+                'method' => $r['method'] ?? null,
+                'zone_no' => $r['zone_no'] ?? null,
+                'unmatched_boxes' => array_values($anyUnmatchedBoxes),
+            ]);
+
+            return false;
+        }));
+        $anyUnmatchedBoxes = array_values($anyUnmatchedBoxes);
+
         // Filter out rate cards whose total price (base + fuel + gst) is 0.
         // When no rate row matches the weight/zone the combined amounts stay
         // 0 and the card would otherwise show "₹0.00" — hide those from the
@@ -5998,6 +6029,7 @@ class CustomerController extends Controller
                 'message' => 'No zone found for the selected state',
             ],
             'all_rates' => $allRates,
+            'unmatched_boxes' => $anyUnmatchedBoxes,
         ];
 
         return response()->json($response);
