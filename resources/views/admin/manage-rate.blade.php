@@ -737,6 +737,13 @@
                                                 </tbody>
                                             </table>
                                         </div>
+                                        <div id="customerRatesPager" class="d-flex justify-content-between align-items-center mt-2" style="display:none;">
+                                            <small class="text-muted" id="customerRatesPagerInfo"></small>
+                                            <div class="btn-group btn-group-sm" role="group" aria-label="Customer rates pages">
+                                                <button type="button" class="btn btn-outline-secondary" id="customerRatesPrevPage">‹ Prev</button>
+                                                <button type="button" class="btn btn-outline-secondary" id="customerRatesNextPage">Next ›</button>
+                                            </div>
+                                        </div>
                                         <div id="noCustomerSelected" class="text-center py-5 text-muted">
                                             <i class="ti ti-user-search fs-48 mb-3 d-block"></i>
                                             <p>Select a customer to view and edit their rates.</p>
@@ -1106,6 +1113,12 @@
 
         var customerRateTable;
         var loadedCustomerRates = [];
+        // Server-side paging state for customer rates (large customers are
+        // fetched page-by-page so a single response never blows up).
+        var customerRatesPage = 1;
+        var customerRatesPerPage = 100;
+        var customerRatesTotal = 0;
+        var customerRatesLastPage = 1;
         // Currently selected customer ID + details (used by the end_date popup)
         var currentSelectedCustomerId = null;
         var selectedCustomerIds = [];
@@ -1240,6 +1253,10 @@
             // Initialize Customer Rate DataTable ONCE (empty)
             customerRateTable = $('#customerRatesDataTable').DataTable({
                 order: [[0, 'asc']],
+                // Paging is server-side now (customerRatesPager below) — the
+                // DataTable only renders the current page, never paginates it.
+                paging: false,
+                info: false,
                 pageLength: 50,
                 dom: 'frtip',
                 buttons: [
@@ -1318,14 +1335,18 @@
                 populateCustomerCountryOptions('', '');
                 document.getElementById('customerCountryFilter').value = '';
                 if (selectedCustomerIds.length) {
-                    loadCustomerRates(selectedCustomerIds[0]);
+                    loadCustomerRates(selectedCustomerIds[0], 1);
                 } else {
                     loadedCustomerRates = [];
+                    customerRatesTotal = 0;
+                    customerRatesPage = 1;
+                    customerRatesLastPage = 1;
                     currentSelectedCustomerId = null;
                     currentCustomerInfo = null;
                     currentCustomerEndDate = null;
                     customerRateTable.clear().draw();
                     $('#customerRatesTable').hide();
+                    $('#customerRatesPager').hide();
                     $('#noCustomerSelected').show();
                 }
             });
@@ -1488,20 +1509,21 @@
             });
 
             // Customer rate filter change handlers — Service FIRST, then Country
-            // (same as Bulk Upload / Update New Rate modal).
+            // (same as Bulk Upload / Update New Rate modal). Filters run
+            // server-side, so any change resets to page 1 and reloads.
             $('#customerServiceFilter').on('change', function() {
                 populateCustomerCountryOptions(this.value, '');
                 document.getElementById('customerCountryFilter').value = '';
-                renderFilteredCustomerRates();
+                if (currentSelectedCustomerId) loadCustomerRates(currentSelectedCustomerId, 1);
             });
             $('#customerCountryFilter').on('change', function() {
-                renderFilteredCustomerRates();
+                if (currentSelectedCustomerId) loadCustomerRates(currentSelectedCustomerId, 1);
             });
             $('#customerClearFilter').on('click', function() {
                 document.getElementById('customerServiceFilter').value = '';
                 populateCustomerCountryOptions('', '');
                 document.getElementById('customerCountryFilter').value = '';
-                renderFilteredCustomerRates();
+                if (currentSelectedCustomerId) loadCustomerRates(currentSelectedCustomerId, 1);
             });
 
             // === Export Excel button handlers ===
@@ -1748,7 +1770,7 @@
             }
 
             function openUpdateNewRateModal() {
-                if (selectedCustomerIds.length === 0 || loadedCustomerRates.length === 0) {
+                if (selectedCustomerIds.length === 0 || (customerRatesTotal === 0 && loadedCustomerRates.length === 0)) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'No Customer Selected',
@@ -1828,7 +1850,7 @@
                             timer: 2200,
                             showConfirmButton: false
                         });
-                        loadCustomerRates(currentSelectedCustomerId);
+                        loadCustomerRates(currentSelectedCustomerId, customerRatesPage);
                     },
                     error: function(xhr) {
                         var response = xhr.responseJSON || {};
@@ -2626,15 +2648,30 @@
             });
         });
 
-        // Load customer rates via AJAX
-        // Load customer rates via AJAX and store them for filtering
-        function loadCustomerRates(customerId) {
+        // Load customer rates via AJAX (server-paged + server-filtered so
+        // large customers never ship their whole rate table at once).
+        function loadCustomerRates(customerId, page) {
+            if (!customerId) return;
+            customerRatesPage = Math.max(1, parseInt(page || 1, 10) || 1);
+            var serviceKey = document.getElementById('customerServiceFilter')
+                ? document.getElementById('customerServiceFilter').value : '';
+            var country = document.getElementById('customerCountryFilter')
+                ? document.getElementById('customerCountryFilter').value : '';
             $.ajax({
                 url: '{{ url("/admin/manage-rate/get-customer-rates") }}',
                 type: 'GET',
-                data: { customer_id: customerId },
+                data: {
+                    customer_id: customerId,
+                    service_key: serviceKey,
+                    country: country,
+                    page: customerRatesPage,
+                    per_page: customerRatesPerPage
+                },
                 success: function(response) {
                     loadedCustomerRates = response.rates || [];
+                    customerRatesTotal = parseInt(response.total || 0, 10) || 0;
+                    customerRatesPage = parseInt(response.page || 1, 10) || 1;
+                    customerRatesLastPage = Math.max(1, parseInt(response.last_page || 1, 10) || 1);
                     // Store the selected customer ID + details for the
                     // end_date popup.
                     currentSelectedCustomerId = customerId;
@@ -2642,32 +2679,54 @@
                     currentCustomerEndDate = response.current_end_date || null;
                     renderFilteredCustomerRates();
                     $('#customerRatesTable').show();
+                    $('#customerRatesPager').show();
                     $('#noCustomerSelected').hide();
                 },
-                error: function() {
-                    showAlert('Failed to load customer rates.', 'error');
+                error: function(xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                        ? xhr.responseJSON.message
+                        : 'Failed to load customer rates.' + (xhr.status ? ' (HTTP ' + xhr.status + ')' : '') + ' Please try again or narrow the Service / Country filter.';
+                    showAlert(msg, 'error');
                 }
             });
         }
 
-        // Render customer rates table, applying service & country filters.
-        // Service filter is a DISTINCT group key (api_provider||service_code),
-        // matched case-insensitively against each rate's service.
+        // Render the pager under the customer rates table.
+        function renderCustomerRatesPager() {
+            var info = document.getElementById('customerRatesPagerInfo');
+            var prevBtn = document.getElementById('customerRatesPrevPage');
+            var nextBtn = document.getElementById('customerRatesNextPage');
+            if (!info || !prevBtn || !nextBtn) return;
+            if (customerRatesTotal <= 0) {
+                info.textContent = 'No rates found.';
+            } else {
+                var from = (customerRatesPage - 1) * customerRatesPerPage + 1;
+                var to = Math.min(customerRatesPage * customerRatesPerPage, customerRatesTotal);
+                info.textContent = 'Showing ' + from + '–' + to + ' of ' + customerRatesTotal + ' rates (page ' + customerRatesPage + ' of ' + customerRatesLastPage + ')';
+            }
+            prevBtn.disabled = customerRatesPage <= 1;
+            nextBtn.disabled = customerRatesPage >= customerRatesLastPage;
+        }
+
+        $(document).on('click', '#customerRatesPrevPage', function() {
+            if (customerRatesPage > 1 && currentSelectedCustomerId) {
+                loadCustomerRates(currentSelectedCustomerId, customerRatesPage - 1);
+            }
+        });
+        $(document).on('click', '#customerRatesNextPage', function() {
+            if (customerRatesPage < customerRatesLastPage && currentSelectedCustomerId) {
+                loadCustomerRates(currentSelectedCustomerId, customerRatesPage + 1);
+            }
+        });
+
+        // Render the current server-filtered page of customer rates.
+        // Service & country filtering now happens in getCustomerRates —
+        // this only renders rows (with global numbering) + the pager.
         function renderFilteredCustomerRates() {
-            var countryFilter = document.getElementById('customerCountryFilter').value;
-            var serviceFilter = document.getElementById('customerServiceFilter').value;
             var rows = [];
-            var idx = 1;
+            var idx = (customerRatesPage - 1) * customerRatesPerPage + 1;
 
             loadedCustomerRates.forEach(function(rate) {
-                var rateCountry = rate.service ? (rate.service.country || '') : '';
-                var rateServiceKey = rate.service
-                    ? (((rate.service.api_provider || '') + '||' + (rate.service.service_code || '')).toLowerCase().replace(/\s+/g, ' ').trim())
-                    : '';
-
-                // Apply filters (service FIRST, then country)
-                if (serviceFilter && rateServiceKey !== String(serviceFilter).toLowerCase().trim()) return;
-                if (countryFilter && rateCountry !== countryFilter) return;
 
                 var isDefault = rate.is_default ? true : false;
                 var defaultBadge = isDefault
@@ -2756,6 +2815,7 @@
                 .clear()
                 .rows.add(rows)
                 .draw();
+            renderCustomerRatesPager();
         }
 
         // Inline edit for Customer Rate
@@ -2914,7 +2974,7 @@
                             // Reload the customer rates table to reflect
                             // the new end_date on every row.
                             if (currentSelectedCustomerId) {
-                                loadCustomerRates(currentSelectedCustomerId);
+                                loadCustomerRates(currentSelectedCustomerId, customerRatesPage);
                             }
                         } else {
                             Swal.fire({
@@ -3043,7 +3103,7 @@
                             });
                             // Reload the customer rates table
                             if (currentSelectedCustomerId) {
-                                loadCustomerRates(currentSelectedCustomerId);
+                                loadCustomerRates(currentSelectedCustomerId, customerRatesPage);
                             }
                         } else {
                             Swal.fire({

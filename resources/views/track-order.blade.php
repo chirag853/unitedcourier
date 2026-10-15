@@ -770,13 +770,10 @@
             if (shipment) {
                 const shipmentFields = [
                     { label: 'AWB Number', value: shipment?.awb_number, icon: 'fa-solid fa-barcode' },
-                    { label: 'Shipping Method', value: shipment?.shipping_method, icon: 'fa-solid fa-truck' },
-                    { label: 'Shipper Name', value: shipment?.shipper_name, icon: 'fa-solid fa-user' },
-                    { label: 'Company', value: shipment?.shipper_company, icon: 'fa-solid fa-building' },
-                    { label: 'Origin City', value: shipment?.shipper_city, icon: 'fa-solid fa-city' },
-                    { label: 'Origin State', value: shipment?.shipper_state, icon: 'fa-solid fa-map' },
-                    { label: 'Phone', value: shipment?.shipper_phone, icon: 'fa-solid fa-phone' },
-                    { label: 'Email', value: shipment?.shipper_email, icon: 'fa-solid fa-envelope' },
+                    { label: 'Reference No', value: shipment?.reference_no, icon: 'fa-solid fa-hashtag' },
+                    { label: 'Booking Date', value: shipment?.booking_date, icon: 'fa-solid fa-calendar-days' },
+                    // { label: 'Phone', value: shipment?.shipper_phone, icon: 'fa-solid fa-phone' },
+                    // { label: 'Email', value: shipment?.shipper_email, icon: 'fa-solid fa-envelope' },
                 ];
 
                 shipmentFields.forEach(field => {
@@ -795,7 +792,7 @@
                     { label: 'Destination City', value: consignee?.consignee_city, icon: 'fa-solid fa-city' },
                     { label: 'Destination State', value: consignee?.consignee_state, icon: 'fa-solid fa-map' },
                     { label: 'Destination Country', value: consignee?.consignee_country, icon: 'fa-solid fa-globe' },
-                    { label: 'Consignee Phone', value: consignee?.consignee_phone, icon: 'fa-solid fa-phone' },
+                    // { label: 'Consignee Phone', value: consignee?.consignee_phone, icon: 'fa-solid fa-phone' },
                 ];
 
                 consigneeFields.forEach(field => {

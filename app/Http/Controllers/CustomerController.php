@@ -3990,6 +3990,8 @@ class CustomerController extends Controller
 
             // Server-side validation: enforce max invoice total based on origin_type.
             // CSB IV -> max 25,000 | CSB V -> max 10,00,000 (1,000,000)
+            // Limits are in INR. Items are entered in the selected invoice
+            // currency — convert using the destination rate when not INR.
             $items = $request->input('items', []);
             $calculatedTotal = 0;
             if (is_array($items)) {
@@ -3997,10 +3999,22 @@ class CustomerController extends Controller
                     $calculatedTotal += (float) ($item['amount'] ?? 0);
                 }
             }
+            $invoiceCurrency = strtoupper(trim((string) ($validatedData['invoice_currency'] ?? 'INR')));
+            $totalInInr = $calculatedTotal;
+            if ($invoiceCurrency !== '' && $invoiceCurrency !== 'INR') {
+                $destRate = (float) (Destination::whereRaw('UPPER(name) = ?', [strtoupper((string) ($validatedData['delivery_destination'] ?? ''))])->value('rate') ?? 0);
+                if ($destRate > 0) {
+                    $totalInInr = $calculatedTotal * $destRate;
+                }
+            }
             $maxAllowedTotal = ($validatedData['origin_type'] === 'CSB V') ? 1000000 : 25000;
-            if ($calculatedTotal > $maxAllowedTotal) {
+            if ($totalInInr > $maxAllowedTotal) {
                 $originLabel = ($validatedData['origin_type'] === 'CSB V') ? 'CSB V' : 'CSB IV';
-                $message = 'The total invoice amount is ₹'.number_format($calculatedTotal, 2).
+                $enteredPrefix = ($invoiceCurrency !== '' && $invoiceCurrency !== 'INR') ? $invoiceCurrency.' ' : '₹';
+                $inrNote = ($invoiceCurrency !== '' && $invoiceCurrency !== 'INR' && $totalInInr !== $calculatedTotal)
+                    ? ' (≈ ₹'.number_format($totalInInr, 2).')'
+                    : '';
+                $message = 'The total invoice amount is '.$enteredPrefix.number_format($calculatedTotal, 2).$inrNote.
                     ', which exceeds the maximum allowed limit of ₹'.number_format($maxAllowedTotal, 2).
                     ' for '.$originLabel.'. Please reduce the invoice total and try again.';
                 if (! $request->expectsJson()) {
@@ -4019,35 +4033,35 @@ class CustomerController extends Controller
                 ], 422);
             }
 
-            // Server-side validation: enforce max total package weight (68 kg) for CSB IV only.
-            // CSB V has no weight limit.
+            // Server-side validation: enforce max per-box chargeable weight (68 kg) for CSB IV only.
+            // CSB V has no weight limit. Total shipment weight is unlimited.
             if ($validatedData['origin_type'] !== 'CSB V') {
                 $packages = $request->input('packages', []);
-                $totalWeight = 0;
-                if (is_array($packages)) {
-                    foreach ($packages as $pkg) {
-                        $totalWeight += (float) ($pkg['chargeable_weight'] ?? 0);
-                    }
-                }
                 $maxWeight = 68;
-                if ($totalWeight > $maxWeight) {
-                    $weightMessage = 'The total package weight is '.number_format($totalWeight, 2).
-                        ' kg, which exceeds the maximum allowed limit of '.$maxWeight.
-                        ' kg for CSB IV. Please reduce the weight and try again.';
-                    if (! $request->expectsJson()) {
-                        return back()
-                            ->withErrors(['packages' => $weightMessage])
-                            ->withInput()
-                            ->with('error', $weightMessage);
-                    }
+                if (is_array($packages)) {
+                    foreach ($packages as $idx => $pkg) {
+                        $boxWeight = (float) ($pkg['chargeable_weight'] ?? 0);
+                        if ($boxWeight > $maxWeight) {
+                            $boxNum = $idx + 1;
+                            $weightMessage = 'Box #'.$boxNum.' chargeable weight is '.number_format($boxWeight, 2).
+                                ' kg, which exceeds the maximum allowed limit of '.$maxWeight.
+                                ' kg per box for CSB IV. Please reduce the weight and try again.';
+                            if (! $request->expectsJson()) {
+                                return back()
+                                    ->withErrors(['packages' => $weightMessage])
+                                    ->withInput()
+                                    ->with('error', $weightMessage);
+                            }
 
-                    return response()->json([
-                        'success' => false,
-                        'message' => $weightMessage,
-                        'errors' => [
-                            'packages' => [$weightMessage],
-                        ],
-                    ], 422);
+                            return response()->json([
+                                'success' => false,
+                                'message' => $weightMessage,
+                                'errors' => [
+                                    'packages' => [$weightMessage],
+                                ],
+                            ], 422);
+                        }
+                    }
                 }
             }
 
@@ -6614,25 +6628,7 @@ class CustomerController extends Controller
                 ],
             ];
 
-            $lengthCm = $pkgData['length_cm'] ?? null;
-            $widthCm = $pkgData['width_cm'] ?? null;
-            $heightCm = $pkgData['height_cm'] ?? null;
-
-            if ($lengthCm && $widthCm && $heightCm) {
-                $pkg['Dimensions'] = [
-                    'UnitOfMeasurement' => ['Code' => 'IN'],
-                    'Length' => (string) $lengthCm,
-                    'Width' => (string) $widthCm,
-                    'Height' => (string) $heightCm,
-                ];
-            } else {
-                $pkg['Dimensions'] = [
-                    'UnitOfMeasurement' => ['Code' => 'IN'],
-                    'Length' => '10',
-                    'Width' => '8',
-                    'Height' => '4',
-                ];
-            }
+            // No Dimensions sent to UPS (shipper requirement).
 
             $packages[] = $pkg;
         }
@@ -6653,12 +6649,6 @@ class CustomerController extends Controller
                 'PackageWeight' => [
                     'UnitOfMeasurement' => ['Code' => $weightUnit],
                     'Weight' => $fallbackWeight,
-                ],
-                'Dimensions' => [
-                    'UnitOfMeasurement' => ['Code' => 'IN'],
-                    'Length' => '10',
-                    'Width' => '8',
-                    'Height' => '4',
                 ],
             ];
         }

@@ -2434,6 +2434,20 @@
                 $('#shipmentCountInfo').text('Showing ' + visibleCount + ' of ' + liveStatusCounts.all + ' shipments');
             }
 
+            // Auto tab-shift after a status-changing action: keep all query
+            // params, just point `status` at the target tab and navigate so the
+            // affected shipments are visible immediately.
+            function shiftToStatusTab(status) {
+                try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('status', status);
+                    url.searchParams.delete('page');
+                    window.location.href = url.toString();
+                } catch (e) {
+                    window.location.reload();
+                }
+            }
+
             // Manifest failed → server reverts a Ready shipment back to Draft.
             // Reflect that in the row so the UI stays consistent with the database.
             const revertRowToDraft = function ($row) {
@@ -2973,8 +2987,8 @@
                     },
                     success: function (response) {
                         if (response.success) {
-                            // Refresh immediately so table + wallet balance + counters reflect the cancellation.
-                            window.location.reload();
+                            // Shift to the Cancelled tab so table + wallet balance + counters reflect the cancellation.
+                            shiftToStatusTab('cancelled');
                             return;
                         } else {
                             showAlert('danger', response.message);
@@ -3184,6 +3198,9 @@
                         const successPopup = new bootstrap.Modal(popupElement);
                         popupElement.addEventListener('hidden.bs.modal', function () {
                             this.remove();
+                            // Paid shipments are now Ready — shift to the Ready tab.
+                            // Partial success stays put so failed (Draft) rows remain visible.
+                            if (allSucceeded) shiftToStatusTab('ready');
                         });
                         successPopup.show();
                         return;
@@ -3403,6 +3420,7 @@
                                 chargeNote = ' Payment of INR ' + number_format(response.amount_charged, 2) + ' deducted from your wallet.';
                             }
                             showAlert('success', 'Shipment manifested successfully! Tracking: ' + (response.tracking_number || 'N/A') + chargeNote);
+                            setTimeout(function () { shiftToStatusTab('manifested'); }, 1500);
                         } else {
                             // Manifest failed — server reverts a Ready shipment back to Draft, reflect it in the row.
                             if ($('#invoice-row-' + invoiceId).data('status') === 'ready') {
@@ -3546,6 +3564,7 @@
                                 showAlert('warning', failMsg.replace(/\n/g, '<br>'));
                             } else {
                                 showAlert('success', response.message);
+                                setTimeout(function () { shiftToStatusTab('manifested'); }, 1200);
                             }
 
                             $btn.prop('disabled', false).html('<i class="ti ti-package-export me-1"></i> Bulk Manifest');
@@ -3848,7 +3867,7 @@
                 let index = 0;
                 const processNext = function () {
                     if (index >= queue.length) {
-                        window.location.reload();
+                        shiftToStatusTab('cancelled');
                         return;
                     }
                     const id = queue[index];
@@ -3970,7 +3989,7 @@
                 let index = 0;
                 const processNext = function () {
                     if (index >= queue.length) {
-                        window.location.reload();
+                        shiftToStatusTab('cancelled');
                         return;
                     }
                     const id = queue[index];
@@ -4040,7 +4059,7 @@
                 let index = 0;
                 const processNext = function () {
                     if (index >= queue.length) {
-                        window.location.reload();
+                        shiftToStatusTab('cancelled');
                         return;
                     }
 
@@ -4211,7 +4230,7 @@
                             assignPickupNumber = null;
                             $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i>Yes, Assign for Pickup');
                             showAlert('success', response.message);
-                            setTimeout(function () { window.location.reload(); }, 1200);
+                            setTimeout(function () { shiftToStatusTab('assigned_for_pickup'); }, 1200);
                         } else {
                             showAlert('danger', response.message || 'Unable to assign manifest for pickup.');
                             $btn.prop('disabled', false).html('<i class="ti ti-truck me-1"></i>Yes, Assign for Pickup');

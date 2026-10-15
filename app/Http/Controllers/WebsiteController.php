@@ -536,9 +536,17 @@ $businessCategories = BusinessCategory::active()->ordered()->get();
 
         $shipmentDetails = null;
         if ($shipper) {
+            // Reference No: matched-via-reference pehle se aata hai, warna
+            // create_shipment se AWB dwara nikalo. Booking Date = shipper_info.created_at.
+            $resolvedReference = $referenceNumber
+                ?? \App\Models\CreateShipment::where('awb_number', $awbNumber)
+                    ->orderByDesc('id')
+                    ->value('reference_number');
             $shipmentDetails = [
                 'awb_number' => $shipper->awb_number,
                 'shipping_method' => $shipper->shipping_method,
+                'reference_no' => $resolvedReference,
+                'booking_date' => $shipper->created_at ? $shipper->created_at->format('d M Y') : null,
                 'shipper_name' => $shipper->contact_person,
                 'shipper_company' => $shipper->company_name,
                 'shipper_city' => $shipper->city,

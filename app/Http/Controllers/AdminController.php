@@ -6371,17 +6371,41 @@ class AdminController extends Controller
     {
         $customerId = $request->customer_id;
 
-        $rates = \App\Models\CourierRate::with('service')
-            ->where('customer_id', $customerId)
-            ->orderBy('service_id')
+        $query = \App\Models\CourierRate::with('service')
+            ->where('customer_id', $customerId);
+
+        // Server-side filters (same semantics as the Excel export): narrow
+        // the result set BEFORE paging so large customers never ship their
+        // entire rate table in a single response.
+        $serviceKey = trim((string) $request->input('service_key', ''));
+        if ($serviceKey !== '' && str_contains($serviceKey, '||')) {
+            [$keyApi, $keyCode] = explode('||', $serviceKey, 2);
+            $keyApi = trim((string) $keyApi);
+            $keyCode = trim((string) $keyCode);
+            $query->whereHas('service', function ($serviceQuery) use ($keyApi, $keyCode) {
+                $serviceQuery->whereRaw('LOWER(api_provider) = ?', [strtolower($keyApi)])
+                    ->whereRaw('LOWER(service_code) = ?', [strtolower($keyCode)]);
+            });
+        }
+        $country = trim((string) $request->input('country', ''));
+        if ($country !== '') {
+            $query->whereHas('service', function ($serviceQuery) use ($country) {
+                $serviceQuery->where('country', $country);
+            });
+        }
+
+        $query->orderBy('service_id')
             ->orderBy('zone_no')
-            ->orderBy('wt_range_start')
-            ->get();
+            ->orderBy('wt_range_start');
+
+        $perPage = (int) $request->input('per_page', 100);
+        $perPage = max(1, min($perPage, 500));
+        $paginator = $query->paginate($perPage);
 
         // Include customer details (name, email, phone) and the current
-        // end_date (taken from the first rate, since all rates for a
-        // customer share the same end_date) so the manage-rate page can
-        // show them in the end_date popup.
+        // end_date (all rates for a customer share the same end_date, so a
+        // single cheap lookup is enough regardless of the page) so the
+        // manage-rate page can show them in the end_date popup.
         $customer = \App\Models\Customer::find($customerId);
         $customerInfo = null;
         $currentEndDate = null;
@@ -6394,16 +6418,23 @@ class AdminController extends Controller
                 'phone_number'  => $customer->phone_number,
                 'full_name'     => trim(($customer->first_name ?? '') . ' ' . ($customer->last_name ?? '')),
             ];
-            $firstRate = $rates->first();
-            if ($firstRate && $firstRate->end_date) {
-                $currentEndDate = $firstRate->end_date instanceof \DateTime
-                    ? $firstRate->end_date->format('Y-m-d')
-                    : (string) $firstRate->end_date;
+            $firstEndDate = \App\Models\CourierRate::where('customer_id', $customerId)
+                ->whereNotNull('end_date')
+                ->orderBy('id')
+                ->value('end_date');
+            if ($firstEndDate) {
+                $currentEndDate = $firstEndDate instanceof \DateTime
+                    ? $firstEndDate->format('Y-m-d')
+                    : (string) $firstEndDate;
             }
         }
 
         return response()->json([
-            'rates'           => $rates,
+            'rates'           => $paginator->items(),
+            'total'           => $paginator->total(),
+            'page'            => $paginator->currentPage(),
+            'per_page'        => $paginator->perPage(),
+            'last_page'       => $paginator->lastPage(),
             'customer'        => $customerInfo,
             'current_end_date' => $currentEndDate,
         ]);

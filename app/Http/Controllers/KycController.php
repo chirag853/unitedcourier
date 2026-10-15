@@ -770,7 +770,28 @@ class KycController extends Controller
                 ], 422);
             }
 
-            if ($identifierConflict = $this->findKycIdentifierConflict($customer, $gst, null, null)) {
+            // Exporter-customers page: duplicate check sirf exporter_customers
+            // table se (apne exporter_id ke saved customers me kyc_number ya
+            // gst_certificate_number match). KycDetail/CsbForm yahan check
+            // nahi hote taaki verify-pass = save-pass rahe.
+            if (trim((string) $request->input('context')) === 'exporter_customers') {
+                $gstNorm = strtoupper(preg_replace('/[^A-Z0-9]+/', '', $gst));
+                $exporterDuplicate = \App\Models\ExporterCustomer::query()
+                    ->where('exporter_id', $customer->id)
+                    ->where(function ($query) use ($gst, $gstNorm) {
+                        $query->where('kyc_number', $gst)
+                            ->orWhere('kyc_number', $gstNorm)
+                            ->orWhere('gst_certificate_number', $gst)
+                            ->orWhere('gst_certificate_number', $gstNorm);
+                    })
+                    ->exists();
+                if ($exporterDuplicate) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This GSTIN is already registered for another saved customer.',
+                    ], 409);
+                }
+            } elseif ($identifierConflict = $this->findKycIdentifierConflict($customer, $gst, null, null)) {
                 return $this->kycIdentifierConflictResponse($identifierConflict);
             }
 

@@ -7407,8 +7407,8 @@
                                             };
                                         };
 
-                                        // Total weight limit validation
-                                        // CSB IV -> max 68 kg | CSB V -> no limit
+                                        // Per-box weight limit validation
+                                        // CSB IV -> max 68 kg per box | CSB V -> no limit (total unlimited)
                                         window.getMaxWeight = function() {
                                             const originTypeSelect = document.getElementById('originType');
                                             const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
@@ -7424,21 +7424,34 @@
                                             });
                                             return total;
                                         };
-                                        window.checkWeightLimit = function() {
-                                            const total = window.getTotalWeight();
+                                        window.getOverweightBoxes = function() {
                                             const max = window.getMaxWeight();
+                                            const overweight = [];
+                                            document.querySelectorAll('.rowContaineraddmore').forEach(function(row, idx) {
+                                                const chgWtInput = row.querySelector('[name$="[chargeable_weight]"]');
+                                                const wt = chgWtInput ? (parseFloat(chgWtInput.value) || 0) : 0;
+                                                if (wt > max) {
+                                                    overweight.push({ box: idx + 1, weight: wt });
+                                                }
+                                            });
+                                            return overweight;
+                                        };
+                                        window.checkWeightLimit = function() {
+                                            const max = window.getMaxWeight();
+                                            const overweight = window.getOverweightBoxes();
                                             const warning = document.getElementById('totalWeightLimitWarning');
-                                            const exceeded = total > max;
+                                            const exceeded = overweight.length > 0;
                                             if (!warning) return exceeded;
                                             if (exceeded) {
-                                                warning.textContent = 'Total weight is ' + total.toFixed(2) +
+                                                const first = overweight[0];
+                                                warning.textContent = 'Box #' + first.box + ' chargeable weight is ' + first.weight.toFixed(2) +
                                                     ' kg, which exceeds the maximum allowed limit of ' + max +
-                                                    ' kg for CSB IV. Please reduce the weight.';
+                                                    ' kg per box for CSB IV. Please reduce the weight.';
                                                 warning.style.display = 'block';
                                             } else {
                                                 warning.style.display = 'none';
                                             }
-                                            return total > max;
+                                            return exceeded;
                                         };
 
                                         function syncPackageRows() {
@@ -8179,14 +8192,25 @@
                                                             });
                                                             const totalInput = document.getElementById('totalAmount');
                                                             if (totalInput) totalInput.value = total;
-                                                            // Autofill Invoice Amount with the same items total
+                                                            // Autofill Invoice Amount with the same items total.
+                                                            // Amounts are entered in the selected Invoice Currency —
+                                                            // no conversion. Invoice Amount = items total as-is.
                                                             const invoiceAmountInput = document.querySelector('[name="invoice_amount"]');
-                                                            if (invoiceAmountInput) invoiceAmountInput.value = total;
-                                                            // Validate against max allowed total
+                                                            if (invoiceAmountInput) {
+                                                                invoiceAmountInput.value = total;
+                                                            }
+                                                            // Validate against max allowed total (limits are in INR —
+                                                            // convert the entered total using the destination rate).
                                                             const maxTotal = window.getMaxInvoiceTotal();
+                                                            const curSelForLimit = document.querySelector('[name="invoice_currency"]');
+                                                            const curCodeForLimit = curSelForLimit ? curSelForLimit.value : 'INR';
+                                                            const curInfoForLimit = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
+                                                            const totalInr = (curCodeForLimit && curCodeForLimit !== 'INR' && curInfoForLimit.rate > 0) ? total * curInfoForLimit.rate : total;
+                                                            const limitExceeded = totalInr > maxTotal;
+                                                            const curPrefix = (curCodeForLimit && curCodeForLimit !== 'INR') ? curCodeForLimit + ' ' : '₹';
                                                             const totalAmountEl = document.getElementById('totalAmount');
                                                             if (totalAmountEl) {
-                                                                if (total > maxTotal) {
+                                                                if (limitExceeded) {
                                                                     totalAmountEl.style.borderColor = '#dc3545';
                                                                     totalAmountEl.style.color = '#dc3545';
                                                                 } else {
@@ -8196,13 +8220,17 @@
                                                             }
                                                             const limitWarning = document.getElementById('invoiceTotalLimitWarning');
                                                             if (limitWarning) {
-                                                                if (total > maxTotal) {
+                                                                if (limitExceeded) {
                                                                     const originTypeSelect = document.getElementById('originType');
                                                                     const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                                                                    let inrNote = '';
+                                                                    if (curCodeForLimit && curCodeForLimit !== 'INR' && totalInr !== total) {
+                                                                        inrNote = ' (≈ ₹' + totalInr.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ')';
+                                                                    }
                                                                     limitWarning.textContent = 'Maximum allowed total for ' +
                                                                         (isCsb5 ? 'CSB V' : 'CSB IV') + ' is ₹' +
                                                                         maxTotal.toLocaleString('en-IN') +
-                                                                        '. Current total is ₹' + total.toLocaleString('en-IN') + '.';
+                                                                        '. Current total is ' + curPrefix + total.toLocaleString('en-IN') + inrNote + '.';
                                                                     limitWarning.style.display = 'block';
                                                                 } else {
                                                                     limitWarning.style.display = 'none';
@@ -9159,8 +9187,8 @@
 
 
     // Fetch rates for ALL courier services and show as selectable card list
-    // Destination currency conversion (sirf display ke liye —
-    // database me invoice_currency hamesha INR jata hai).
+    // Invoice is entered and saved in the selected Invoice Currency
+    // (limits are checked against the INR equivalent via destination rate).
     window.destCurrencyInfo = function () {
         var sel = document.querySelector('select[name="delivery_destination"]');
         var opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
@@ -9186,6 +9214,8 @@
         }
         if (window.jQuery && jQuery(sel).hasClass('select2-hidden-accessible')) jQuery(sel).trigger('change.select2');
         else sel.dispatchEvent(new Event('change', { bubbles: true }));
+        // Amount ko nayi currency ke hisab se refresh karo (entered values untouched).
+        if (typeof window.updateTotal === 'function') window.updateTotal();
     }
     function bindDestCurrencySync() {
         var dest = document.getElementById('delivery_destination') || document.querySelector('select[name="delivery_destination"]');
@@ -9194,17 +9224,18 @@
         var handler = function () { syncInvoiceCurrency(); };
         dest.addEventListener('change', handler);
         if (window.jQuery) jQuery(dest).on('change', handler);
+        // Currency badalne par limit display refresh ho (amount convert nahi hota).
+        var cur = document.querySelector('select[name="invoice_currency"]');
+        if (cur && !cur.dataset.amountSyncBound) {
+            cur.dataset.amountSyncBound = '1';
+            var curHandler = function () { if (typeof window.updateTotal === 'function') window.updateTotal(); };
+            cur.addEventListener('change', curHandler);
+            if (window.jQuery) jQuery(cur).on('change', curHandler);
+        }
     }
-    // Submit par invoice_currency force INR (display ke liye kuch bhi chuna ho).
-    function forceInvoiceCurrencyINR() {
-        var form = document.getElementById('shipmentForm');
-        if (!form || form.dataset.inrForced) return;
-        form.dataset.inrForced = '1';
-        form.addEventListener('submit', function () {
-            var sel = form.querySelector('[name="invoice_currency"]');
-            if (sel) sel.value = 'INR';
-        });
-    }
+    // Invoice is entered AND saved in the selected currency (no INR forcing).
+    // Disabled: previously forced invoice_currency back to INR on submit.
+    function forceInvoiceCurrencyINR() {}
     document.addEventListener('DOMContentLoaded', function () { bindDestCurrencySync(); forceInvoiceCurrencyINR(); });
 
     function calculateRate() {
@@ -9509,11 +9540,6 @@
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
                         const totalPrice = getRateTotal(r);
-                        // Display-only conversion in destination currency (DB me INR hi jata hai).
-                        const destConv = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
-                        const destConvHtml = (destConv.code && destConv.code !== 'INR' && destConv.rate > 0)
-                            ? '<div class="total-row"><div class="total-label"><i class="fas fa-exchange-alt"></i> Total Amount in ' + destConv.code + '</div><div class="total-amount">' + destConv.code + ' ' + (totalPrice / destConv.rate).toFixed(2) + '</div></div>'
-                            : '';
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
@@ -9683,7 +9709,6 @@
                                                     ₹ ${totalPrice.toFixed(2)}
                                                 </div>
                                             </div>
-                                            ${destConvHtml}
                                         </div>
                                     </div>
                                 </div>
@@ -11388,18 +11413,28 @@
                     return;
                 }
                 // Validate invoice total against origin-type limit
+                // (limits are in INR — convert the entered total first).
                 // CSB IV -> max 25,000 | CSB V -> max 10,00,000
                 if (window.getMaxInvoiceTotal && window.updateTotal) {
                     window.updateTotal();
                     const total = parseFloat(document.getElementById('totalAmount').value) || 0;
                     const maxTotal = window.getMaxInvoiceTotal();
-                    if (total > maxTotal) {
+                    const subCurSel = document.querySelector('[name="invoice_currency"]');
+                    const subCurCode = subCurSel ? subCurSel.value : 'INR';
+                    const subCurInfo = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
+                    const subTotalInr = (subCurCode && subCurCode !== 'INR' && subCurInfo.rate > 0) ? total * subCurInfo.rate : total;
+                    if (subTotalInr > maxTotal) {
                         const originTypeSelect = document.getElementById('originType');
                         const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';
+                        const subPrefix = (subCurCode && subCurCode !== 'INR') ? subCurCode + ' ' : '₹';
+                        let subInrNote = '';
+                        if (subCurCode && subCurCode !== 'INR' && subTotalInr !== total) {
+                            subInrNote = ' (≈ ₹' + subTotalInr.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ')';
+                        }
                         Swal.fire({
                             icon: 'error',
                             title: 'Invoice Total Exceeds Limit',
-                            html: 'The total invoice amount is <strong>₹' + total.toLocaleString('en-IN') +
+                            html: 'The total invoice amount is <strong>' + subPrefix + total.toLocaleString('en-IN') + subInrNote +
                                 '</strong>, which exceeds the maximum allowed limit of <strong>₹' +
                                 maxTotal.toLocaleString('en-IN') + '</strong> for ' +
                                 (isCsb5 ? 'CSB V' : 'CSB IV') + '.<br>Please reduce the invoice total and try again.',
@@ -11408,17 +11443,18 @@
                         return;
                     }
                 }
-                // Validate total package weight against 68 kg limit
-                if (window.checkWeightLimit && window.getTotalWeight) {
-                    const totalWeight = window.getTotalWeight();
+                // Validate per-box chargeable weight against 68 kg limit (total unlimited)
+                if (window.checkWeightLimit && window.getOverweightBoxes) {
+                    const overweightBoxes = window.getOverweightBoxes();
                     const maxWeight = window.getMaxWeight();
-                    if (totalWeight > maxWeight) {
+                    if (overweightBoxes.length > 0) {
+                        const first = overweightBoxes[0];
                         Swal.fire({
                             icon: 'error',
-                            title: 'Total Weight Exceeds Limit',
-                            html: 'The total package weight is <strong>' + totalWeight.toFixed(2) +
+                            title: 'Box Weight Exceeds Limit',
+                            html: 'Box #' + first.box + ' chargeable weight is <strong>' + first.weight.toFixed(2) +
                                 ' kg</strong>, which exceeds the maximum allowed limit of <strong>' +
-                                maxWeight + ' kg</strong>.<br>Please reduce the weight and try again.',
+                                maxWeight + ' kg per box</strong>.<br>Please reduce the weight and try again.',
                             confirmButtonColor: '#dc3545'
                         });
                         return;

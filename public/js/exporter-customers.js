@@ -1125,6 +1125,7 @@
                 verifyData.append('gst_number', gstin);
                 verifyData.append('business_name', gstKycBusinessName.value.trim());
                 verifyData.append('gst_certificate_document', gstKycFileInput.files[0]);
+                verifyData.append('context', 'exporter_customers');
 
                 gstKycVerified = false;
                 gstKycVerifyBtn.disabled = true;
@@ -1227,6 +1228,7 @@
                 verifyData.append('gst_number', gstin);
                 verifyData.append('business_name', gstBusinessName.value.trim());
                 verifyData.append('gst_certificate_document', gstFileInput.files[0]);
+                verifyData.append('context', 'exporter_customers');
 
                 gstVerified = false;
                 verifyGstBtn.disabled = true;
