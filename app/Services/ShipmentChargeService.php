@@ -880,6 +880,15 @@ class ShipmentChargeService
             return null;
         }
 
+        // Go Green applies ONLY where the network is DHL-INTL. The service
+        // input is a combined "method network provider" string, so strip all
+        // separators and look for the exact 'dhlintl' run instead of a loose
+        // substring — other DHL networks must never match.
+        $serviceFlat = preg_replace('/[^a-z0-9]/', '', strtolower(trim((string) $service))) ?? '';
+        if (! str_contains($serviceFlat, 'dhlintl')) {
+            return null;
+        }
+
         foreach (self::findDisputeRows($chargeType) as $row) {
             if (! self::matchDestination($row->destination ?? 'ALL', $destIn)) {
                 continue;
