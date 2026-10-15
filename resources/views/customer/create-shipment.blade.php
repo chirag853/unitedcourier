@@ -9864,6 +9864,9 @@
                         const greenTotal = parseFloat(r.green_total) || 0;
                         const combinedSurcharge = totalSurcharge + (disputeMatched ? disputeTotal : 0) + (ddpMatched ? ddpTotal : 0) + (greenMatched ? greenTotal : 0);
                         const hasItemSurcharges = !!(r.surcharges && r.surcharges.length);
+                        // Itemized surcharges: only non-zero ones are shown.
+                        const nonZeroSurcharges = (r.surcharges || []).filter(function(s) { return (parseFloat(s.price) || 0) > 0; });
+                        const hasNonZeroSurcharges = nonZeroSurcharges.length > 0;
                         const totalPrice = getRateTotal(r);
                         // Per-box tax: shipment GST ko (base + fuel) ke proportion me baanto,
                         // taaki box tax ka sum neeche wali GST row se hamesha match kare
@@ -10009,25 +10012,25 @@
                                             </div>
                                         </div>
                                         ` : ''}
-                                        <div class="breakdown-grid" style="${hasItemSurcharges ? '' : 'grid-template-columns: 1fr;'}">
+                                        <div class="breakdown-grid" style="${hasNonZeroSurcharges ? '' : 'grid-template-columns: 1fr;'}">
                                             <div class="breakdown-column">
                                                 <div class="breakdown-title">Charges</div>
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Total Base Price</span>
                                                     <span class="breakdown-value">₹ ${totalBasePrice.toFixed(2)}</span>
                                                 </div>
+                                                ${totalFuelPrice > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Total Fuel Price</span>
                                                     <span class="breakdown-value">₹ ${totalFuelPrice.toFixed(2)}</span>
                                                 </div>
+                                                ` : ''}
+                                                ${computedGst > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Tax Amount</span>
                                                     <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
                                                 </div>
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">Total Surcharge (incl. GST)</span>
-                                                    <span class="breakdown-value">₹ ${combinedSurcharge.toFixed(2)}</span>
-                                                </div>
+                                                ` : ''}
                                                 ${greenMatched && greenTotal > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Go Green Plus (incl. GST)</span>
@@ -10035,9 +10038,9 @@
                                                 </div>
                                                 ` : ''}
                                             </div>
-                                            ${hasItemSurcharges ? '<div class="breakdown-column">' +
+                                            ${hasNonZeroSurcharges ? '<div class="breakdown-column">' +
                                                 '<div class="breakdown-title">Tax & Surcharges</div>' +
-                                                r.surcharges.map(function(s) {
+                                                nonZeroSurcharges.map(function(s) {
                                                     return '<div class="breakdown-row">' +
                                                         '<span class="breakdown-label">' + s.name + '</span>' +
                                                         '<span class="breakdown-value">₹ ' + (parseFloat(s.price) || 0).toFixed(2) + '</span>' +

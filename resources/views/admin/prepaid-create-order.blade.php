@@ -9540,6 +9540,8 @@
                         const totalSurcharge = parseFloat(r.total_surcharge) || surchargeTotal;
                         const computedGst = gstAmount > 0 ? gstAmount : ((totalBasePrice + totalFuelPrice + totalSurcharge) * gstPct / 100);
                         const totalPrice = getRateTotal(r);
+                        // Itemized surcharges: only non-zero ones are shown.
+                        const visibleSurcharges = (r.surcharges || []).filter(function(s) { return (parseFloat(s.price) || 0) > 0; });
 
                         // Build rate breakdown JSON
                         const rateData = JSON.stringify({
@@ -9668,36 +9670,34 @@
                                             </div>
                                         </div>
                                         ` : ''}
-                                        <div class="breakdown-grid">
+                                        <div class="breakdown-grid" style="${visibleSurcharges.length > 0 ? '' : 'grid-template-columns: 1fr;'}">
                                             <div class="breakdown-column">
                                                 <div class="breakdown-title">Charges</div>
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Total Base Price</span>
                                                     <span class="breakdown-value">₹ ${totalBasePrice.toFixed(2)}</span>
                                                 </div>
+                                                ${totalFuelPrice > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">Total Fuel Price</span>
                                                     <span class="breakdown-value">₹ ${totalFuelPrice.toFixed(2)}</span>
                                                 </div>
+                                                ` : ''}
+                                                ${computedGst > 0 ? `
                                                 <div class="breakdown-row">
                                                     <span class="breakdown-label">GST Amount</span>
                                                     <span class="breakdown-value">₹ ${computedGst.toFixed(2)}</span>
                                                 </div>
+                                                ` : ''}
                                             </div>
-                                            <div class="breakdown-column">
-                                                <div class="breakdown-title">Tax & Surcharges</div>
-                                                <div class="breakdown-row">
-                                                    <span class="breakdown-label">Total Surcharge</span>
-                                                    <span class="breakdown-value">₹ ${totalSurcharge.toFixed(2)}</span>
-                                                </div>
-                                                
-                                                ${(r.surcharges && r.surcharges.length > 0) ? r.surcharges.map(function(s) {
+                                            ${visibleSurcharges.length > 0 ? '<div class="breakdown-column">' +
+                                                '<div class="breakdown-title">Tax & Surcharges</div>' +
+                                                visibleSurcharges.map(function(s) {
                                                     return '<div class="breakdown-row">' +
                                                         '<span class="breakdown-label">' + s.name + '</span>' +
                                                         '<span class="breakdown-value">₹ ' + (parseFloat(s.price) || 0).toFixed(2) + '</span>' +
                                                     '</div>';
-                                                }).join('') : ''}
-                                            </div>
+                                                }).join('') + '</div>' : ''}
                                         </div>
                                         <div class="total-breakdown">
                                             <div class="total-row">
