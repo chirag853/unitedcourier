@@ -922,6 +922,9 @@
                                                     </span>
                                                 </td>
                                                 <td>
+                                                    @if(($selectedStatus ?? null) === 'assigned_for_pickup' && collect($manifest->delivery_types ?? [])->map(fn($t) => strtolower(trim((string) $t)))->contains('delhivery'))
+                                                        <span class="badge bg-warning text-dark me-1" title="Manifested via Delhivery">Delhivery</span>
+                                                    @endif
                                                     <a href="{{ route('customer.manifest-detail', ['manifestNumber' => $manifest->manifest_number]) }}"
                                                        target="_blank"
                                                        class="btn btn-sm btn-outline-primary btn-icon"

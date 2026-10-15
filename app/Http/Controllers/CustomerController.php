@@ -7295,6 +7295,10 @@ class CustomerController extends Controller
                         'manifest_number' => $manifestNumber,
                         'manifest_created_at' => $first->shipperInfo->manifest->created_at ?? null,
                         'status' => (int) ($first->shipperInfo->manifest->status ?? Manifest::STATUS_PICKUP),
+                        'delivery_types' => $group->map(function ($invoice) {
+                            $groupManifest = $invoice->shipperInfo ? $invoice->shipperInfo->manifest : null;
+                            return $groupManifest ? (string) ($groupManifest->delivery_type ?? '') : '';
+                        })->filter()->unique()->values()->all(),
                         'shipment_count' => $group->count(),
                         'total_value' => (float) $group->sum(function ($invoice) {
                             return (float) ($invoice->shipperInfo->total_price ?? 0);
