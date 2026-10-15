@@ -6629,6 +6629,13 @@ class CustomerController extends Controller
                 $serviceDescription = 'Ground Saver 1 lbs or grater';
             }
         }
+        // UPS ReferenceNumber: shipment_invoice.reference_number (PO code).
+        // Falls back to the legacy static value when empty.
+        $upsReferenceNumber = trim((string) ($validatedData['reference_number'] ?? ''));
+        if ($upsReferenceNumber === '') {
+            $upsReferenceNumber = 'ORDER12345';
+        }
+
         // Build Packages array from form data
         $packages = [];
         $packageRows = $validatedData['packages'] ?? [];
@@ -6651,8 +6658,8 @@ class CustomerController extends Controller
 
                 'ReferenceNumber' => [
                     [
-                        'Code' => '9S',
-                        'Value' => 'ORDER12345',
+                        'Code' => 'PO',
+                        'Value' => $upsReferenceNumber,
                     ],
                 ],
 
@@ -6675,8 +6682,8 @@ class CustomerController extends Controller
                 'Description' => 'Documents',
                 'ReferenceNumber' => [
                     [
-                        'Code' => '9S',
-                        'Value' => 'ORDER12345',
+                        'Code' => 'PO',
+                        'Value' => $upsReferenceNumber,
                     ],
                 ],
                 'Packaging' => ['Code' => '02'],
@@ -6752,6 +6759,10 @@ class CustomerController extends Controller
                 ],
                 'LabelSpecification' => [
                     'LabelImageFormat' => ['Code' => 'PDF'],
+                    'LabelStockSize' => [
+                        'Height' => '6',
+                        'Width' => '4',
+                    ],
                 ],
             ],
         ];
@@ -11548,6 +11559,7 @@ class CustomerController extends Controller
             'consignee_state' => $consignee->state ?? '',
             'consignee_zip_code' => $consignee->zip_code,
             'delivery_destination' => $consignee->delivery_destination,
+            'reference_number' => \App\Models\ShipmentInvoice::where('shipper_id', $shipper->id)->orderByDesc('id')->value('reference_number'),
             'packages' => $packagesData,
         ];
 

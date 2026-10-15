@@ -3327,6 +3327,7 @@ class PrepaidController extends Controller
             'consignee_state' => $consignee->state ?? '',
             'consignee_zip_code' => $consignee->zip_code,
             'delivery_destination' => $consignee->delivery_destination,
+            'reference_number' => \App\Models\ShipmentInvoice::where('shipper_id', $shipper->id)->orderByDesc('id')->value('reference_number'),
             'packages' => $packagesData,
         ];
 
@@ -3401,6 +3402,13 @@ class PrepaidController extends Controller
             }
         }
 
+        // UPS ReferenceNumber: shipment_invoice.reference_number (PO code).
+        // Falls back to the legacy static value when empty.
+        $upsReferenceNumber = trim((string) ($validatedData['reference_number'] ?? ''));
+        if ($upsReferenceNumber === '') {
+            $upsReferenceNumber = 'ORDER12345';
+        }
+
         $packages = [];
         $packageRows = $validatedData['packages'] ?? [];
         foreach ($packageRows as $pkgData) {
@@ -3418,8 +3426,8 @@ class PrepaidController extends Controller
                 'Packaging' => ['Code' => '02'],
                 'ReferenceNumber' => [
                     [
-                        'Code' => '9S',
-                        'Value' => 'ORDER12345',
+                        'Code' => 'PO',
+                        'Value' => $upsReferenceNumber,
                     ],
                 ],
                 'PackageWeight' => [
@@ -3439,8 +3447,8 @@ class PrepaidController extends Controller
                 'Description' => 'Documents',
                 'ReferenceNumber' => [
                     [
-                        'Code' => '9S',
-                        'Value' => 'ORDER12345',
+                        'Code' => 'PO',
+                        'Value' => $upsReferenceNumber,
                     ],
                 ],
                 'Packaging' => ['Code' => '02'],
@@ -3514,6 +3522,10 @@ class PrepaidController extends Controller
                 ],
                 'LabelSpecification' => [
                     'LabelImageFormat' => ['Code' => 'PDF'],
+                    'LabelStockSize' => [
+                        'Height' => '6',
+                        'Width' => '4',
+                    ],
                 ],
             ],
         ];
