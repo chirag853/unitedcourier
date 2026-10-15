@@ -12400,9 +12400,11 @@ if (rateRadio && rateRadio.dataset.rate) {
         function lockStateFromApi(place) {
             if (!stateSelect || !place) return;
 
+            // Prefer the state abbreviation (e.g. NY) for the submitted value,
+            // falling back to the full name when no abbreviation exists.
             const stateName = (place.state || '').trim();
             const stateAbbr = (place['state abbreviation'] || '').trim();
-            const stateValue = stateName || stateAbbr;
+            const stateValue = stateAbbr || stateName;
             if (!stateValue) return;
 
             stateSelect.innerHTML = '';
