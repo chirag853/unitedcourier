@@ -1431,7 +1431,13 @@
                                     <span class="dp-date">{{ $option['display'] }}</span>
                                 </div>
                             @endforeach
+                            <div class="md-pickup-date-option" data-value="custom" title="Choose a custom date">
+                                <span class="dp-label">Custom</span>
+                                <span class="dp-date"><i class="ti ti-calendar"></i></span>
+                            </div>
                         </div>
+                        <input type="date" class="form-control mt-2 d-none" id="mdAssignPickupCustomDate">
+                        <div class="text-danger mt-1 d-none" id="mdAssignPickupDateError" style="font-size:12px;"></div>
                         <input type="hidden" id="mdAssignPickupDate" value="{{ ($pickupDateOptions[0]['value'] ?? '') }}">
                     </div>
                     <div class="d-flex justify-content-center gap-2 mt-4">
@@ -1870,7 +1876,11 @@
                             var modal = bootstrap.Modal.getInstance(modalEl);
                             if (modal) modal.hide();
                             mdShowToast('success', 'Removed!', response.message || awb + ' removed from manifest.');
-                            setTimeout(function () { window.location.reload(); }, 1200);
+                            // Removed shipment goes back to Packed — redirect
+                            // to the Packed tab instead of reloading/closing.
+                            setTimeout(function () {
+                                window.location.href = '{{ route("customer.view-all-shipments") }}?status=packed';
+                            }, 1200);
                         } else {
                             mdShowToast('error', 'Unable to remove', response.message || 'Please try again.');
                             $confirmBtn.prop('disabled', false).html('<i class="ti ti-trash"></i> Yes, Remove');
@@ -1959,9 +1969,55 @@
 
             // ---- Assign for Pickup flow ----
             $('#mdAssignPickupBtn').on('click', function () {
+                // Reset date selection to the first preset option.
+                var $dates = $('#mdAssignPickupDates');
+                $dates.find('.md-pickup-date-option').removeClass('selected');
+                $dates.find('.md-pickup-date-option[data-value!="custom"]').first().addClass('selected');
+                $('#mdAssignPickupCustomDate').addClass('d-none').val('');
+                $('#mdAssignPickupDateError').addClass('d-none').text('');
+                $('#mdAssignPickupDate').val($dates.find('.md-pickup-date-option.selected').data('value') || '');
                 var modalEl = document.getElementById('mdAssignPickupModal');
                 var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
                 modal.show();
+            });
+
+            // Custom pickup date: runs after the generic option handler above,
+            // so the 'custom' value it sets gets corrected here.
+            $(document).on('click', '#mdAssignPickupDates .md-pickup-date-option', function () {
+                var $opt = $(this);
+                var isCustom = String($opt.data('value') || '') === 'custom';
+                $('#mdAssignPickupCustomDate').toggleClass('d-none', !isCustom);
+                $('#mdAssignPickupDateError').addClass('d-none').text('');
+                if (!isCustom) {
+                    $('#mdAssignPickupDate').val($opt.data('value'));
+                } else {
+                    // Same 12-noon cutoff as presets: after 12 PM today is
+                    // closed — min date becomes tomorrow.
+                    $('#mdAssignPickupDate').val('');
+                    var now = new Date();
+                    var min = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (now.getHours() < 12 ? 0 : 1));
+                    var minStr = min.getFullYear() + '-' + String(min.getMonth() + 1).padStart(2, '0') + '-' + String(min.getDate()).padStart(2, '0');
+                    var $custom = $('#mdAssignPickupCustomDate');
+                    $custom.attr('min', minStr);
+                    if ($custom.val() && $custom.val() < minStr) $custom.val('');
+                }
+            });
+
+            $(document).on('change', '#mdAssignPickupCustomDate', function () {
+                var val = String($(this).val() || '');
+                var min = String($(this).attr('min') || '');
+                var $err = $('#mdAssignPickupDateError');
+                if (!val) {
+                    $err.removeClass('d-none').text('Please choose a pickup date from the calendar.');
+                    return;
+                }
+                if (min && val < min) {
+                    $err.removeClass('d-none').text('Same-day pickup is closed after 12 PM. Please choose tomorrow or later.');
+                    $(this).val('');
+                    return;
+                }
+                $err.addClass('d-none').text('');
+                $('#mdAssignPickupDate').val(val);
             });
 
             $('#mdConfirmAssignPickup').on('click', function () {
@@ -1970,6 +2026,12 @@
 
                 if (!manifestNumber) {
                     mdShowToast('error', 'Unable to assign', 'Manifest number is missing.');
+                    return;
+                }
+
+                // Custom date chosen but calendar value missing/invalid.
+                if (!$('#mdAssignPickupDate').val()) {
+                    mdShowToast('error', 'Pickup date missing', 'Please choose a pickup date from the calendar.');
                     return;
                 }
 
