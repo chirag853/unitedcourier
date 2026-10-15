@@ -5266,7 +5266,9 @@ class CustomerController extends Controller
         foreach ($services as $key => $service) {
 
             // ========== SPECIAL CASE: US Multi-package with United Ground Premium ==========
-            if ($destinationCountry === 'US' && strtolower($service->method) == 'united ground premium') {
+            // SELF-provider services ride the same box-wise branch so they
+            // also show on multi-box US orders (priced from their own bands).
+            if ($destinationCountry === 'US' && (strtolower($service->method) == 'united ground premium' || strtolower($service->api_provider ?? '') === 'self')) {
                 // echo 'A';
                 // Box-wise calculation
                 $boxBreakdown = [];

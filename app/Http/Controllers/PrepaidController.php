@@ -2581,7 +2581,10 @@ class PrepaidController extends Controller
             // Same as create-shipment: multi-package US orders only price
             // United Ground Premium per box; other US services are priced
             // box-wise only for single-package orders.
-            if ($rateCountry === 'US' && $isMultiPackageCount > 1 && strtolower($service->method ?? '') !== 'united ground premium') {
+            // Multi-package US orders price United Ground Premium AND
+            // SELF-provider services per box; other US services are priced
+            // box-wise only for single-package orders.
+            if ($rateCountry === 'US' && $isMultiPackageCount > 1 && strtolower($service->method ?? '') !== 'united ground premium' && strtolower($service->api_provider ?? '') !== 'self') {
                 continue;
             }
             if ($rateCountry === 'US') {
