@@ -5415,7 +5415,9 @@ class CustomerController extends Controller
 
             }// end if
 
-            if ($destinationCountry === 'US' && $isMultiPackage <= 1 && strtolower($service->method) != 'united ground premium') {
+            // SELF-provider services are priced in the special-case branch
+            // above, so they are excluded here to avoid a duplicate card.
+            if ($destinationCountry === 'US' && $isMultiPackage <= 1 && strtolower($service->method) != 'united ground premium' && strtolower($service->api_provider ?? '') !== 'self') {
                 // Box-wise calculation
                 $boxBreakdown = [];
                 $combinedBase = 0;
