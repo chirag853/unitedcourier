@@ -3164,6 +3164,7 @@ class CodController extends Controller
             'consignee_state' => $consignee->state ?? '',
             'consignee_zip_code' => $consignee->zip_code,
             'delivery_destination' => $consignee->delivery_destination,
+            'awb_number' => $shipper->awb_number,
             'reference_number' => \App\Models\ShipmentInvoice::where('shipper_id', $shipper->id)->orderByDesc('id')->value('reference_number'),
             'packages' => $packagesData,
         ];
@@ -3239,9 +3240,12 @@ class CodController extends Controller
             }
         }
 
-        // UPS ReferenceNumber: shipment_invoice.reference_number (PO code).
-        // Falls back to the legacy static value when empty.
-        $upsReferenceNumber = trim((string) ($validatedData['reference_number'] ?? ''));
+        // UPS ReferenceNumber value: AWB number first, then the
+        // shipment_invoice reference, then the legacy static fallback.
+        $upsReferenceNumber = trim((string) ($validatedData['awb_number'] ?? ''));
+        if ($upsReferenceNumber === '') {
+            $upsReferenceNumber = trim((string) ($validatedData['reference_number'] ?? ''));
+        }
         if ($upsReferenceNumber === '') {
             $upsReferenceNumber = 'ORDER12345';
         }
