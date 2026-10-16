@@ -2186,7 +2186,7 @@ class AdminController extends Controller
             'AdditionalDetails' => [
                 'IsThirdParty' => false,
                 'ProductDetails' => $productDetails,
-                'InvoiceCurrency' => (string) ($invoice?->invoice_currency ?? $createShipment?->invoice_currency ?? ''),
+                'InvoiceCurrency' => "(string) ($invoice?->invoice_currency ?? $createShipment?->invoice_currency ?? '')",
                 'InvoiceNo' => (string) ($invoice?->invoice_number ?? $createShipment?->invoice_number ?? ''),
                 'InvoiceDate' => date('Y-m-d\\T00:00:00', strtotime((string) $invoiceDate)),
                 'TermsOfSale' => (string) ($invoice?->incoterms ?? $createShipment?->incoterms ?? ''),

@@ -6799,7 +6799,7 @@ class PrepaidController extends Controller
             'AdditionalDetails' => [
                 'IsThirdParty' => true,
                 'ProductDetails' => $productDetails,
-                'InvoiceCurrency' => (string) ($invoice->invoice_currency ?? 'INR'),
+                'InvoiceCurrency' => 'GBP',
                 'InvoiceNo' => (string) ($invoice->invoice_number ?? ''),
                 'InvoiceDate' => $invoiceDate,
                 'TermsOfSale' => (string) ($invoice->incoterms ?? 'FOB'),
