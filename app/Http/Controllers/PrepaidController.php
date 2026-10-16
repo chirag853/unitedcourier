@@ -6743,9 +6743,13 @@ class PrepaidController extends Controller
         $invoiceDate = $invoice && $invoice->invoice_date
             ? $invoice->invoice_date->format('Y-m-d').'T00:00:00Z'
             : now()->format('Y-m-d').'T00:00:00Z';
-        $referenceNumber = trim((string) ($invoice->reference_number ?? ''));
+        // CustomerRefNo carries the AWB number (invoice reference as fallback).
+        $referenceNumber = trim((string) ($shipper->awb_number ?? ''));
         if ($referenceNumber === '') {
-            $referenceNumber = (string) ($shipper->awb_number ?? ('SU-'.$shipper->id));
+            $referenceNumber = trim((string) ($invoice->reference_number ?? ''));
+        }
+        if ($referenceNumber === '') {
+            $referenceNumber = 'SU-'.$shipper->id;
         }
 
         $senderAddressLine1 = trim((string) ($shipper->address_line1 ?? ''));
