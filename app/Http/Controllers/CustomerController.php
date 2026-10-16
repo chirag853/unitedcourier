@@ -4002,7 +4002,12 @@ class CustomerController extends Controller
             $invoiceCurrency = strtoupper(trim((string) ($validatedData['invoice_currency'] ?? 'INR')));
             $totalInInr = $calculatedTotal;
             if ($invoiceCurrency !== '' && $invoiceCurrency !== 'INR') {
-                $destRate = (float) (Destination::whereRaw('UPPER(name) = ?', [strtoupper((string) ($validatedData['delivery_destination'] ?? ''))])->value('rate') ?? 0);
+                // Prefer the rate of the SELECTED invoice currency (any rated
+                // destination), fall back to the shipment destination's rate.
+                $destRate = (float) (Destination::whereRaw('UPPER(currency_code) = ?', [$invoiceCurrency])->whereNotNull('rate')->orderBy('id')->value('rate') ?? 0);
+                if (! ($destRate > 0)) {
+                    $destRate = (float) (Destination::whereRaw('UPPER(name) = ?', [strtoupper((string) ($validatedData['delivery_destination'] ?? ''))])->value('rate') ?? 0);
+                }
                 if ($destRate > 0) {
                     $totalInInr = $calculatedTotal * $destRate;
                 }
@@ -9966,6 +9971,34 @@ class CustomerController extends Controller
     }
 
     /**
+     * Build a customer-facing carrier failure message that names the
+     * shipment's service method (what the customer selected) instead of
+     * the internal provider (Primus, Flying Tigers, ...). Raw vendor text
+     * is scrubbed the same way. Logs keep the original wording.
+     */
+    private function carrierFailMessage($shippingMethod, $vendorMessage): string
+    {
+        $method = trim((string) $shippingMethod);
+        if ($method === '') {
+            $method = 'the selected service';
+        }
+        $msg = trim((string) ($vendorMessage ?? ''));
+        if ($msg === '') {
+            $msg = 'Unknown error';
+        }
+        // Longest tokens first so 'flying tigers' wins over 'tigers'-style parts.
+        $providerTokens = [
+            'flying tigers', 'flyingtigers', 'overseas logistic', 'overseaslogistic',
+            'ship global', 'shipglobal', 'ship universal', 'shipuniversal',
+            'postshipping', 'post shipping', 'primus', 'gofo',
+            'cirro parcll', 'cirro', 'aj worldwide',
+        ];
+        $msg = str_ireplace($providerTokens, $method, $msg);
+
+        return 'Shipment booking failed for '.$method.': '.$msg;
+    }
+
+    /**
      * Manifest a single shipment - check network (UPS vs Ship Global) and call appropriate API.
      * Works for shipments in 'ready' (after Confirm Payment) or 'packed' status.
      */
@@ -10125,7 +10158,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'ShipUniversal API Failed: '.($shipUniversalResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $shipUniversalResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'shipuniversal_response' => $shipUniversalResult['data'] ?? null,
                         'request_payload' => $shipUniversalResult['request_payload'] ?? null,
                     ], 500);
@@ -10200,7 +10235,10 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Primus API Failed: '.($primusResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $primusResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
+                        'primus_response' => $primusResult['data'] ?? null,
                         'request_payload' => $primusResult['payload'] ?? null,
                     ], 422);
                 }
@@ -10237,7 +10275,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Overseas Logistic API Failed: '.$overseasMsg,
+                        'message' => $this->carrierFailMessage($shippingMethod, $overseasMsg),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'overseas_response' => $overseasResult['data'] ?? null,
                         'request_payload' => $overseasResult['request_payload'] ?? null,
                     ], 500);
@@ -10337,7 +10377,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $postShippingResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'postshipping_response' => $postShippingResult['data'] ?? null,
                         'request_payload' => $postShippingResult['request_payload'] ?? null,
                     ], 500);
@@ -10354,7 +10396,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'PostShipping API Failed: '.($postShippingResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $postShippingResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'postshipping_response' => $postShippingResult['data'] ?? null,
                         'request_payload' => $postShippingResult['request_payload'] ?? null,
                     ], 500);
@@ -10461,8 +10505,11 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Flying Tigers API Failed: '.($flyingTigersResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $flyingTigersResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'flyingtigers_response' => $flyingTigersResult['data'] ?? null,
+                        'request_payload' => $flyingTigersResult['request_payload'] ?? null,
                     ], 500);
                 }
 
@@ -10543,7 +10590,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Ship Global API Failed: '.($shipGlobalResult['message'] ?? 'Unknown error'),
+                        'message' => $this->carrierFailMessage($shippingMethod, $shipGlobalResult['message'] ?? null),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'ship_global_response' => $shipGlobalResult['data'] ?? null,
                     ], 500);
                 }
@@ -10658,7 +10707,9 @@ class CustomerController extends Controller
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'UPS Shipment Failed: '.$errorMessage,
+                        'message' => $this->carrierFailMessage($shippingMethod, $errorMessage),
+                        'shipper_id' => $shipperId,
+                        'awb_number' => $shipper->awb_number ?? null,
                         'rawResponse' => $upsResult['rawResponse'] ?? null,
                     ], 500);
                 }
@@ -15081,6 +15132,7 @@ class CustomerController extends Controller
                     'data' => $apiResponse,
                     'status_code' => $response->status(),
                     'is_address_error' => $isAddressError,
+                    'request_payload' => $payload ?? null,
                 ];
             }
 
@@ -15096,6 +15148,7 @@ class CustomerController extends Controller
                     'message' => 'Cannot create order: Provided address appears to be incorrect or incomplete.',
                     'data' => $apiResponse,
                     'is_address_error' => true,
+                    'request_payload' => $payload ?? null,
                 ];
             }
 
@@ -15115,6 +15168,7 @@ class CustomerController extends Controller
                         'message' => $errorMessage,
                         'data' => $apiResponse,
                         'is_address_error' => $isAddressError,
+                        'request_payload' => $payload ?? null,
                     ];
                 }
             }

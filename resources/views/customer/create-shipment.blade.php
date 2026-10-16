@@ -8499,12 +8499,15 @@
                                                                 invoiceAmountInput.value = total;
                                                             }
                                                             // Validate against max allowed total (limits are in INR —
-                                                            // convert the entered total using the destination rate).
+                                                            // convert using the SELECTED invoice currency's rate,
+                                                            // falling back to the destination rate).
                                                             const maxTotal = window.getMaxInvoiceTotal();
                                                             const curSelForLimit = document.querySelector('[name="invoice_currency"]');
                                                             const curCodeForLimit = curSelForLimit ? curSelForLimit.value : 'INR';
                                                             const curInfoForLimit = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
-                                                            const totalInr = (curCodeForLimit && curCodeForLimit !== 'INR' && curInfoForLimit.rate > 0) ? total * curInfoForLimit.rate : total;
+                                                            const mapRateForLimit = window.invoiceCurrencyRate ? window.invoiceCurrencyRate(curCodeForLimit) : 0;
+                                                            const effRateForLimit = mapRateForLimit > 0 ? mapRateForLimit : (curInfoForLimit.rate || 0);
+                                                            const totalInr = (curCodeForLimit && curCodeForLimit !== 'INR' && effRateForLimit > 0) ? total * effRateForLimit : total;
                                                             const limitExceeded = totalInr > maxTotal;
                                                             const curPrefix = (curCodeForLimit && curCodeForLimit !== 'INR') ? curCodeForLimit + ' ' : '₹';
                                                             const totalAmountEl = document.getElementById('totalAmount');
@@ -9504,21 +9507,54 @@
         var rate = opt && opt.dataset.rate ? parseFloat(opt.dataset.rate) : 0;
         return { code: code, rate: rate > 0 ? rate : 0 };
     };
-    // Invoice Currency me INR + destination currency dikhao.
+    // All rated currencies across EVERY destination (rate IS NOT NULL).
+    // Built from the destination dropdown's data-currency/data-rate.
+    window.invoiceCurrencyRates = function () {
+        var sel = document.querySelector('select[name="delivery_destination"]');
+        var seen = {};
+        var list = [];
+        if (sel) {
+            Array.prototype.forEach.call(sel.options, function (opt) {
+                var code = opt && opt.dataset && opt.dataset.currency ? String(opt.dataset.currency).trim().toUpperCase() : '';
+                var rate = opt && opt.dataset && opt.dataset.rate ? parseFloat(opt.dataset.rate) : 0;
+                if (!code || code === 'INR' || !(rate > 0) || seen[code]) return;
+                seen[code] = true;
+                list.push({ code: code, rate: rate });
+            });
+        }
+        list.sort(function (a, b) { return a.code < b.code ? -1 : (a.code > b.code ? 1 : 0); });
+        return list;
+    };
+    // Rate for a given invoice currency code (0 when unknown).
+    window.invoiceCurrencyRate = function (code) {
+        code = String(code || '').trim().toUpperCase();
+        if (!code || code === 'INR') return 0;
+        var list = window.invoiceCurrencyRates ? window.invoiceCurrencyRates() : [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].code === code) return list[i].rate;
+        }
+        return 0;
+    };
+    // Invoice Currency me INR + saari rated currencies dikhao.
     function syncInvoiceCurrency() {
-        var sel = document.querySelector('select[name="invoice_currency"]');
+        var sel = document.querySelector('[name="invoice_currency"]');
         if (!sel) return;
-        var info = window.destCurrencyInfo();
         var current = sel.value;
         sel.innerHTML = '';
         var inr = document.createElement('option');
         inr.value = 'INR'; inr.textContent = 'INR';
         sel.appendChild(inr);
-        if (info.code && info.code !== 'INR') {
+        var list = window.invoiceCurrencyRates ? window.invoiceCurrencyRates() : [];
+        list.forEach(function (info) {
             var o = document.createElement('option');
             o.value = info.code; o.textContent = info.code;
             sel.appendChild(o);
-            if (current === info.code) sel.value = info.code;
+        });
+        // Keep the user's selection whenever it still exists.
+        if (current && (current === 'INR' || list.some(function (info) { return info.code === current; }))) {
+            sel.value = current;
+        } else {
+            sel.value = 'INR';
         }
         if (window.jQuery && jQuery(sel).hasClass('select2-hidden-accessible')) jQuery(sel).trigger('change.select2');
         else sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -9544,7 +9580,7 @@
     // Invoice is entered AND saved in the selected currency (no INR forcing).
     // Disabled: previously forced invoice_currency back to INR on submit.
     function forceInvoiceCurrencyINR() {}
-    document.addEventListener('DOMContentLoaded', function () { bindDestCurrencySync(); forceInvoiceCurrencyINR(); });
+    document.addEventListener('DOMContentLoaded', function () { bindDestCurrencySync(); forceInvoiceCurrencyINR(); syncInvoiceCurrency(); });
 
     function calculateRate() {
         const resultDiv = document.getElementById('upsRateResult');
@@ -11739,7 +11775,9 @@
                     const subCurSel = document.querySelector('[name="invoice_currency"]');
                     const subCurCode = subCurSel ? subCurSel.value : 'INR';
                     const subCurInfo = window.destCurrencyInfo ? window.destCurrencyInfo() : { code: '', rate: 0 };
-                    const subTotalInr = (subCurCode && subCurCode !== 'INR' && subCurInfo.rate > 0) ? total * subCurInfo.rate : total;
+                    const subMapRate = window.invoiceCurrencyRate ? window.invoiceCurrencyRate(subCurCode) : 0;
+                    const subEffRate = subMapRate > 0 ? subMapRate : (subCurInfo.rate || 0);
+                    const subTotalInr = (subCurCode && subCurCode !== 'INR' && subEffRate > 0) ? total * subEffRate : total;
                     if (subTotalInr > maxTotal) {
                         const originTypeSelect = document.getElementById('originType');
                         const isCsb5 = originTypeSelect && originTypeSelect.value === 'CSB V';

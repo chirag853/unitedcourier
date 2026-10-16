@@ -3147,7 +3147,7 @@
                                 if ($('#invoice-row-' + item.invoice_id).data('status') === 'ready') {
                                     revertRowToDraft($('#invoice-row-' + item.invoice_id));
                                 }
-                                showAlert('danger', (manifestResponse && manifestResponse.message) || 'Manifest failed. No payment was deducted from your wallet. The shipment has been moved back to Draft.');
+                                showAlert('danger', DRAFT_API_FAIL_MSG);
                             }
                             done();
                         },
@@ -3160,11 +3160,7 @@
                             if (xhr.responseJSON && xhr.responseJSON.is_address_error) {
                                 showAddressErrorFallbackModal(xhr.responseJSON);
                             } else {
-                                let msg = 'Manifest failed. No payment was deducted from your wallet. The shipment has been moved back to Draft.';
-                                if (xhr.responseJSON && xhr.responseJSON.message) {
-                                    msg += ' ' + xhr.responseJSON.message;
-                                }
-                                showAlert('danger', msg);
+                                showAlert('danger', DRAFT_API_FAIL_MSG);
                             }
                             done();
                         }
@@ -3227,16 +3223,12 @@
                                 markRowReady(item, response);
                                 manifestAfterPayment(item, processNext);
                             } else {
-                                showAlert('danger', response.message || 'Payment failed for one shipment.');
+                                showAlert('danger', DRAFT_API_FAIL_MSG);
                                 processNext();
                             }
                         },
                         error: function (xhr) {
-                            let msg = 'Error processing payment.';
-                            if (xhr.responseJSON && xhr.responseJSON.message) {
-                                msg = xhr.responseJSON.message;
-                            }
-                            showAlert('danger', msg);
+                            showAlert('danger', DRAFT_API_FAIL_MSG);
                             processNext();
                         }
                     });
@@ -3253,6 +3245,10 @@
                 parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                 return parts.join('.');
             }
+
+            // Default message for ANY carrier/vendor API failure on this page.
+            // Raw vendor errors (timeouts, token failures) are never shown.
+            const DRAFT_API_FAIL_MSG = 'Shipment creation is delayed. Kindly contact Customer Care for assistance and resolution.';
 
             // Show alert helper
             function showAlert(type, message) {
@@ -3429,7 +3425,7 @@
                             if ($('#invoice-row-' + invoiceId).data('status') === 'ready') {
                                 revertRowToDraft($('#invoice-row-' + invoiceId));
                             }
-                            showAlert('danger', response.message || 'Manifest failed. No payment was deducted. The shipment has been moved back to Draft.');
+                            showAlert('danger', DRAFT_API_FAIL_MSG);
                             $btn.prop('disabled', false).html(originalButtonHtml);
                         }
                     },
@@ -3444,10 +3440,7 @@
                             $btn.prop('disabled', false).html(originalButtonHtml);
                             return;
                         }
-                        let msg = 'Error manifesting shipment.';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            msg = xhr.responseJSON.message;
-                        }
+                        let msg = DRAFT_API_FAIL_MSG;
                         showAlert('danger', msg);
                         $btn.prop('disabled', false).html(originalButtonHtml);
                     }

@@ -2011,6 +2011,7 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>HAWB Number</th>
+                                                <th>Tracking No.</th>
                                                 <th>Order Date</th>
                                                 <th>Receiver Details</th>
                                                 <th>Package Details</th>
@@ -2027,6 +2028,7 @@
                                                     if ($plPkg->chargeable_weight !== null && $plPkg->chargeable_weight !== '') { $plBillable += (float) $plPkg->chargeable_weight; }
                                                 }
                                                 $plStatus = $shipment->shipper_status ?? 'dispatched';
+                                                $plTrackingNo = ($trackingNoByShipper ?? [])[(int) ($shipment->shipper_id ?? 0)] ?? null;
                                             @endphp
                                             <tr data-manifest-number="{{ $shipment->manifest_number ?? '' }}">
                                                 <td>{{ $index + 1 }}</td>
@@ -2046,6 +2048,13 @@
                                                             <span class="hawb-sub-value">{{ $shipment->invoice_number ?: '-' }}</span>
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td style="white-space:nowrap;">
+                                                    @if(!empty($plTrackingNo))
+                                                        <span class="badge bg-info">{{ $plTrackingNo }}</span>
+                                                    @else
+                                                        <span class="text-muted">-</span>
+                                                    @endif
                                                 </td>
                                                 <td>
                                                     <div>{{ \Carbon\Carbon::parse($shipment->created_at)->format('d M Y') }}</div>

@@ -1272,6 +1272,19 @@ class AdminController extends Controller
                 ->groupBy('shipper_id');
         }
 
+        // Tracking No. column ke liye latest carrier tracking number,
+        // shipper_id se mapped (shipment_tracking, non-null only).
+        $trackingNoByShipper = [];
+        if (! empty($pkgShipperIds)) {
+            $trackingRows = \App\Models\ShipmentTracking::whereIn('shipper_id', $pkgShipperIds)
+                ->whereNotNull('shipment_identification_number')
+                ->orderBy('id')
+                ->get(['shipper_id', 'shipment_identification_number']);
+            foreach ($trackingRows as $trackingRow) {
+                $trackingNoByShipper[(int) $trackingRow->shipper_id] = (string) $trackingRow->shipment_identification_number;
+            }
+        }
+
         // Manifest ke saare shippers ke saare packages ka total chargeable weight.
         $manifestTotalWeight = function ($shipments) use ($packagesByShipper): float {
             $total = 0.0;
@@ -1418,7 +1431,7 @@ class AdminController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'mobile']);
 
-        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'assignedForPickupManifestGroups', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons', 'packagesByShipper'));
+        return view('admin.companies', compact('manifestGroups', 'manifestedShipments', 'readyForPickupManifestGroups', 'readyForPickupShipments', 'assignedForPickupShipments', 'assignedForPickupManifestGroups', 'printLabelShipments', 'readyToDispatchShipments', 'deliveryPersons', 'packagesByShipper', 'trackingNoByShipper'));
     }
 
     /**
