@@ -1187,7 +1187,7 @@
                                 <button type="button" class="md-close-manifest-btn" id="mdCloseManifestBtn" title="Close this manifest">
                                     <i class="ti ti-lock"></i> Close Manifest
                                 </button>
-                            @elseif(in_array($mdManifestStatus, [\App\Models\Manifest::STATUS_CLOSE, \App\Models\Manifest::STATUS_PICKUP], true))
+                            @elseif(in_array($mdManifestStatus, [\App\Models\Manifest::STATUS_CLOSE, \App\Models\Manifest::STATUS_PICKUP, \App\Models\Manifest::STATUS_DROP], true))
                                 <a href="{{ route($mdLabelRoute, ['manifestNumber' => $manifest->manifest_number]) }}" target="_blank" class="md-close-manifest-btn" title="Print manifest label" style="background:#0a7d33;">
                                     <i class="ti ti-printer"></i> Manifest Label
                                 </a>

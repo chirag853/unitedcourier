@@ -40,6 +40,7 @@ class Customer extends Authenticatable
         'csb_status',
         'status',
         'can_create_shipment',
+        'is_drop',
     ];
 
     protected $hidden = [
@@ -55,6 +56,7 @@ class Customer extends Authenticatable
         'csb_status' => 'integer',
         'status' => 'boolean',
         'can_create_shipment' => 'boolean',
+        'is_drop' => 'boolean',
     ];
 
     public function getAuthPassword()

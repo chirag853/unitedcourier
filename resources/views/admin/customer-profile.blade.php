@@ -534,6 +534,10 @@
                             </button>
                             <!-- <button type="button" class="stepper-nav-btn kyc-preview-btn" data-bs-toggle="modal" data-bs-target="#kycPreviewModal"><i class="ti ti-eye"></i> Preview KYC</button> -->
                             @endif
+                            <label class="action-btn" for="dropToggle" style="cursor:pointer;gap:6px;" title="Drop customer: closing a manifest moves shipments straight to Assigned for Pickup">
+                                <input type="checkbox" id="dropToggle" class="form-check-input m-0" {{ $customer->is_drop ? 'checked' : '' }}>
+                                <i class="ti ti-package"></i> Drop
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -2628,6 +2632,35 @@
                 submitBtn.innerHTML = '<i class="ti ti-plus me-1"></i>Recharge';
             });
         });
+
+        // Drop toggle: drop customers skip pickup — closing a manifest moves
+        // their shipments straight to Assigned for Pickup (DROP status).
+        var dropToggle = document.getElementById('dropToggle');
+        if (dropToggle) {
+            dropToggle.addEventListener('change', function() {
+                var checked = dropToggle.checked;
+                var token = document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : '{{ csrf_token() }}';
+                fetch('{{ route("admin.customer.toggle-drop", ["id" => $customer->id]) }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+                    body: JSON.stringify({ is_drop: checked ? 1 : 0 })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        dropToggle.checked = !!data.is_drop;
+                        Swal.fire({ icon: 'success', title: data.is_drop ? 'Drop Enabled' : 'Drop Disabled', text: data.message, timer: 2000, showConfirmButton: false });
+                    } else {
+                        dropToggle.checked = !checked;
+                        Swal.fire({ icon: 'error', title: 'Failed', text: data.message || 'Could not update drop status.' });
+                    }
+                })
+                .catch(function(err) {
+                    dropToggle.checked = !checked;
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Network error: ' + err.message });
+                });
+            });
+        }
 
         // SweetAlert2 confirmation for Approve KYC (same as kyc-pending page)
         var approveForm = document.querySelector('.approve-form');

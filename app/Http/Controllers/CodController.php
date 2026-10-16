@@ -1103,6 +1103,7 @@ class CodController extends Controller
                     'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
                     'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
                     'raw_response' => $shipmentResponse,
+                    'raw_request' => $upsPayloadResult['payload'] ?? null,
                     'status' => 'created',
                 ]
             );

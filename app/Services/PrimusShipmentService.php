@@ -57,7 +57,8 @@ class PrimusShipmentService
                     $result['description'],
                     $result['details'],
                     $isBulk,
-                    $targetStatus
+                    $targetStatus,
+                    $maskedPayload ?? null
                 );
             } catch (Throwable $exception) {
                 Log::error('Primus shipment persistence failed.', [
@@ -338,10 +339,11 @@ class PrimusShipmentService
         string $description,
         array $details,
         bool $isBulk,
-        string $targetStatus = 'manifested'
+        string $targetStatus = 'manifested',
+        ?array $requestPayload = null
     ): void {
         $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
-        DB::transaction(function () use ($shipper, $customerId, $response, $trackingNumber, $label, $statusCode, $description, $details, $isBulk, $targetStatus): void {
+        DB::transaction(function () use ($shipper, $customerId, $response, $trackingNumber, $label, $statusCode, $description, $details, $isBulk, $targetStatus, $requestPayload): void {
             $lockedShipper = ShipperInfo::whereKey($shipper->id)
                 ->where('customer_id', $customerId)
                 ->lockForUpdate()
@@ -369,6 +371,7 @@ class PrimusShipmentService
                     'billing_weight' => is_numeric($details['Weight'] ?? null) ? $details['Weight'] : null,
                     'package_results' => $label ? ['PDF' => $label] : null,
                     'raw_response' => $response,
+                    'raw_request' => $requestPayload,
                     'status' => 'created',
                 ]
             );

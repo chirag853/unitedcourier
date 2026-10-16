@@ -8,12 +8,14 @@ class Manifest extends Model
 {
     /**
      * Manifest status constants.
-     * 0 = open, 1 = remove, 3 = close, 4 = pickup
+     * 0 = open, 1 = remove, 3 = close, 4 = pickup, 5 = drop
+     * (drop = drop-customer manifest closed straight to assigned_for_pickup)
      */
     public const STATUS_OPEN    = 0;
     public const STATUS_REMOVE  = 1;
     public const STATUS_CLOSE   = 3;
     public const STATUS_PICKUP  = 4;
+    public const STATUS_DROP    = 5;
 
     /**
      * Human readable labels for each manifest status.
@@ -25,6 +27,7 @@ class Manifest extends Model
         self::STATUS_REMOVE  => 'Remove',
         self::STATUS_CLOSE   => 'Close',
         self::STATUS_PICKUP  => 'Pickup',
+        self::STATUS_DROP    => 'Drop',
     ];
 
     /**
@@ -37,6 +40,7 @@ class Manifest extends Model
         self::STATUS_REMOVE  => 'bg-danger',
         self::STATUS_CLOSE   => 'bg-dark',
         self::STATUS_PICKUP  => 'bg-warning text-dark',
+        self::STATUS_DROP    => 'bg-success',
     ];
 
     /**

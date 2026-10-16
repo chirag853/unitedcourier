@@ -620,6 +620,7 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
         ->name('admin.customer.kyc-document.download');
     Route::post('/customer/{id}/toggle-status', [AdminController::class, 'toggleCustomerStatus'])->name('admin.customer.toggle-status');
     Route::post('/customer/{id}/toggle-shipment-access', [AdminController::class, 'toggleShipmentAccess'])->name('admin.customer.toggle-shipment-access');
+    Route::post('/customer/{id}/toggle-drop', [AdminController::class, 'toggleDrop'])->name('admin.customer.toggle-drop');
     Route::get('/kyc-export', [AdminController::class, 'exportKycExcel'])->name('admin.kyc-export');
 
     // Manage Rate Routes

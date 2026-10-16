@@ -8541,7 +8541,7 @@ class CustomerController extends Controller
         }
 
         $alreadyClosed = $rows->every(function ($row) {
-            return (int) $row->status === Manifest::STATUS_CLOSE;
+            return in_array((int) $row->status, [Manifest::STATUS_CLOSE, Manifest::STATUS_DROP], true);
         });
 
         if ($alreadyClosed) {
@@ -8551,12 +8551,45 @@ class CustomerController extends Controller
             ], 422);
         }
 
+        // Drop customers skip pickup: manifest rows go to DROP (not CLOSE)
+        // and every shipment jumps straight to assigned_for_pickup.
+        $isDropCustomer = (bool) \App\Models\Customer::whereKey($customerId)->value('is_drop');
+        $newManifestStatus = $isDropCustomer ? Manifest::STATUS_DROP : Manifest::STATUS_CLOSE;
+
         Manifest::query()
             ->where('manifest_number', $manifestNumber)
             ->where('customer_id', $customerId)
-            ->update(['status' => Manifest::STATUS_CLOSE]);
+            ->update(['status' => $newManifestStatus]);
 
-        \Log::info('Manifest '.$manifestNumber.' closed by customer #'.$customerId.' ('.$rows->count().' manifest rows).');
+        \Log::info('Manifest '.$manifestNumber.' closed by customer #'.$customerId.' ('.$rows->count().' manifest rows, drop='.($isDropCustomer ? 'yes' : 'no').').');
+
+        if ($isDropCustomer) {
+            $dropShipperIds = $rows->pluck('shipper_id')->filter()->unique()->values()->all();
+            if (! empty($dropShipperIds)) {
+                ShipperInfo::whereIn('id', $dropShipperIds)
+                    ->where('customer_id', $customerId)
+                    ->update(['status' => 'assigned_for_pickup']);
+                foreach ($dropShipperIds as $dropShipperId) {
+                    $dropShipper = ShipperInfo::find($dropShipperId);
+                    if (! $dropShipper) {
+                        continue;
+                    }
+                    Tracking::firstOrCreate(
+                        ['shipper_id' => $dropShipper->id, 'status' => 'assigned_for_pickup'],
+                        [
+                            'awb_number' => $dropShipper->awb_number,
+                            'uwc_id' => $dropShipper->awb_number,
+                            'title' => Tracking::getTitleForStatus('assigned_for_pickup'),
+                        ]
+                    );
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Manifest '.$manifestNumber.' has been closed and assigned for pickup (drop customer).',
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -8641,6 +8674,19 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'This manifest is already assigned for pickup.',
+            ], 422);
+        }
+
+        // Drop manifests are terminal (already assigned on close) — they can
+        // never go through the pickup-assignment flow.
+        $isDropManifest = $rows->every(function ($row) {
+            return (int) $row->status === Manifest::STATUS_DROP;
+        });
+
+        if ($isDropManifest) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This is a drop manifest and is already assigned for pickup.',
             ], 422);
         }
 
@@ -10191,7 +10237,9 @@ class CustomerController extends Controller
                         $trackingNumber,
                         $labelUrl,
                         false,
-                        $targetStatus
+                        $targetStatus,
+                        null,
+                        $shipUniversalResult['request_payload'] ?? null
                     );
                 } catch (\Exception $e) {
                     \Log::error('Failed to store ShipUniversal manifest: '.$e->getMessage());
@@ -10299,6 +10347,7 @@ class CustomerController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Overseas Logistic shipment created',
+                            'raw_request' => $overseasResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -10419,6 +10468,7 @@ class CustomerController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'PostShipping shipment created',
+                            'raw_request' => $postShippingResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -10528,6 +10578,7 @@ class CustomerController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Flying Tigers shipment created',
+                            'raw_request' => $flyingTigersResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -10635,6 +10686,7 @@ class CustomerController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Ship Global order created',
+                            'raw_request' => $shipGlobalResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -10743,6 +10795,7 @@ class CustomerController extends Controller
                             'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
                             'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
                             'raw_response' => $shipmentResponse,
+                            'raw_request' => $upsPayload ?? null,
                             'status' => 'created',
                         ]
                     );
@@ -10964,7 +11017,8 @@ class CustomerController extends Controller
                             $labelUrl,
                             true,
                             'manifested',
-                            $bulkManifestNumber
+                            $bulkManifestNumber,
+                            $shipUniversalResult['request_payload'] ?? null
                         );
 
                         // Payment is cut only AFTER the manifest succeeds.
@@ -11052,6 +11106,7 @@ class CustomerController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Overseas Logistic shipment created',
+                                'raw_request' => $overseasResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -11132,6 +11187,7 @@ class CustomerController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'PostShipping shipment created',
+                                'raw_request' => $postShippingResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -11229,6 +11285,7 @@ class CustomerController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Flying Tigers shipment created',
+                                'raw_request' => $flyingTigersResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -11325,6 +11382,7 @@ class CustomerController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Ship Global order created',
+                                'raw_request' => $shipGlobalResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -11420,6 +11478,7 @@ class CustomerController extends Controller
                                 'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
                                 'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
                                 'raw_response' => $shipmentResponse,
+                                'raw_request' => $upsPayload ?? null,
                                 'status' => 'created',
                             ]
                         );
@@ -13352,7 +13411,8 @@ class CustomerController extends Controller
         $labelUrl,
         $isBulk = false,
         $targetStatus = 'manifested',
-        ?string $manifestNumber = null
+        ?string $manifestNumber = null,
+        ?array $requestPayload = null
     ) {
         $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
@@ -13371,6 +13431,7 @@ class CustomerController extends Controller
                 'billing_weight' => null,
                 'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $requestPayload,
                 'status' => 'created',
             ]
         );
@@ -15576,6 +15637,7 @@ class CustomerController extends Controller
                     'billing_weight' => $totalWeight,
                     'package_results' => null,
                     'raw_response' => $apiResponse,
+                    'raw_request' => $shipGlobalResult['request_payload'] ?? null,
                     'status' => 'created',
                 ]
             );

@@ -5121,7 +5121,8 @@ class PrepaidController extends Controller
         $isBulk = false,
         $targetStatus = 'manifested',
         ?string $manifestNumber = null,
-        int $adminId = 0
+        int $adminId = 0,
+        ?array $requestPayload = null
     ) {
         $targetStatus = $targetStatus === 'ready' ? 'ready' : 'manifested';
         $createShipment = CreateShipment::where('shipper_id', $shipper->id)->first();
@@ -5140,6 +5141,7 @@ class PrepaidController extends Controller
                 'billing_weight' => null,
                 'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $requestPayload,
                 'status' => 'created',
             ]
         );
@@ -9137,7 +9139,8 @@ class PrepaidController extends Controller
                         false,
                         $targetStatus,
                         null,
-                        $adminId
+                        $adminId,
+                        $shipUniversalResult['request_payload'] ?? null
                     );
                 } catch (\Exception $e) {
                     \Log::error('Failed to store prepaid ShipUniversal manifest: '.$e->getMessage());
@@ -9240,6 +9243,7 @@ class PrepaidController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Overseas Logistic shipment created',
+                            'raw_request' => $overseasResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -9339,6 +9343,7 @@ class PrepaidController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'PostShipping shipment created',
+                            'raw_request' => $postShippingResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -9445,6 +9450,7 @@ class PrepaidController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Flying Tigers shipment created',
+                            'raw_request' => $flyingTigersResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -9550,6 +9556,7 @@ class PrepaidController extends Controller
                             'create_shipment_id' => $createShipment ? $createShipment->id : null,
                             'response_status_code' => '1',
                             'response_status_description' => 'Ship Global order created',
+                            'raw_request' => $shipGlobalResult['request_payload'] ?? null,
                             'shipment_identification_number' => $trackingNumber,
                             'total_charges_currency' => 'INR',
                             'total_charges_amount' => null,
@@ -9656,6 +9663,7 @@ class PrepaidController extends Controller
                             'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
                             'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
                             'raw_response' => $shipmentResponse,
+                            'raw_request' => $upsPayload ?? null,
                             'status' => 'created',
                         ]
                     );
@@ -9895,7 +9903,8 @@ class PrepaidController extends Controller
                             true,
                             'manifested',
                             $bulkManifestNumber,
-                            $adminId
+                            $adminId,
+                            $shipUniversalResult['request_payload'] ?? null
                         );
 
                         // Payment is cut only AFTER the manifest succeeds.
@@ -9983,6 +9992,8 @@ class PrepaidController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Overseas Logistic shipment created',
+                                'raw_request' => $overseasResult['request_payload'] ?? null,
+                            'raw_request' => $overseasResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -10063,6 +10074,8 @@ class PrepaidController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'PostShipping shipment created',
+                                'raw_request' => $postShippingResult['request_payload'] ?? null,
+                            'raw_request' => $postShippingResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -10160,6 +10173,8 @@ class PrepaidController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Flying Tigers shipment created',
+                                'raw_request' => $flyingTigersResult['request_payload'] ?? null,
+                            'raw_request' => $flyingTigersResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -10256,6 +10271,8 @@ class PrepaidController extends Controller
                                 'create_shipment_id' => $createShipment ? $createShipment->id : null,
                                 'response_status_code' => '1',
                                 'response_status_description' => 'Ship Global order created',
+                                'raw_request' => $shipGlobalResult['request_payload'] ?? null,
+                            'raw_request' => $shipGlobalResult['request_payload'] ?? null,
                                 'shipment_identification_number' => $trackingNumber,
                                 'total_charges_currency' => 'INR',
                                 'total_charges_amount' => null,
@@ -10351,6 +10368,7 @@ class PrepaidController extends Controller
                                 'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
                                 'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
                                 'raw_response' => $shipmentResponse,
+                                'raw_request' => $upsPayload ?? null,
                                 'status' => 'created',
                             ]
                         );
@@ -10484,6 +10502,7 @@ class PrepaidController extends Controller
                 'billing_weight' => null,
                 'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $shipUniversalResult['request_payload'] ?? null,
             ]);
 
             return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
@@ -10540,6 +10559,7 @@ class PrepaidController extends Controller
                     'BoxLabelURL' => $boxLabelUrl,
                 ]) : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $overseasResult['request_payload'] ?? null,
             ]);
 
             return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
@@ -10569,6 +10589,7 @@ class PrepaidController extends Controller
                 'billing_weight' => null,
                 'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $postShippingResult['request_payload'] ?? null,
             ]);
 
             return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
@@ -10608,6 +10629,7 @@ class PrepaidController extends Controller
                 'billing_weight' => null,
                 'package_results' => $labelUrl ? ['LabelURL' => $labelUrl] : null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $flyingTigersResult['request_payload'] ?? null,
             ]);
 
             return ['success' => true, 'tracking_number' => $trackingNumber, 'label_url' => $labelUrl];
@@ -10657,6 +10679,7 @@ class PrepaidController extends Controller
                 'billing_weight' => null,
                 'package_results' => null,
                 'raw_response' => $apiResponse,
+                'raw_request' => $shipGlobalResult['request_payload'] ?? null,
             ]);
 
             return ['success' => true, 'tracking_number' => $trackingNumber];
@@ -10704,6 +10727,7 @@ class PrepaidController extends Controller
             'billing_weight' => $shipmentResponse['ShipmentResults']['BillingWeight']['Weight'] ?? null,
             'package_results' => $shipmentResponse['ShipmentResults']['PackageResults'] ?? null,
             'raw_response' => $shipmentResponse,
+            'raw_request' => $upsPayloadResult['payload'] ?? null,
         ]);
 
         Log::info('Prepaid order accepted by UPS Ship API.', [

@@ -3346,7 +3346,22 @@ class AdminController extends Controller
                 // unreadable package_results value) still print 4x6.
                 if (empty($pdfBase64)) {
                     $labelUrl = null;
-                    if (is_array($firstPkg)) {
+                    // Prefer the per-tracking LabelUrl (e.g. ShipUniversal
+                    // Data.TrackingNumbers[0].LabelUrl) over the airwaybill.
+                    if (is_array($rawResponse)) {
+                        foreach (['Data', 'data'] as $dataKey) {
+                            $trackingList = $rawResponse[$dataKey]['TrackingNumbers'] ?? null;
+                            if (is_array($trackingList)) {
+                                foreach ($trackingList as $trackingEntry) {
+                                    if (is_array($trackingEntry) && ! empty($trackingEntry['LabelUrl'])) {
+                                        $labelUrl = $trackingEntry['LabelUrl'];
+                                        break 2;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (empty($labelUrl) && is_array($firstPkg)) {
                         $labelUrl = $firstPkg['BoxLabelURL'] ?? null;
                     }
                     if (empty($labelUrl) && is_array($rawResponse)) {
@@ -10016,6 +10031,45 @@ class AdminController extends Controller
 
         return redirect()->back()
             ->with('success', "Shipment creation for {$customerName} has been {$action} successfully.");
+    }
+
+    /**
+     * Toggle the drop flag for a customer. Drop customers skip pickup:
+     * closing a manifest moves their shipments straight to
+     * assigned_for_pickup and marks manifest rows as DROP.
+     */
+    public function toggleDrop(Request $request, $id)
+    {
+        $customer = Customer::findOrFail($id);
+
+        if ($request->has('is_drop')) {
+            $customer->is_drop = (bool) $request->input('is_drop');
+        } else {
+            $customer->is_drop = ! $customer->is_drop;
+        }
+        $customer->save();
+
+        $action = $customer->is_drop ? 'enabled' : 'disabled';
+        $customerName = $customer->first_name . ' ' . $customer->last_name;
+
+        \App\Support\SystemLogger::log(
+            'customer.drop_toggle',
+            "Drop for {$customerName} has been {$action}",
+            'customer',
+            ! (bool) $customer->is_drop,
+            (bool) $customer->is_drop
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'is_drop' => (bool) $customer->is_drop,
+                'message' => "Drop for {$customerName} has been {$action} successfully.",
+            ]);
+        }
+
+        return redirect()->back()
+            ->with('success', "Drop for {$customerName} has been {$action} successfully.");
     }
 
     /**

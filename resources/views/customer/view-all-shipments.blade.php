@@ -938,7 +938,7 @@
                                                                 data-manifest-number="{{ $manifest->manifest_number }}">
                                                             <i class="ti ti-lock"></i>
                                                         </button>
-                                                    @elseif(in_array($manifestStatusVal, [\App\Models\Manifest::STATUS_CLOSE, \App\Models\Manifest::STATUS_PICKUP], true))
+                                                    @elseif(in_array($manifestStatusVal, [\App\Models\Manifest::STATUS_CLOSE, \App\Models\Manifest::STATUS_PICKUP, \App\Models\Manifest::STATUS_DROP], true))
                                                         <a href="{{ route('customer.manifest-label', ['manifestNumber' => $manifest->manifest_number]) }}"
                                                            target="_blank"
                                                            class="btn btn-sm btn-outline-success btn-icon"
