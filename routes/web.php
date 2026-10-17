@@ -751,6 +751,7 @@ Route::prefix('customer')->name('customer.')->middleware(['log.activity', 'redir
     Route::post('/bulk-upload', [BulkUploadController::class, 'processBulkUpload'])->name('bulk-upload.process');
     Route::post('/bulk-upload/preview', [BulkUploadController::class, 'previewBulkUpload'])->name('bulk-upload.preview');
     Route::get('/bulk-invoice-pdf/{shipper}', [BulkUploadController::class, 'downloadBulkInvoicePdf'])->name('bulk-invoice-pdf');
+    Route::get('/bulk-upload/failed-download/{file}', [BulkUploadController::class, 'downloadFailedRows'])->name('bulk-upload.download-failed');
     Route::post('/ups-rate', [CustomerController::class, 'getUpsRate'])->name('ups.rate');
     Route::post('/ups-ship', [CustomerController::class, 'createUpsShipment'])->name('ups.ship');
     Route::get('/view-all-shipments', [CustomerController::class, 'viewAllShipments'])->name('view-all-shipments');

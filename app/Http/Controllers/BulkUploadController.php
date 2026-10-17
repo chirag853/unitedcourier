@@ -68,8 +68,8 @@ class BulkUploadController extends Controller
             if (function_exists('set_time_limit')) {
                 @set_time_limit(300);
             }
-            @ini_set('max_execution_time', '300');
-            @ini_set('memory_limit', '512M');
+            // @ini_set('max_execution_time', '300');
+            // @ini_set('memory_limit', '512M');
 
             $file = $request->file('excel_file');
             $filePath = $file->getRealPath();
@@ -395,7 +395,15 @@ class BulkUploadController extends Controller
                         }
                     }
 
-                    $shippingMethod = $courierService ? $courierService->method : ($serviceType ?: null);
+                    // Rate nahi mila (na preview selection, na ServiceType
+                    // fallback) — silent zero-price draft banane ke bajaye row
+                    // fail karo. Aisi rows "insert nahi hue" list + failed
+                    // Excel export me jayengi.
+                    if (! $courierService) {
+                        throw new \Exception("No rate found for this shipment (AwbNo '{$awbNo}'). Select a rate in preview or provide ServiceType.");
+                    }
+
+                    $shippingMethod = $courierService->method;
 
                     // ---- Fail fast: saare item rows ka HSN validate karo
                     // kuch create karne SE PEHLE, taaki fail hone par koi
@@ -665,10 +673,23 @@ class BulkUploadController extends Controller
 
             DB::commit();
 
+            // Failed (skipped) rows ko Excel me export karo — original columns
+            // + last me Error_Reason column, taaki customer fix karke dobara
+            // upload kar sake. Export fail ho to upload result block na karo.
+            $failedDownloadFile = null;
+            if (! empty($errors)) {
+                try {
+                    $failedDownloadFile = $this->buildFailedRowsExcel($rows, $grouped, $errors, $customerId);
+                } catch (\Exception $e) {
+                    \Log::error('Bulk upload [process]: failed-rows Excel could not be generated (customer ' . $customerId . '): ' . $e->getMessage());
+                }
+            }
+
             return back()->with([
                 'success' => $successCount . ' shipment(s) created successfully from the bulk upload.',
                 'created_shipments' => $createdShipments,
                 'upload_errors' => $errors,
+                'failed_download_file' => $failedDownloadFile,
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1258,6 +1279,94 @@ class BulkUploadController extends Controller
         }
 
         return response()->download(public_path($relativePath), 'invoice_' . $shipper->awb_number . '.pdf');
+    }
+
+    /**
+     * Failed (skipped) rows ko ek Excel sheet me export karo — original
+     * columns + last me "Error_Reason" column. Customer ise fix karke dobara
+     * upload kar sakta hai (extra column header-map ignore karta hai).
+     *
+     * @return string Saved file name (uploads/bulk_failed/ ke andar)
+     */
+    private function buildFailedRowsExcel(array $rows, array $grouped, array $errors, int $customerId): string
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Failed Rows');
+
+        // Header row: original headers + Error_Reason.
+        $headers = array_map(function ($h) {
+            return (string) $h;
+        }, $rows[0]);
+        $headers[] = 'Error_Reason';
+        $sheet->fromArray($headers, null, 'A1');
+
+        // Data rows: har failed AWB ke saare original rows + us AWB ka error.
+        $rowIndex = 2;
+        foreach ($errors as $err) {
+            $awbNo = (string) ($err['awb_no'] ?? '');
+            $message = (string) ($err['message'] ?? '');
+            $awbRows = $grouped[$awbNo] ?? [];
+            foreach ($awbRows as $failedRow) {
+                $line = array_map(function ($cell) {
+                    return $cell === null ? '' : $cell;
+                }, $failedRow);
+                $line[] = $message;
+                $sheet->fromArray($line, null, 'A' . $rowIndex);
+                $rowIndex++;
+            }
+        }
+
+        $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->getFont()->setBold(true);
+
+        $directory = public_path('uploads/bulk_failed');
+        if (! file_exists($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        // Purani failed files (7 din se purani) best-effort cleanup —
+        // export kabhi bhi cleanup ki wajah se fail na ho.
+        try {
+            foreach (glob($directory . '/failed_*.xlsx') ?: [] as $oldFile) {
+                if (filemtime($oldFile) < time() - (7 * 24 * 60 * 60)) {
+                    @unlink($oldFile);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore — cleanup optional hai.
+        }
+
+        $filename = 'failed_' . $customerId . '_' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(4)), 0, 8) . '.xlsx';
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($directory . '/' . $filename);
+        $spreadsheet->disconnectWorksheets();
+
+        return $filename;
+    }
+
+    /**
+     * Download a previously generated failed-rows Excel for this customer.
+     * Security: sirf apni (failed_<customerId>_*) files, basename ke alawa
+     * kuch nahi.
+     */
+    public function downloadFailedRows($file)
+    {
+        if (!auth()->guard('customer')->check()) {
+            return redirect()->route('login');
+        }
+
+        $customer = auth()->guard('customer')->user();
+
+        $file = basename((string) $file);
+        if (! preg_match('/^failed_' . (int) $customer->id . '_[A-Za-z0-9_]+\.xlsx$/', $file)) {
+            abort(404);
+        }
+
+        $fullPath = public_path('uploads/bulk_failed/' . $file);
+        if (! is_file($fullPath)) {
+            abort(404);
+        }
+
+        return response()->download($fullPath, $file);
     }
 
     /**

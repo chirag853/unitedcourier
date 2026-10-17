@@ -357,6 +357,11 @@
                                                     <li><strong>AwbNo: {{ $err['awb_no'] }}</strong> - {{ $err['message'] }}</li>
                                                 @endforeach
                                             </ul>
+                                            @if(session('failed_download_file'))
+                                                <a href="{{ route('customer.bulk-upload.download-failed', session('failed_download_file')) }}" class="btn btn-sm btn-outline-danger mt-3">
+                                                    <i class="ti ti-download me-1"></i> {{ count($uploadErrors) }} record(s) were not inserted — Download Excel
+                                                </a>
+                                            @endif
                                         </div>
                                     @endif
                                 </div>
@@ -393,6 +398,9 @@
                         </span>
                         <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
                             <i class="ti ti-cash me-1"></i> Grand Total: <strong id="previewGrandTotal">₹0.00</strong>
+                        </span>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 d-none" id="previewNoRateBadge">
+                            <i class="ti ti-alert-triangle me-1"></i> No Rate: <strong id="previewNoRateCount">0</strong>
                         </span>
                         <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2">
                             <i class="ti ti-info-circle me-1"></i> Click a shipment to expand & select a rate
@@ -550,6 +558,20 @@
 
                 $('#previewTotalShipments').text(data.total_shipments || shipments.length);
 
+                // No-rate shipments ka count badge (jinki all_rates khaali hai).
+                var noRateCount = 0;
+                shipments.forEach(function (s) {
+                    if (!s.all_rates || s.all_rates.length === 0) {
+                        noRateCount++;
+                    }
+                });
+                if (noRateCount > 0) {
+                    $('#previewNoRateCount').text(noRateCount);
+                    $('#previewNoRateBadge').removeClass('d-none');
+                } else {
+                    $('#previewNoRateBadge').addClass('d-none');
+                }
+
                 shipments.forEach(function (s, idx) {
                     var allRates = s.all_rates || [];
                     var defaultRate = s.default_rate || null;
@@ -699,9 +721,10 @@
                     .replace(/'/g, '&#039;');
             }
 
-            // Confirm button in modal - submit the form with selected rates
+            // Confirm button in modal - submit the form with selected rates.
+            // Rate-na-mila shipments skip ho jati hain (insert nahi hoti) aur
+            // upload ke baad failed Excel me download kar sakte ho.
             $('#confirmSubmitBtn').on('click', function () {
-                // Validate that every shipment has a selected rate
                 var missingCount = 0;
                 if (previewData && previewData.shipments) {
                     previewData.shipments.forEach(function (s) {
@@ -710,18 +733,42 @@
                         }
                     });
                 }
+
+                var doSubmit = function () {
+                    // Populate the hidden field with the selected rate map
+                    $('#selectedRatesInput').val(JSON.stringify(selectedRateMap));
+                    var modal = bootstrap.Modal.getInstance(document.getElementById('previewModal'));
+                    if (modal) modal.hide();
+
+                    // Show the hidden submit button and trigger form submission
+                    $submitBtn.removeClass('d-none').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
+                    $form.trigger('submit');
+                };
+
                 if (missingCount > 0) {
-                    showAlert('Please select a rate for all ' + missingCount + ' shipment(s) before confirming.', 'warning');
+                    var totalShipments = previewData && previewData.shipments ? previewData.shipments.length : 0;
+                    var readyCount = totalShipments - missingCount;
+                    var message = missingCount + ' shipment(s) have no rate available and will not be inserted.\n\n' +
+                        readyCount + ' shipment(s) will be created. You can download the skipped records as an Excel file after the upload.\n\nContinue?';
+                    if (window.Swal) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Some shipments will be skipped',
+                            html: escapeHtml(message).replace(/\n/g, '<br>'),
+                            showCancelButton: true,
+                            confirmButtonText: 'Continue',
+                            cancelButtonText: 'Cancel',
+                            confirmButtonColor: '#405189'
+                        }).then(function (result) {
+                            if (result.isConfirmed) doSubmit();
+                        });
+                    } else if (window.confirm(message)) {
+                        doSubmit();
+                    }
                     return;
                 }
-                // Populate the hidden field with the selected rate map
-                $('#selectedRatesInput').val(JSON.stringify(selectedRateMap));
-                var modal = bootstrap.Modal.getInstance(document.getElementById('previewModal'));
-                if (modal) modal.hide();
 
-                // Show the hidden submit button and trigger form submission
-                $submitBtn.removeClass('d-none').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Processing...');
-                $form.trigger('submit');
+                doSubmit();
             });
 
             // Form submit loading state
