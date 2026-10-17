@@ -51,10 +51,16 @@ class BulkUploadController extends Controller
         $customer = auth()->guard('customer')->user();
         $customerId = $customer->id;
 
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
-            'selected_rates' => 'nullable|string', // JSON map: { awb_no: rate_id }
-        ]);
+        try {
+            $request->validate([
+                'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
+                'selected_rates' => 'nullable|string', // JSON map: { awb_no: rate_id }
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validation wale errors bhi log me store karo (UI ke alawa).
+            \Log::error('Bulk upload [process]: validation failed (customer ' . $customerId . '): ' . collect($e->errors())->flatten()->implode(' | '));
+            throw $e;
+        }
 
         try {
             // Badi file (100+ shipments) same request me process hoti hai —
@@ -76,6 +82,7 @@ class BulkUploadController extends Controller
             $rows = $sheet->toArray(null, true, true, false);
 
             if (count($rows) < 2) {
+                \Log::error('Bulk upload [process]: file contains no data rows (customer ' . $customerId . ', file ' . $file->getClientOriginalName() . ').');
                 return back()->with('error', 'The uploaded file does not contain any data rows.');
             }
 
@@ -128,6 +135,7 @@ class BulkUploadController extends Controller
             }
 
             if (empty($grouped)) {
+                \Log::error('Bulk upload [process]: no valid rows with AwbNo (customer ' . $customerId . ', file ' . $file->getClientOriginalName() . ').');
                 return back()->with('info', 'No valid rows with AwbNo found in the uploaded file.');
             }
 
@@ -189,7 +197,7 @@ class BulkUploadController extends Controller
                         'awb_no' => $awbNo,
                         'message' => $duplicateAwbs[(string) $awbNo],
                     ];
-                    \Log::error('Bulk upload skipped duplicate ReferenceNo for AwbNo ' . $awbNo);
+                    \Log::error('Bulk upload [process]: skipped duplicate ReferenceNo for AwbNo ' . $awbNo . ' (customer ' . $customerId . '): ' . $duplicateAwbs[(string) $awbNo]);
 
                     continue;
                 }
@@ -651,7 +659,7 @@ class BulkUploadController extends Controller
                         'awb_no' => $awbNo,
                         'message' => $e->getMessage(),
                     ];
-                    \Log::error('Bulk upload error for AwbNo ' . $awbNo . ': ' . $e->getMessage());
+                    \Log::error('Bulk upload [process]: AwbNo ' . $awbNo . ' failed (customer ' . $customerId . '): ' . $e->getMessage());
                 }
             }
 
@@ -664,10 +672,11 @@ class BulkUploadController extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Bulk upload [process]: validation failed (customer ' . $customerId . '): ' . collect($e->errors())->flatten()->implode(' | '));
             return back()->withErrors($e->validator)->withInput()->with('error', 'Validation failed. Please upload a valid Excel file.');
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Bulk upload failed: ' . $e->getMessage());
+            \Log::error('Bulk upload [process]: failed (customer ' . $customerId . '): ' . $e->getMessage());
             return back()->with('error', 'Bulk upload failed: ' . $e->getMessage());
         }
     }
@@ -679,15 +688,22 @@ class BulkUploadController extends Controller
     public function previewBulkUpload(Request $request)
     {
         if (!auth()->guard('customer')->check()) {
+            \Log::warning('Bulk upload [preview]: unauthorized request.');
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $customer = auth()->guard('customer')->user();
         $customerId = $customer->id;
 
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
-        ]);
+        try {
+            $request->validate([
+                'excel_file' => 'required|file|mimes:xls,xlsx,csv|max:20480',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validation wale errors bhi log me store karo (UI ke alawa).
+            \Log::error('Bulk upload [preview]: validation failed (customer ' . $customerId . '): ' . collect($e->errors())->flatten()->implode(' | '));
+            throw $e;
+        }
 
         try {
             // Badi file par preview calculation me timeout na ho isliye guard lagao.
@@ -707,6 +723,7 @@ class BulkUploadController extends Controller
             $rows = $sheet->toArray(null, true, true, false);
 
             if (count($rows) < 2) {
+                \Log::error('Bulk upload [preview]: file contains no data rows (customer ' . $customerId . ', file ' . $file->getClientOriginalName() . ').');
                 return response()->json(['success' => false, 'message' => 'The uploaded file does not contain any data rows.']);
             }
 
@@ -756,6 +773,7 @@ class BulkUploadController extends Controller
             }
 
             if (empty($grouped)) {
+                \Log::error('Bulk upload [preview]: no valid rows with AwbNo (customer ' . $customerId . ', file ' . $file->getClientOriginalName() . ').');
                 return response()->json(['success' => false, 'message' => 'No valid rows with AwbNo found in the uploaded file.']);
             }
 
@@ -974,6 +992,14 @@ class BulkUploadController extends Controller
                     $zoneError = "No rate found for weight {$totalChgWeight}kg in zone '{$zoneLabel}' for service '{$serviceType}' (destination '{$destination}').";
                 }
 
+                // User ko preview me dikhne wala koi bhi error log me bhi store karo.
+                $previewError = $serviceTypeError ?? $zoneError;
+                if ($previewError !== null) {
+                    \Log::warning('Bulk upload [preview]: AwbNo ' . $awbNo . ' — ' . $previewError . ' (customer ' . $customerId . ')');
+                } elseif (empty($allRates)) {
+                    \Log::warning('Bulk upload [preview]: AwbNo ' . $awbNo . ' — no rates available (customer ' . $customerId . ', weight ' . $totalChgWeight . 'kg, zone ' . ($consigneeState ?: 'unknown') . ', destination ' . ($destination ?: 'unknown') . ').');
+                }
+
                 $previewShipments[] = [
                     'awb_no' => $awbNo,
                     'consignee_name' => $consigneeName ?: '-',
@@ -989,7 +1015,7 @@ class BulkUploadController extends Controller
                     'default_rate' => $defaultRate,
                     'row_count' => count($rowGroup),
                     'service_type' => $serviceType ?: '-',
-                    'error' => $serviceTypeError ?? $zoneError,
+                    'error' => $previewError,
                 ];
 
                 $grandTotal += $defaultRate['total'] ?? 0;
@@ -1003,9 +1029,10 @@ class BulkUploadController extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Bulk upload [preview]: validation failed (customer ' . $customerId . '): ' . collect($e->errors())->flatten()->implode(' | '));
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            \Log::error('Bulk upload preview failed: ' . $e->getMessage());
+            \Log::error('Bulk upload [preview]: failed (customer ' . $customerId . '): ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Preview failed: ' . $e->getMessage()], 500);
         }
     }
