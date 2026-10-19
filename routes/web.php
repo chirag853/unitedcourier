@@ -124,6 +124,8 @@ Route::prefix('admin')->middleware('log.activity')->group(function () {
     Route::get('/cancel-orders', [AdminController::class, 'cancelOrders'])->name('admin.cancel-orders');
     Route::get('/customer-report', [AdminController::class, 'customerReport'])->name('admin.customer-report');
     Route::get('/customer-report/export', [AdminController::class, 'exportCustomerReport'])->name('admin.customer-report.export');
+    // Customer Report ke draft rows ka base rate edit (Action column button).
+    Route::post('/customer-report/update-base-rate', [AdminController::class, 'updateCustomerReportBaseRate'])->name('admin.customer-report.update-base-rate');
     Route::get('/wallet-transactions', [AdminController::class, 'walletTransactions'])->name('admin.wallet-transactions');
     Route::get('/wallet-transactions/data', [AdminController::class, 'walletTransactionsData'])->name('admin.wallet-transactions.data');
     Route::post('/apply-dispute-charge', [AdminController::class, 'applyDisputeCharge'])->name('admin.apply-dispute-charge');

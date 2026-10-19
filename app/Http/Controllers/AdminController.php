@@ -9521,14 +9521,15 @@ class AdminController extends Controller
     }
 
     /**
-     * Customer Report (read-only, admin side).
+     * Customer Report (admin side).
      *
      * Sidebar > Reports > Customer Report. Customer-wise saari shipment
      * details — kaunsi shipment kis step (draft/ready/packed/manifested/
      * ready_for_pickup/assigned_for_pickup/received/dispatched/delivered/
      * cancelled/disputed/on_hold) par hai — bilkul view-all-shipments jaisa
-     * table, lekin yahan koi action (pay/cancel/print/manifest/assign)
-     * available nahi hai. Sirf dekhne + filter karne ke liye.
+     * table. Baaki actions (pay/cancel/print/manifest/assign) yahan nahi
+     * hain; sirf draft shipments ke liye base rate edit ka ek Action column
+     * hai (dekho: updateCustomerReportBaseRate).
      */
     /**
      * Customer Report listing + Excel export dono ke liye shared filtered query.
@@ -9547,7 +9548,7 @@ class AdminController extends Controller
         return ShipmentInvoice::query()
             ->with([
                 'shipperInfo' => function ($q) {
-                    $q->select('id', 'customer_id', 'awb_number', 'company_name', 'contact_person', 'city', 'state', 'pincode', 'status', 'total_price', 'created_at');
+                    $q->select('id', 'customer_id', 'awb_number', 'company_name', 'contact_person', 'city', 'state', 'pincode', 'status', 'total_price', 'base_price', 'fuel_price', 'gst_percentage', 'gst_amount', 'surcharge_total', 'total_base_price', 'total_fuel_price', 'total_surcharge', 'created_at');
                 },
                 'shipperInfo.manifest' => function ($q) {
                     $q->select('id', 'shipper_id', 'manifest_number', 'status', 'created_at');
@@ -9654,6 +9655,156 @@ class AdminController extends Controller
         ];
 
         return view('admin.customer-report', compact('invoices', 'statusCounts', 'statusOptions', 'customers', 'status', 'customerId'));
+    }
+
+    /**
+     * Customer Report — draft shipment ka base rate update.
+     *
+     * Sirf draft shipments allowed hain (status null/''/'draft', invoice
+     * cancelled nahi, manifest nahi bana). Rule:
+     *   - Base rate (base_price + total_base_price) naya value set hota hai.
+     *   - GST sirf tab recalculate hota hai jab original amount percentage
+     *     based tha (gst_percentage > 0 aur purana gst amount percentage math
+     *     se match karta ho) — fixed-amount GST wale shipments me GST waisa
+     *     hi rehta hai.
+     *   - Total price delta se update hota hai (purana total + base ka
+     *     difference + gst ka difference) taaki creation par total me folded
+     *     extra amounts (jaise CSB-V dispute charge) preserve rahein.
+     */
+    public function updateCustomerReportBaseRate(Request $request)
+    {
+        $validated = $request->validate([
+            'shipper_id' => ['required', 'integer', 'exists:shipper_info,id'],
+            'base_rate'  => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+        ]);
+
+        $admin = Auth::guard('admin')->user();
+
+        try {
+            $result = DB::transaction(function () use ($validated, $admin) {
+                $shipper = ShipperInfo::where('id', $validated['shipper_id'])->lockForUpdate()->first();
+
+                if (! $shipper) {
+                    return ['success' => false, 'code' => 404, 'message' => 'Shipment not found.'];
+                }
+
+                // Draft-only guard: paid / manifested / dispatched shipments
+                // ka base rate edit nahi ho sakta.
+                $currentStatus = (string) ($shipper->status ?? '');
+                if ($currentStatus !== '' && $currentStatus !== 'draft') {
+                    return [
+                        'success' => false,
+                        'code' => 422,
+                        'message' => 'Sirf draft shipments ka base rate edit ho sakta hai. Ye shipment "'.($shipper->status ?: 'unknown').'" status me hai.',
+                    ];
+                }
+
+                if ($shipper->manifest()->exists()) {
+                    return ['success' => false, 'code' => 422, 'message' => 'Is shipment ka manifest ban chuka hai, base rate edit nahi ho sakta.'];
+                }
+
+                if (ShipmentInvoice::where('shipper_id', $shipper->id)->where('status', 'cancelled')->exists()) {
+                    return ['success' => false, 'code' => 422, 'message' => 'Cancelled shipment ka base rate edit nahi ho sakta.'];
+                }
+
+                $oldBase = (float) ($shipper->base_price ?? $shipper->total_base_price ?? 0);
+                $fuel = (float) ($shipper->fuel_price ?? $shipper->total_fuel_price ?? 0);
+                $surchargeTotal = (float) ($shipper->surcharge_total ?? $shipper->total_surcharge ?? 0);
+                $gstPct = (float) ($shipper->gst_percentage ?? 0);
+                $oldGst = (float) ($shipper->gst_amount ?? 0);
+                $oldTotal = (float) ($shipper->total_price ?? 0);
+
+                $newBase = round((float) $validated['base_rate'], 2);
+
+                // GST recalc sirf percentage-based original GST ke liye.
+                $newGst = $oldGst;
+                $gstRecalculated = false;
+                if ($gstPct > 0) {
+                    $pctGstAtOldBase = round(($oldBase + $fuel + $surchargeTotal) * $gstPct / 100, 2);
+                    if (abs($pctGstAtOldBase - $oldGst) <= 1) {
+                        $newGst = round(($newBase + $fuel + $surchargeTotal) * $gstPct / 100, 2);
+                        $gstRecalculated = true;
+                    }
+                }
+
+                // Delta-based total (folded extra amounts preserve).
+                $newTotal = $oldTotal > 0
+                    ? round($oldTotal + ($newBase - $oldBase) + ($newGst - $oldGst), 2)
+                    : round($newBase + $fuel + $newGst + $surchargeTotal, 2);
+
+                $shipper->base_price = $newBase;
+                $shipper->total_base_price = $newBase;
+                $shipper->gst_amount = $newGst;
+                $shipper->total_price = $newTotal;
+                $shipper->save();
+
+                // Audit trail — shipment history me dikhta hai.
+                ShipmentLog::logStatus(
+                    (int) $shipper->id,
+                    (string) $shipper->awb_number,
+                    $currentStatus !== '' ? $currentStatus : 'draft',
+                    $currentStatus !== '' ? $currentStatus : 'draft',
+                    'Base rate changed from Rs '.number_format($oldBase, 2).' to Rs '.number_format($newBase, 2)
+                        .' (total Rs '.number_format($oldTotal, 2).' to Rs '.number_format($newTotal, 2).')'
+                        .($gstRecalculated ? ', GST recalculated at '.number_format($gstPct, 2).'%' : '')
+                        .' by admin'.($admin ? ' #'.$admin->id.' ('.$admin->name.')' : ''),
+                    $shipper->customer_id,
+                    'admin'
+                );
+
+                Log::info('Customer report base rate updated', [
+                    'shipper_id' => $shipper->id,
+                    'awb_number' => $shipper->awb_number,
+                    'admin_id' => $admin?->id,
+                    'old_base' => $oldBase,
+                    'new_base' => $newBase,
+                    'old_gst' => $oldGst,
+                    'new_gst' => $newGst,
+                    'old_total' => $oldTotal,
+                    'new_total' => $newTotal,
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'Base rate update ho gaya. Naya total: Rs '.number_format($newTotal, 2),
+                    'breakdown' => [
+                        'base' => $newBase,
+                        'fuel' => $fuel,
+                        'gst' => $newGst,
+                        'gst_percentage' => $gstPct,
+                        'surcharge' => $surchargeTotal,
+                        'total' => $newTotal,
+                    ],
+                    'formatted' => [
+                        'base' => number_format($newBase, 2),
+                        'fuel' => number_format($fuel, 2),
+                        'gst' => number_format($newGst, 2),
+                        'surcharge' => number_format($surchargeTotal, 2),
+                        'total' => number_format($newTotal, 2),
+                    ],
+                ];
+            });
+        } catch (\Throwable $e) {
+            Log::error('Customer report base rate update failed', [
+                'shipper_id' => $validated['shipper_id'],
+                'admin_id' => $admin?->id,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Base rate update nahi ho paya. Please dobara try karein.',
+            ], 500);
+        }
+
+        if (empty($result['success'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Base rate update nahi ho paya.',
+            ], $result['code'] ?? 422);
+        }
+
+        return response()->json($result);
     }
 
     /**

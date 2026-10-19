@@ -162,11 +162,11 @@
                 <div class="report-hero-ic"><i class="ti ti-file-analytics"></i></div>
                 <div class="flex-fill" style="position:relative;z-index:1;min-width:220px;">
                     <h4>Customer Report</h4>
-                    <p>Customer-wise list of all shipments showing which step each shipment is currently at (same view as view-all-shipments). This page is view-only — no actions (pay / cancel / print / manifest / assign) can be performed from here.</p>
+                    <p>Customer-wise list of all shipments showing which step each shipment is currently at (same view as view-all-shipments). View-only report — sirf draft shipments ka base rate edit ho sakta hai; baaki koi action (pay / cancel / print / manifest / assign) available nahi hai.</p>
                 </div>
                 <div class="d-flex align-items-center gap-2" style="position:relative;z-index:1;">
                     <span class="read-only-note" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;">
-                        <i class="ti ti-eye"></i> Read-only — No actions
+                        <i class="ti ti-edit"></i> Read-only — Draft base rate edit allowed
                     </span>
                     <a href="{{ route('admin.customer-report.export', request()->query()) }}" class="btn btn-success">
                         <i class="ti ti-file-spreadsheet me-1"></i> Export Excel
@@ -241,7 +241,7 @@
                 </div>
             </div>
 
-            <!-- Read-only table : view-all-shipment jaisa, bina Action column -->
+            <!-- Table : view-all-shipment jaisa, Action column sirf draft rows ke liye -->
             <div class="table-scroll-wrap">
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover mb-0">
@@ -257,6 +257,7 @@
                                 <th>Amount</th>
                                 <th>Manifest</th>
                                 <th>Status (Step)</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -305,7 +306,7 @@
                                         @endif
                                     </td>
                                     <td>{{ $invoice->invoice_number ?? 'N/A' }}</td>
-                                    <td style="font-weight:600;white-space:nowrap;">{{ $shipper && $shipper->total_price ? number_format((float) $shipper->total_price, 2) : '-' }}</td>
+                                    <td style="font-weight:600;white-space:nowrap;" @if($shipper) data-amount-for="shipper-{{ $shipper->id }}" @endif>{{ $shipper && $shipper->total_price ? number_format((float) $shipper->total_price, 2) : '-' }}</td>
                                     <td>
                                         @if($manifest && $manifest->manifest_number)
                                             <span class="badge bg-secondary">{{ $manifest->manifest_number }}</span>
@@ -316,10 +317,29 @@
                                     <td>
                                         <span class="status-badge {{ $badgeClass($rowStatus) }}">{{ $prettyStatus($rowStatus) }}</span>
                                     </td>
+                                    <td style="white-space:nowrap;">
+                                        @if($rowStatus === 'draft' && $shipper)
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-primary edit-base-rate-btn"
+                                                    data-shipper-id="{{ $shipper->id }}"
+                                                    data-awb="{{ $shipper->awb_number }}"
+                                                    data-base="{{ (float) ($shipper->base_price ?? $shipper->total_base_price ?? 0) }}"
+                                                    data-fuel="{{ (float) ($shipper->fuel_price ?? $shipper->total_fuel_price ?? 0) }}"
+                                                    data-gst-pct="{{ (float) ($shipper->gst_percentage ?? 0) }}"
+                                                    data-gst="{{ (float) ($shipper->gst_amount ?? 0) }}"
+                                                    data-surcharge="{{ (float) ($shipper->surcharge_total ?? $shipper->total_surcharge ?? 0) }}"
+                                                    data-total="{{ (float) ($shipper->total_price ?? 0) }}"
+                                                    title="Edit Base Rate (draft only)">
+                                                <i class="ti ti-pencil"></i> Edit Base Rate
+                                            </button>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center py-5 text-muted">
+                                    <td colspan="11" class="text-center py-5 text-muted">
                                         <i class="ti ti-package" style="font-size:40px;color:#ccc;"></i>
                                         <p class="mt-2 mb-0">Koi shipment nahi mili. Filter badal kar dobara try karein.</p>
                                     </td>
@@ -339,8 +359,74 @@
             </div>
 
             <p class="text-muted mt-2" style="font-size:12px;">
-                <i class="ti ti-lock me-1"></i> Read-only report — is page par koi button/action nahi hai. Shipment par action lena ho to <a href="{{ url('/admin/companies') }}">View All Order</a> par jayein.
+                <i class="ti ti-lock me-1"></i> View-only report — sirf draft shipments ka base rate edit kiya ja sakta hai (paid / manifested shipments locked hain). Baaki actions ke liye <a href="{{ url('/admin/companies') }}">View All Order</a> par jayein.
             </p>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Base Rate modal : sirf draft shipments ke liye -->
+<div class="modal fade" id="editBaseRateModal" tabindex="-1" aria-labelledby="editBaseRateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editBaseRateModalLabel"><i class="ti ti-currency-rupee me-1"></i> Edit Base Rate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-muted">HAWB Number</span>
+                    <span class="badge bg-dark awb-badge" id="ebrAwb">-</span>
+                </div>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">Base Rate</td>
+                                <td class="text-end fw-semibold" id="ebrBaseCell">-</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Fuel</td>
+                                <td class="text-end" id="ebrFuelCell">-</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">GST <span id="ebrGstPctLabel"></span></td>
+                                <td class="text-end" id="ebrGstCell">-</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Surcharge</td>
+                                <td class="text-end" id="ebrSurchargeCell">-</td>
+                            </tr>
+                            <tr class="border-top">
+                                <td class="fw-bold">Total</td>
+                                <td class="text-end fw-bold" id="ebrTotalCell">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mb-1">
+                    <label class="form-label" for="ebrBaseInput">New Base Rate (Rs) <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0" class="form-control" id="ebrBaseInput" placeholder="Enter new base rate">
+                </div>
+                <div class="form-text mb-3">Fuel aur surcharge same rahenge; GST percentage-based ho to naye base par recalculate hoga.</div>
+
+                <div class="alert alert-info mb-0">
+                    <div class="d-flex justify-content-between">
+                        <span>New Total (preview)</span>
+                        <span class="fw-bold" id="ebrNewTotalCell">-</span>
+                    </div>
+                </div>
+
+                <div class="alert alert-danger mt-3 mb-0 d-none" id="ebrError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="ebrSaveBtn">
+                    <i class="ti ti-check me-1"></i> Save
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -350,5 +436,161 @@
 <script src="{{ asset('assets/js/feather.min.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/plugins/simplebar/simplebar.min.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/js/script.js') }}" type="text/javascript"></script>
+<script>
+(function () {
+    'use strict';
+
+    var ebrUrl = @json(route('admin.customer-report.update-base-rate'));
+    var ebrModalEl = document.getElementById('editBaseRateModal');
+    var ebrModal = ebrModalEl ? new bootstrap.Modal(ebrModalEl) : null;
+    var ebrState = { shipperId: null, base: 0, fuel: 0, gstPct: 0, gst: 0, surcharge: 0, total: 0, gstFromPct: false };
+
+    function ebrFmt(n) {
+        n = Number(n) || 0;
+        return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Server ke GST rule jaisa hi: sirf percentage-based GST recalc hota hai.
+    function ebrComputeNewGst(newBase) {
+        if (ebrState.gstPct > 0 && ebrState.gstFromPct) {
+            return Math.round((newBase + ebrState.fuel + ebrState.surcharge) * ebrState.gstPct / 100 * 100) / 100;
+        }
+        return ebrState.gst;
+    }
+
+    function ebrComputeNewTotal(newBase) {
+        var newGst = ebrComputeNewGst(newBase);
+        var total = ebrState.total > 0
+            ? ebrState.total + (newBase - ebrState.base) + (newGst - ebrState.gst)
+            : newBase + ebrState.fuel + newGst + ebrState.surcharge;
+        return Math.round(total * 100) / 100;
+    }
+
+    function ebrUpdatePreview() {
+        var newBase = parseFloat(document.getElementById('ebrBaseInput').value);
+        var previewCell = document.getElementById('ebrNewTotalCell');
+        if (isNaN(newBase) || newBase < 0) {
+            previewCell.textContent = '-';
+            return;
+        }
+        previewCell.textContent = 'Rs ' + ebrFmt(ebrComputeNewTotal(newBase));
+    }
+
+    function ebrShowSuccess(message) {
+        var content = document.querySelector('.page-wrapper .content') || document.querySelector('.content');
+        if (!content) { return; }
+        var alertEl = document.createElement('div');
+        alertEl.className = 'alert alert-success alert-dismissible fade show';
+        alertEl.setAttribute('role', 'alert');
+        alertEl.innerHTML = message + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        content.prepend(alertEl);
+        window.setTimeout(function () {
+            alertEl.classList.remove('show');
+            window.setTimeout(function () { alertEl.remove(); }, 300);
+        }, 5000);
+    }
+
+    // Draft row ka "Edit Base Rate" button -> modal fill + open.
+    document.addEventListener('click', function (event) {
+        var btn = event.target.closest('.edit-base-rate-btn');
+        if (!btn) { return; }
+
+        ebrState.shipperId = btn.getAttribute('data-shipper-id');
+        ebrState.base = parseFloat(btn.getAttribute('data-base')) || 0;
+        ebrState.fuel = parseFloat(btn.getAttribute('data-fuel')) || 0;
+        ebrState.gstPct = parseFloat(btn.getAttribute('data-gst-pct')) || 0;
+        ebrState.gst = parseFloat(btn.getAttribute('data-gst')) || 0;
+        ebrState.surcharge = parseFloat(btn.getAttribute('data-surcharge')) || 0;
+        ebrState.total = parseFloat(btn.getAttribute('data-total')) || 0;
+
+        var pctGstAtOldBase = ebrState.gstPct > 0
+            ? Math.round((ebrState.base + ebrState.fuel + ebrState.surcharge) * ebrState.gstPct / 100 * 100) / 100
+            : 0;
+        ebrState.gstFromPct = ebrState.gstPct > 0 && Math.abs(pctGstAtOldBase - ebrState.gst) <= 1;
+
+        document.getElementById('ebrAwb').textContent = btn.getAttribute('data-awb') || '-';
+        document.getElementById('ebrBaseCell').textContent = 'Rs ' + ebrFmt(ebrState.base);
+        document.getElementById('ebrFuelCell').textContent = 'Rs ' + ebrFmt(ebrState.fuel);
+        document.getElementById('ebrGstCell').textContent = 'Rs ' + ebrFmt(ebrState.gst);
+        document.getElementById('ebrGstPctLabel').textContent = ebrState.gstPct > 0 ? '(' + ebrState.gstPct + '%)' : '';
+        document.getElementById('ebrSurchargeCell').textContent = 'Rs ' + ebrFmt(ebrState.surcharge);
+        document.getElementById('ebrTotalCell').textContent = 'Rs ' + ebrFmt(ebrState.total);
+        document.getElementById('ebrBaseInput').value = ebrState.base > 0 ? ebrState.base.toFixed(2) : '';
+        document.getElementById('ebrError').classList.add('d-none');
+
+        ebrUpdatePreview();
+        if (ebrModal) { ebrModal.show(); }
+    });
+
+    document.addEventListener('input', function (event) {
+        if (event.target && event.target.id === 'ebrBaseInput') { ebrUpdatePreview(); }
+    });
+
+    // Save -> AJAX POST, success par row ka Amount cell update.
+    var ebrSaveBtn = document.getElementById('ebrSaveBtn');
+    if (ebrSaveBtn) {
+        ebrSaveBtn.addEventListener('click', function () {
+            var errorBox = document.getElementById('ebrError');
+            var newBase = parseFloat(document.getElementById('ebrBaseInput').value);
+            errorBox.classList.add('d-none');
+
+            if (isNaN(newBase) || newBase < 0) {
+                errorBox.textContent = 'Please valid base rate enter karein.';
+                errorBox.classList.remove('d-none');
+                return;
+            }
+
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var originalHtml = ebrSaveBtn.innerHTML;
+            ebrSaveBtn.disabled = true;
+            ebrSaveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+            fetch(ebrUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfMeta ? csrfMeta.getAttribute('content') : ''
+                },
+                body: JSON.stringify({ shipper_id: ebrState.shipperId, base_rate: newBase })
+            })
+            .then(function (response) {
+                return response.json()
+                    .catch(function () { return { success: false, message: 'Unexpected server response.' }; })
+                    .then(function (data) { return { ok: response.ok, data: data }; });
+            })
+            .then(function (result) {
+                if (!result.ok || !result.data || !result.data.success) {
+                    throw new Error((result.data && result.data.message) || 'Base rate update nahi ho paya.');
+                }
+
+                var data = result.data;
+
+                var amountCell = document.querySelector('[data-amount-for="shipper-' + ebrState.shipperId + '"]');
+                if (amountCell) { amountCell.textContent = data.formatted.total; }
+
+                // Button ke data attributes update — dobara edit ke liye fresh values.
+                var rowBtn = document.querySelector('.edit-base-rate-btn[data-shipper-id="' + ebrState.shipperId + '"]');
+                if (rowBtn) {
+                    rowBtn.setAttribute('data-base', data.breakdown.base);
+                    rowBtn.setAttribute('data-gst', data.breakdown.gst);
+                    rowBtn.setAttribute('data-total', data.breakdown.total);
+                }
+
+                if (ebrModal) { ebrModal.hide(); }
+                ebrShowSuccess(data.message || 'Base rate update ho gaya.');
+            })
+            .catch(function (error) {
+                errorBox.textContent = error.message || 'Base rate update nahi ho paya.';
+                errorBox.classList.remove('d-none');
+            })
+            .finally(function () {
+                ebrSaveBtn.disabled = false;
+                ebrSaveBtn.innerHTML = originalHtml;
+            });
+        });
+    }
+})();
+</script>
 </body>
 </html>
