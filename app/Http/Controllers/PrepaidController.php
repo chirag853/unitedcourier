@@ -248,6 +248,7 @@ class PrepaidController extends Controller
                 : null;
             $orderCustomerId = $selectedExporter ? (int) $selectedExporter->exporter_id : null;
             $billToCustomerId = $validatedData['bill_to_customer_id'] ?? $orderCustomerId;
+            $billToCustomer = $billToCustomerId ? Customer::find($billToCustomerId) : null;
 
             // ------------------------------------------------------------------
             // Every box declared in the package dimensions must have at least
@@ -1087,6 +1088,7 @@ class PrepaidController extends Controller
             $adomantraPayload = $this->buildAdomantraOrderPayload(
                 $validatedData,
                 $admin,
+                $billToCustomer,
                 $courierService ?? null,
                 $courierRate,
                 $awbNumber,
@@ -1668,14 +1670,15 @@ class PrepaidController extends Controller
     /**
      * Build the Adomantra order payload for a Prepaid order.
      *
-     * Mirrors CustomerController::buildAdomantraOrderPayload() exactly, but
-     * accepts an Admin instead of a Customer: the sender name and account
-     * code come from the logged-in admin (the Admin model has a single
-     * `name` field and no customer_code).
+     * Mirrors CustomerController::buildAdomantraOrderPayload(). AccountCode /
+     * AccountName come from the order's Bill To customer; orders without a
+     * Bill To customer fall back to the logged-in admin (the Admin model has
+     * a single `name` field and no customer_code).
      */
     private function buildAdomantraOrderPayload(
         array $data,
         Admin $admin,
+        ?Customer $billToCustomer,
         ?CourierService $service,
         ?CourierRate $rate,
         string $awbNumber,
@@ -1702,8 +1705,21 @@ class PrepaidController extends Controller
         $destinationRecord = Destination::where('name', $destination)->first();
         $countryCode = strtoupper((string) ($destinationRecord?->country_code ?? ''));
         $csbType = strtoupper((string) ($data['origin_type'] ?? 'CSB IV')) === 'CSB V' ? 'CSB 5' : 'CSB 4';
-        $customerName = trim((string) ($admin->name ?? 'Admin'));
-        $accountCode = 'UWC'.str_pad((string) $admin->id, 6, '0', STR_PAD_LEFT);
+        // AccountCode / AccountName must identify the order's Bill To
+        // customer, not the admin who created the shipment. Orders without a
+        // Bill To customer (no exporter selected) keep the legacy admin
+        // account so existing integrations continue to work.
+        if ($billToCustomer) {
+            $customerName = trim((string) ($billToCustomer->first_name.' '.$billToCustomer->last_name));
+            if ($customerName === '') {
+                $customerName = trim((string) ($data['biller_name'] ?? '')) ?: 'Customer';
+            }
+            $accountCode = (string) ($billToCustomer->customer_code
+                ?: 'UWC'.str_pad((string) $billToCustomer->id, 6, '0', STR_PAD_LEFT));
+        } else {
+            $customerName = trim((string) ($admin->name ?? 'Admin'));
+            $accountCode = 'UWC'.str_pad((string) $admin->id, 6, '0', STR_PAD_LEFT);
+        }
 
         $productDetails = array_map(function (array $item): array {
             return [
