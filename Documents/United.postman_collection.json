@@ -120,18 +120,15 @@
             "header": [
               {
                 "key": "Accept",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               },
               {
                 "key": "Authorization",
-                "value": "Token 462d4dd4644874ba774fa599aef160a97ed3fa7f",
-                "type": "text"
+                "value": "Token 30304432-72ee-4314-849e-1ba8d48f6f50"
               },
               {
                 "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               }
             ],
             "body": {
@@ -139,15 +136,11 @@
               "urlencoded": [
                 {
                   "key": "format",
-                  "value": "json",
-                  "type": "text",
-                  "uuid": "ac2d0243-19b4-4b05-b19f-8dd0eff3b504"
+                  "value": "json"
                 },
                 {
                   "key": "data",
-                  "value": "{\n  \"format\": \"json\",\n  \"data\": {\n    \"shipments\": [\n      {\n        \"name\": \"Consignee Name\",\n        \"add\": \"Shastri Nagar, Near Metro Station, E2/35\",\n        \"pin\": \"110052\",\n        \"city\": \"Delhi\",\n        \"state\": \"Delhi\",\n        \"country\": \"India\",\n        \"phone\": \"9625693880\",\n\n        \"order\": \"TEST-ORD-20260617-0006\",\n        \"waybill\": \"\",\n\n        \"payment_mode\": \"Prepaid\",\n        \"cod_amount\": 0,\n\n        \"total_amount\": 100,\n\n        \"products_desc\": \"General Merchandise\",\n        \"quantity\": 1,\n\n        \"weight\": 1.0,\n        \"shipment_length\": 20,\n        \"shipment_width\": 15,\n        \"shipment_height\": 10,\n\n        \"shipping_mode\": \"Surface\",\n\n        \"seller_gst_tin\": \"27ABCDE1234F1Z5\",\n        \"client_gst_tin\": \"27ABCDE5678F1Z9\",\n        \"consignee_gst_tin\": \"29ABCDE9999F1Z2\",\n\n        \"hsn_code\": \"62052000\",\n        \"invoice_reference\": \"INV-20260617-0006\"\n      }\n    ],\n\n    \"pickup_location\": {\n      \"name\": \"ac549e-UNITEDWORLDWIDECOURI-do\"\n    }\n  }\n}",
-                  "type": "text",
-                  "uuid": "31f30dc9-effb-4fc2-9e33-5d18330115aa"
+                  "value": "{\n  \"format\": \"json\",\n  \"data\": {\n    \"shipments\": [\n      {\n        \"name\": \"Consignee Name\",\n        \"add\": \"Shastri Nagar, Near Metro Station, E2/35\",\n        \"pin\": \"110052\",\n        \"city\": \"Delhi\",\n        \"state\": \"Delhi\",\n        \"country\": \"India\",\n        \"phone\": \"9625693880\",\n\n        \"order\": \"TEST-ORD-20260617-0006\",\n        \"waybill\": \"\",\n\n        \"payment_mode\": \"Prepaid\",\n        \"cod_amount\": 0,\n\n        \"total_amount\": 100,\n\n        \"products_desc\": \"General Merchandise\",\n        \"quantity\": 1,\n\n        \"weight\": 1.0,\n        \"shipment_length\": 20,\n        \"shipment_width\": 15,\n        \"shipment_height\": 10,\n\n        \"shipping_mode\": \"Surface\",\n\n        \"seller_gst_tin\": \"27ABCDE1234F1Z5\",\n        \"client_gst_tin\": \"27ABCDE5678F1Z9\",\n        \"consignee_gst_tin\": \"29ABCDE9999F1Z2\",\n\n        \"hsn_code\": \"62052000\",\n        \"invoice_reference\": \"INV-20260617-0006\"\n      }\n    ],\n\n    \"pickup_location\": {\n      \"name\": \"ac549e-UNITEDWORLDWIDECOURI-do\"\n    }\n  }\n}"
                 }
               ]
             },
@@ -161,6 +154,172 @@
               ],
               "path": [
                 "manifest"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "delhivery label generation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token 462d4dd4644874ba774fa599aef160a97ed3fa7f"
+              }
+            ],
+            "url": {
+              "raw": "https://track.delhivery.com/api/p/packing_slip?wbns=52488210000545&pdf=true&pdf_size=4x6",
+              "protocol": "https",
+              "host": [
+                "track",
+                "delhivery",
+                "com"
+              ],
+              "path": [
+                "api",
+                "p",
+                "packing_slip"
+              ],
+              "query": [
+                {
+                  "key": "wbns",
+                  "value": "52488210000545"
+                },
+                {
+                  "key": "pdf",
+                  "value": "true"
+                },
+                {
+                  "key": "pdf_size",
+                  "value": "4x6"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delhivery pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token 462d4dd4644874ba774fa599aef160a97ed3fa7f"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickup_time\": \"11:00:00\",\n  \"pickup_date\": \"2026-09-30\",\n  \"pickup_location\": \"ac549e-UNITEDWORLDWIDECOURI-do\",\n  \"expected_package_count\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://track.delhivery.com/fm/request/new/",
+              "protocol": "https",
+              "host": [
+                "track",
+                "delhivery",
+                "com"
+              ],
+              "path": [
+                "fm",
+                "request",
+                "new",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "add new warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token 462d4dd4644874ba774fa599aef160a97ed3fa7f"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9999999999\",\n  \"city\": \"Kota\",\n  \"name\": \"testing1\",\n  \"pin\": \"110042\",\n  \"address\": \"address\",\n  \"country\": \"India\",\n  \"email\": \"abc@gmail.com\",\n  \"registered_name\": \"test client\",\n  \"return_address\": \"test return_address\",\n  \"return_pin\": \"110042\",\n  \"return_city\": \"Kota\",\n  \"return_state\": \"Delhi\",\n  \"return_country\": \"India\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://track.delhivery.com/api/backend/clientwarehouse/create/",
+              "protocol": "https",
+              "host": [
+                "track",
+                "delhivery",
+                "com"
+              ],
+              "path": [
+                "api",
+                "backend",
+                "clientwarehouse",
+                "create",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update warehouse address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Token 462d4dd4644874ba774fa599aef160a97ed3fa7f"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "\n{\n  \"name\": \"testing1\",\n  \"phone\": \"9999999999\",\n  \"address\": \"address\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://track.delhivery.com/api/backend/clientwarehouse/edit/",
+              "protocol": "https",
+              "host": [
+                "track",
+                "delhivery",
+                "com"
+              ],
+              "path": [
+                "api",
+                "backend",
+                "clientwarehouse",
+                "edit",
+                ""
               ]
             }
           },
@@ -198,15 +357,8 @@
               }
             ],
             "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "grant_type",
-                  "value": "client_credentials",
-                  "type": "text",
-                  "uuid": "acea52f2-1515-43c8-bf6b-1ad6a4457b8c"
-                }
-              ]
+              "mode": "raw",
+              "raw": ""
             },
             "url": {
               "raw": "https://wwwcie.ups.com/security/v1/oauth/token",
@@ -234,7 +386,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "eyJraWQiOiIzOTNjOTE2Yi02OTdhLTRiMmMtYmUxMy0xNWU4ZjM5ZDUxZDQiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzM4NCJ9.eyJzdWIiOiJ1d2NueWNAYW9sLmNvbSIsImNsaWVudGlkIjoiR1NURXVRZHk1WEhuV2FseEdRRUNINHloU3FKQWl5ZFZOamhvNkFrUEduMVp3TVlYIiwiaXNzIjoiaHR0cHM6Ly9hcGlzLnVwcy5jb20iLCJ1dWlkIjoiOTY0N0REOEQtNkU1Ri0xMjA2LUIxRDItNzhDNUZEQzZGMThCIiwic2lkIjoiMzkzYzkxNmItNjk3YS00YjJjLWJlMTMtMTVlOGYzOWQ1MWQ0IiwiYXVkIjoidW5pdGVkIHNoaXBwaW5nLVgxOTcwMCIsImF0IjoiNzM2Z0xyWmNCYW55d2YwbDVtUGpFY0hSR21IQSIsIm5iZiI6MTc4MDkxODI1OSwiRGlzcGxheU5hbWUiOiJ1bml0ZWQgc2hpcHBpbmctWDE5NzAwIiwiZXhwIjoxNzgwOTMyNjU5LCJpYXQiOjE3ODA5MTgyNTksImp0aSI6Ijc2MzE5MzY0LTI3MTYtNGY5MS1hOTVjLTJiNjAzYzU3ODk5OSJ9.GdP14Rg5MH1LjKOnbZPdxmQd2BdGobEOY7qfZWX54iV-1uLLfs98ZIVWQWQwGtkn7xCpq6k1MSeaOTQyePbnf4HzGEtAsvDfj4cUlQ1jZl5oo0mfVMKR4UpFJMQC3eJ1js1fFkz3ZYfNCykbU7RQxMs0MiBduz30nI4pfz-mrukoFhUZDJGfVfOHwdoZpl2u8XEMHvPO-K4naNXgJrJj2DBh0KAiy5cieFP3BgHSmHtbacTgl3ZhRLomHel_c6NPcO5iNHG7ozdt9O7_YBk14RmtBbEwwUp7lzYilkLrPhvHUV9OacR025Qwpcmr02rRJOj22kkgAUmtCjKTSunRSSIICSx3-x1vlxvFF41cY9KRh2m-fmS321TM9PZ9esiigTGpiY1ayU1fT8fnltMbLT679f3Dgz7BbG8J46jY6Kusk36Fmprt927BWHTQ977SZ1KdavHI9m9yiamZQ8jM7Jyp02x5b95z3N1MV7Ovop1sqM11JMBmyiuYFFDg7EaMMCNuZjj4csZ_ZdxKeE1txxTGQHrIL8PZhBatF55ZpmCU4uGC6ANB8u1iTBTNwY-FMCRDlyd1OQJU6dqKC0fY2wnBO2EtC_9pdvTBc4jW2FlL9Y5lT6h_X6aJkv1BfJS7S7vMph9SyGWm-7y_me1aJL8KjQFLVRk5BhMvdbbgkR4",
+                  "value": "eyJraWQiOiJmNmE2OGNiMS1jNTY4LTQ0ZDMtYWFhZS1hYmI0NmJiMmE4ODAiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzM4NCJ9.eyJzdWIiOiJ1d2NueWNAYW9sLmNvbSIsImNsaWVudGlkIjoiR1NURXVRZHk1WEhuV2FseEdRRUNINHloU3FKQWl5ZFZOamhvNkFrUEduMVp3TVlYIiwiaXNzIjoiaHR0cHM6Ly9hcGlzLnVwcy5jb20iLCJ1dWlkIjoiOTY0N0REOEQtNkU1Ri0xMjA2LUIxRDItNzhDNUZEQzZGMThCIiwic2lkIjoiZjZhNjhjYjEtYzU2OC00NGQzLWFhYWUtYWJiNDZiYjJhODgwIiwiYXVkIjoidW5pdGVkIHNoaXBwaW5nLVgxOTcwMCIsImF0IjoiQnVsTlJ2QXdHaTNCSm1nUG13Z2ZNbEdrN3d5NyIsIm5iZiI6MTc5MDI0MzYxNCwiRGlzcGxheU5hbWUiOiJ1bml0ZWQgc2hpcHBpbmctWDE5NzAwIiwiZXhwIjoxNzkwMjU4MDE0LCJpYXQiOjE3OTAyNDM2MTQsImp0aSI6ImRmYjZjZDM3LTk4ZWQtNDJmMS04ZDQwLWY5N2Q3ODllMzhlZiJ9.jvMLOxQkdX0eqn8MKOPBv0FApTfawm4-Rhr5g-CbLM5teK7tL0SowbvhRmHE22cZPNKY5v-uZ8SfNZvh-bDU9QqouMcrQAVmxG0txhlcTc4YeqLYzu1rebGq-qKdcQ0e54JcjSif-7vHgHF0MFa9HIZwfwDMEU2Dj8YQDToamhuAZ0wqGw2_2wD6QvRfqfz7JX9WDeLtAQ0e8rOK-kdULFYVIccLNWM43wSiFrXxG4vAvAt9I6pJXxFrwkFctplq3-yZraWSi6LJ89rLueoYiQyl2KkwOSroxahwrnjV--5ql4bODdmGQ5aO4jlkSD46cQi8CkAcAInwHMJTas5DVg",
                   "type": "string"
                 }
               ]
@@ -263,6 +415,133 @@
                 "shipments",
                 "v2403",
                 "ship"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "tracking",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJraWQiOiJmNmE2OGNiMS1jNTY4LTQ0ZDMtYWFhZS1hYmI0NmJiMmE4ODAiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzM4NCJ9.eyJzdWIiOiJ1d2NueWNAYW9sLmNvbSIsImNsaWVudGlkIjoiR1NURXVRZHk1WEhuV2FseEdRRUNINHloU3FKQWl5ZFZOamhvNkFrUEduMVp3TVlYIiwiaXNzIjoiaHR0cHM6Ly9hcGlzLnVwcy5jb20iLCJ1dWlkIjoiOTY0N0REOEQtNkU1Ri0xMjA2LUIxRDItNzhDNUZEQzZGMThCIiwic2lkIjoiZjZhNjhjYjEtYzU2OC00NGQzLWFhYWUtYWJiNDZiYjJhODgwIiwiYXVkIjoidW5pdGVkIHNoaXBwaW5nLVgxOTcwMCIsImF0IjoieWlmcjFXVVJIM0dDV2hMbldUT0lBMWlwT3RPOSIsIm5iZiI6MTc4NzI5NTI4MCwiRGlzcGxheU5hbWUiOiJ1bml0ZWQgc2hpcHBpbmctWDE5NzAwIiwiZXhwIjoxNzg3MzA5NjgwLCJpYXQiOjE3ODcyOTUyODAsImp0aSI6IjY4ODg2ZjJjLWEzYWItNDU0Yy05MmE5LWIyY2M0ZWUyOWE2ZiJ9.i9_9AjSM1CC2QViUjvmO_6g_daMPN2urwq2NSTVtz1efn51E9HMFhn9DyvH9VQKqGqet2OP1-lQJsR7XztIZJoJCAJRH6qK5eAmD0kshW6jdX3FIaTTIl7_04FicT8Kv_af25qoiXo5tNLB3fEDMdPaD9HyVhr-U-tcgPOXAkqyun-9OUDP6z8RFap71ayZZpq55KFqsAvjrd1Ay5LIcx9m-9SqkT1cZY5N0EUQEnjswqguwYqQdc32evQdVodPF7yB-zR7nLx0cav2JmIDLHdGawMg291KCrzQsFOpZsmlADVjS9d96pVI10OSgPBcLF8fuCaCqokmADyMGSSnPcw",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": ""
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "transId",
+                "value": "123456789"
+              },
+              {
+                "key": "transactionSrc",
+                "value": "Production"
+              },
+              {
+                "key": "Cookie",
+                "value": "_abck=8B7406F72E87C91666209B43FEA35319~-1YAAQP6kRYEcLMPifAQAATvrRGBAI6uPmTt+OhAFuEkCHPKk8ATiBQsTno7cF1Ma7GNxKl9BraVXCA1dyI6UCmCnllJE35ReJlyyc1oIXfmivRzv1woCTbEEuS6xtfipEt8pl0z1WTaRBAvcvTV1RKcWU9710GEpL7fmMg2RaNUQVVJ9/e4FxZCQTA/ZfDdbFUAMW1/umkHLVCR4FV0ncJ/oCBgsGE603V5o6OtSPzwq3HITX8yLuL3oxJBAGVsatwlKPoCUO64CQ0ooLxTUEb0est3UUuFpHHr5bKd7PP4/Djzfwr7vS/Mky6nl6NepAKpdelU6YE1Aee4YH2P3PxZzPfX0WdRKlEW10oMXxVA/HVkNQ+fYl6QblwntAWZjnwXclQ7HvgMbVQru1RoSPZedDMhsGU8G7YYbzFZFDHAIvFJMaRlSIsZfEgew2mvUk/cKk1hXD5hBOwc+FavC6pRvNIqCbyfqd-1~-1~-1~-1~-1; bm_sz=E4EF9989AEBDE6C5021A6D2E8FEA4855YAAQP6kRYEgLMPifAQAATvrRGACmz7M6CdzH7k3ZPNuwSQHFlizvccnkCDVLh3ihhqflGfviTErhVJV3lFU6UHGQD9V9xYFYhVis758I0dGMjMRYJvqjTUX8XwmXgACLHFEZH6UwUyzvOBEm/tDEfrndX0qQLbnfJqy6ntOzpyej1aRgG/e8+oVT5aDKo4ftrgApTOdf1w5wJNkUE1WVPB7YfyGvBETF30kZvbc8bNhOhyyGAgYkzNv/nJwBbWV596R4JHpWVnlS1AFrjkBoT1olVV9GLAnF30SNdOBu8UpmPE4vkFXf9/8sPaks5Hn0gaEQPgi/cufzG3PJEam6st8JZCspxUoB3psdDFkjRV/ZHEOvZV/zFnwY0a52DOZKp4ACdqfBJiZ42a/z+d6m4pYwUzrmGA==~44086303555654"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": []
+            },
+            "url": {
+              "raw": "https://onlinetools.ups.com/api/track/v1/details/1ZX197000391970868",
+              "protocol": "https",
+              "host": [
+                "onlinetools",
+                "ups",
+                "com"
+              ],
+              "path": [
+                "api",
+                "track",
+                "v1",
+                "details",
+                "1ZX197000391970868"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "https://wwwcie.ups.com/security/v1/oauth/token",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "password",
+                  "value": "fVuQ8CMYIzxpABWkZFcOM3AyW0x4i1zo7mwiZk7gyLjpD1IWawoCXa3OXWNfVjao",
+                  "type": "string"
+                },
+                {
+                  "key": "username",
+                  "value": "GSTEuQdy5XHnWalxGQECH4yhSqJAiydVNjho6AkPGn1ZwMYX",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic ymhAYxZP0UnFxj8TLYORnJNSF52TDhSz2fjAMRS5h6YjmckM:2YyEab9klzMNoFMCchGPXA0ArOodVVicezrOUzkraijMbvpbxWZk7GflB1JwPjoi"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-merchant-id",
+                "value": "ymhAYxZP0UnFxj8TLYORnJNSF52TDhSz2fjAMRS5h6YjmckM"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "type": "text",
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://wwwcie.ups.com/security/v1/oauth/token",
+              "protocol": "https",
+              "host": [
+                "wwwcie",
+                "ups",
+                "com"
+              ],
+              "path": [
+                "security",
+                "v1",
+                "oauth",
+                "token"
               ]
             }
           },
@@ -318,7 +597,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "42e38e8fd6c85227144a145a050df74a8eeb00e1c0d2cea94b8d1f128480e559",
+                  "value": "13816663f11e23e6f75229290d11effdc3ba7ad0429ea8cbc27f10b449ce7d58",
                   "type": "string"
                 }
               ]
@@ -627,13 +906,13 @@
               "type": "basic",
               "basic": [
                 {
-                  "key": "password",
-                  "value": "C10009",
+                  "key": "username",
+                  "value": "rUe0HXAbXbYQFKotzwSRL2s3uejd1CgxuGIHwEQ5HRyHYtyUUC",
                   "type": "string"
                 },
                 {
-                  "key": "username",
-                  "value": "rUe0HXAbXbYQFKotzwSRL2s3uejd1CgxuGIHwEQ5HRyHYtyUUC",
+                  "key": "password",
+                  "value": "C10009",
                   "type": "string"
                 }
               ]
@@ -642,40 +921,39 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               },
               {
                 "key": "Accept",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               },
               {
                 "key": "AuthToken",
-                "value": "rUe0HXAbXbYQFKotzwSRL2s3uejd1CgxuGIHwEQ5HRyHYtyUUC",
-                "type": "text"
+                "value": "rUe0HXAbXbYQFKotzwSRL2s3uejd1CgxuGIHwEQ5HRyHYtyUUC"
               },
               {
                 "key": "ClientCode",
                 "value": "C10009",
-                "type": "text",
                 "disabled": true
               },
               {
                 "key": "UserCode",
                 "value": "C10009",
-                "type": "text",
                 "disabled": true
               },
               {
                 "key": "CustomerID",
-                "value": "US5307338",
-                "type": "text"
+                "value": "US5307338"
               }
             ],
             "body": {
-              "mode": "urlencoded",
-              "urlencoded": []
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "https://gapi.yunexpressusa.com/api/WayBill/CreateOrder",
@@ -842,6 +1120,47 @@
           "response": []
         },
         {
+          "name": "Create Order testing",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_0ote}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"AccountCode\": \"TEST\",\r\n    \"Sender\": {\r\n        \"SenderName\": \"KADANNAGARI BABU\",\r\n        \"SenderContactPerson\": \"KADANNAGARI BABU\",\r\n        \"SenderAddressLine1\": \"1-118/4\",\r\n        \"SenderAddressLine2\": \"THUMKUNTA\",\r\n        \"SenderAddressLine3\": \"TEST LABEL API\",\r\n        \"SenderPincode\": \"500078\",\r\n        \"SenderCity\": \"K.V.RANGAREDDY\",\r\n        \"SenderState\": \"TS\",\r\n        \"SenderTelephone\": \"9559077706\",\r\n        \"SenderEmailId\": \"\",\r\n        \"KYCType\": \"Aadhaar Number\",\r\n        \"KYCNo\": \"582712462820\"\r\n    },\r\n    \"Receiver\": {\r\n        \"ReceiverName\": \"Emma Wilson\",\r\n        \"ReceiverContactPerson\": \"Emma Wilson\",\r\n        \"ReceiverAddressLine1\": \"15 High Street\",\r\n        \"ReceiverAddressLine2\": \"Flat 4\",\r\n        \"ReceiverAddressLine3\": \"\",\r\n        \"ReceiverZipcode\": \"M1 1AE\",\r\n        \"ReceiverCity\": \"Manchester\",\r\n        \"ReceiverState\": \"Greater Manchester\",\r\n        \"ReceiverCountry\": \"GB\",\r\n        \"ReceiverTelephone\": \"+447911123456\",\r\n        \"ReceiverEmailid\": \"emma.wilson@example.com\",\r\n        \"VatId\": \"\"\r\n    },\r\n    \"ServiceDetails\": {\r\n        \"Service\": \"USA SELF\",\r\n        \"GoodsType\": \"NDox\",\r\n        \"PackageType\": \"PACKAGE\"\r\n    },\r\n    \"PackageDetails\": {\r\n        \"PackageDetail\": [\r\n            {\r\n                \"Length\": 1.0,\r\n                \"Width\": 1.0,\r\n                \"Height\": 1.0,\r\n                \"ActualWeight\": 0.05\r\n            }\r\n        ]\r\n    },\r\n    \"AdditionalDetails\": {\r\n        \"IsThirdParty\": true,\r\n        \"ProductDetails\": [\r\n            {\r\n                \"BoxNo\": \"1\",\r\n                \"Description\": \"POOJA BOWLS\",\r\n                \"HSNCode\": \"9403608040\",\r\n                \"HTSCode\": \"940360804000\",\r\n                \"UnitType\": \"PCS\",\r\n                \"Qty\": 1,\r\n                \"UnitRate\": 10,\r\n                \"ShipPieceIGST\": 0,\r\n                \"PieceWt\": 0\r\n            }\r\n        ],\r\n        \"InvoiceCurrency\": \"INR\",\r\n        \"InvoiceNo\": \"765\",\r\n        \"InvoiceDate\": \"2026-04-02T00:00:00Z\",\r\n        \"TermsOfSale\": \"DDP\",\r\n        \"ReasonForExport\": \"SALE\",\r\n        \"FreightCharge\": 0,\r\n        \"InsuranceCharge\": 0,\r\n        \"CSB_Type\": \"CSB 4\",\r\n        \"CustomerRefNo\": \"TEST_LABEL001\",\r\n        \"DeliveryConfirmation\": \"No\",\r\n        \"DutyTax\": \"DDU\",\r\n        \"DutiesAccountNo\": \"\",\r\n        \"TransactionId\": \"\",\r\n        \"ShipperImage\": \"\",\r\n        \"ShipperKYC\": \"\",\r\n        \"FileName\": \"\",\r\n        \"IECNo\": \"\",\r\n        \"ADCode\": \"\",\r\n        \"BankType\": \"G\",\r\n        \"BankAccount\": \"\",\r\n        \"NFEI\": false,\r\n        \"Ecom\": false,\r\n        \"MEIS\": false,\r\n        \"BoundUT\": \"NA\",\r\n        \"IGSTPaid\": \"No\",\r\n        \"IGSTAmount\": 0\r\n    }\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "apiv2.shipuniversal.com/api/shipment/create",
+              "host": [
+                "apiv2",
+                "shipuniversal",
+                "com"
+              ],
+              "path": [
+                "api",
+                "shipment",
+                "create"
+              ]
+            },
+            "description": "## Create Shipment API\n\nThis endpoint allows users to create a shipment by providing necessary details about the sender, receiver, service details, package details, and additional information related to the shipment.\n\n### Request Format\n\nThe request must be sent as a JSON object in the body of the POST request. The structure of the request body is as follows:\n\n| Parameter Name | Type | Required | Description |\n| --- | --- | --- | --- |\n| AccountCode | string | Yes | Unique code for the account making the shipment. |\n| Sender | object | Yes | Details of the sender. |\n| SenderName | string | Yes | Name of the sender. |\n| SenderContactPerson | string | Yes | Contact person for the sender. |\n| SenderAddressLine1 | string | Yes | First line of sender's address. |\n| SenderAddressLine2 | string | No | Second line of sender's address. |\n| SenderAddressLine3 | string | No | Third line of sender's address. |\n| SenderPincode | string | Yes | Pincode for sender's address. |\n| SenderCity | string | Yes | City of the sender. |\n| SenderState | string | Yes | State of the sender. |\n| SenderTelephone | string | Yes | Telephone number of the sender. |\n| SenderEmailId | string | Yes | Email ID of the sender. |\n| KYCType | string | Yes | Type of KYC document provided by the sender. |\n| KYCNo | string | Yes | KYC number of the sender. |\n| Receiver | object | Yes | Details of the receiver. |\n| ReceiverName | string | Yes | Name of the receiver. |\n| ReceiverContactPerson | string | Yes | Contact person for the receiver. |\n| ReceiverAddressLine1 | string | Yes | First line of receiver's address. |\n| ReceiverAddressLine2 | string | No | Second line of receiver's address. |\n| ReceiverAddressLine3 | string | No | Third line of receiver's address. |\n| ReceiverZipcode | string | Yes | Zipcode for receiver's address. |\n| ReceiverCity | string | Yes | City of the receiver. |\n| ReceiverState | string | Yes | State of the receiver. |\n| ReceiverCountry | string | Yes | Country of the receiver. |\n| ReceiverTelephone | string | Yes | Telephone number of the receiver. |\n| ReceiverEmailid | string | Yes | Email ID of the receiver. |\n| VatId | string | Yes | VAT ID of the receiver. |\n| ServiceDetails | object | Yes | Details of the service selected for shipment. |\n| Service | string | Yes | Type of service for the shipment. |\n| GoodsType | string | Yes | Type of goods being shipped. |\n| PackageType | string | Yes | Type of package used for shipment. |\n| PackageDetails | object | Yes | Details of the package. |\n| PackageDetail | array | Yes | List of package details. |\n| Length | number | Yes | Length of the package. |\n| Width | number | Yes | Width of the package. |\n| Height | number | Yes | Height of the package. |\n| ActualWeight | number | Yes | Actual weight of the package. |\n| AdditionalDetails | object | Yes | Additional details related to the shipment. |\n| ProductDetails | array | Yes | List of product details included in the shipment. |\n| BoxNo | string | Yes | Box number for the product. |\n| Description | string | Yes | Description of the product. |\n| HSNCode | string | Yes | HSN code for the product. |\n| UnitType | string | Yes | Type of unit for the product. |\n| Qty | number | Yes | Quantity of the product. |\n| UnitRate | number | Yes | Rate per unit of the product. |\n| ShipPieceIGST | number | Yes | IGST applicable per piece. |\n| PieceWt | number | Yes | Weight of each piece. |\n| InvoiceCurrency | string | Yes | Currency for the invoice. |\n| InvoiceNo | string | Yes | Invoice number for the shipment. |\n| InvoiceDate | string | Yes | Date of the invoice. |\n| TermsOfSale | string | Yes | Terms of sale for the shipment. |\n| ReasonForExport | string | Yes | Reason for exporting the goods. |\n| FreightCharge | number | Yes | Freight charges for the shipment. |\n| InsuranceCharge | number | Yes | Insurance charges for the shipment. |\n| CSB_Type | string | Yes | Type of CSB applicable. |\n| CustomerRefNo | string | Yes | Customer reference number. |\n| DeliveryConfirmation | string | Yes | Method of delivery confirmation. |\n| DutyTax | string | Yes | Duty tax applicable for the shipment. |\n| DutiesAccountNo | string | Yes | Duties account number. |\n| TransactionId | string | Yes | Unique transaction ID for the shipment. |\n| ShipperImage | string | Yes | Base64 encoded image of the shipper. |\n| ShipperKYC | string | Yes | Base64 encoded KYC document of the shipper. |\n| FileName | string | Yes | Name of the KYC document file. |\n\n### Response Fields\n\n| Parameter Name | Type | Required | Description |\n| --- | --- | --- | --- |\n| Status | boolean | Yes | Indicates whether the shipment creation was successful. |\n| Error | string | No | Contains error details, if any. |\n| Data | object | Yes | Contains shipment-related information. |\n| └── AwbNo | string | No | Air Waybill Number. |\n| └── Destination | string | No | The destination of the shipment. |\n| └── ChargeableWeight | string | No | The weight used for billing. |\n| └── TotalCharges | string | No | Total charges for the shipment. |\n| └── AdditionalCharges | array | No | List of any additional charges incurred. |\n| └── └── Description | string | No | Description of the additional charge. |\n| └── └── Amount | number | No | Amount of the additional charge. |\n| └── TrackingNumbers | array | No | Contains tracking information for the shipment. |\n| └── └── TrackingNo | string | No | Tracking number for the shipment. |\n| └── └── LabelUrl | string | No | URL for the shipment label. |\n| └── └── InvoiceUrl | string | No | URL for the shipment invoice. |\n| Timestamp | string | No | The time at which the response was generated. |\n| RequestId | string | No | Unique identifier for the request. |\n\n### Detailed Response Parameter Descriptions\n\n- **Status**: Indicates whether the shipment creation was successful. This is a boolean value where `true` means success and `false` indicates failure.\n    \n- **Error**: Contains error details, if any. This is a string that will provide information about what went wrong during the shipment creation.\n    \n- **Data**: Contains shipment-related information including:\n    \n    - **AwbNo**: (string) The Air Waybill Number assigned to the shipment, which is used for tracking.\n        \n    - **Destination**: (string) The destination of the shipment, providing clarity on where the package is being sent.\n        \n    - **ChargeableWeight**: (string) The weight used for billing purposes, which may differ from the actual weight based on shipping policies.\n        \n    - **TotalCharges**: (string) The total charges for the shipment, including all applicable fees.\n        \n    - **AdditionalCharges**: (array) A list of any additional charges incurred during the shipment process. Each entry includes:\n        \n        - **Description**: (string) A brief description of the additional charge.\n            \n        - **Amount**: (number) The monetary value of the additional charge.\n            \n    - **TrackingNumbers**: (array) Contains tracking information for the shipment, which includes:\n        \n        - **TrackingNo**: (string) The tracking number assigned to the shipment for monitoring its progress.\n            \n        - **LabelUrl**: (string) The URL where the shipment label can be accessed.\n            \n        - **InvoiceUrl**: (string) The URL where the shipment invoice can be accessed.\n            \n- **Timestamp**: The time at which the response was generated, providing context for when the request was processed.\n    \n- **RequestId**: Unique identifier for the request, useful for tracking and debugging purposes.\n    \n\n### Example Response\n\n``` json\n{\n    \"Status\": true,\n    \"Error\": null,\n    \"Data\": {\n        \"AwbNo\": \"55000077\",\n        \"Destination\": \"USA\",\n        \"ChargeableWeight\": \"0.5(KG)\",\n        \"TotalCharges\": \"0.00\",\n        \"AdditionalCharges\": [\n            {\n                \"Description\": \"\",\n                \"Amount\": 0.0\n            }\n        ],\n        \"Airwaybill\": {\n            \"AirwaybillUrl\": \"https://sandbox.cmswebservice.com/PrintLabel/55000077_Airwaybill.pdf\",\n            \"BoxlabelUrl\": \"https://sandbox.cmswebservice.com/PrintLabel/55000077_Airwaybill4X6.pdf\",\n            \"CustomInvoiceUrl\": null\n        },\n        \"TrackingNumbers\": [\n            {\n                \"TrackingNo\": \"\",\n                \"LabelUrl\": \"\",\n                \"InvoiceUrl\": \"\"\n            }\n        ]\n    },\n    \"Timestamp\": \"2025-09-07T19:09:17.1663053Z\",\n    \"RequestId\": \"9247eb0f-c176-48bb-b874-dedf8162e783\"\n}\n\n ```"
+          },
+          "response": []
+        },
+        {
           "name": "Get service list",
           "protocolProfileBehavior": {
             "disableBodyPruning": true
@@ -942,7 +1261,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "a337g9i2JXv9mhAtFZpkNOrbwfWcZFbwEuw3bdGoriiKbx06CQInssJZ5kE5d0ertrYAo-mGqtY0cX3vBKHE2nvnav0fSdbtqZWJryTH1SCeDXIuFyJQa7jUlutu2jd2OVamRNs-u9RrlN--aQUoN_2NPMZZUsn-dx7NU4p_ChvQtQjzkr3CyfUwYgYc412qdbRC3bg1BdSlBf1ErTB4dX1Blv9zypg0UAxSm2Xh-FVRD1pHzPsw7phEw-Peva9-",
+                  "value": "CK1DqXnzq8_OuwygCTWdrd-H1zVWvVGxRyrlH_ECxjstxPrV7_rvRQ6y7Sog0MxuqGQkowsD6unY1xgHGJGmmHgZw9YGFStAXI6VgsDt37yZ9t4pkRWUYS-_3eUr4FK2Xcyz5nZ2ttw5MdfxBCUMdFsk36crOQQ8J0Uy9d7VcNB4AJHl_tFYltc6zYEzSX-u6URsGtNUVgODpmdNJkQeMYmh1uGX2p-Zg9SkcqDnICAk-vr2-b2HwXgJ15Qw9nfS",
                   "type": "string"
                 }
               ]
@@ -959,7 +1278,7 @@
               }
             },
             "url": {
-              "raw": "https://apiv2.shipuniversal.com/api/tracking/55000039",
+              "raw": "https://apiv2.shipuniversal.com/api/tracking/UWC26082100004",
               "protocol": "https",
               "host": [
                 "apiv2",
@@ -969,7 +1288,7 @@
               "path": [
                 "api",
                 "tracking",
-                "55000039"
+                "UWC26082100004"
               ]
             },
             "description": "## API Endpoint: Track Shipment\n\nThis endpoint allows users to track the status of a shipment using its unique Air Waybill Number (AWB No). By sending a GET request to the specified URL, users can retrieve detailed information about the shipment, including its current status, destination, and any events associated with it.\n\n### Request Format\n\n- **Method**: GET\n    \n- **URL**: `https://apiv2.shipuniversal.com/api/tracking/{awb_number}`\n    \n- **Path Parameter**:\n    \n    - `awb_number`: The unique identifier for the shipment (e.g., `55000039`).\n        \n\n### Expected Response Format\n\nOn a successful request, the API will return a JSON response with the following structure:\n\n``` json\n{\n    \"Status\": true,\n    \"Data\": {\n        \"Awbno\": \"55000039\",\n        \"Shipdate\": \"2025-09-04T00:00:00\",\n        \"Destination\": \"USA\",\n        \"Consignee\": \"XYZ Imports LLC\",\n        \"Forwarder\": \"UPS\",\n        \"ForwardingNo\": \"1ZR8E220D900026126\",\n        \"Events\": [\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:37:00\",\n                \"EventCode\": \"DEL\",\n                \"EventDescription\": \"DELIVERED\",\n                \"Location\": \"NEW DELHI\",\n                \"ReceiverName\": \"\"\n            },\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:34:00\",\n                \"EventCode\": \"OUT\",\n                \"EventDescription\": \"OUT FOR DELIVERY\",\n                \"Location\": \"NEW DELHI\",\n                \"ReceiverName\": \"\"\n            },\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:15:00\",\n                \"EventCode\": \"IN\",\n                \"EventDescription\": \"In-Transit\",\n                \"Location\": \"NEW DE\",\n                \"ReceiverName\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\n- **Status**: A boolean indicating the success of the request.\n    \n- **Data**: An object containing detailed information about the shipment:\n    \n    - **Awbno**: The air waybill number.\n        \n    - **Shipdate**: The date the shipment was sent.\n        \n    - **Destination**: The final destination of the shipment.\n        \n    - **Consignee**: The recipient of the shipment.\n        \n    - **Forwarder**: The forwarding company handling the shipment.\n        \n    - **ForwardingNo**: The forwarding number associated with the shipment.\n        \n    - **Events**: An array of event objects detailing the shipment's journey, with each event containing:\n        \n        - **EventDate**: The date of the event.\n            \n        - **EventTime**: The time of the event.\n            \n        - **EventCode**: A code representing the type of event.\n            \n        - **EventDescription**: A description of the event.\n            \n        - **Location**: The location where the event occurred.\n            \n        - **ReceiverName**: The name of the person receiving the shipment.\n            \n\n### Example Response\n\n``` json\n{\n    \"Status\": true,\n    \"Data\": {\n        \"Awbno\": \"55000039\",\n        \"Shipdate\": \"2025-09-04T00:00:00\",\n        \"Destination\": \"USA\",\n        \"Consignee\": \"XYZ Imports LLC\",\n        \"Forwarder\": \"UPS\",\n        \"ForwardingNo\": \"1ZR8E220D900026126\",\n        \"Events\": [\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:37:00\",\n                \"EventCode\": \"DEL\",\n                \"EventDescription\": \"DELIVERED\",\n                \"Location\": \"NEW DELHI\",\n                \"ReceiverName\": \"\"\n            },\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:34:00\",\n                \"EventCode\": \"OUT\",\n                \"EventDescription\": \"OUT FOR DELIVERY\",\n                \"Location\": \"NEW DELHI\",\n                \"ReceiverName\": \"\"\n            },\n            {\n                \"EventDate\": \"2025-09-07T00:00:00\",\n                \"EventTime\": \"08:15:00\",\n                \"EventCode\": \"IN\",\n                \"EventDescription\": \"In-Transit\",\n                \"Location\": \"NEW DE\",\n                \"ReceiverName\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\nThis endpoint is crucial for users needing real-time updates on their shipments, enhancing transparency and tracking capabilities."
@@ -1125,12 +1444,12 @@
               "basic": [
                 {
                   "key": "password",
-                  "value": "1234",
+                  "value": "J2YTXPW1MGMGWOGW6DS7H9RA0A7EVONWYAJGMR5FFST1HCEEVZTVQ7L19SISZIDT",
                   "type": "string"
                 },
                 {
                   "key": "username",
-                  "value": "Test",
+                  "value": "F25064758DAE48CBABC95DE709DCC253",
                   "type": "string"
                 }
               ]
@@ -1172,19 +1491,26 @@
         },
         {
           "name": "all services in overseas",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
           "request": {
             "auth": {
               "type": "bearer",
               "bearer": [
                 {
                   "key": "token",
-                  "value": "DXj9-FYd37ad_32Xr8cVN08DM-TL4tXpY94s79PH1AAXX_C3XjhGAtZI-ie89U_SiP4WbaQ3bEEbVCXrhx-OLNaOnhn4B2j9TzTgn9X-vMz5vbI144qMdK5U9kJKt2H0Qb7v641-lDnAP-QPNyqQ62DLB3Okev8CJ6_nLEOcyZAPV3_PqiAf9bHC-KEQ1Q-1CbasEA_PhZ9lWr8uIufn_bboxQ57g8gvXZezIKUbI7mWWV37SSLa_c8HZnTaoGBh",
+                  "value": "03SyLTJr3LRVU_1S8nM4NUdbefhyqyUn9K8-4-_L7GB0kHQdQYbH5tqFY2QEE_-gpCu2xbNKN-g8iGwLSTTr36wcVbYuqJNKGx0djpznZOeB3d07FOeYeSv8D3LuOo42DP3R7oTC26vdT7yAXYqkSRvRMckdDKjlkkdzKH7OA6Bp-tIfHhGYRsWX5fufCjtHCCZ9cMcCeuUsMxUyvOlhkPHD5-jvVG2DmZmG-vygpti1F3GfFGTTPC-3sWDt8pL3",
                   "type": "string"
                 }
               ]
             },
             "method": "GET",
             "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": []
+            },
             "url": {
               "raw": "https://api.overseaslogistic.com/api/service/list",
               "protocol": "https",
@@ -1210,16 +1536,21 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{auth_secret_0s69}}",
+                  "value": "bxYgOX_VraEdIYqScl9xZUjdp8R7MGz0nneeVrkUuRVPuR3wK_s33c9uIBACFWxeUXvIa6imySDPohh1uDWwz4mohYD83WXfjrlo-SM-D27zDYZRKjVxmICqQ2UaJiqAQF1Hj9lCB9P5Ir0O0XpGIUzO_A9cfejPpYW4UIsNAVVp7jFv-LcdNqhhIL0cCE_b9uWRLOLYLL8oIRmdRNTDM555xNgnE7i2khl0wV-hZ2sLhEjvVLssf43HSWX6v-ZficFbEuMj5HbHyDs68WojQ9OEHAXWXaTD7Wih1SgzsfE",
                   "type": "string"
                 }
               ]
             },
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "client_id",
+                "value": "PRU02"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"AccountCode\": \"PR-U02\",\r\n    \"Sender\": {\r\n        \"SenderName\": \"XYZ COMPANY NAME\",\r\n        \"SenderContactPerson\": \"John Doe\",\r\n        \"SenderAddressLine1\": \"123 Export Street\",\r\n        \"SenderAddressLine2\": \"Industrial Area\",\r\n        \"SenderAddressLine3\": \"Phase II\",\r\n        \"SenderPincode\": \"400001\",\r\n        \"SenderCity\": \"Mumbai\",\r\n        \"SenderState\": \"MH\",\r\n        \"SenderTelephone\": \"+919876543210\",\r\n        \"SenderEmailId\": \"sender@example.com\",\r\n        \"KYCType\": \"GSTIN (Normal)\",\r\n        \"KYCNo\": \"27ABCDE1234F1Z5\"\r\n    },\r\n    \"Receiver\": {\r\n        \"ReceiverType\": \"Business\",\r\n        \"ReceiverName\": \"ABC Imports Canada Inc.\",\r\n        \"ReceiverContactPerson\": \"Michael Johnson\",\r\n        \"ReceiverAddressLine1\": \"1055 West Hastings Street\",\r\n        \"ReceiverAddressLine2\": \"Suite 1700\",\r\n        \"ReceiverAddressLine3\": \"\",\r\n        \"ReceiverZipcode\": \"V6E 2E9\",\r\n        \"ReceiverCity\": \"Vancouver\",\r\n        \"ReceiverState\": \"BC\",\r\n        \"ReceiverCountry\": \"CA\",\r\n        \"ReceiverTelephone\": \"+16045551234\",\r\n        \"ReceiverEmailid\": \"michael.johnson@abcimports.ca\",\r\n        \"VatId\": \"123456789RT0001\"\r\n    },\r\n    \"ServiceDetails\": {\r\n        \"Service\": \"CANADA_YVR_SELF\",\r\n        \"GoodsType\": \"NDox\",\r\n        \"PackageType\": \"PACKAGE\"\r\n    },\r\n    \"PackageDetails\": {\r\n        \"PackageDetail\": [\r\n            {\r\n                \"Length\": 30.5,\r\n                \"Width\": 20.0,\r\n                \"Height\": 15.0,\r\n                \"ActualWeight\": 1.0\r\n            }\r\n        ]\r\n    },\r\n    \"AdditionalDetails\": {\r\n        \"ProductDetails\": [\r\n            {\r\n                \"BoxNo\": \"1\",\r\n                \"Description\": \"Cotton Shirts\",\r\n                \"HSNCode\": \"61051000\",\r\n                \"HTSCode\": \"6105100000\",\r\n                \"UnitType\": \"PCS\",\r\n                \"Qty\": 50,\r\n                \"UnitRate\": 250.00,\r\n                \"ShipPieceIGST\": 0.00,\r\n                \"PieceWt\": 0.3\r\n            }\r\n        ],\r\n        \"InvoiceCurrency\": \"INR\",\r\n        \"InvoiceNo\": \"INV-2025-001\",\r\n        \"InvoiceDate\": \"2025-08-30T00:00:00Z\",\r\n        \"TermsOfSale\": \"FOB\",\r\n        \"ReasonForExport\": \"GIFT\",\r\n        \"FreightCharge\": 0,\r\n        \"InsuranceCharge\": 0,\r\n        \"CSB_Type\": \"CSB 4\",\r\n        \"IGSTPayment\":\"Na\",\r\n        \"IGSTAmount\":\"0\",\r\n        \"AdCode\":\"\",\r\n        \"IECNo\":\"\",\r\n        \"BankAccount\":\"\",\r\n        \"BankType\":\"P\",\r\n        \"NFEI\":\"\",\r\n        \"CustomerRefNo\": \"CUSTREF-98765\",\r\n        \"DeliveryConfirmation\": \"No\",\r\n        \"DutyTax\": \"DDP\",\r\n        \"DutiesAccountNo\": \"\",\r\n        \"TransactionId\": \"TXN789654\",\r\n        \"ShipperImage\": \"base64-encoded-image-string\",\r\n        \"ShipperKYC\": \"base64-encoded-kyc-doc-string\",\r\n        \"FileName\": \"kyc_document.pdf\",\r\n        \"Fileext\":\".pdf\"\r\n    }\r\n}",
+              "raw": "{\r\n    \"AccountCode\": \"PR-U02\",\r\n    \"Sender\": {\r\n        \"SenderName\": \"XYZ COMPANY NAME\",\r\n        \"SenderContactPerson\": \"John Doe\",\r\n        \"SenderAddressLine1\": \"123 Export Street\",\r\n        \"SenderAddressLine2\": \"Industrial Area\",\r\n        \"SenderAddressLine3\": \"Phase II\",\r\n        \"SenderPincode\": \"400001\",\r\n        \"SenderCity\": \"Mumbai\",\r\n        \"SenderState\": \"MH\",\r\n        \"SenderTelephone\": \"+919876543210\",\r\n        \"SenderEmailId\": \"sender@example.com\",\r\n        \"KYCType\": \"GSTIN (Normal)\",\r\n        \"KYCNo\": \"27ABCDE1234F1Z5\"\r\n    },\r\n    \"Receiver\": {\r\n        \"ReceiverType\": \"Business\",\r\n        \"ReceiverName\": \"ABC Imports Canada Inc.\",\r\n        \"ReceiverContactPerson\": \"Michael Johnson\",\r\n        \"ReceiverAddressLine1\": \"1055 West Hastings Street\",\r\n        \"ReceiverAddressLine2\": \"Suite 1700\",\r\n        \"ReceiverAddressLine3\": \"\",\r\n        \"ReceiverZipcode\": \"V6E\",\r\n        \"ReceiverCity\": \"Vancouver\",\r\n        \"ReceiverState\": \"BC\",\r\n        \"ReceiverCountry\": \"CA\",\r\n        \"ReceiverTelephone\": \"+16045551234\",\r\n        \"ReceiverEmailid\": \"michael.johnson@abcimports.ca\",\r\n        \"VatId\": \"123456789RT0001\"\r\n    },\r\n    \"ServiceDetails\": {\r\n        \"Service\": \"CANADA_YVR_SELF\",\r\n        \"GoodsType\": \"NDox\",\r\n        \"PackageType\": \"PACKAGE\"\r\n    },\r\n    \"PackageDetails\": {\r\n        \"PackageDetail\": [\r\n            {\r\n                \"Length\": 30.5,\r\n                \"Width\": 20.0,\r\n                \"Height\": 15.0,\r\n                \"ActualWeight\": 1.0\r\n            },\r\n            {\r\n                \"Length\": 30.5,\r\n                \"Width\": 20.0,\r\n                \"Height\": 15.0,\r\n                \"ActualWeight\": 1.0\r\n            },\r\n            {\r\n                \"Length\": 30.5,\r\n                \"Width\": 20.0,\r\n                \"Height\": 15.0,\r\n                \"ActualWeight\": 1.0\r\n            }\r\n        ]\r\n    },\r\n    \"AdditionalDetails\": {\r\n        \"ProductDetails\": [\r\n            {\r\n                \"BoxNo\": \"1\",\r\n                \"Description\": \"Cotton Shirts\",\r\n                \"HSNCode\": \"61051000\",\r\n                \"HTSCode\": \"6105100000\",\r\n                \"UnitType\": \"PCS\",\r\n                \"Qty\": 50,\r\n                \"UnitRate\": 250.00,\r\n                \"ShipPieceIGST\": 0.00,\r\n                \"PieceWt\": 0.3\r\n            }\r\n        ],\r\n        \"InvoiceCurrency\": \"INR\",\r\n        \"InvoiceNo\": \"INV-2025-001\",\r\n        \"InvoiceDate\": \"2025-08-30T00:00:00Z\",\r\n        \"TermsOfSale\": \"FOB\",\r\n        \"ReasonForExport\": \"GIFT\",\r\n        \"FreightCharge\": 0,\r\n        \"InsuranceCharge\": 0,\r\n        \"CSB_Type\": \"CSB 4\",\r\n        \"IGSTPayment\":\"Na\",\r\n        \"IGSTAmount\":\"0\",\r\n        \"AdCode\":\"\",\r\n        \"IECNo\":\"\",\r\n        \"BankAccount\":\"\",\r\n        \"BankType\":\"P\",\r\n        \"NFEI\":\"\",\r\n        \"CustomerRefNo\": \"CUSTREF-98765\",\r\n        \"DeliveryConfirmation\": \"No\",\r\n        \"DutyTax\": \"DDP\",\r\n        \"DutiesAccountNo\": \"\",\r\n        \"TransactionId\": \"TXN789654\",\r\n        \"ShipperImage\": \"base64-encoded-image-string\",\r\n        \"ShipperKYC\": \"base64-encoded-kyc-doc-string\",\r\n        \"FileName\": \"kyc_document.pdf\",\r\n        \"Fileext\":\".pdf\"\r\n    }\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1254,7 +1585,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "-z5wYULaTpB_fEVOvMVG7cMKuG4jQSzE9kcwYcjRq4ME9mkCG8jn8SnO5PcOQglKUCDskWc2ZiyyKf8LLUkByhxRDnSDZ_fp0jbB9u2Hz2KFrjhB0IW2W2Npln5_sZNaWjTvsEaIUbh4W7clQH5MUmRLhqpQ5387Pb-R82J3gXBtyJ_b3M-yk-cm0bIyI2E0LliU_U77wmNGagccmBi0mfSsViguyheXVne_7zxg1tzJ7Cm5AGkAP17uSeSIkvMS",
+                  "value": "3Vm6Ee5GfQ7_ZLL4ljzVcDf-EE1ptUenhg56oOSl7cxoLNHCG4UcZcCnWku3LQHkfXjeOZtq5ohh3y9NCNxHOg3ajdc54zuO2l1NWjC6nfYsR_Zd_ltfVmmcCgGVAo9w_Lu8Hezv4Y23P-Dg4b8mpkHJtkhRzyjV1jGtjrTx0KpgjDHKjSfWgvTh6UD4vWH-0RBIiVxXNkCFxqgpXVgnL6gLMN2wSnUBNZrR7B2p9knd2EuOtRgbE2QXmapXjNRCsTWClpUgw1YWvN8Tio760RDcdGhnbA1_t57V6vZVPDo",
                   "type": "string"
                 }
               ]
@@ -1271,7 +1602,7 @@
               }
             },
             "url": {
-              "raw": "https://api.overseaslogistic.com/api/tracking/UWC26081100001",
+              "raw": "https://api.overseaslogistic.com/api/tracking/55220834",
               "protocol": "https",
               "host": [
                 "api",
@@ -1281,7 +1612,7 @@
               "path": [
                 "api",
                 "tracking",
-                "UWC26081100001"
+                "55220834"
               ]
             }
           },
@@ -1354,7 +1685,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "8VVB_W3CkztmUFQpCeqUXHsAOX5Z_semZ5BXOEZVaGmj7rnPY5hw_oFZp2LyAzlrCOMrHOn80oDSPsNqVPJ8bDHfBCHv0zUr56f1PrH_U931qMopxGozuPaYGjx5XhKZUshL-Hj7mh_Wze8mXgLDF8SLjQlaNo0MhTAqASaYUhuHKEytir0EGurOGwyeIfoUNt8-fWtIDknOeAexYrwhLRUeImoCMPAxX7Cssg1oQPOFliyven1tPROQwo6Z9Cv3",
+                  "value": "Cc2-xn43j886gi8BkFBjAVNekFY9EVtVpTu62FiposWFtX4tj7ZxobdMBlg5hCgkHjk3FI9hOkVkZ-YjIUnGW1-s-4EYJwMY5ObIbHNBNemm6xMExUrTTIGf2UafhfsfSKa5C5_mf7rhLZhv4KbbImA0STxXUPgkKnmxBI0jY5ZjKFYozL78Olx5Jah4iIolbugloJBRe4OLexwAwFLE_9EXuh5QaNIyW_uY887O_Jz2QBvMOeDvV3PT8IKOGP3k",
                   "type": "string"
                 }
               ]
@@ -1386,7 +1717,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "CZavr6zsy-fEM6A4Yk56HiA_HWR7BJndekI_xwLbvkEhmiC-lOJzls3-VRo3O3sqPcIlw8no6NmXRZbLJnPOwrZ1XQO4Se6dLptbQW714KR4SSR15uxJEFWtIj65z7FjeVYVLbS7Hfz6ju-2wnw2_jW1-oKqqRwO1MblOgQNulKwLlDxG4lioB6kDaDOOVCoNf35AXKGKClAMJEAvLnVHPcTwnws8IK0tkp1Dnh-O0dzqNbiOGvwOFafAhl9CXe1",
+                  "value": "7ajSm7fhRqHaqeHH6ZtgA02dOM1Dh_7fCCck5qYbUTM-GVIrluBRmFHP3kaDh1NcDAIVuItU4jgmIT588ccvkeLeyeO-6XJL9Oxq-MCc7LTM41BXPCa8cwv48GbK-8cZGNGSff_66vBFR4V9iVFncm9RWWokvG0PDmFwy6Wbk6BbpVq1Wbt-oyrdfn-BlcZ2e8adBLTOrRW1CrKLnjA37w4D42tBu2nEWPW-TxjDIpeGA_A4ItrplQFBf9Kw6T-1",
                   "type": "string"
                 }
               ]
@@ -1396,6 +1727,46 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n    \"AccountCode\": \"SU0119\",\r\n    \"Sender\": {\r\n        \"SenderName\": \"KADANNAGARI BABU\",\r\n        \"SenderContactPerson\": \"KADANNAGARI BABU\",\r\n        \"SenderAddressLine1\": \"1-118/4\",\r\n        \"SenderAddressLine2\": \"THUMKUNTA\",\r\n        \"SenderAddressLine3\": \"TEST LABEL API\",\r\n        \"SenderPincode\": \"500078\",\r\n        \"SenderCity\": \"K.V.RANGAREDDY\",\r\n        \"SenderState\": \"TS\",\r\n        \"SenderTelephone\": \"9559077706\",\r\n        \"SenderEmailId\": \"\",\r\n        \"KYCType\": \"Aadhaar Number\",\r\n        \"KYCNo\": \"582712462820\"\r\n    },\r\n    \"Receiver\": {\r\n        \"ReceiverName\": \"SUREKHA\",\r\n        \"ReceiverContactPerson\": \"SUREKHA\",\r\n        \"ReceiverAddressLine1\": \"1316 RIVENDELL WAY\",\r\n        \"ReceiverAddressLine2\": \"EDISON NJ 08817-2018\",\r\n        \"ReceiverAddressLine3\": \"\",\r\n        \"ReceiverZipcode\": \"08817\",\r\n        \"ReceiverCity\": \"EDISON\",\r\n        \"ReceiverState\": \"NJ\",\r\n        \"ReceiverCountry\": \"US\",\r\n        \"ReceiverTelephone\": \"+16015954923\",\r\n        \"ReceiverEmailid\": \"\",\r\n        \"VatId\": \"\"\r\n    },\r\n    \"ServiceDetails\": {\r\n        \"Service\": \"USA SELF\",\r\n        \"GoodsType\": \"NDox\",\r\n        \"PackageType\": \"PACKAGE\"\r\n    },\r\n    \"PackageDetails\": {\r\n        \"PackageDetail\": [\r\n            {\r\n                \"Length\": 1.0,\r\n                \"Width\": 1.0,\r\n                \"Height\": 1.0,\r\n                \"ActualWeight\": 0.05\r\n            }\r\n        ]\r\n    },\r\n    \"AdditionalDetails\": {\r\n        \"IsThirdParty\": true,\r\n        \"ProductDetails\": [\r\n            {\r\n                \"BoxNo\": \"1\",\r\n                \"Description\": \"POOJA BOWLS\",\r\n                \"HSNCode\": \"9403608040\",\r\n                \"HTSCode\": \"940360804000\",\r\n                \"UnitType\": \"PCS\",\r\n                \"Qty\": 1,\r\n                \"UnitRate\": 10,\r\n                \"ShipPieceIGST\": 0,\r\n                \"PieceWt\": 0\r\n            }\r\n        ],\r\n        \"InvoiceCurrency\": \"INR\",\r\n        \"InvoiceNo\": \"765\",\r\n        \"InvoiceDate\": \"2026-04-02T00:00:00Z\",\r\n        \"TermsOfSale\": \"DDP\",\r\n        \"ReasonForExport\": \"SALE\",\r\n        \"FreightCharge\": 0,\r\n        \"InsuranceCharge\": 0,\r\n        \"CSB_Type\": \"CSB 4\",\r\n        \"CustomerRefNo\": \"TEST_LABEL001\",\r\n        \"DeliveryConfirmation\": \"No\",\r\n        \"DutyTax\": \"DDU\",\r\n        \"DutiesAccountNo\": \"\",\r\n        \"TransactionId\": \"\",\r\n        \"ShipperImage\": \"\",\r\n        \"ShipperKYC\": \"\",\r\n        \"FileName\": \"\",\r\n        \"IECNo\": \"\",\r\n        \"ADCode\": \"\",\r\n        \"BankType\": \"G\",\r\n        \"BankAccount\": \"\",\r\n        \"NFEI\": false,\r\n        \"Ecom\": false,\r\n        \"MEIS\": false,\r\n        \"BoundUT\": \"NA\",\r\n        \"IGSTPaid\": \"No\",\r\n        \"IGSTAmount\": 0\r\n    }\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "apiv2.shipuniversal.com/api/shipment/create",
+              "host": [
+                "apiv2",
+                "shipuniversal",
+                "com"
+              ],
+              "path": [
+                "api",
+                "shipment",
+                "create"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "create order testing",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "7ajSm7fhRqHaqeHH6ZtgA02dOM1Dh_7fCCck5qYbUTM-GVIrluBRmFHP3kaDh1NcDAIVuItU4jgmIT588ccvkeLeyeO-6XJL9Oxq-MCc7LTM41BXPCa8cwv48GbK-8cZGNGSff_66vBFR4V9iVFncm9RWWokvG0PDmFwy6Wbk6BbpVq1Wbt-oyrdfn-BlcZ2e8adBLTOrRW1CrKLnjA37w4D42tBu2nEWPW-TxjDIpeGA_A4ItrplQFBf9Kw6T-1",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n        \"AccountCode\": \"SU0119\",\r\n        \"Sender\": {\r\n            \"SenderName\": \"Exporter user\",\r\n            \"SenderContactPerson\": \"testing user\",\r\n            \"SenderAddressLine1\": \"adomantra kirti nagar\",\r\n            \"SenderAddressLine2\": \"adomantra kirti nagar\",\r\n            \"SenderAddressLine3\": \"\",\r\n            \"SenderPincode\": \"110052\",\r\n            \"SenderCity\": \"Delhi\",\r\n            \"SenderState\": \"DL\",\r\n            \"SenderTelephone\": \"+919302875700\",\r\n            \"SenderEmailId\": \"testing@gmail.com\",\r\n            \"KYCType\": \"GSTIN (Normal)\",\r\n            \"KYCNo\": \"07AANCA2340K1ZN\"\r\n        },\r\n        \"Receiver\": {\r\n            \"ReceiverName\": \"chirag\",\r\n            \"ReceiverContactPerson\": \"chirag bharti\",\r\n            \"ReceiverAddressLine1\": \"testing address\",\r\n            \"ReceiverAddressLine2\": \"testing address\",\r\n            \"ReceiverAddressLine3\": \"\",\r\n            \"ReceiverZipcode\": \"SW1A 1AA\",\r\n            \"ReceiverCity\": \"Westminster\",\r\n            \"ReceiverState\": \"London\",\r\n            \"ReceiverCountry\": \"GB\",\r\n            \"ReceiverTelephone\": \"9625693880\",\r\n            \"ReceiverEmailid\": \"chirag@adomantra.com\",\r\n            \"VatId\": \"\"\r\n        },\r\n        \"ServiceDetails\": {\r\n            \"Service\": \"UK ECOM\",\r\n            \"GoodsType\": \"NDox\",\r\n            \"PackageType\": \"PACKAGE\"\r\n        },\r\n        \"PackageDetails\": {\r\n            \"PackageDetail\": [\r\n                {\r\n                    \"Length\": 10,\r\n                    \"Width\": 10,\r\n                    \"Height\": 10,\r\n                    \"ActualWeight\": 1\r\n                }\r\n            ]\r\n        },\r\n        \"AdditionalDetails\": {\r\n            \"IsThirdParty\": true,\r\n            \"ProductDetails\": [\r\n                {\r\n                    \"BoxNo\": \"1\",\r\n                    \"Description\": \"100 % LADIES COTTON DRESS\",\r\n                    \"HSNCode\": \"61044200\",\r\n                    \"HTSCode\": \"6104420010\",\r\n                    \"UnitType\": \"PCS\",\r\n                    \"Qty\": 10,\r\n                    \"UnitRate\": 10,\r\n                    \"ShipPieceIGST\": 0,\r\n                    \"PieceWt\": 0.1\r\n                }\r\n            ],\r\n            \"InvoiceCurrency\": \"INR\",\r\n            \"InvoiceNo\": \"100\",\r\n            \"InvoiceDate\": \"2026-08-22T00:00:00Z\",\r\n            \"TermsOfSale\": \"DDP\",\r\n            \"ReasonForExport\": \"SALE\",\r\n            \"FreightCharge\": 0,\r\n            \"InsuranceCharge\": 0,\r\n            \"CSB_Type\": \"CSB 4\",\r\n            \"CustomerRefNo\": \"100\",\r\n            \"DeliveryConfirmation\": \"No\",\r\n            \"DutyTax\": \"DDU\",\r\n            \"DutiesAccountNo\": \"\",\r\n            \"TransactionId\": \"\",\r\n            \"ShipperImage\": \"\",\r\n            \"ShipperKYC\": \"\",\r\n            \"FileName\": \"\",\r\n            \"IECNo\": \"\",\r\n            \"ADCode\": \"\",\r\n            \"BankType\": \"G\",\r\n            \"BankAccount\": \"\",\r\n            \"NFEI\": false,\r\n            \"Ecom\": false,\r\n            \"MEIS\": false,\r\n            \"BoundUT\": \"Bond UT\",\r\n            \"IGSTPaid\": \"No\",\r\n            \"IGSTAmount\": 0\r\n        }\r\n    }",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1453,6 +1824,38 @@
                 "api",
                 "shipment",
                 "create"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "tracking",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "qGYMKtANOmMPC7AWerxkRefsP8GkWdQH4JLYbZVPKD3wTKCBghudsKPV3oV5bRMlGy6G2Yn_S423SGz_jG7sVaDokgpNAZpjxI80_-S3hSvKoBgE3pJxUMXC10_soFHhDrQKy1KzmDrfbm5lWVpZhLxbhwFqlEJM_mSP8VfL2K7jDM3hUYrU5aAIhi28xXdSQ3Qfoc40Cf7Qm3pkUSaZVzAZluHTEDNZfIYtMaL6Tj7rO7_9nr5jY1nXc2dMMfV5",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://apiv2.shipuniversal.com/api/tracking/99113433",
+              "protocol": "https",
+              "host": [
+                "apiv2",
+                "shipuniversal",
+                "com"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "99113433"
               ]
             }
           },
@@ -1523,7 +1926,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "EdkpjJmKlccaPJmaDpLXNjwkz3tgliLwlwk9vHd2wzgkW1A8a6vsnSFEYNUJybsMz1_yavADKWQeAtMH8bt8k5pEa-6TEjbCzBYcGUNGI3LMkVTYXbR6MWXNRILkj3T7VI8YsKzgvSNBmf1974TgiMUFouXRoGW2aXPtICw7uwxCSsa2xcQYS5hQlhz8uddp9682tELyXC940D3IssxOf50_ADfaX61eHVKgiTGUGhwEbNKmqiFKGPln4U4nfNGlbkFktxTc5vHIiQpuTIBCjggXeR6Z4FQfwInyO665KU8FN8bnCnYmpYzVP1g1YDIv",
+                  "value": "6fM8hL8JjWCgtrhw8i3crA_6sts6PG9KEoxcWarsQx2pnoHPc1O5LiNOSG0jtzLyxLAj7pznLmgq2W3D23nasgK_CyvPoPdNDPRQcU0f2xkdz0aYQ07ihCYRbbTvx3Auo0_NEfE0QbuSfKgjido4WXXgNqVz0sSzLol_Vr4-DBD-wYlGbPGraa3hts0YlDZXHjCUHrxZElbUSk7S-SsDTuf1QGFWbXad9JCDbMVqYc-40sq5bks4nxEZkkYRTztDQm-tJhViROMx7MgOytR-4KOutD_xdy7-xRp5FLt6fZlm56LP-QrMKuI6QbOl2REp",
                   "type": "string"
                 }
               ]
@@ -1568,6 +1971,46 @@
           "response": []
         },
         {
+          "name": "service list",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer YOUR_ACCESS_TOKEN"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"ValidateAccount\": [\n        {\n            \"AccountCode\": \"PGL130\",\n            \"Username\": \"PGL130\",\n            \"Password\":\"PGL130@1234\",\n            \"AccessKey\": \"134WERAS\"\n        }\n    ],\n  \"Shipment\": [\n    {\n      \"CustomerCode\": \"PGL130\",\n      \"CustomerName\": \"TEST CUSTOMER\",\n      \"ThirdPartyLabel\": true,\n      \"DestinationCode\": \"USA\",\n\n      \"ConsignorName\": \"TEST ACCOUNT\",\n      \"ConsignorContactPerson\": \"TEST ACCOUNT\",\n      \"ConsignorAddressLine1\": \"DELHI\",\n      \"ConsignorAddressLine2\": \"DELHI\",\n      \"ConsignorAddressLine3\": \"\",\n      \"ConsignorCity\": \"DELHI\",\n      \"ConsignorPostCode\": \"110037\",\n      \"ConsignorState\": \"DELHI\",\n      \"ConsignorPhoneNo\": \"\",\n\n      \"GSTType\": \"GSTIN (Normal)\",\n      \"GSTIN\": \"07AACCO5243L1ZA\",\n\n      \"ConsigneeName\": \"TEST\",\n      \"ConsigneeContactPerson\": \"TEST\",\n      \"ConsigneeAddressLine1\": \"TEST\",\n      \"ConsigneeAddressLine2\": \"TEST\",\n      \"ConsigneeAddressLine3\": \"\",\n      \"ConsigneeCity\": \"NEW YORK\",\n      \"ConsigneeZipCode\": \"10001\",\n      \"ConsigneeState\": \"NY\",\n      \"ConsigneePhoneNo\": \"1234567\",\n\n      \"ServiceTypeCode\": \"EX\",\n      \"ServiceType\": \"EXPRESS\",\n      \"NetworkCode\": \"DHL\",\n\n      \"GoodsDesc\": \"NDox\",\n      \"NumofItems\": 1,\n      \"ActWeight\": 0.500,\n\n      \"VolWeights\": [\n        {\n          \"ActWeight\": 0.5,\n          \"Length\": 0,\n          \"Width\": 0,\n          \"Height\": 0,\n          \"Pcs\": 1\n        }\n      ],\n\n      \"CustomsValue\": 100,\n      \"CustomsCurrencyCode\": \"INR\",\n      \"ShipmentContent\": \"BAG\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://api.primuslogistics.in/api/Shipping/AddShipment",
+              "protocol": "http",
+              "host": [
+                "api",
+                "primuslogistics",
+                "in"
+              ],
+              "path": [
+                "api",
+                "Shipping",
+                "AddShipment"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Create Shipment testing",
           "request": {
             "auth": {
@@ -1595,7 +2038,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"ValidateAccount\": [\r\n        {\r\n            \"AccountCode\": \"PGL130\",\r\n            \"Username\": \"PGL130\",\r\n            \"Password\": \"PGL130@1234\",\r\n            \"AccessKey\": \"134WERAS\"\r\n        }\r\n    ],\r\n    \"Shipment\": [\r\n        {\r\n            \"CustomerCode\": \"PGL130\",\r\n            \"CustomerName\": \"UNITED WORLDWIDE COURIERS PVT LTD\",\r\n            \"DestinationCode\": \"CA\",\r\n            \"ThirdPartyLabel\": true,\r\n            \"ConsignorName\": \"Exporter user\",\r\n            \"ConsignorContactPerson\": \"testing user\",\r\n            \"ConsignorAddressLine1\": \"adomantra kirti nagar\",\r\n            \"ConsignorAddressLine2\": \"adomantra kirti nagar\",\r\n            \"ConsignorAddressLine3\": \"\",\r\n            \"ConsignorCity\": \"Delhi\",\r\n            \"ConsignorPostCode\": \"110052\",\r\n            \"ConsignorState\": \"DL\",\r\n            \"ConsignorPhoneNo\": \"+919302875700\",\r\n            \"GSTType\": \"Aadhaar Number\",\r\n            \"GSTIN\": \"432323423423\",\r\n            \"ConsigneeName\": \"chirag\",\r\n            \"ConsigneeContactPerson\": \"chirag bharti\",\r\n            \"ConsigneeAddressLine1\": \"3007 NORTH REDDA RD\",\r\n            \"ConsigneeAddressLine2\": \"3007 NORTH REDDA RD\",\r\n            \"ConsigneeAddressLine3\": \"\",\r\n            \"ConsigneeCity\": \"brampton\",\r\n            \"ConsigneeZipCode\": \"L6P 3A1\",\r\n            \"ConsigneeState\": \"ontario\",\r\n            \"ConsigneePhoneNo\": \"9625693880\",\r\n            \"ServiceTypeCode\": \"S\",\r\n            \"ServiceType\": \"EXPRESS\",\r\n            \"NetworkCode\": \"FED\",\r\n            \"GoodsDesc\": \"NDox\",\r\n            \"NumofItems\": \"1\",\r\n            \"ActWeight\": \"0.500\",\r\n            \"VolWeights\": [\r\n                {\r\n                    \"ActWeight\": \"0.5\",\r\n                    \"Length\": \"10\",\r\n                    \"Width\": \"10\",\r\n                    \"Height\": \"10\",\r\n                    \"Pcs\": \"1\"\r\n                }\r\n            ],\r\n            \"CustomsValue\": \"100.00\",\r\n            \"CustomsCurrencyCode\": \"INR\",\r\n            \"ShipmentContent\": \"100 % LADIES COTTON DRESS\",\r\n            \"ItemDetails\": [\r\n                {\r\n                    \"BoxNo\": \"1\",\r\n                    \"Description\": \"100 % LADIES COTTON DRESS\",\r\n                    \"HSNCode\": \"61044200\",\r\n                    \"Qty\": \"10\",\r\n                    \"Rate\": \"10\",\r\n                    \"Amount\": \"100\",\r\n                    \"Unit\": \"PCS\",\r\n                    \"ShipPieceIGST\": \"0\",\r\n                    \"PieceWt\": \"0.05\"\r\n                }\r\n            ],\r\n            \"CSB_Type\": \"CSB 4\",\r\n            \"TermsOfSale\": \"DDP\",\r\n            \"ShipPurpose\": \"SALE\",\r\n            \"EComm\": \"No\",\r\n            \"ExporterType\": \"NA\",\r\n            \"ExporterInvDate\": \"10/08/2026\",\r\n            \"ExporterInvNo\": \"100\",\r\n            \"IGSTPayment\": \"NA\",\r\n            \"IGSTAmount\": \"0\",\r\n            \"FreightCharge\": \"0\",\r\n            \"InsuranceCharge\": \"0\",\r\n            \"ReferenceNumber\": \"100\",\r\n            \"PackageType\": \"Your Packaging\",\r\n            \"MEIS\": \"No\",\r\n            \"DutyTaxPaid\": \"\",\r\n            \"DutiesAccountNo\": \"\",\r\n            \"ForwarderService\": \"\",\r\n            \"InsuredValue\": \"\",\r\n            \"Base64StringInvoice\": \"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fD0rBUtLQwNLQzMzzZAsiAkATqcbDwplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCA0MzIgMjg4XS9SZXNvdXJjZXM8PC9Gb250PDwvRjEgMiAwIFI+Pi9YT2JqZWN0PDwvaW1nMCAxIDAgUj4+Pj4vQ29udGVudHMgMyAwIFIvUGFyZW50IDQgMCBSPj4KZW5kb2JqCjIgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhL0VuY29kaW5nL1dpbkFuc2lFbmNvZGluZz4+CmVuZG9iago0IDAgb2JqCjw8L1R5cGUvUGFnZXMvQ291bnQgMS9LaWRzWzUgMCBSXT4+CmVuZG9iago2IDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyA0IDAgUj4+CmVuZG9iago3IDAgb2JqCjw8L1Byb2R1Y2VyKGlUZXh0U2hhcnCSIDUuNS4xMy4xIKkyMDAwLTIwMTkgaVRleHQgR3JvdXAgTlYgXChBR1BMLXZlcnNpb25cKSkvQ3JlYXRpb25EYXRlKEQ6MjAyNjA4MDQxNTQxMTMrMDUnMzAnKS9Nb2REYXRlKEQ6MjAyNjA4MDQxNTQxMTMrMDUnMzAnKT4+CmVuZG9iagp4cmVmCjAgOAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAzMTY3NSAwMDAwMCBuIAowMDAwMDMxMzY3IDAwMDAwIG4gCjAwMDAwMzE3NjMgMDAwMDAgbiAKMDAwMDAzMTU0MCAwMDAwMCBuIAowMDAwMDMxODE0IDAwMDAwIG4gCjAwMDAwMzE4NTkgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDgvUm9vdCA2IDAgUi9JbmZvIDcgMCBSL0lEIFs8OTM0ZDU3NmJiZjMzY2Y0Njg4ZTU2YWUyYzRhNGVhYTE+PDkzNGQ1NzZiYmYzM2NmNDY4OGU1NmFlMmM0YTRlYWExPl0+PgolaVRleHQtNS41LjEzLjEKc3RhcnR4cmVmCjMyMDI0CiUlRU9GCg==\",\r\n            \"filename\": \"TESTFILE.pdf\"\r\n        }\r\n    ]\r\n}",
+              "raw": "{\r\n        \"ValidateAccount\": [\r\n            {\r\n                \"AccountCode\": \"PGL130\",\r\n                \"Username\": \"PGL130\",\r\n                \"Password\": \"PGL130@1234\",\r\n                \"AccessKey\": \"134WERAS\"\r\n            }\r\n        ],\r\n        \"Shipment\": [\r\n            {\r\n                \"CustomerCode\": \"PGL130\",\r\n                \"CustomerName\": \"UNITED WORLDWIDE COURIERS PVT LTD\",\r\n                \"DestinationCode\": \"Canada\",\r\n                \"ThirdPartyLabel\": true,\r\n                \"VATID\": \"\",\r\n                \"ConsignorName\": \"Exporter user\",\r\n                \"ConsignorContactPerson\": \"testing user\",\r\n                \"ConsignorAddressLine1\": \"adomantra kirti nagar\",\r\n                \"ConsignorAddressLine2\": \"adomantra kirti nagar\",\r\n                \"ConsignorAddressLine3\": \"\",\r\n                \"ConsignorCity\": \"Delhi\",\r\n                \"ConsignorPostCode\": \"110052\",\r\n                \"ConsignorState\": \"DL\",\r\n                \"ConsignorPhoneNo\": \"+919302875700\",\r\n                \"GSTType\": \"Aadhaar Number\",\r\n                \"GSTIN\": \"226816223671\",\r\n                \"ConsigneeName\": \"chirag\",\r\n                \"ConsigneeContactPerson\": \"chirag bharti\",\r\n                \"ConsigneeAddressLine1\": \"3938 Merton Street\",\r\n                \"ConsigneeAddressLine2\": \"3938 Merton Street\",\r\n                \"ConsigneeAddressLine3\": \"\",\r\n                \"ConsigneeCity\": \"toronto\",\r\n                \"ConsigneeZipCode\": \"L6A 0T4\",\r\n                \"ConsigneeState\": \"Ontario\",\r\n                \"ConsigneePhoneNo\": \"9625693880\",\r\n                \"ServiceTypeCode\": \"S\",\r\n                \"ServiceType\": \"EXPRESS\",\r\n                \"NetworkCode\": \"FED\",\r\n                \"GoodsDesc\": \"NDox\",\r\n                \"NumofItems\": \"1\",\r\n                \"ActWeight\": \"1.000\",\r\n                \"VolWeights\": [\r\n                    {\r\n                        \"ActWeight\": \"1\",\r\n                        \"Length\": \"10\",\r\n                        \"Width\": \"10\",\r\n                        \"Height\": \"10\",\r\n                        \"Pcs\": \"1\"\r\n                    }\r\n                ],\r\n                \"CustomsValue\": \"100.00\",\r\n                \"CustomsCurrencyCode\": \"INR\",\r\n                \"ShipmentContent\": \"100 % LADIES COTTON DRESS\",\r\n                \"ItemDetails\": [\r\n                    {\r\n                        \"BoxNo\": \"1\",\r\n                        \"Description\": \"100 % LADIES COTTON DRESS\",\r\n                        \"HSNCode\": \"61044200\",\r\n                        \"Qty\": \"10\",\r\n                        \"Rate\": \"10\",\r\n                        \"Amount\": \"100\",\r\n                        \"Unit\": \"PCS\",\r\n                        \"ShipPieceIGST\": \"0\",\r\n                        \"PieceWt\": \"0.1\"\r\n                    }\r\n                ],\r\n                \"CSB_Type\": \"CSB 4\",\r\n                \"TermsOfSale\": \"DDP\",\r\n                \"ShipPurpose\": \"SALE\",\r\n                \"EComm\": \"No\",\r\n                \"ExporterType\": \"NA\",\r\n                \"ExporterInvDate\": \"13\\/08\\/2026\",\r\n                \"ExporterInvNo\": \"100\",\r\n                \"IGSTPayment\": \"NA\",\r\n                \"IGSTAmount\": \"0\",\r\n                \"FreightCharge\": \"0\",\r\n                \"InsuranceCharge\": \"0\",\r\n                \"ReferenceNumber\": \"100\",\r\n                \"PackageType\": \"Your Packaging\",\r\n                \"MEIS\": \"No\",\r\n                \"DutyTax\": \"RECIPIENT\",\r\n                \"DutyAccountNo\": \"\",\r\n                \"filename\": \"uwc26081300001-884479db-6796-4c28-b778-ed65aa8e4c88.pdf\",\r\n                \"Base64StringInvoice\": \"aHR0cDovLzEzLjIzMi4yMTcuODcvdXdjL3B1YmxpYy91cGxvYWRzL2N1c3RvbV9sYWJlbHMvdXdjMjYwODEzMDAwMDEtODg0NDc5ZGItNjc5Ni00YzI4LWI3NzgtZWQ2NWFhOGU0Yzg4LnBkZg==\"\r\n            }\r\n        ]\r\n    }",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1614,6 +2057,56 @@
                 "api",
                 "ShippingFedEx",
                 "AddShipment"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "tracking",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "flKdmjzUMJXOC9z5Q3HyjMVVKw_mr1f_hFSvtLK2UK5Qp5WSQXNJd1ZHteDYVelvI_9eKiMQnuu5cWuVQjpx-gQl3ntgItsmv5uI97AnyIVuDYpiDE9rUqzk-_lrFFUXsII0sIetaDNUEeub14RDbMVs_Y9hAADgKPPEcRxK5lY2FeKv0h1Ei6D62old3ay-fjwZcRJcvR6gRLSYQSdgS7_ekU58YuHGH6F3aEAeflvnOgGWEBZQ_hog43WUk1QtPFSHZQMaMf3SDEfZgAEEi5vMOOE1dfXHtvb4r7WBkmBbqQPYaoEgD55tjSC9vuoN",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer YOUR_ACCESS_TOKEN"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"ValidateAccount\": [\n        {\n            \"AccountCode\": \"PGL130\",\n            \"Username\": \"PGL130\",\n            \"Password\": \"PGL130@1234\",\n            \"AccessKey\": \"134WERAS\"\n        }\n    ],\n    \"Awbno\": \"50089875\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://api.primuslogistics.in/api/Track/GetTrackings",
+              "protocol": "http",
+              "host": [
+                "api",
+                "primuslogistics",
+                "in"
+              ],
+              "path": [
+                "api",
+                "Track",
+                "GetTrackings"
               ]
             }
           },
@@ -1699,7 +2192,7 @@
               "formdata": [
                 {
                   "key": "verification_id",
-                  "value": "0000005",
+                  "value": "0000008",
                   "type": "text",
                   "uuid": "324f059b-4965-4d3c-9dc0-ba94a40c4be2"
                 },
@@ -1713,7 +2206,7 @@
                   "key": "file",
                   "type": "file",
                   "uuid": "c20f3c24-86b4-45f6-841a-15d7c620a4af",
-                  "src": "/C:/Users/chira/OneDrive/Desktop/aadhar.jpeg"
+                  "src": "/C:/Users/chira/OneDrive/Documents/GitHub/GitHub/unitedcourier/Documents/united uploaded document like gst/testing aadhar.png"
                 },
                 {
                   "key": "do_verification",
@@ -1884,7 +2377,7 @@
               "formdata": [
                 {
                   "key": "verification_id",
-                  "value": "0000001",
+                  "value": "uwc10",
                   "type": "text",
                   "uuid": "da9cc45b-15f3-4954-b1be-7b7a8b1da92f"
                 },
@@ -1898,7 +2391,7 @@
                   "key": "file",
                   "type": "file",
                   "uuid": "e50f916b-3355-4a70-8ab7-6f3bd81c96c9",
-                  "src": "/C:/Users/chira/OneDrive/Desktop/pan.jpeg"
+                  "src": "/C:/Users/chira/OneDrive/Documents/GitHub/GitHub/unitedcourier/Documents/united uploaded document like gst/adomantra pan.png"
                 },
                 {
                   "key": "do_verification",
@@ -2061,7 +2554,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"GSTIN\": \"07AAACU1765H1ZC\",\n    \"business_name\": \"UNITED WORLDWIDE COURIER PVT LTD\"\n}",
+              "raw": "{\n    \"GSTIN\": \"07AAGFF2194N1Z1\",\n    \"business_name\": \"UNITED WORLDWIDE COURIER PVT LTD\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2179,6 +2672,57 @@
               "body": "{\n    \"reference_id\": 2772974,\n    \"GSTIN\": \"07AAACU1765H1ZC\",\n    \"legal_name_of_business\": \"UNITED WORLDWIDE COURIER PRIVATE LIMITED\",\n    \"trade_name_of_business\": \"UNITED WORLDWIDE COURIER PRIVATE LIMITED\",\n    \"center_jurisdiction\": \"RANGE - 54\",\n    \"state_jurisdiction\": \"Ward 35\",\n    \"date_of_registration\": \"2017-07-21\",\n    \"constitution_of_business\": \"Private Limited\",\n    \"taxpayer_type\": \"Regular\",\n    \"gst_in_status\": \"Active\",\n    \"last_update_date\": \"2026-03-03\",\n    \"nature_of_business_activities\": [\n        \"Supplier of Services\",\n        \"Office / Sale Office\"\n    ],\n    \"principal_place_address\": \"LOWER GROUND FLOOR, BUILDING NO 1, New Delhi, KHASRA NO 505 BYE PASS ROAD, Delhi, 110037\",\n    \"principal_place_split_address\": {\n        \"building_name\": \"\",\n        \"street\": \"KHASRA NO 505 BYE PASS ROAD\",\n        \"location\": \"New Delhi\",\n        \"building_number\": \"BUILDING NO 1\",\n        \"district\": \"New Delhi\",\n        \"state\": \"Delhi\",\n        \"city\": \"\",\n        \"flat_number\": \"LOWER GROUND FLOOR\",\n        \"latitude\": \"28.5452720000001\",\n        \"longitude\": \"77.129485\",\n        \"pincode\": \"110037\"\n    },\n    \"additional_address_array\": [\n        {\n            \"address\": \"R-39, Pick up office, New Delhi, Main Vikas Marg, East Delhi, Delhi, 110092\",\n            \"split_address\": {\n                \"building_name\": \"R-39\",\n                \"street\": \"Main Vikas Marg\",\n                \"location\": \"New Delhi\",\n                \"building_number\": \"Pick up office\",\n                \"district\": \"East Delhi\",\n                \"state\": \"Delhi\",\n                \"city\": \"\",\n                \"flat_number\": \"\",\n                \"latitude\": \"28.626964\",\n                \"longitude\": \"77.2792870000001\",\n                \"pincode\": \"110092\"\n            }\n        }\n    ],\n    \"valid\": true,\n    \"message\": \"GSTIN Exists\"\n}"
             }
           ]
+        },
+        {
+          "name": "payment gateway",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Client-Secret",
+                "value": "cfsk_ma_test_00820bc7377d85ec49934cb9db927dfd_0deabe58"
+              },
+              {
+                "key": "X-Client-Id",
+                "value": "TEST1114008707c75df82185115efff778004111"
+              },
+              {
+                "key": "x-api-version",
+                "value": "2025-01-01"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_amount\": 14.10,\n  \"order_currency\": \"INR\",\n  \"customer_details\": {\n    \"customer_id\": \"USER123\",\n    \"customer_name\": \"joe\",\n    \"customer_email\": \"joe.s@cashfree.com\",\n    \"customer_phone\": \"+919876543210\"\n  },\n  \"order_meta\": {\n    \"return_url\": \"https://b8af79f41056.eu.ngrok.io?order_id=order_123\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://sandbox.cashfree.com/pg/orders",
+              "protocol": "https",
+              "host": [
+                "sandbox",
+                "cashfree",
+                "com"
+              ],
+              "path": [
+                "pg",
+                "orders"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -2244,6 +2788,547 @@
                 "api",
                 "shipment",
                 "customer"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "hsn finder",
+      "item": [
+        {
+          "name": "New Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "3e8195ae7d5ca7044e9d95077e30eea1c972b22d2c7458f1288954d6efcb224a"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "type": "file",
+                  "key": "image",
+                  "src": "/C:/Users/chira/OneDrive/Pictures/pngtree-water-bottle-png-image_20750703.png"
+                },
+                {
+                  "type": "text",
+                  "key": "description",
+                  "value": "women clothes",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://unitedcouriers.in/hsn-api/classify",
+              "protocol": "https",
+              "host": [
+                "unitedcouriers",
+                "in"
+              ],
+              "path": [
+                "hsn-api",
+                "classify"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "DHL",
+      "item": []
+    },
+    {
+      "name": "GOFO",
+      "item": [
+        {
+          "name": "create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "uk_bL16N8dBmV7JHmNnWayFgST-AI4F5VSxvMGE7RaDTAY"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"order_number\": \"ORD-1002\",\r\n  \"warehouse_id\": 25,\r\n  \"to\": {\r\n    \"name\": \"Jane Doe\",\r\n    \"phone\": \"+14155550100\",\r\n    \"email\": \"jane@example.com\",\r\n    \"street1\": \"123 Market St\",\r\n    \"city\": \"San Francisco\",\r\n    \"state\": \"CA\",\r\n    \"postal_code\": \"90008\",\r\n    \"country\": \"US\",\r\n    \"residential\": true\r\n  },\r\n  \"shipment_type\": \"parcel\",\r\n  \"parcel_unit\": \"metric\",\r\n  \"parcel_weight\": 1.5,\r\n  \"parcel_length\": 25,\r\n  \"parcel_width\": 20,\r\n  \"parcel_height\": 10,\r\n  \"order_value\": 100,\r\n  \"currency\": \"USD\",\r\n  \"contents_description\": \"sample goods\",\r\n  \"signature_option\": \"none\",\r\n  \"pickup_option\": \"dropoff\",\r\n  \"items\": [\r\n    {\r\n      \"description\": \"Widget\",\r\n      \"quantity\": 1,\r\n      \"unit_value\": 100,\r\n      \"currency\": \"USD\",\r\n      \"country_of_origin\": \"IN\",\r\n      \"sku\": \"WID-001\"\r\n    }\r\n  ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://api.console.upbox.co.in/intl-order/v1/tenant-api/orders",
+              "protocol": "https",
+              "host": [
+                "api",
+                "console",
+                "upbox",
+                "co",
+                "in"
+              ],
+              "path": [
+                "intl-order",
+                "v1",
+                "tenant-api",
+                "orders"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "create shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "uk_bL16N8dBmV7JHmNnWayFgST-AI4F5VSxvMGE7RaDTAY"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": 6336,\n  \"carrier_code\": \"GOFO\",\n  \"service_code\": \"UBX-GOFOPP\",\n  \"parcel_unit\": \"metric\",\n  \"parcel_weight\": 1.5,\n  \"parcel_length\": 25,\n  \"parcel_width\": 20,\n  \"parcel_height\": 10,\n  \"parcel_number\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://api.console.upbox.co.in/intl-order/v1/tenant-api/shipments",
+              "protocol": "https",
+              "host": [
+                "api",
+                "console",
+                "upbox",
+                "co",
+                "in"
+              ],
+              "path": [
+                "intl-order",
+                "v1",
+                "tenant-api",
+                "shipments"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Adomantra Api's",
+      "item": [
+        {
+          "name": "cod api",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"awb_number\": \"UWC26091100001\",\r\n  \"type\": \"cod\",\r\n  \"remark\": \"Payment's received\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/close-cod",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "close-cod"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "wallet recharge api",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"customer_code\": \"UWC000064\",\r\n    \"recharge_type\": \"cash\",\r\n    \"amount\": 100\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/wallet-recharge",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "wallet-recharge"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update tracking number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"awb_number\":\"UWC26101200001\",\r\n    \"tracking_number\":\"anil sirs\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/update-tracking",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "update-tracking"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "adomantra manifest api's for customers",
+      "item": [
+        {
+          "name": "create token",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "chirag@adomantra.com",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "111111",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\":\"chirag@adomantra.com\",\r\n    \"password\":\"Test1234\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/v1/auth/token",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "services",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "77f012ea00aa2bef8aeada1dfa24af6513c22ea85f6b5f3ab0a78f5f99a0112f",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/v1/services/UWC000060",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "v1",
+                "services",
+                "UWC000060"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "create shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer 6737ab24b53f0b232c45c51006bb12276cef8a3e2150f14fc73e697cb8ad9b67"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_code\": 100,\n  \"method\": \"ARAMEX INTERNATIONAL\",\n  \"origin_type\": \"CSB V\",\n  \"delivery_destination\": \"UNITED STATES\",\n  \"ref_number\":\"REFCAN002\",\n  \"sender\": {\n    \"company_name\": \"chirag\",\n    \"contact_person\": \"Rahul\",\n    \"address_line1\": \"Plot 1, MIDC\",\n    \"pincode\": \"400001\",\n    \"city\": \"Mumbai\",\n    \"state\": \"MH\",\n    \"phone_number\": \"9625693880\",\n    \"email\": \"shipper@example.com\",\n    \"kyc_type\": \"PAN Card\",\n    \"kyc_number\": \"ABCDE1234F\"\n  },\n  \"reciever\": {\n    \"name\": \"chirag\",\n    \"address_line1\": \"123 Main St\",\n    \"zip_code\": \"10018\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"phone_number\": \"9625693880\",\n    \"email\": \"consignee@example.com\"\n  },\n  \"packages\": [\n    {\n      \"actual_weight_kg\": 4.5,\n      \"length_cm\": 30,\n      \"width_cm\": 20,\n      \"height_cm\": 10\n    }\n  ],\n  \"invoice\": {\n    \"invoice_number\": \"INV-0001\",\n    \"invoice_date\": \"2026-10-01\",\n    \"invoice_amount\": 5000,\n    \"incoterms\": \"CIF\",\n    \"invoice_currency\": \"INR\"\n  },\n  \"items\": [\n    {\n      \"box_no\": 1,\n      \"description\": \"General Merchandise\",\n      \"qty\": 1,\n      \"unit_rate\": 5000,\n      \"unit_type\": \"PCS\"\n    }\n  ],\n  \"csb_v\": {\n    \"ecommerce\": \"Yes\",\n    \"scheme\": \"No\",\n    \"iec_code\": \"ABCDE1234F\",\n    \"gst_number\": \"27ABCDE1234F1Z5\",\n    \"ad_code\": \"123456\",\n    \"bank_account_number\": \"1234567890\",\n    \"bank_ifsc_code\": \"HDFC0001234\"\n  }\n// \"csb_v\": {\n//     \"ecommerce\": \"\",\n//     \"scheme\": \"\",\n//     \"iec_code\": \"\",\n//     \"gst_number\": \"\",\n//     \"ad_code\": \"\",\n//     \"bank_account_number\": \"\",\n//     \"bank_ifsc_code\": \"\"\n//   }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/v1/manifests",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "v1",
+                "manifests"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "manifest shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer d73b7edbb94e5b4517b45a11ecdb8aee71537ed4a29fb686521f93111dc52fb5"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"awb_number\": \"UWC26101200009\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/v1/manifests/from-draft",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "v1",
+                "manifests",
+                "from-draft"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "track",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer 6737ab24b53f0b232c45c51006bb12276cef8a3e2150f14fc73e697cb8ad9b67"
+              }
+            ],
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/v1/manifests/UWC26101200009",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "v1",
+                "manifests",
+                "UWC26101200009"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "create shipment via cms (adomantra)",
+      "item": [
+        {
+          "name": "create shipment by cms",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_code\": \"UWC000063\",\n  \"api_provider\": \"ups\",\n  \"method\": \"UNITED AIREXPRESS\",\n  \"delivery_destination\": \"US- United State of America\",\n  \"ref_number\": \"REFCAN003\",\n  \"shipper\": {\n    \"company_name\": \"Test Co\",\n    \"contact_person\": \"Tester\",\n    \"address_line1\": \"Addr 1\",\n    \"pincode\": \"110001\",\n    \"city\": \"Delhi\",\n    \"state\": \"DL\",\n    \"phone_number\": \"9999999999\",\n    \"email\": \"t@t.com\"\n  },\n  \"consignee\": {\n    \"name\": \"Recv\",\n    \"address_line1\": \"Addr 2\",\n    \"zip_code\": \"10001\",\n    \"city\": \"New York\",\n    \"phone_number\": \"9999999999\",\n    \"email\": \"r@r.com\"\n  },\n  \"packages\": [\n    {\n      \"actual_weight_kg\": 1,\n      \"length_cm\": 10,\n      \"width_cm\": 10,\n      \"height_cm\": 10\n    }\n  ],\n  \"invoice\": {\n    \"invoice_number\": \"INV-001\",\n    \"invoice_date\": \"2026-10-12\",\n    \"invoice_amount\": 100\n  },\n  \"items\": [\n    {\n      \"description\": \"Goods\",\n      \"qty\": 1,\n      \"unit_rate\": 100,\n      \"amount\": 100\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://127.0.0.1:8000/api/shipment-creation-cms",
+              "protocol": "http",
+              "host": [
+                "127",
+                "0",
+                "0",
+                "1"
+              ],
+              "port": "8000",
+              "path": [
+                "api",
+                "shipment-creation-cms"
               ]
             }
           },

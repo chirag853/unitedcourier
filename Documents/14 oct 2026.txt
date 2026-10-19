@@ -1,0 +1,8 @@
+14 oct 2026
+-----------------
+1) create shipment ke time pe total weight laga hua hai vo per box wise check hoga 
+2) invoice amount hai usko fix krna hai
+3) ups mai jitni bhi hai usme hum volumetric weight nhi chahiye jese l x b x h yeh nhi chahiye
+5) create shipment ke time pe exporter-customer mai jb bhi mai select
+6) edit order ke time pe wahi state aani chahiye jo humne store kri thi
+7) view all shipment mai shift krwa do tab
