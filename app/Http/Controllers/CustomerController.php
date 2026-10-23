@@ -31,6 +31,7 @@ use App\Models\Wallet;
 use App\Models\WalletTransaction;
 use App\Models\WarehouseAddress;
 use App\Models\Zone;
+use App\Rules\NameContainsLetter;
 use App\Services\CashfreePaymentService;
 use App\Services\PrimusShipmentService;
 use App\Services\ShipmentChargeService;
@@ -1143,8 +1144,8 @@ class CustomerController extends Controller
                 'integer',
                 Rule::exists('business_categories', 'id')->where('status', 'active'),
             ],
-            'company_name' => ['required', 'string', 'min:2', 'max:150', 'regex:/^[\pL\pN][\pL\pN\s.&()\'\/-]*$/u'],
-            'contact_person' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL][\pL\s.\'-]*$/u'],
+            'company_name' => ['required', 'string', 'min:2', 'max:150', 'regex:/^[\pL\pN][\pL\pN\s.&()\'\/-]*$/u', new NameContainsLetter('Company name')],
+            'contact_person' => ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL\pN][\pL\pN\s.\'-]*$/u', new NameContainsLetter('Contact person')],
             'address_line1' => ['required', 'string', 'min:5', 'max:255'],
             'address_line2' => ['nullable', 'string', 'max:255'],
             'address_line3' => ['nullable', 'string', 'max:255'],
@@ -1275,7 +1276,7 @@ class CustomerController extends Controller
             'business_category_id.required' => 'Please select a customer type.',
             'business_category_id.exists' => 'The selected customer type is invalid or inactive.',
             'company_name.regex' => 'Company name contains invalid characters.',
-            'contact_person.regex' => 'Contact person may contain letters, spaces, dots, apostrophes and hyphens only.',
+            'contact_person.regex' => 'Contact person may contain letters, numbers, spaces, dots, apostrophes and hyphens only.',
             'pincode.regex' => 'Enter a valid 6-digit Indian pincode.',
             'city.regex' => 'City may contain letters, spaces, dots, apostrophes and hyphens only.',
             'state.regex' => 'State may contain letters, spaces, dots, apostrophes and hyphens only.',
@@ -2359,8 +2360,8 @@ class CustomerController extends Controller
             'origin_type' => 'nullable|string|max:50',
             'reason_for_export' => 'nullable|string|in:sample,gift,commercial,repair,return,others|max:20',
             'business_type' => 'nullable|string|in:business,customer|max:50',
-            'consignee_name' => 'required|string|max:150',
-            'consignee_contact_person' => 'required|string|max:100',
+            'consignee_name' => ['required', 'string', 'max:150', new NameContainsLetter('Consignee name')],
+            'consignee_contact_person' => ['required', 'string', 'max:100', new NameContainsLetter('Consignee contact person')],
             'consignee_address_line1' => 'required|string|max:255',
             'consignee_address_line2' => 'nullable|string|max:255',
             'consignee_address_line3' => 'nullable|string|max:255',
@@ -3609,8 +3610,8 @@ class CustomerController extends Controller
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
-                'shipper_company_names' => 'required|string|max:150',
-                'shipper_contact_person' => 'required|string|max:100',
+                'shipper_company_names' => ['required', 'string', 'max:150', new NameContainsLetter('Shipper company name')],
+                'shipper_contact_person' => ['required', 'string', 'max:100', new NameContainsLetter('Shipper contact person')],
                 'shipper_address_line1' => 'required|string|max:255',
                 'shipper_address_line2' => 'nullable|string|max:255',
                 'shipper_address_line3' => 'nullable|string|max:255',
@@ -3624,8 +3625,8 @@ class CustomerController extends Controller
                 'shipper_kyc_number' => 'nullable|string|max:100',
 
                 // Consignee Info
-                'consignee_name' => 'required|string|max:150',
-                'consignee_contact_person' => 'required|string|max:100',
+                'consignee_name' => ['required', 'string', 'max:150', new NameContainsLetter('Consignee name')],
+                'consignee_contact_person' => ['required', 'string', 'max:100', new NameContainsLetter('Consignee contact person')],
                 'consignee_address_line1' => 'required|string|max:255',
                 'consignee_address_line2' => 'nullable|string|max:255',
                 'consignee_address_line3' => 'nullable|string|max:255',

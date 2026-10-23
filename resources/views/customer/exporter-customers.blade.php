@@ -1047,7 +1047,7 @@
                                                 <div class="col-md-6" id="companyNameWrapper">
                                                     <label class="section-label">Company Name <span class="text-danger">*</span></label>
                                                     <div class="input-wrapper">
-                                                        <input type="text" id="companyName" name="company_name" class="input-custom" value="{{ old('company_name') }}" minlength="2" maxlength="150" pattern="[A-Za-z0-9][A-Za-z0-9 .&()'/-]*" required>
+                                                        <input type="text" id="companyName" name="company_name" class="input-custom" value="{{ old('company_name') }}" minlength="2" maxlength="150" pattern="(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9 .&\(\)'\/\-]*" required>
                                                         <i class="fas fa-building"></i>
                                                     </div>
                                                     <small class="text-muted">Minimum 2 characters.</small>
@@ -1055,7 +1055,7 @@
                                                 <div class="col-md-6">
                                                     <label class="section-label">Contact Person <span class="text-danger">*</span></label>
                                                     <div class="input-wrapper">
-                                                        <input type="text" id="contactPerson" name="contact_person" class="input-custom" value="{{ old('contact_person') }}" minlength="2" maxlength="100" pattern="[A-Za-z][A-Za-z .'-]*" required>
+                                                        <input type="text" id="contactPerson" name="contact_person" class="input-custom" value="{{ old('contact_person') }}" minlength="2" maxlength="100" pattern="(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9 .'\-]*" required>
                                                         <i class="fas fa-user"></i>
                                                     </div>
                                                     <small class="text-muted" id="contactPersonHint">Auto-filled from the verified KYC document.</small>

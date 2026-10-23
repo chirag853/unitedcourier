@@ -7320,6 +7320,20 @@
                                                                     }
                                                                     return;
                                                                 }
+                                                                const invalidName = [
+                                                                    ['consignee_name', 'Consignee name'],
+                                                                    ['consignee_contact_person', 'Contact person']
+                                                                ].find(function (pair) {
+                                                                    const fieldValue = String(payload[pair[0]] || '').trim();
+                                                                    return fieldValue && !/\p{L}/u.test(fieldValue);
+                                                                });
+                                                                if (invalidName) {
+                                                                    if (saveMsg) {
+                                                                        saveMsg.textContent = invalidName[1] + ' must include at least one letter; it cannot be only a phone number.';
+                                                                        saveMsg.classList.add('text-danger');
+                                                                    }
+                                                                    return;
+                                                                }
                                                                 saveBtn.disabled = true;
                                                                 fetch('{{ route("customer.saved-consignees.store") }}', {
                                                                     method: 'POST',
@@ -11239,6 +11253,15 @@
                     }
                 });
             };
+            const requireLetters = function(fields, accordionId) {
+                fields.forEach(function(field) {
+                    const element = form.querySelector('[name="' + field.name + '"]');
+                    const fieldValue = String(element?.value || '').trim();
+                    if (fieldValue && !/\p{L}/u.test(fieldValue)) {
+                        addError(element, field.label + ' must include at least one letter; it cannot be only a phone number.', accordionId);
+                    }
+                });
+            };
 
             requireFields([
                 { name: 'shipper_company_names', label: 'Shipper company name' },
@@ -11251,6 +11274,11 @@
                 { name: 'shipper_emails', label: 'Shipper email' },
                 { name: 'shipper_kyc_type', label: 'Shipper KYC type' },
                 { name: 'shipper_kyc_number', label: 'Shipper KYC number' }
+            ], 'basic');
+
+            requireLetters([
+                { name: 'shipper_company_names', label: 'Shipper company name' },
+                { name: 'shipper_contact_person', label: 'Shipper contact person' }
             ], 'basic');
 
             const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -11287,6 +11315,11 @@
                 { name: 'consignee_zip_code', label: 'Consignee zip code' },
                 { name: 'consignee_city', label: 'Consignee city' },
                 { name: 'consignee_phone_number', label: 'Consignee phone number' }
+            ], 'address');
+
+            requireLetters([
+                { name: 'consignee_name', label: 'Consignee name' },
+                { name: 'consignee_contact_person', label: 'Consignee contact person' }
             ], 'address');
 
             const consigneeEmail = form.querySelector('[name="consignee_email"]');

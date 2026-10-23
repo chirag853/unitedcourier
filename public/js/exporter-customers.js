@@ -170,6 +170,30 @@
             return true;
         }
 
+        // Company/contact names must contain at least one letter. This rejects
+        // pure phone numbers while still allowing values like "3M India" or
+        // "24x7 Courier".
+        function validateNameFields() {
+            var fields = [
+                { input: document.getElementById('companyName'), label: 'Company name' },
+                { input: document.getElementById('contactPerson'), label: 'Contact person' }
+            ];
+
+            for (var i = 0; i < fields.length; i++) {
+                var field = fields[i];
+                var value = field.input ? field.input.value.trim() : '';
+                if (value && !/\p{L}/u.test(value)) {
+                    showAlert(field.label + ' must include at least one letter; it cannot be only a phone number.', 'error');
+                    if (field.input) {
+                        field.input.focus();
+                    }
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         form.querySelectorAll('.wizard-next').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var next = parseInt(btn.getAttribute('data-next'), 10);
@@ -670,6 +694,9 @@
         if (step3ActionBtn) {
             step3ActionBtn.addEventListener('click', function () {
                 if (isCsbVSelected()) {
+                    if (!validateNameFields()) {
+                        return;
+                    }
                     showPanel(4);
                 }
             });
@@ -1320,6 +1347,11 @@
 
         form.addEventListener('submit', function (e) {
             e.preventDefault();
+
+            if (!validateNameFields()) {
+                showPanel(3);
+                return;
+            }
 
             var isBusiness = isBusinessCustomerType();
 

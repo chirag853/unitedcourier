@@ -34,6 +34,7 @@ use App\Models\Tracking;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
 use App\Models\Zone;
+use App\Rules\NameContainsLetter;
 use App\Services\AdomantraApiClient;
 use App\Services\PrimusShipmentService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -156,8 +157,8 @@ class PrepaidController extends Controller
                 'shipping_method' => 'nullable|string|max:100',
                 'service_rate_id' => 'nullable|integer',
                 'shipper_same_as_customer' => 'boolean',
-                'shipper_company_names' => 'required|string|max:150',
-                'shipper_contact_person' => 'required|string|max:100',
+                'shipper_company_names' => ['required', 'string', 'max:150', new NameContainsLetter('Shipper company name')],
+                'shipper_contact_person' => ['required', 'string', 'max:100', new NameContainsLetter('Shipper contact person')],
                 'shipper_address_line1' => 'required|string|max:255',
                 'shipper_address_line2' => 'nullable|string|max:255',
                 'shipper_address_line3' => 'nullable|string|max:255',
@@ -174,8 +175,8 @@ class PrepaidController extends Controller
                 'biller_name' => 'nullable|string|max:255',
 
                 // Consignee Info
-                'consignee_name' => 'required|string|max:150',
-                'consignee_contact_person' => 'required|string|max:100',
+                'consignee_name' => ['required', 'string', 'max:150', new NameContainsLetter('Consignee name')],
+                'consignee_contact_person' => ['required', 'string', 'max:100', new NameContainsLetter('Consignee contact person')],
                 'consignee_address_line1' => 'required|string|max:255',
                 'consignee_address_line2' => 'nullable|string|max:255',
                 'consignee_address_line3' => 'nullable|string|max:255',
